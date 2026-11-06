@@ -4,6 +4,7 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_thread.h"
+#include "ov01/gr_gp_init.h"
 
 /* Only the packed-colour words at +0x20..+0x2c are accessed here. */
 typedef struct ClearEnvColor {
@@ -50,97 +51,62 @@ void YamamotoTest(void)
     }
 }
 
-/*
- * grOpenF2/grPutF2/grCloseF2/grPacketSend's own record (src/ov01/gr_gp_init.c,
- * still asm there; that TU owns the layout and has not published it through a
- * header yet -- shared-header need). This call site only ever takes its
- * address, so the storage is left untyped here rather than restating the
- * owner's struct (the element count matches src/ov01/battle_init.c's
- * curTexTrans, this TU's own already-accepted call site for the same API).
- */
-extern void grGpInit(void *packet);
-extern void grOpenF2(void *packet);
-extern void grPutF2(void *packet, void *vertex, int flags);
-extern void grCloseF2(void);
-extern void grPacketSend(void *packet);
-
-/*
- * grPutF2's own line-vertex record (evidenced only by this call site): two
- * homogeneous points (screen x/y, plus a fixed z/w pair grOpenF2's setup
- * never varies) and a packed RGBA colour, all in one 36-byte block.
- */
-typedef struct F2Point {
-    float x;
-    float y;
-    float z;
-    float w;
-} F2Point;
-
-typedef struct F2Line {
-    F2Point p0;
-    F2Point p1;
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char a;
-} F2Line;
-
 void testScreen(void)
 {
-    int packet[2];
-    F2Line line;
+    GrPacket packet;
+    GrF2Vertices line;
     int y;
     int x;
 
-    grGpInit(packet);
+    grGpInit(&packet);
 
-    line.p0.w = 1.0f;
-    line.p1.w = 1.0f;
-    line.a = 0x80;
-    line.p0.z = 16777213.0f;
-    line.p1.z = 16777213.0f;
-    grOpenF2(packet);
+    line.points[0].w = 1.0f;
+    line.points[1].w = 1.0f;
+    line.color[3] = 0x80;
+    line.points[0].z = 16777213.0f;
+    line.points[1].z = 16777213.0f;
+    grOpenF2(&packet);
 
-    line.p1.x = 512.0f;
-    line.p0.x = 0.0f;
+    line.points[1].x = 512.0f;
+    line.points[0].x = 0.0f;
     for (y = 0; y <= 448; y += 7) {
         float yf;
 
         if (y == 0 || y == 448) {
-            line.r = 0xFF;
-            line.g = 0x80;
-            line.b = 0x80;
+            line.color[0] = 0xFF;
+            line.color[1] = 0x80;
+            line.color[2] = 0x80;
         } else {
-            line.r = 0xFF;
-            line.g = 0xFF;
-            line.b = 0xFF;
+            line.color[0] = 0xFF;
+            line.color[1] = 0xFF;
+            line.color[2] = 0xFF;
         }
         yf = (float)y;
-        line.p1.y = yf;
-        line.p0.y = yf;
-        grPutF2(packet, &line, 0);
+        line.points[1].y = yf;
+        line.points[0].y = yf;
+        grPutF2(&packet, &line, 0);
     }
 
-    line.p0.y = 0.0f;
-    line.p1.y = 448.0f;
+    line.points[0].y = 0.0f;
+    line.points[1].y = 448.0f;
     for (x = 0; x <= 512; x += 8) {
         float xf;
 
         if (x == 0 || x == 512) {
-            line.r = 0xFF;
-            line.g = 0x80;
-            line.b = 0x80;
+            line.color[0] = 0xFF;
+            line.color[1] = 0x80;
+            line.color[2] = 0x80;
         } else {
-            line.r = 0xFF;
-            line.g = 0xFF;
-            line.b = 0xFF;
+            line.color[0] = 0xFF;
+            line.color[1] = 0xFF;
+            line.color[2] = 0xFF;
         }
         xf = (float)x;
-        line.p1.x = xf;
-        line.p0.x = xf;
-        grPutF2(packet, &line, 0);
+        line.points[1].x = xf;
+        line.points[0].x = xf;
+        grPutF2(&packet, &line, 0);
     }
 
     grCloseF2();
-    grPacketSend(packet);
+    grPacketSend(&packet);
 }

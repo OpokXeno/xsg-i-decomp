@@ -1,33 +1,35 @@
 /*
- * Private source hypothesis copied from the retained block-10 candidate
- * source (SHA-256 7022be20ec8834e1b4d169df2d5d1deae06d697f3ce1607fcea2995d77e82a1a),
- * lines 818-949. The prior derive reports .data 2344 bytes exactly equal,
- * with 11 pointer relocations unresolved. Do not treat that as full acceptance.
- * The unallocated D_00A456C8 string and the .bss definitions are intentionally
- * omitted; support16 owns the latter. The types for XtxFileEntry, PosTblEntry,
- * ThinkMapTable and SpecTable are the TU-local declarations in that source.
+ * OV01 TU 5 .data and const tables: the name tables, the think and map
+ * tables, the position and the stat-file tables. Definitions stay in their
+ * original order. The types XtxFileEntry, PosTblEntry, ThinkMapTable and
+ * SpecTable are the TU-local declarations in the main file.
  */
-extern char D_00A44880[];
-extern char D_00A44898[];
-extern char D_00A448A0[];
-extern char D_00A448B8[];
-extern char D_00A448C0[];
-extern char D_00A448D8[];
-extern char D_00A44920[];
-extern char D_00A44900[];
-extern char D_00A448E0[];
-static char *motNameBase = D_00A44880;
-static char *motNameExt = D_00A44898;
-static char *mapNameBase = D_00A448A0;
-static char *mapNameExt = D_00A44898;
-static char *mapName = D_00A448B8;
-static char *thinkNameBase = D_00A448C0;
-static char *thinkNameExt = D_00A44898;
-static char *thinkName = D_00A448D8;
+extern char unitOrgDataYamamotoMotText[];
+extern char unitOrgBinText[];
+extern char unitOrgDataYamamotoMapText[];
+extern char unitOrgMapText[];
+extern char unitOrgDataYamamotoThinkText[];
+extern char unitOrgThinkText[];
+extern char unitOrgDataYamamotoStatStatXtxText[];
+extern char unitOrgDataYamamotoStatManuXtxText[];
+extern char unitOrgDataYamamotoStatCurXtxText[];
+static const char *motNameBase = unitOrgDataYamamotoMotText;
+static const char *motNameExt = unitOrgBinText;
+static const char *mapNameBase = unitOrgDataYamamotoMapText;
+static const char *mapNameExt = unitOrgBinText;
+static const char *mapName = unitOrgMapText;
+static const char *thinkNameBase = unitOrgDataYamamotoThinkText;
+static const char *thinkNameExt = unitOrgBinText;
+static const char *thinkName = unitOrgThinkText;
+/* Destination addresses dataFileLoadNB reads the stat XTX files into (main RAM,
+ * not CD sectors). */
+#define YAMAMOTO_STAT_STAT_XTX_ADDRESS 0x01B13800
+#define YAMAMOTO_STAT_MANU_XTX_ADDRESS 0x01B09800
+#define YAMAMOTO_STAT_CUR_XTX_ADDRESS 0x01B04000
 static XtxFileEntry xtxFile[4] = {
-    { D_00A44920, 0x01B13800 },
-    { D_00A44900, 0x01B09800 },
-    { D_00A448E0, 0x01B04000 },
+    { unitOrgDataYamamotoStatStatXtxText, YAMAMOTO_STAT_STAT_XTX_ADDRESS },
+    { unitOrgDataYamamotoStatManuXtxText, YAMAMOTO_STAT_MANU_XTX_ADDRESS },
+    { unitOrgDataYamamotoStatCurXtxText, YAMAMOTO_STAT_CUR_XTX_ADDRESS },
     { 0, 0 }
 };
 
@@ -110,6 +112,8 @@ static short cidChgTbl[196] = {
      0x4F1E, 0x4F1F, 0x4F20, 0x4F21, 0x4F03, 0x4F04, 0x4F14, 0x4F22, 0x4F23, 0x4F24, 0x4F25, 0x4F26,
      0x4F27, 0x4F28, 0x4F29, 0x0000
  };
+
+static const char *motFile[303] = { unitOrgChaoText, unitOrgKosmText, unitOrgShioText, unitOrgShitText, unitOrgZiggText, unitOrgMomoText, unitOrgJrText, unitOrgCeciText, unitOrgCathText, unitOrgVirgText, unitOrgChaoText, unitOrgChaoText, 0, 0, 0, 0, unitOrgVx01Text, unitOrgVx02Text, unitOrgVx03Text, unitOrgVx04Text, unitOrgVx05Text, unitOrgVx06Text, unitOrgAg01Text, unitOrgAg02Text, unitOrgAg03Text, unitOrgAg04Text, unitOrgAg05Text, unitOrgAg05Text, unitOrgUknText, 0, 0, 0, unitOrgSldText, unitOrgGuno001Text, unitOrgGuno002Text, unitOrgGuno003Text, unitOrgGuno004Text, unitOrgGuno005Text, unitOrgGuno006Text, unitOrgGuno007Text, unitOrgGuno008Text, unitOrgGuno009Text, unitOrgGuno010Text, unitOrgGuno011Text, unitOrgGuno012Text, unitOrgGuno013Text, unitOrgGuno014Text, unitOrgGuno015Text, unitOrgGuno016Text, unitOrgGuno017Text, unitOrgGuno018Text, unitOrgGuno019Text, unitOrgGuno020Text, unitOrgGuno021Text, unitOrgGuno022Text, unitOrgGuno023Text, unitOrgGuno024Text, unitOrgGuno025Text, unitOrgGuno001Text, unitOrgGuno002Text, unitOrgGuno003Text, unitOrgGuno114Text, unitOrgFema001Text, unitOrgFema002Text, unitOrgFema003Text, unitOrgFema004Text, unitOrgFema005Text, unitOrgFema006Text, unitOrgFere001Text, unitOrgFere002Text, unitOrgFere003Text, unitOrgFero001Text, unitOrgFeso001Text, unitOrgFeso002Text, unitOrgFeso003Text, unitOrgFeso004Text, unitOrgUtma001Text, unitOrgUtma002Text, unitOrgUtma003Text, unitOrgUtma004Text, unitOrgUtma005Text, unitOrgUtma006Text, unitOrgUtma007Text, unitOrgUtma008Text, unitOrgUtma009Text, unitOrgUtma010Text, unitOrgUtma011Text, unitOrgUtma012Text, unitOrgUtma013Text, unitOrgUtma014Text, unitOrgUtre001Text, unitOrgUtre002Text, unitOrgUtre003Text, unitOrgUtre004Text, unitOrgUtre005Text, unitOrgUtre006Text, unitOrgUtro001Text, unitOrgUtro002Text, unitOrgUtro003Text, unitOrgUtro004Text, unitOrgUtro005Text, unitOrgUtro006Text, unitOrgUtro007Text, unitOrgUtso001Text, unitOrgUtso002Text, unitOrgUtso003Text, unitOrgUtso004Text, unitOrgUtso005Text, unitOrgUtso006Text, unitOrgUtso007Text, unitOrgUtma002Text, unitOrgUtma002Text, unitOrgUtma006Text, unitOrgGuno006Text, unitOrgFema001Text, unitOrgFeso001Text, unitOrgFeso002Text, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, unitOrgFeso001Text, unitOrgFeso001Text, unitOrgFeso001Text, unitOrgFeso001Text, unitOrgFeso001Text, unitOrgBoss001Text, unitOrgBoss002Text, unitOrgBoss003Text, unitOrgBoss004Text, unitOrgBoss005Text, unitOrgBoss006Text, unitOrgBoss007Text, unitOrgBoss008Text, unitOrgBoss009Text, unitOrgBoss010Text, unitOrgBoss011Text, unitOrgBoss012Text, unitOrgBoss013Text, unitOrgBoss014Text, unitOrgBoss015Text, unitOrgBoss016Text, unitOrgBoss017Text, unitOrgBoss018Text, unitOrgBoss019Text, unitOrgBoss020Text, unitOrgBoss021Text, unitOrgBoss022Text, unitOrgBoss023Text, unitOrgBoss024Text, unitOrgBoss025Text, unitOrgBoss026Text, unitOrgBoss027Text, unitOrgBoss028Text, unitOrgBoss029Text, unitOrgBoss030Text, unitOrgBoss031Text, unitOrgBoss032Text, unitOrgBoss033Text, unitOrgBoss003Text, unitOrgBoss004Text, unitOrgBoss020Text, unitOrgSkjJr1Text, unitOrgSkjJr2Text, unitOrgSkjMomo1Text, unitOrgSkjShion1Text, unitOrgSkjShion2Text, unitOrgSkjShion3Text, unitOrgSkjShion4Text, unitOrgSkjKosmos1Text, unitOrgChaoSp1Text, unitOrgChaoSp2Text, unitOrgChaoSp3Text, unitOrgChaoSp4Text, unitOrgChaoSp5Text, unitOrgChaoSp6Text, unitOrgChaoSp7Text, unitOrgChaoSp8Text, unitOrgKosmSp1Text, unitOrgKosmSp2Text, unitOrgKosmSp3Text, unitOrgKosmSp4Text, unitOrgKosmSp5Text, unitOrgKosmSp6Text, unitOrgKosmSp7Text, unitOrgShioSp1Text, unitOrgShioSp2Text, unitOrgShioSp3Text, unitOrgShioSp4Text, unitOrgShioSp5Text, unitOrgShioSp6Text, unitOrgShioSp7Text, unitOrgShioSp8Text, unitOrgShitSp1Text, unitOrgShitSp2Text, unitOrgShitSp3Text, unitOrgShitSp4Text, unitOrgShitSp5Text, unitOrgShitSp6Text, unitOrgShitSp7Text, unitOrgShitSp8Text, unitOrgZiggSp1Text, unitOrgZiggSp2Text, unitOrgZiggSp3Text, unitOrgZiggSp4Text, unitOrgZiggSp5Text, unitOrgZiggSp6Text, unitOrgZiggSp7Text, unitOrgMomoSp1Text, unitOrgMomoSp2Text, unitOrgMomoSp3Text, unitOrgMomoSp4Text, unitOrgMomoSp5Text, unitOrgMomoSp6Text, unitOrgMomoSp7Text, unitOrgMomoSp8Text, unitOrgJrSp1Text, unitOrgJrSp2Text, unitOrgJrSp3Text, unitOrgJrSp4Text, unitOrgJrSp5Text, unitOrgJrSp6Text, unitOrgJrSp7Text, unitOrgJrSp8Text, unitOrgKosmWp1Text, unitOrgKosmWp2Text, unitOrgKosmWp3Text, unitOrgKosmWp4Text, unitOrgKosmWp5Text, unitOrgKosmWp6Text, unitOrgZiggWp1Text, unitOrgZiggWp2Text, unitOrgZiggWp3Text, unitOrgZiggWp4Text, unitOrgSut0Text, unitOrgAx0Text, unitOrgBd0Text, unitOrgBd1Text, unitOrgBdf0Text, unitOrgHg0Text, unitOrgHg1Text, unitOrgHmr0Text, unitOrgHmr1Text, unitOrgHmr2Text, unitOrgMg0Text, unitOrgMg1Text, unitOrgRf0Text, unitOrgRf1Text, unitOrgRf2Text, unitOrgBam0Text, unitOrgBs0Text, unitOrgLsr0Text, unitOrgPbk0Text, unitOrgFl0Text, unitOrgGnd0Text, unitOrgGlg0Text, unitOrgHb0Text, unitOrgMsp0Text, unitOrgMsp2Text, unitOrgBl0Text, unitOrgCb0Text, unitOrgEac0Text, unitOrgBp0Text, unitOrgLgc0Text, unitOrgAmp2Text, unitOrgShb0Text, unitOrgFsd0Text, unitOrgVsd0Text, unitOrgBbc0Text, unitOrgEad0Text, unitOrgEcm1Text, unitOrgEcm2Text, unitOrgSmp1Text, unitOrgWir0Text, unitOrgSol0Text, unitOrgDef0Text, unitOrgGlg0Text, unitOrgHb0Text, unitOrgMsp2Text };
  
 /* The indexed special-base fields continue at the next original data symbol. */
 static ThinkMapTable thinkMapTbl = {
@@ -122,15 +126,15 @@ static SpecTable specTbl = {
 };
  
 /* Error and file-name messages from this TU's original rodata. */
-static const char D_00A457B0[] = "** dataSpecLearnSet: err %d\n";
-static const char D_00A457D0[] = "** dataSpecLearnGet: err %d\n";
-static const unsigned char D_00A45890[] = "** dataCidGet: err %d\n";
-static const unsigned char D_00A458A8[] = "** dataWidGet: err %d";
-static const char D_00A459E0[] = "** NBread: err %d\n";
-static const char D_00A459F8[] = "** NBread: end %d *\n";
-static const char D_00A45AC8[] = "** dataUnitFileLoad: err\n";
-static const char D_00A45F38[] = "** dataChildActorCreate: err\n";
-static const char D_00A45FE8[] = "** dataXtxAdrGet: err %d\n";
-static const char D_00A46008[] = "data\\yamamoto\\batdat.bin";
-static const char D_00A46028[] = "%03d";
-static const char D_00A46030[] = "** dataMapLoad: err -> %d\n";
+static const char unitOrgDataSpecLearnSetErrText[] = "** dataSpecLearnSet: err %d\n";
+static const char unitOrgDataSpecLearnGetErrText[] = "** dataSpecLearnGet: err %d\n";
+static const unsigned char unitOrgDataCidGetErrText[] = "** dataCidGet: err %d\n";
+static const unsigned char unitOrgDataWidGetErrText[] = "** dataWidGet: err %d";
+static const char unitOrgNBreadErrText[] = "** NBread: err %d\n";
+static const char unitOrgNBreadEndText[] = "** NBread: end %d *\n";
+static const char unitOrgDataUnitFileLoadErrText[] = "** dataUnitFileLoad: err\n";
+static const char unitOrgDataChildActorCreateErrText[] = "** dataChildActorCreate: err\n";
+static const char unitOrgDataXtxAdrGetErrText[] = "** dataXtxAdrGet: err %d\n";
+static const char unitOrgDataYamamotoBatdatBinText[] = "data\\yamamoto\\batdat.bin";
+static const char unitOrgJpText[] = "%03d";
+static const char unitOrgDataMapLoadErrText[] = "** dataMapLoad: err -> %d\n";

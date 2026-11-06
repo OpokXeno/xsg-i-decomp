@@ -4,6 +4,30 @@
 #include "shared.h"
 
 typedef struct Actor Actor;
+typedef struct BattleUnit BattleUnit;
+struct CalcUnitParam;
+
+/* Hides the actor: unit_cmd.c sets and clears it on the motion actor and tests
+ * it on the work actor (unitCmdSet, unitTelIn). include/main/act_1.h defines the
+ * same macro, so this bit is not an enumerator. */
+#define ACTOR_FLAG_HIDDEN 0x8
+
+/* Bits of Actor.flags, the battle actor record every OV01 TU shares. */
+enum ActorFlag {
+    /* unitCmdSet sets it when it queues a command whose selector is nonzero
+     * (ori 0x2 at 0x00a01d5c); unitCmdFree clears it (and 0x00a01e08). */
+    ACTOR_FLAG_CMD_PENDING = 0x2,
+    /* The enemy-controlled bit: unitLoad picks sefSetupEnemy on it, and
+     * unitActupdate recomputes the ground height only when it is set. */
+    ACTOR_FLAG_ENEMY = 0x40,
+    /* Set by unitCmdDead (0x00a0307c, 0x00a03270) and unitCmdEscape; unitLiveNumGet
+     * skips it as not alive, unitCmdDeadSet refuses to set it again and unitCmdWake
+     * clears it. calcDeadUnitNum counts it, calcBackLineChk skips it. */
+    ACTOR_FLAG_DEAD = 0x80,
+    /* unitCmdGuard sets it (ori 0x800 at 0x00a02764) and unitCmdDef tests it
+     * to skip its follow-up motion 0x1C (andi at 0x00a02fac). */
+    ACTOR_FLAG_GUARD = 0x800
+};
 
 /*
  * The unit record scenarioMtd, transWepIn/transWepOut and spWepDispOn
@@ -13,14 +37,13 @@ typedef struct Actor Actor;
  * as transWepIn/transWepOut do on their own argument and scenarioMtd does on
  * *unitHandle. Bytes between the evidenced members are untouched here.
  */
-typedef struct BattleUnit BattleUnit;
-
 struct BattleUnit {
-    unsigned char unmodeled_00[0x10];
-    Actor *work;       /* +0x10 */
-    Actor *actor;      /* +0x14 */
+    XglTaskPrefix task;   /* +0x00: the scheduler header (include/shared.h) */
+    Actor *work;          /* +0x10: the unit's battle actor (ObjectTask.work) */
+    Actor *actor;         /* +0x14: the motion actor */
     unsigned char unmodeled_18[0x1C - 0x18];
-    Actor *weapon[4];  /* +0x1C */
+    Actor *weapon[4];     /* +0x1C: one actor per weapon slot (slot & 3) */
+    Actor *subActor;      /* +0x2C: unitRemoveActor disposes it first when set */
 };
 
 /*
@@ -38,9 +61,12 @@ void transWepOut(BattleUnit *unit, int slot);
  * address (data still asm-owned; original ELF symbol name).
  */
 typedef struct ManWork {
-    unsigned char unmodeled_00[0xc];
+    int tgtSelect;        /* +0x0: picks pTgtUnit2 (values 6, 7, 9, 10, 11) or
+                           * pTgtUnit in tgtUnitAdrGet */
+    int field04;          /* +0x4: cleared by battleInit */
+    int selection;        /* +0x8 */
     int controlPhase;     /* +0xc */
-    ObjectTask *unitTask; /* +0x10 */
+    BattleUnit *unitTask; /* +0x10 */
     unsigned char unmodeled_14[4]; /* original named span continues to +0x18 */
 } ManWork;
 
@@ -55,5 +81,10 @@ typedef struct UnitWork {
 } UnitWork;
 
 ManWork *manWorkGet(void);
+
+/* Functions used by other translation units (ov01/tu003, battle_init.c). */
+int unitCmdListSet(BattleUnit *unit, int *command);
+int keyCmdApGet(BattleUnit *unit, int command);
+void decoEffCall(BattleUnit *unit, int type);
 
 #endif /* INCLUDE_OV01_BATTLE_INIT_H */

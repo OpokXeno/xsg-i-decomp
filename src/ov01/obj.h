@@ -7,38 +7,30 @@
 
 #include "shared.h"
 
-/* The manager heads are the free-list and active-list roots, not two active
- * execution lists.  The remaining slots are established by the same task
- * manager helpers; this wrapper only passes the manager through. */
-typedef struct {
-    ObjectTask *free_head;
-    ObjectTask *active_head;
-    ObjectTask *active_tail;
-    ObjectTask *next_to_visit;
-} TaskManager;
+/* The object task pool objInit clears: slot count and the 0x80-byte slot size. */
+#define OBJ_TASK_CAPACITY 50
+#define OBJ_TASK_SLOT_SIZE 0x80
 
-typedef void (*ObjectTaskCallback)(ObjectTask *task);
+/* The objWork pool: slot count, and the value ObjectWork.used holds while a slot is taken. */
+#define OBJ_WORK_COUNT 60
+#define OBJ_WORK_IN_USE 1
 
-/* Canonical declaration from main/tu090's source header. This OV01 TU keeps a
- * local boundary declaration because the generated main header does not yet
- * export xglTaskEntryNext. */
-XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
-                                int (*callback)(XglTaskPrefix *task),
+/* Queued commands per object (ObjectCommandQueue.entries). */
+#define OBJ_CMD_QUEUE_CAPACITY 5
+
+/* The scheduler callback xglTaskEntryNext stores in XglTaskPrefix.callback. */
+typedef int (*ObjectSchedulerCallback)(XglTaskPrefix *task);
+
+XglTaskPrefix *xglTaskEntryPrev(XglTaskScheduler *scheduler,
+                                ObjectSchedulerCallback callback,
                                 XglTaskPrefix *entry);
 
 /*
- * The object task node as this unit's entry points allocate it.
- *
- * ObjectTask (include/shared.h) carries the part every consumer of an object
- * task shares: the 16-byte XglTaskPrefix the scheduler maintains and the work
- * pointer at +0x10 objRemove hands back to objWorkFree.  This unit establishes
- * one more member of the same record, the callback slot at +0x18: objEntrySub
- * (0x00a00378) clears it before it returns a fresh node (sw $0,0x18 at
- * 0x00a003d4), objEntry2 (0x00a00330) stores the caller's callback there,
- * objExec2 (0x00a002b8) loads it and calls it with the task, and objRemove
- * (0x00a00478) clears it again before releasing the node.  The word at +0x14
- * between them is written and read by nothing here and stays unmodelled, so
- * this type states what it knows and stops: it is not the complete 0x80-byte
+ * The object task node this unit allocates.  ObjectTask (include/shared.h)
+ * carries the scheduler prefix and the work pointer; the callback slot at
+ * +0x18 is established here: objEntrySub clears it, objEntry2 stores the
+ * caller's callback, objExec2 calls it, and objRemove clears it again.  The
+ * word at +0x14 is not read by this unit, so this is not the complete 0x80-byte
  * node.
  */
 typedef struct {
@@ -124,39 +116,40 @@ typedef struct {
 } ObjectWork;
 
 
-int xglTaskRemove(XglTaskPrefix *task);
-
 void objInit(void);
 
 void objExec(void);
 
-
-extern void objExecSub(void *manager);
+extern void objExecSub(XglTaskScheduler *manager);
 
 void objExec2(void);
 
-void objEntry(void *argument);
+void objEntry(ObjectSchedulerCallback schedulerCallback);
 
-ObjectTask *objEntry2(void *argument, ObjectTaskCallback callback);
+ObjectTask *objEntry2(ObjectSchedulerCallback schedulerCallback, ObjectTaskCallback callback);
 
-extern ObjectTask *objEntrySub(void *manager, void *argument, int reverse);
+extern ObjectTask *objEntrySub(XglTaskScheduler *manager, ObjectSchedulerCallback schedulerCallback, int reverse);
 
-void objEntryRev(void *argument);
+void objEntryRev(ObjectSchedulerCallback schedulerCallback);
 
-ObjectTask *objEntry2Rev(void *argument, ObjectTaskCallback callback);
+ObjectTask *objEntry2Rev(ObjectSchedulerCallback schedulerCallback, ObjectTaskCallback callback);
 
 void objRemove(ObjectTask *task);
 
 void objWorkInit(void);
 
-extern void objWorkFree(void *work);
+extern void objWorkFree(ObjectWork *work);
 
-extern const char D_00A43810[];
-extern const char D_00A43848[];
-extern const char D_00A43880[];
-extern const char D_00A438C0[];
+extern ObjectWork *objWorkGet(void);
 
-extern const char D_00A43860[];
+extern const char objEntryErrorText[];
+
+extern const char objEntryPureErrorText[];
+extern const char objWorkGetErrorText[];
+extern const char objCmdPushBuffOverText[];
+extern const char objFifoPushErrorText[];
+
+extern const char objWorkFreeErrorText[];
 
 void objStdInit(ObjectTask *task);
 
@@ -168,19 +161,29 @@ extern const char objRemovePureError[];
 
 void objCmdClear(ObjectTask *task);
 
-void *objCmdPtrGet(ObjectTask *task);
+ObjectCommandEntry *objCmdPtrGet(ObjectTask *task);
 
-void *objCmdTailGet(ObjectTask *task);
+ObjectCommandEntry *objCmdTailGet(ObjectTask *task);
 
-extern const char D_00A438A0[];
+extern const char objCmdPopBuffOverText[];
 
-void *objCmdPop(ObjectTask *task);
+ObjectCommandEntry *objCmdPush(ObjectTask *task);
+
+ObjectCommandEntry *objCmdPop(ObjectTask *task);
 
 int objCmdNext(ObjectTask *task);
 
+ObjectTask *objEntryPure(ObjectSchedulerCallback callback);
+
+int objStdMove(ObjectTask *task);
+
+void objHatoVec(ObjectTask *task, int steps);
+
 void fifoInit(Fifo *fifo, int capacity);
 
-extern const char D_00A438D8[];
+extern const char objFifoPopErrorText[];
+
+int fifoPush(Fifo *fifo);
 
 int fifoPop(Fifo *fifo);
 

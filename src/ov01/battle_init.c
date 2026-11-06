@@ -2,9 +2,13 @@
  * OV01 original TU 3: 0x00a07770..0x00a10bb8 (150 functions)
  */
 #include "common.h"
+#include "ov01/actor.h"
 #include "shared.h"
 #include "battle_init.h"
 #include "ov01/calc.h"
+#include "ov01/unit_cmd.h"
+#include "ov01/snd.h"
+#include "ov01/menu.h"
 #include "main/party.h"
 #include "main/sef.h"
 
@@ -12,10 +16,6 @@
  * outside their #APP blocks. */
 const char s_battleCtrlBoostEnFormat[32] = "** BOOST EN=%d %d%% (%d)\n";
 
-#define CURSOR_STATE_OFF 0x10
-#define STATE_FLAGS_OFF 0x00
-#define STATE_UNK70_OFF 0x70
-#define STATE_UNK74_OFF 0x74
 
 /*
  * The enemy AI's own boost chance percentage: a signed byte at CalcUnitParam
@@ -45,67 +45,16 @@ extern void battleMsgPut(int x, int y, int msgId, int frames);
  * and the flags word at +0x6F0 (hairWindOn ORs in HAIR_WIND_BIT there for
  * every other unit's actor and hairWindOff clears it again).
  */
-typedef struct Actor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    unsigned char unmodeled_70[0xC0 - 0x70];
-    float transparency; /* +0xC0 */
-    unsigned char unmodeled_c4[0x6F0 - 0xC4];
-    u32 windFlags; /* +0x6F0 */
-    unsigned char unmodeled_6f4[0x6F8 - 0x6F4];
-    float motionStep; /* +0x6F8: statEffProc zeroes it while status effect
-                       * 3 is shown (`sw $0,0x6F8($3)` at 0x00a0f560) and
-                       * restores 1/30 when it ends (`swc1 $f0,0x6F8($3)`
-                       * at 0x00a0f5e4) */
-} Actor;
+/* The motion actor's current motion id; +0x84 holds the CalcUnitParam pointer
+ * on the work actor instead. stat1Proc compares it with 20 and 21. */
+typedef struct UnitMotionHead {
+    unsigned char unmodeled_00[0x86];
+    short motionId; /* +0x86 */
+} UnitMotionHead;
 
 #define HAIR_WIND_BIT 0x100000
 
 #define WEAPON_HIDDEN_BIT 0x8
-
-/*
- * The unit record scenarioMtd, transWepIn/transWepOut and spWepDispOn
- * (0x00a0e550) all share: spWepDispOn receives the
- * same pointer scenarioMtd receives, dereferences it to reach this record,
- * then indexes its +0x1C table by (weapon-slot & 3) and reads +0x14, exactly
- * as transWepIn/transWepOut do on their own argument and scenarioMtd does on
- * *unitHandle. Bytes between the evidenced members are untouched here.
- */
-typedef struct BattleUnit BattleUnit;
-struct BattleUnit {
-    unsigned char unmodeled_00[0x10];
-    Actor *work;       /* +0x10 */
-    Actor *actor;      /* +0x14 */
-    unsigned char unmodeled_18[0x1C - 0x18];
-    Actor *weapon[4];  /* +0x1C */
-};
-
-/*
- * BattleUnit's own ObjectTask.work slot at +0x10 (inside unmodeled_00 above,
- * not completed here): camEventTurnStartSet reads it as the same Actor
- * pointer src/ov01/unit_cmd.c and src/ov01/snd.c already read through
- * ObjectTask.work on their own unit records, testing bit 0x40 of
- * Actor.flags (the enemy bit src/ov01/unit_cmd.h names ACTOR_FLAG_ENEMY).
- *
- * BattleUnit is the battle-side view of the unit's ObjectTask, the type
- * calcUPGet takes. scenarioCam and spWepDispOn pass ScenarioBatExec.unit to
- * calcUPGet unconverted (the first word of the exec record goes straight
- * into the argument register: `jal calcUPGet` at 0x00a0ba90 with `lw $4,
- * 0x0($16)` in its delay slot, and at 0x00a0e5d8 and 0x00a0e664 in
- * spWepDispOn), so they write the same (ObjectTask *) conversion that
- * battleCtrlBoostPl already uses on the unitTblGet() entries. The view
- * stays partial: only work (+0x10), actor (+0x14) and weapon[] (+0x1C) are
- * evidenced, and no other BattleUnit member is claimed here.
- */
-#define BATTLE_UNIT_WORK_OFF 0x10
 
 /*
  * The camera-event request record camEventExec (defined elsewhere, still
@@ -178,10 +127,34 @@ extern void transWepInDraw(Actor *actor);
 extern void transWepOutDraw(Actor *actor);
 
 /*
+ * dataWpnGet's record (src/ov01/data_unit_org_get.c, WpnRecord), as far as
+ * keyBuffChk reads it; the name follows menu.c's MenuWpnData view.
+ */
+typedef struct KeyWpnData {
+    unsigned char unmodeled_00[0x0F];
+    signed char apCost;          /* +0x0F: `lb $3,0xF($2)` at 0x00a0b398 */
+    unsigned char unmodeled_10[0x14 - 0x10];
+    short tecId;                 /* +0x14: the command's technique id */
+    short tecIdMultiHit;         /* +0x16: keyCmd2tid's technique for commands 3, 5, 10 */
+    short tecIdDblAct;           /* +0x18: keyCmd2tid's technique for command 19 */
+} KeyWpnData;
+
+/* Functions from other translation units, or defined later in this file,
+ * that are called before their definition. */
+extern KeyWpnData *dataWpnGet(int weaponId);
+extern void actStockInit(void);
+extern int actStockRemove(BattleUnit *unit, int *index);
+extern void scenarioMtd();
+extern unsigned char *dataGainGet(int entry);
+extern int dataBoxInc(int group, int item);
+extern const char *itemNameGet(int group, int index);
+extern int sefIsHitActor(Actor *actor);
+
+/*
  * The battle AI script identifier (data still asm-owned: the extern keeps
  * its splat name until the owning data TU recovers it, docs/naming.md).
  */
-static int D_00A57C80;
+static int thinkNo;
 
 /*
  * The unit currently executing a battle action / the unit that most
@@ -191,27 +164,45 @@ static BattleUnit *pLastUnit;
 BattleUnit **tgtUnitAdrGet(void);
 BattleUnit *tgtUnitGet(void);
 
-/*
- * manWorkGet's return type. Only the two fields menuKeyGuideObjDraw (src/
- * ov01/menu.c, ov01/tu009) consumes are evidenced there: unitTask at +0x10
- * and controlPhase at +0xc. This TU's own code only takes the record's
- * address (data still asm-owned; original ELF symbol name).
- */
-typedef struct ManWork {
-    unsigned char unmodeled_00[0xc];
-    int controlPhase;     /* +0xc */
-    ObjectTask *unitTask; /* +0x10 */
-    unsigned char unmodeled_14[4]; /* original named span continues to +0x18 */
-} ManWork;
 static ManWork manWk;
 
 /*
- * Opaque battle-control record. batCtrlGet is its only reference in the
- * mapped functions so far; no dereference evidences any member layout
- * (data still asm-owned; original ELF symbol name).
+ * battleCtrl's state (BatCtrl.field00): choose the acting unit's command,
+ * pick the next actor from the action stock, or wait until the queued
+ * command has run and the battle message is done. Names follow what each
+ * case does (guessed from the code, not from a debug string).
+ */
+enum BattleCtrlState {
+    BATTLE_CTRL_ACT_SELECT = 1,
+    BATTLE_CTRL_STOCK_PICK = 2,
+    BATTLE_CTRL_ACT_WAIT = 3
+};
+
+/*
+ * battleExec's phase (BatCtrl.field04). Names follow each case's work, and
+ * BatCtrl.field08 holds the phase the WAIT phases resume (guessed names).
+ */
+enum BattlePhase {
+    BATTLE_PHASE_EXEC_QUEUE = 1,       /* battleExecNorm: run the next queued command */
+    BATTLE_PHASE_SCENARIO_START = 2,   /* scenarioDstGet(0): scenario batch starts */
+    BATTLE_PHASE_SCENARIO_RUN = 3,     /* scenarioBatExec until it reports done */
+    BATTLE_PHASE_STAT_PROC_1 = 4,      /* stat1Proc on the statUnit record */
+    BATTLE_PHASE_DEAD = 5,             /* battleExecDead */
+    BATTLE_PHASE_STAT_PROC_2 = 6,      /* stat2Proc on the statUnit record */
+    BATTLE_PHASE_WAIT_BUSY = 7,        /* wait while busyUnitChk(2) > 0, then field08 */
+    BATTLE_PHASE_WAIT_UNIT = 8,        /* wait while pExecUnit's flag 0x2 is set */
+    BATTLE_PHASE_WAIT_FRAMES = 9       /* wait while busyUnitChk(0) > 0 and field0C counts down */
+};
+
+/*
+ * The battle-control record battleExec's phase machine steps through
+ * (original ELF symbol name).
  */
 typedef struct BatCtrl {
-    unsigned char unmodeled_00[4];
+    int field00; /* +0x0: set to 1 by battleInit */
+    int field04; /* +0x4: battle phase; set to 7 by battleInit */
+    int field08; /* +0x8: phase to resume after a wait; set to 1 by battleInit */
+    int field0C; /* +0xC: frame countdown tested by battleExec's case 9 */
 } BatCtrl;
 static BatCtrl batCtrl;
 
@@ -237,8 +228,8 @@ static BatCtrl batCtrl;
  * only reference to it in this TU and touches just the one evidenced word.
  */
 typedef struct ScenarioStep {
-    unsigned char unmodeled_00[0x10];
-    int stride; /* +0x10: added into ScenarioBatState.index by scenarioBatNext */
+    ScenarioBatExec exec; /* +0x00: the action record scenarioBatExecPhase40 casts this pointer to */
+    int stride;           /* +0x10: added into ScenarioBatState.index by scenarioBatNext */
 } ScenarioStep;
 /*
  * Two-parameter spelling of the phase callback: a compiler-specific matching
@@ -261,16 +252,20 @@ typedef void (*ScenarioPhaseFunc)(int source, ScenarioDstEntry *dest);
  *   +0x00 unit: scenarioBatEnd reads unit->work (+0x10) and clears bit 0x4000
  *         in its first word; scenarioBatExecMain passes the word at unit+0x14
  *         to sefIsSeSignal.
- *   +0x08: battleExec copies it into D_00A57B78.
+ *   +0x08: battleExec copies it into statUnit.hpBonus.
  *   +0x14: scenarioBatExecPhase30 zeroes it after scenarioEffCall.
  */
 struct ScenarioDstEntry {
-    ObjectTask *unit;                 /* +0x00 */
+    BattleUnit *unit;                 /* +0x00 */
     unsigned char unmodeled_04[4];
     int word08;                       /* +0x08 */
-    unsigned char unmodeled_0c[8];
+    int word0c;                       /* +0x0C: scenarioBatEnd's dst[3] */
+    unsigned char unmodeled_10[4];
     int word14;                       /* +0x14 */
-    unsigned char unmodeled_18[0x10];
+    int word18;                       /* +0x18: scenarioBatEnd's dst[6] */
+    int word1c;                       /* +0x1C: scenarioBatEnd's dst[7] */
+    int word20;                       /* +0x20: scenarioBatEnd's dst[8] */
+    int word24;                       /* +0x24: scenarioBatEnd's dst[9] */
 };
 
 /*
@@ -303,20 +298,111 @@ static ObjectTask *pTaskEnCur;
 static BattleUnit *pActUnit;
 static int oldCurGrp;
 static int keyBuffIdx;
-static int keyBuff[8];
+#define KEY_BUFF_COUNT 8
+static int keyBuff[KEY_BUFF_COUNT];
 static int batMainFlag;
 static ScenarioStep scenarioSrc[8];
 static ScenarioDstEntry scenarioDst[12];
 static ScenarioBatState scenarioPtr;
 static int helpFlag;
-static CamEvent D_00A57B80;
+typedef struct StatUnit {
+    BattleUnit *unit;
+    int cmd;
+    int hpBonus;
+} StatUnit;
+static StatUnit statUnit;
+static CamEvent camEv;
 static int batRetCode;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleInit);
+/*
+ * batRetCode, read by battleAfter and by entry_first_init.c through
+ * battleRetCodeGet. battleEndChk writes WIN (mode 1 with the enemy side
+ * empty, which stores the mode itself), LOSE (the player side empty) or
+ * ESCAPE (escapeFlag, or the cfEvent bits 0x10/0x20). battleAfter prints the
+ * player-win text for WIN, the escape text for ESCAPE and the enemy-win text
+ * for the remaining value.
+ */
+enum BattleResult {
+    BATTLE_RESULT_NONE = 0,
+    BATTLE_RESULT_WIN = 1,
+    BATTLE_RESULT_LOSE = 2,
+    BATTLE_RESULT_ESCAPE = 3
+};
+
+static int fifoCmd[6];
+extern void fifoInit(void *fifo, int capacity);
+static BattleUnit *pTgtUnit;
+static BattleUnit *pTgtUnit2;
+static BattleUnit *pExecUnit;
+static BattleUnit *pManUnit;
+static BattleUnit *pCounterUnit;
+static int thinkWk;
+static int menuFlag;
+extern void objInit(void);
+extern void unitInit(void);
+extern void thinkSysInit(void);
+extern void dataFileInfoInit(void);
+extern void keyBuffClear(void);
+extern void dataBattleInit(void);
+extern void scenarioBatInit(void);
+extern void monsGainInit(void);
+extern void sndInit(void);
+extern void MBattleCreate(void);
+extern void menuInitBat(void);
+extern void dataVPadModeSet(int enable);
+extern ObjectTask *objEnCurCreate(float x, float y, float z);
+
+void battleInit(void)
+{
+  ObjectTask *task;
+  objInit();
+  unitInit();
+  thinkSysInit();
+  dataFileInfoInit();
+  task = objEnCurCreate(0.0f, 0.0f, 0.0f);
+  *((int *) task->work) |= 4;
+  pTaskEnCur = task;
+  pActUnit = 0;
+  pExecUnit = 0;
+  pTgtUnit = 0;
+  pTgtUnit2 = 0;
+  pManUnit = 0;
+  pCounterUnit = 0;
+  pLastUnit = 0;
+  fifoInit(&fifoCmd, 0x20);
+  keyBuffClear();
+  manWk.unitTask = 0;
+  thinkWk = 0;
+  batCtrl.field04 = BATTLE_PHASE_WAIT_BUSY;
+  batMainFlag = 0;
+  manWk.controlPhase = (int) 0;
+  menuFlag = 0;
+  helpFlag = 0;
+  escapeFlag = 0;
+  manWk.field04 = 0;
+  manWk.tgtSelect = 0;
+  batCtrl.field00 = BATTLE_CTRL_ACT_SELECT;
+  batCtrl.field08 = BATTLE_PHASE_EXEC_QUEUE;
+  dataBattleInit();
+  actStockInit();
+  if (!task->work)
+  {
+  }
+  do
+  {
+    scenarioBatInit();
+    monsGainInit();
+    sndInit();
+    MBattleCreate();
+    menuInitBat();
+  }
+  while (0);
+  dataVPadModeSet(0);
+}
 
 void battleCtrl(void);
 void battleExec(void);
-void battleEndChk(void);
+int battleEndChk(void);
 
 /*
  * Set unconditionally at the start of every battleMain tick (data still
@@ -332,14 +418,125 @@ void battleMain(void)
     battleEndChk();
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleAfter);
+extern const char battleInitPLWinText[];
+extern const char battleInitPLEscText[];
+extern const char battleInitENWinText[];
+extern void menuStatDispRemove(void);
+extern int busyUnitChk(int side);
+extern int battleRetCodeGet(void);
+void objCurRemove(void);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrl);
+int battleAfter(void)
+{
+  int rv;
+  CmdEntry cmd;
+  CamEvent *ev;
+  BattleUnit **unitTable;
+  int eventType;
+  int count;
+  int i;
+  int ret;
+  BattleUnit *unit;
+  ret = battleRetCodeGet();
+  if ((ev && ev) && ev)
+  {
+  }
+  if (ret == BATTLE_RESULT_WIN)
+  {
+    if (batMainFlag == ret)
+    {
+      char *msg;
+      i = 0;
+      printf(battleInitPLWinText);
+      batMainFlag = 2;
+      (&camEv)->unit = pLastUnit;
+      eventType = 5;
+      do
+      {
+        ev = &camEv;
+        camEv.type = eventType;
+        batMainFlag = 2;
+        ((void (*)(CamEvent *, BattleUnit *))camEventExec)(ev, pLastUnit);
+        count = unitTblGet(0, &unitTable);
+      }
+      while (0);
+      if (count > 0)
+      {
+        do
+        {
+          unit = unitTable[i];
+          i++;
+          if ((unit != 0) && (!((*((int *) unit->work)) & 0x80)))
+          {
+            cmd.selector = CMD_BTED;
+            unitCmdSet(unit, &cmd);
+          }
+        }
+        while (i < count);
+      }
+      if ((battleInitENWinText && battleInitENWinText) && battleInitENWinText)
+      {
+      }
+      menuStatDispRemove();
+      objCurRemove();
+      return 1;
+    }
+    if (dataPadRead(1) & PAD_CIRCLE)
+    {
+      goto zero;
+    }
+    if (busyUnitChk(2) != 0)
+    {
+      goto one;
+    }
+    goto zero;
+    one:
+    goto _sw_tl2;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlConfusion);
+    zero:
+    return 0;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlJunk);
+  }
+  if (ret == BATTLE_RESULT_ESCAPE)
+  {
+    printf(battleInitPLEscText);
+    batMainFlag = 2;
+    menuStatDispRemove();
+    objCurRemove();
+    return 0;
+  }
+  printf(battleInitENWinText);
+  batMainFlag = (double) 2;
+  menuStatDispRemove();
+  objCurRemove();
+  ev = &camEv;
+  return 0;
+  _sw_tl2:
+  return 1;
 
+}
+
+extern int dataPadRead(int padNo);
+int battleCtrlHelp(void);
+int battleCtrlBoostPl(void);
+int battleCtrlConfusion(BattleUnit *unit);
+int battleCtrlMan(BattleUnit *unit, int *inp);
+int battleCtrlThink(BattleUnit *unit);
+int battleCtrlJunk(BattleUnit *unit);
+int unitLiveNumGet2(int kind);
+int actUnitTblMake(int side, BattleUnit **actUnits);
+int rnd(int max);
+ManWork *manWorkGet(void);
+int battleCtrlBoostEn(void);
+BattleUnit *actStockPick(void);
+void menuStockNext(void);
+void menuStockStart(void);
+void menuStockBoost(void);
+void calcTurnStart(BattleUnit *unit);
+void thinkTurnStartExec(BattleUnit *unit);
+void camEventTurnStartSet(void);
+int thinkExecChk(void);
+int battleMsgEndChk(void);
 /*
  * The action-stock record (0x24 bytes, the span the published `int *` of
  * actStockGet indexes). actStockRemove compares the unit against the boost
@@ -352,16 +549,231 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlJunk);
  * read the same storage through views of their own.
  */
 typedef struct ActStock {
-    ObjectTask *stock[4]; /* +0x00 */
-    ObjectTask *boost[2]; /* +0x10: calcBoost's per-mode boosting actor */
-    int count;            /* +0x18 */
-    unsigned char unmodeled_1c[8];
+    BattleUnit *stock[4]; /* +0x00 */
+    BattleUnit *boost[2]; /* +0x10: calcBoost's per-mode boosting actor */
+    int max;              /* +0x18: the limit actStockMaxGet returns */
+    int pickCursor;       /* +0x1C: stock slots handed out so far (actStockPick) */
+    BattleUnit *lastPicked; /* +0x20: the unit actStockPick returned last */
+    int pickSource;       /* +0x24: 1 after a refill, 2 when a boost slot was taken */
 } ActStock;
 static ActStock actStock;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockInit);
+void battleCtrl(void)
+{
+    BatCtrl *bc;
+    int cmd[8];
+    int ret;
+    int st;
 
-extern int calcBattleChk(ObjectTask *unit);
+    if (dataPadRead(1) & (PAD_L1 | PAD_L2)) {
+        battleCtrlHelp();
+    }
+    if (battleCtrlBoostPl() != 0) {
+        return;
+    }
+    switch (batCtrl.field00) {
+    case BATTLE_CTRL_ACT_SELECT:
+        bc = &batCtrl;
+        if (unitLiveNumGet2(0) == 0) {
+            break;
+        }
+        if (unitLiveNumGet2(1) == 0) {
+            break;
+        }
+        if (actUnitTblMake(2, (BattleUnit **)cmd) == 0) {
+            bc->field00 = BATTLE_CTRL_STOCK_PICK;
+            manWorkGet()->unitTask = 0;
+            break;
+        }
+        if (calcStatGet(pActUnit, 1, 0x4000) != 0 || calcStatGet(pActUnit, 5, 0x1000) != 0) {
+            ret = battleCtrlConfusion(pActUnit);
+        } else if (calcStatGet(pActUnit, 4, 0x40) != 0 && rnd(100) < 50) {
+            ret = battleCtrlJunk(pActUnit);
+        } else {
+            goto normal;
+        }
+        if (ret == 0) {
+            bc->field00 = BATTLE_CTRL_ACT_WAIT;
+        }
+        break;
+    normal:
+        if (pActUnit->work->flags & 0x20) {
+            ret = ((int (*)(BattleUnit *, int *))battleCtrlThink)(pActUnit, &thinkWk);
+        } else {
+            ret = battleCtrlMan(pActUnit, (int *)manWorkGet());
+        }
+        if (ret == 0) {
+            batCtrl.field00 = BATTLE_CTRL_ACT_WAIT;
+        }
+        break;
+    case BATTLE_CTRL_STOCK_PICK:
+        {
+            BattleUnit *pick = actStockPick();
+            pActUnit = pick;
+            if (pick == 0) {
+                break;
+            }
+        }
+        if (actStock.pickSource == 0) {
+            menuStockNext();
+        } else if (actStock.pickSource == 1) {
+            menuStockStart();
+        } else {
+            menuStockBoost();
+        }
+        pActUnit->work->flags |= 8;
+        calcTurnStart(pActUnit);
+        thinkTurnStartExec(pActUnit);
+        camEventTurnStartSet();
+        battleCtrlBoostEn();
+        batCtrl.field00 = BATTLE_CTRL_ACT_SELECT;
+        break;
+    case BATTLE_CTRL_ACT_WAIT:
+        if (pActUnit->work->flags & 8) {
+            break;
+        }
+        st = batCtrl.field04;
+        if (st != BATTLE_PHASE_EXEC_QUEUE) {
+            break;
+        }
+        if (thinkExecChk() == 0) {
+            break;
+        }
+        if (battleMsgEndChk() == 0) {
+            break;
+        }
+        batCtrl.field00 = st;
+        camEv.type = 7;
+        camEv.target = 0;
+        camEv.param = (*(int *)((union { void *p; int i; } *)&pActUnit->work)->p >> 6) & 1;
+        camEv.unit = pActUnit;
+        camEventExec(&camEv);
+        break;
+    }
+}
+
+typedef struct ConfTgt {
+    int slot;
+    int wpn;
+    BattleUnit *tgt;
+} ConfTgt;
+static ConfTgt atkTbl_0[48];
+
+int battleCtrlConfusion(BattleUnit *unit)
+{
+    int cmd[8];
+    BattleUnit **units;
+    int cnt;
+    int count;
+    int slot;
+    int k;
+    int wpn;
+    int no;
+    int sp24;
+
+    count = 0;
+    cnt = unitTblGet(2, &units);
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
+        slot = 0;
+        do {
+            no = calcUPGet(unit)->weaponId[slot];
+            if (no != 0) {
+                wpn = dataWpnGet(no)->tecId;
+                for (k = 0; k < cnt; k++) {
+                    if (units[k] != 0 && !(units[k]->work->flags & ACTOR_FLAG_DEAD) && units[k] != unit && calcAtkChk(unit, units[k], wpn) != 0) {
+                        atkTbl_0[count].slot = slot;
+                        atkTbl_0[count].wpn = wpn;
+                        atkTbl_0[count].tgt = units[k];
+                        count++;
+                    }
+                }
+            }
+            slot++;
+        } while (slot < 3);
+    } else {
+        if ((unit->work->flags & ACTOR_FLAG_ENEMY) || (calcUPGet(unit)->weaponId[0] == 0)) {
+            sp24 = -1;
+        } else {
+            sp24 = 0;
+        }
+        slot = 0;
+        do {
+            wpn = calcUPGet(unit)->normalTechniqueId[slot];
+            if (wpn != 0) {
+                for (k = 0; k < cnt; k++) {
+                    if (units[k] != 0 && !(units[k]->work->flags & ACTOR_FLAG_DEAD) && units[k] != unit && calcAtkChk(unit, units[k], wpn) != 0) {
+                        atkTbl_0[count].slot = sp24;
+                        atkTbl_0[count].wpn = wpn;
+                        atkTbl_0[count].tgt = units[k];
+                        count++;
+                    }
+                }
+            }
+            slot++;
+        } while (slot < 6);
+    }
+    if (count > 0) {
+        int r = rnd(count - 1);
+        cmd[0] = CMD_ATK;
+        cmd[1] = atkTbl_0[r].wpn;
+        cmd[2] = (int)atkTbl_0[r].tgt;
+        cmd[3] = atkTbl_0[r].slot;
+        unitCmdListSet(unit, cmd);
+    }
+    cmd[0] = CMD_END;
+    unitCmdListSet(unit, cmd);
+    return 0;
+}
+
+/* 35-byte battle message buffer; the MsgText copy below is a block move. */
+typedef struct MsgText {
+    signed char text[0x23];
+} MsgText;
+static MsgText msgWork;
+extern const MsgText battleInitUnableToMoveMsg;
+void battleMsg(int msgId);
+
+int battleCtrlJunk(BattleUnit *unit)
+{
+    int cmd[8];
+
+    msgWork = battleInitUnableToMoveMsg;
+    battleMsg((int)&msgWork);
+    cmd[0] = CMD_END;
+    unitCmdListSet(unit, cmd);
+    return 0;
+}
+
+
+extern const char battleInitMakeMaxNumText[];
+extern const char battleInitUIDText[];
+extern const char battleInitJpText[];
+extern const char battleInitSP0Text[];
+extern const char battleInitSP1Text[];
+extern const char battleInitPickIDText[];
+extern int calcWctDec(BattleUnit *unit);
+extern int calcBattleChk(BattleUnit *unit);
+extern int unitTblGet(int side, BattleUnit ***table);
+extern const char battleInitCurEnProcNoTgtText[];
+int actStockMaxGet(void);
+void actStockMake(void);
+
+/* Clears the action stock at battle start: the limit, the cursors and the slots. */
+void actStockInit(void)
+{
+    int i;
+
+    actStock.max = actStockMaxGet();
+    actStock.pickCursor = 0;
+    actStock.lastPicked = 0;
+    actStock.pickSource = 0;
+    for (i = 0; i < 4; i++) {
+        actStock.stock[i] = 0;
+    }
+    for (i = 0; i < 2; i++) {
+        actStock.boost[i] = 0;
+    }
+}
 
 /*
  * The action-stock limit: half the units on side 2 still able to fight,
@@ -377,7 +789,7 @@ int actStockMaxGet(void)
     fighters = 0;
     count = unitTblGet(2, &table);
     for (i = 0; i < count; i++) {
-        if (table[i] != 0 && calcBattleChk((ObjectTask *)table[i])) {
+        if (table[i] != 0 && calcBattleChk(table[i])) {
             fighters++;
         }
     }
@@ -394,15 +806,121 @@ int actStockMaxGet(void)
     return fighters;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockMake);
+/*
+ * Refills the action stock from the side-2 units that can still act: each
+ * unit taken gets bit 0x10 of its actor flags, up to the stock limit. The
+ * stock is printed afterwards, with each unit's character id.
+ */
+void actStockMake(void)
+{
+    BattleUnit **table;
+    int count;
+    int n;
+    int i;
+    BattleUnit **q;
+    int *p;
+    BattleUnit *unit;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", actStockPick);
+    n = 0;
+    i = 3;
+    p = (int *)&actStock;
+    p[6] = actStockMaxGet();
+    p[7] = 0;
+    count = unitTblGet(2, &table);
+    p = (int *)&actStock;
+    do {
+        p[i] = 0;
+        i--;
+    } while (i >= 0);
+    if (actStock.max > 0) {
+        do {
+            i = 0;
+            if (count > 0) {
+                do {
+                    if (table[i] != 0 && calcBattleChk(table[i]) != 0
+                        && (table[i]->work->flags & 0x10) == 0
+                        && calcWctDec(table[i]) == 0) {
+                        unit = table[i];
+                        actStock.stock[n] = unit;
+                        unit->work->flags |= 0x10;
+                        n = n + 1;
+                        if (n >= actStock.max) {
+                            goto done;
+                        }
+                    }
+                    i++;
+                } while (i < count);
+            }
+        } while (n < actStock.max);
+    }
+done:
+    printf(battleInitMakeMaxNumText, actStock.max, n);
+    i = 0;
+    if (n > 0) {
+        q = actStock.stock;
+        do {
+            printf(battleInitUIDText, i, *q, calcUPGet(*q)->charaId);
+            q++;
+            i++;
+        } while (i < n);
+    }
+    printf(battleInitJpText);
+}
+
+/*
+ * Hands out the next acting unit: the boost slots first, then the stock in
+ * order, refilling the stock when it runs out. A unit with bit 0x80 in its
+ * actor flags is skipped. The picked unit is kept in lastPicked.
+ */
+BattleUnit *actStockPick(void)
+{
+    BattleUnit *unit;
+    int c;
+
+    actStock.pickSource = 0;
+    do {
+        if (actStock.max <= actStock.pickCursor && actStock.boost[0] == 0 && actStock.boost[1] == 0) {
+            actStockMake();
+            actStock.pickSource = 1;
+        }
+        if (actStock.boost[0] != 0) {
+            unit = actStock.boost[0];
+            actStock.pickSource = 2;
+            actStock.boost[0] = 0;
+            printf(battleInitSP0Text);
+            if (actStock.pickCursor > 0) {
+                actStock.stock[actStock.pickCursor - 1] = 0;
+            }
+        } else if (actStock.boost[1] != 0) {
+            unit = actStock.boost[1];
+            actStock.boost[1] = 0;
+            actStock.pickSource = 2;
+            printf(battleInitSP1Text);
+            if (actStock.pickCursor > 0) {
+                actStock.stock[actStock.pickCursor - 1] = 0;
+            }
+        } else {
+            c = actStock.pickCursor;
+            unit = actStock.stock[c];
+            if (c > 0) {
+                actStock.stock[c - 1] = 0;
+            }
+            actStock.pickCursor = c + 1;
+        }
+        if (unit == 0 || (unit->work->flags & ACTOR_FLAG_DEAD)) {
+            unit = 0;
+        }
+    } while (unit == 0);
+    printf(battleInitPickIDText, unit, calcUPGet(unit)->charaId, actStock.pickCursor, actStock.max);
+    actStock.lastPicked = unit;
+    return unit;
+}
 
 /*
  * Drop `unit` from the boost slots and the stock; *index receives its stock
  * position, or -1. Nonzero when any slot held it.
  */
-int actStockRemove(ObjectTask *unit, int *index)
+int actStockRemove(BattleUnit *unit, int *index)
 {
     int removed = 0;
     int i;
@@ -416,7 +934,7 @@ int actStockRemove(ObjectTask *unit, int *index)
         actStock.boost[1] = 0;
         removed = 1;
     }
-    for (i = 0; i < actStock.count; i++) {
+    for (i = 0; i < actStock.max; i++) {
         if (actStock.stock[i] == unit) {
             actStock.stock[i] = 0;
             removed = 1;
@@ -432,18 +950,20 @@ int actStockRemove(ObjectTask *unit, int *index)
  * INCLUDE_ASM here) and actStockRemove work on; menu.c and calc.c declare
  * this as returning `int *`, so that published type is kept.
  */
-int *actStockGet(void)
+BattleUnit **actStockGet(void)
 {
-    return (int *)&actStock;
+    return actStock.stock;
 }
 
 /*
  * The battle help page index, cycled 0..2 (data still asm-owned, splat
  * name kept).
  */
+#define BATTLE_HELP_PAGE_COUNT 3
+
 int battleCtrlHelp(void)
 {
-    helpFlag = (helpFlag + 1) % 3;
+    helpFlag = (helpFlag + 1) % BATTLE_HELP_PAGE_COUNT;
     return 1;
 }
 
@@ -452,13 +972,11 @@ int battleCtrlHelpGet(void)
     return helpFlag;
 }
 
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 extern int unitTblGet(int side, BattleUnit ***table);
 extern int calcBoostChk(BattleUnit *unit, int mode);
-extern int calcBoost(BattleUnit *unit, int mode);
 
 /* "** BOOST PL=%d (%d)\n" (data still asm-owned; original ELF symbol name). */
-extern const char D_00A43D78[];
+extern const char battleInitBOOSTPLText[];
 
 extern int dataPadRead(int padNo);
 extern void menuBoostDisp(int enabled);
@@ -470,22 +988,22 @@ int battleCtrlBoostPl(void)
     int held;
 
     held = dataPadRead(1);
-    if (dataPadRead(0) & 0xA) {
+    if (dataPadRead(0) & (PAD_R1 | PAD_R2)) {
         menuBoostDisp(1);
         selection = -1;
-        if (held & 0x80) {
+        if (held & PAD_SQUARE) {
             selection = 0;
-        } else if (held & 0x10) {
+        } else if (held & PAD_TRIANGLE) {
             selection = 1;
-        } else if (held & 0x20) {
+        } else if (held & PAD_CIRCLE) {
             selection = 2;
         }
 
         unitTblGet(0, &table);
         if (selection != -1 && table[selection] != 0 &&
             calcBoostChk(table[selection], 1) != 0) {
-            printf(D_00A43D78, calcUPGet((ObjectTask *)table[selection])->charaId,
-                   calcUPGet((ObjectTask *)table[selection])->bcValue);
+            printf(battleInitBOOSTPLText, calcUPGet(table[selection])->charaId,
+                   calcUPGet(table[selection])->bcValue);
             calcBoost(table[selection], 1);
             return 1;
         }
@@ -508,10 +1026,10 @@ int battleCtrlBoostEn(void)
     count = unitTblGet(1, &table);
     for (i = 0; i < count; i++) {
         if (table[i] != 0) {
-            chance = ((signed char *)calcUPGet((ObjectTask *)table[i]))[CALC_PARAM_BOOST_CHANCE_OFF];
+            chance = ((signed char *)calcUPGet(table[i]))[CALC_PARAM_BOOST_CHANCE_OFF];
             if (calcBoostChk(table[i], 1) != 0 && rnd(100) < chance) {
-                printf(s_battleCtrlBoostEnFormat, calcUPGet((ObjectTask *)table[i])->charaId, chance,
-                       calcUPGet((ObjectTask *)table[i])->bcValue);
+                printf(s_battleCtrlBoostEnFormat, calcUPGet(table[i])->charaId, chance,
+                       calcUPGet(table[i])->bcValue);
                 calcBoost(table[i], 1);
                 return 1;
             }
@@ -520,39 +1038,15 @@ int battleCtrlBoostEn(void)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleCtrlMan);
-
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", manInput);
-
-void camEventTurnStartSet(void)
-{
-    D_00A57B80.type = 6;
-    D_00A57B80.unit = pActUnit;
-    D_00A57B80.target = tgtUnitGet();
-    D_00A57B80.param = (*(int *)*(void **)((char *)pActUnit + BATTLE_UNIT_WORK_OFF) >> 6) & 1;
-    camEventExec(&D_00A57B80);
-}
-
 /*
- * The two command-list buffers cmdListSet/cmdListChange/unitCmdListSet/
- * cmdListCansel (still INCLUDE_ASM here) operate on (data still asm-owned,
- * original ELF symbol names); cmdListPtrGet is the only place both addresses are
- * taken together.
+ * The ether record dataEthGet returns (src/ov01/data_unit_org_get.c, still
+ * asm there), as far as convKey2unit reads it: the technique id at +6.
  */
-static int fifoCmd[6];
-static int cmdList[0xC0];
-
-void cmdListPtrGet(int **list, int **altList)
-{
-    *list = fifoCmd;
-    *altList = cmdList;
-}
-
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cmdListSet);
-
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cmdListChange);
-
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", convKey2unit);
+typedef struct EtherView {
+    unsigned char unmodeled_00[6];
+    short tecId; /* +6 */
+} EtherView;
+extern EtherView *dataEthGet(int etherId);
 
 /*
  * dataTecGet's return, as far as this TU reads it: a byte at +0x00 whose
@@ -579,19 +1073,684 @@ typedef struct TecFlagView {
 
 extern TecFlagView *dataTecGet(int tecId);
 
-/* Queues one 0x14-byte command record on the unit (still asm here). */
-void cmdListSet(ObjectTask *unit, int *command);
+/*
+ * dataItmGet's return as far as scenarioCam reads it: the item's
+ * target-selection flags byte (`lbu $3,0x8($2)` at 0x00a0bae0); calc.c's
+ * ItmTrgView names the same member.
+ */
+typedef struct ItmTrgView {
+    unsigned char unmodeled_00[0x08];
+    u8 trgFlags; /* +0x08 */
+    unsigned char unmodeled_09[0x10 - 0x09];
+    short effectNo; /* +0x10: the item's effect (`lh $4,0x10($2)` at
+                     * 0x00a0cb98 into sefIsFinishEffect) */
+} ItmTrgView;
 
+extern ItmTrgView *dataItmGet(int itmId);
+
+extern void camEventExec(CamEvent *event);
 /*
  * The unit's actor record read from ObjectTask.work as an int-sized word,
  * menu.c's menuStockWorkGet idiom: unitCmdListSet reloads the slot after
  * the int store that sets bit 0x100 (`lw $4,0x10($16)` at 0x00a098a8 after
  * `sw $2,0x0($3)`); read as the pointer, gcc keeps the first load.
  */
-static __inline__ Actor *unitActorGet(ObjectTask *unit)
+static __inline__ Actor *unitActorGet(ObjectTask *task)
 {
-    return (Actor *)*(u32 *)&unit->work;
+    return (Actor *)*(u32 *)&task->work;
 }
+
+/*
+ * Key-command ids: ManWork.field04 (the word battleCtrlMan reads as inp[1])
+ * and the value keyCmdApGet/keyCmdChk take. convKey2unit decodes 0..19 as
+ * weapon slots (ATK through keyCmd2wno), 20..25 as the command kinds below
+ * and 26 as END. The names follow those decodes and the manInput states that
+ * produce them; KEY_CMD_ATTACK and KEY_CMD_ITEM_WIDE and KEY_CMD_CANCEL are
+ * guesses from the same states (no debug string names them).
+ */
+enum BattleKeyCommand {
+    KEY_CMD_NONE = 0,
+    KEY_CMD_WEAPON_LIMIT = 20,     /* ids below this are weapon slots */
+    KEY_CMD_ATTACK = 0x13,         /* guessed: the battle menu's attack entry */
+    KEY_CMD_ETHER = 0x14,
+    KEY_CMD_ITEM = 0x15,
+    KEY_CMD_GUARD = 0x16,
+    KEY_CMD_AGWS = 0x17,
+    KEY_CMD_MOVE = 0x18,
+    KEY_CMD_ITEM_WIDE = 0x19,      /* guessed: item on the wide target (two box uses) */
+    KEY_CMD_END = 0x1A,
+    KEY_CMD_CANCEL = 0x1B          /* guessed: no command this frame (also tested as 0) */
+};
+
+/*
+ * ManWork.tgtSelect, the input state manInput switches on. Names follow what
+ * each state does; the battle-menu entries map menuResultBat's results 1..6
+ * to ETH, ITEM, GUARD, AGWS, MOVE and ATTACK targeting. Guessed names.
+ */
+enum ManSelectState {
+    MAN_SELECT_ROOT = 0,           /* no menu: CROSS opens the battle menu, a key picks a command */
+    MAN_SELECT_KEY_PICKED = 1,     /* a weapon key was chosen: read its AP cost */
+    MAN_SELECT_BAT_OPEN = 2,       /* open the battle menu (also the CROSS return target) */
+    MAN_SELECT_BAT_MENU = 3,       /* battle menu is open and reports its result */
+    MAN_SELECT_COMMAND_DONE = 4,   /* command decided (or menu exit): report the key */
+    MAN_SELECT_ETH_OPEN = 5,
+    MAN_SELECT_ETH_MENU = 6,
+    MAN_SELECT_ETH_TARGET = 7,
+    MAN_SELECT_ITM_OPEN = 8,
+    MAN_SELECT_ITM_MENU = 9,
+    MAN_SELECT_ITM_TARGET = 0xA,
+    MAN_SELECT_ITM_TARGET_WIDE = 0xB,
+    MAN_SELECT_GUARD = 0xC,        /* GUARD key straight away */
+    MAN_SELECT_AGWS_POS = 0xD,     /* position select for AGWS (curPosProc mode 5) */
+    MAN_SELECT_MOVE_POS = 0xE,     /* position select for MOVE (curPosProc mode 6) */
+    MAN_SELECT_ATTACK_TARGET = 0xF /* enemy target select for the attack entry */
+};
+
+extern int manInput(BattleUnit *unit, ManWork *work);
+extern const char battleInitMENUEXITText[];
+extern void menuMapHSet(int enable);
+extern int sndSysSePlay(int soundId);
+extern int calcDItemChk(BattleUnit *unit, int itmId);
+extern void menuOpenBat(BattleUnit *unit);
+extern void menuCloseBat(void);
+extern int menuResultBat(void);
+extern void menuOpenEth(BattleUnit *unit);
+extern void menuCloseEth(void);
+extern int menuResultEth(int *ethId);
+extern void menuOpenItm(BattleUnit *unit);
+extern void menuCloseItm(void);
+extern int menuResultItm(int *itmId);
+extern int keyCmdGet(BattleUnit *unit);
+extern int keyCmdChk(BattleUnit *unit, BattleUnit *target, int command);
+extern int curPosProcInit(BattleUnit *unit, int mode);
+extern int curPosProc(BattleUnit *unit, int *posId);
+extern int curTgtProcInit(BattleUnit **target, BattleUnit *self, int flags);
+extern int curTgtProc(BattleUnit **target, int targetFlags);
+extern int calcWpnUse(BattleUnit *unit, int idx);
+extern int calcAp(BattleUnit *unit, int delta);
+
+int menuChk(void);
+void curSelGrpSet(u32 group, int flags);
+int curEnProcInit(BattleUnit **target, int side);
+int curEnProc(BattleUnit **target);
+void tgtUnitSet(BattleUnit *unit);
+int convKey2unit(BattleUnit *unit, int *command, int *input, int target);
+void keyBuffClear(void);
+
+int battleCtrlMan(BattleUnit *unit, int *inp)
+{
+  int bit;
+  int enemy;
+  BattleUnit *tgt;
+  int cmd[8];
+  int ap;
+  bit = *(int *) unit->work & 0x40;
+  enemy = bit == 0;
+  tgt = tgtUnitGet();
+  if (inp[0] != 1)
+  {
+    if (menuChk() == 0)
+    {
+      pManUnit = unit;
+      pActUnit = unit;
+      curSelGrpSet(1, 0);
+      curEnProcInit(&tgt, enemy);
+      if (curEnProc((BattleUnit **) &tgt) != 0)
+      {
+        CamEvent *ev = &camEv;
+        ev->type = 8;
+        ev->unit = pActUnit;
+        ev->target = *(BattleUnit * volatile *) &tgt;
+        camEventExec(ev);
+      }
+      tgtUnitSet(tgt);
+      unitActorGet(pTaskEnCur)->flags &= ~4;
+    }
+  }
+  ap = manInput(unit, (ManWork *) inp);
+  if (inp[1] == KEY_CMD_END)
+  {
+    cmd[0] = CMD_END;
+    unitCmdListSet(unit, cmd);
+    keyBuffClear();
+    inp[0] = 0;
+    inp[3] = inp[1];
+    return 0;
+  }
+  if ((inp[1] != KEY_CMD_NONE) && (inp[1] != KEY_CMD_CANCEL))
+  {
+    convKey2unit(unit, cmd, inp, (int) tgt);
+    unitCmdListSet(unit, cmd);
+    if (cmd[0] == CMD_ATK)
+    {
+      calcWpnUse(unit, cmd[3]);
+    }
+    calcAp(unit, -ap);
+  }
+  return 1;
+}
+
+int manInput(BattleUnit *unit, ManWork *work)
+{
+  int pad;
+  int cmd;
+  int ap;
+  int trgFlags;
+  int selection;
+  int result;
+  BattleUnit *tgt[1];
+  BattleUnit *target;
+
+  cmd = 0;
+  ap = 0;
+  pad = dataPadRead(1);
+  if (work->unitTask != unit)
+  {
+    work->controlPhase = 0;
+  }
+  else if (work->field04 != KEY_CMD_CANCEL && work->field04 != KEY_CMD_NONE)
+  {
+    work->controlPhase = work->field04;
+  }
+  switch (work->tgtSelect)
+  {
+  case MAN_SELECT_ROOT:
+    menuMapHSet(0);
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    menuFlag = 0;
+    if (pad & PAD_CROSS)
+    {
+      unitActorGet(pTaskEnCur)->flags |= 4;
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+      menuFlag = 1;
+    }
+    else
+    {
+      cmd = keyCmdGet(unit);
+      if (cmd != KEY_CMD_CANCEL && cmd != KEY_CMD_NONE)
+      {
+        menuMapHSet(1);
+        unitActorGet(pTaskEnCur)->flags |= 4;
+        work->tgtSelect = MAN_SELECT_KEY_PICKED;
+        ap = keyCmdApGet(unit, cmd);
+      }
+    }
+    break;
+  case MAN_SELECT_KEY_PICKED:
+    cmd = keyCmdGet(unit);
+    ap = keyCmdApGet(unit, cmd);
+    break;
+  case MAN_SELECT_BAT_OPEN:
+    unitActorGet(pTaskEnCur)->flags |= 4;
+    menuOpenBat(unit);
+    work->tgtSelect = MAN_SELECT_BAT_MENU;
+    camEv.type = 0x12;
+    camEv.unit = pActUnit;
+    camEventExec(&camEv);
+    break;
+  case MAN_SELECT_BAT_MENU:
+    if (pad & PAD_CROSS)
+    {
+      menuCloseBat();
+      work->tgtSelect = MAN_SELECT_ROOT;
+      camEventTurnStartSet();
+    }
+    else
+    {
+      int command = menuResultBat();
+      if (command != 0)
+      {
+        switch (command)
+        {
+        case 1:
+          menuCloseBat();
+          menuOpenEth(unit);
+          work->tgtSelect = MAN_SELECT_ETH_OPEN;
+          camEv.type = 0xD;
+          break;
+        case 2:
+          menuCloseBat();
+          menuOpenItm(unit);
+          work->tgtSelect = MAN_SELECT_ITM_OPEN;
+          camEv.type = 0xE;
+          break;
+        case 3:
+          menuCloseBat();
+          work->tgtSelect = MAN_SELECT_GUARD;
+          camEv.type = 0xF;
+          break;
+        case 4:
+          menuCloseBat();
+          work->tgtSelect = MAN_SELECT_AGWS_POS;
+          camEv.type = 0x10;
+          break;
+        case 5:
+          menuCloseBat();
+          work->tgtSelect = MAN_SELECT_MOVE_POS;
+          camEv.type = 0x11;
+          break;
+        case 6:
+          menuCloseBat();
+          work->tgtSelect = MAN_SELECT_ATTACK_TARGET;
+          camEv.type = 0x16;
+          break;
+        }
+        camEv.unit = pActUnit;
+        camEventExec(&camEv);
+      }
+    }
+    break;
+  case MAN_SELECT_COMMAND_DONE:
+    cmd = KEY_CMD_END;
+    printf(battleInitMENUEXITText);
+    work->tgtSelect = MAN_SELECT_ROOT;
+    menuFlag = 0;
+    menuMapHSet(1);
+    unitActorGet(pTaskEnCur)->flags |= 4;
+    break;
+  case MAN_SELECT_ETH_OPEN:
+    menuResultEth(&selection);
+    if (selection != -1)
+    {
+      work->tgtSelect = MAN_SELECT_ETH_MENU;
+    }
+    break;
+  case MAN_SELECT_ETH_MENU:
+    pad = menuResultEth(&selection);
+    work->selection = selection;
+    if ((pad & PAD_CIRCLE) && selection != 0)
+    {
+      menuCloseEth();
+      tgt[0] = tgtUnitGet();
+      camEv.type = 9;
+      camEv.unit = pActUnit;
+      camEv.target = tgt[0];
+      camEventExec(&camEv);
+      curSelGrpSet(-1, dataTecGet(dataEthGet(work->selection)->tecId)->flags);
+      work->tgtSelect = MAN_SELECT_ETH_TARGET;
+    }
+    else if (pad & PAD_CROSS)
+    {
+      menuCloseEth();
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+    }
+    break;
+  case MAN_SELECT_ETH_TARGET:
+    trgFlags = dataTecGet(dataEthGet(work->selection)->tecId)->flags;
+    tgt[0] = tgtUnitGet();
+    curTgtProcInit(tgt, unit, trgFlags);
+    if (curTgtProc(tgt, trgFlags) != 0)
+    {
+      camEv.unit = pActUnit;
+      camEv.type = 9;
+      camEv.target = tgt[0];
+      camEventExec(&camEv);
+    }
+    tgtUnitSet(tgt[0]);
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    if (pad & PAD_CIRCLE)
+    {
+      ap = keyCmdApGet(unit, KEY_CMD_ETHER);
+      work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+      cmd = KEY_CMD_ETHER;
+      unitActorGet(pTaskEnCur)->flags |= 4;
+      sndSysSePlay(1);
+    }
+    else if (pad & PAD_CROSS)
+    {
+      work->tgtSelect = MAN_SELECT_ETH_OPEN;
+      menuOpenEth(unit);
+      camEv.type = 0xD;
+      camEv.unit = pActUnit;
+      camEventExec(&camEv);
+      unitActorGet(pTaskEnCur)->flags |= 4;
+      sndSysSePlay(2);
+    }
+    break;
+  case MAN_SELECT_ITM_OPEN:
+    menuResultItm(&selection);
+    if (selection != -1)
+    {
+      work->tgtSelect = MAN_SELECT_ITM_MENU;
+    }
+    break;
+  case MAN_SELECT_ITM_MENU:
+    pad = menuResultItm(&selection);
+    work->selection = selection;
+    if ((pad & PAD_CIRCLE) && selection != 0)
+    {
+      menuCloseItm();
+      tgt[0] = tgtUnitGet();
+      camEv.type = 0xA;
+      camEv.unit = pActUnit;
+      camEv.target = tgt[0];
+      camEventExec(&camEv);
+      curSelGrpSet(-1, dataItmGet(work->selection)->trgFlags);
+      work->tgtSelect = MAN_SELECT_ITM_TARGET;
+    }
+    else if ((pad & PAD_TRIANGLE) && selection != 0)
+    {
+      if (calcDItemChk(unit, selection) != 0)
+      {
+        menuCloseItm();
+        tgt[0] = tgtUnitGet();
+        camEv.type = 0xA;
+        camEv.unit = pActUnit;
+        camEv.target = tgt[0];
+        camEventExec(&camEv);
+        curSelGrpSet(-1, dataItmGet(work->selection)->trgFlags);
+        work->tgtSelect = MAN_SELECT_ITM_TARGET_WIDE;
+        sndSysSePlay(1);
+      }
+      else
+      {
+        sndSysSePlay(5);
+      }
+    }
+    else if (pad & PAD_CROSS)
+    {
+      menuCloseItm();
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+    }
+    break;
+  case MAN_SELECT_ITM_TARGET:
+  case MAN_SELECT_ITM_TARGET_WIDE:
+    trgFlags = dataItmGet(work->selection)->trgFlags;
+    if (work->tgtSelect == MAN_SELECT_ITM_TARGET_WIDE)
+    {
+      trgFlags &= 0x7F;
+      trgFlags |= 0x50;
+    }
+    tgt[0] = tgtUnitGet();
+    curTgtProcInit(tgt, unit, trgFlags);
+    if (curTgtProc(tgt, trgFlags) != 0)
+    {
+      camEv.unit = pActUnit;
+      camEv.type = 0xA;
+      camEv.target = tgt[0];
+      camEventExec(&camEv);
+    }
+    tgtUnitSet(tgt[0]);
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    if (pad & PAD_CIRCLE)
+    {
+      cmd = KEY_CMD_ITEM;
+      if (work->tgtSelect != MAN_SELECT_ITM_TARGET)
+      {
+        cmd = KEY_CMD_ITEM_WIDE;
+      }
+      ap = keyCmdApGet(unit, cmd);
+      work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+      unitActorGet(pTaskEnCur)->flags |= 4;
+      sndSysSePlay(1);
+    }
+    else if (pad & PAD_CROSS)
+    {
+      work->tgtSelect = MAN_SELECT_ITM_OPEN;
+      menuOpenItm(unit);
+      camEv.type = 0xE;
+      camEv.unit = pActUnit;
+      camEventExec(&camEv);
+      unitActorGet(pTaskEnCur)->flags |= 4;
+      sndSysSePlay(2);
+    }
+    break;
+  case MAN_SELECT_GUARD:
+    cmd = KEY_CMD_GUARD;
+    ap = keyCmdApGet(unit, KEY_CMD_GUARD);
+    work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+    break;
+  case MAN_SELECT_AGWS_POS:
+    curSelGrpSet(0, 0);
+    curPosProcInit(unit, 5);
+    if (curPosProc(unit, &work->selection) != 0)
+    {
+      camEv.type = 0xB;
+      camEv.unit = pActUnit;
+      camEv.param = work->selection;
+      camEv.target = 0;
+      camEventExec(&camEv);
+    }
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    if (pad & PAD_CIRCLE)
+    {
+      ap = keyCmdApGet(unit, KEY_CMD_AGWS);
+      work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+      camEv.type = 0x18;
+      camEv.unit = pActUnit;
+      cmd = KEY_CMD_AGWS;
+      camEv.param = work->selection;
+      camEv.target = 0;
+      camEventExec(&camEv);
+      sndSysSePlay(1);
+    }
+    else if (pad & PAD_CROSS)
+    {
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+      sndSysSePlay(2);
+    }
+    break;
+  case MAN_SELECT_MOVE_POS:
+    curSelGrpSet(0, 0);
+    curPosProcInit(unit, 6);
+    if (curPosProc(unit, &work->selection) != 0)
+    {
+      camEv.type = 0xC;
+      camEv.unit = pActUnit;
+      camEv.param = work->selection;
+      camEv.target = 0;
+      camEventExec(&camEv);
+    }
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    if (pad & PAD_CIRCLE)
+    {
+      ap = keyCmdApGet(unit, KEY_CMD_MOVE);
+      work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+      cmd = KEY_CMD_MOVE;
+      sndSysSePlay(1);
+    }
+    else if (pad & PAD_CROSS)
+    {
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+      sndSysSePlay(2);
+    }
+    break;
+  case MAN_SELECT_ATTACK_TARGET:
+    tgt[0] = tgtUnitGet();
+    curSelGrpSet(1, 0);
+    curEnProcInit(tgt, 1);
+    if (curEnProc(tgt) != 0)
+    {
+      camEv.unit = pActUnit;
+      camEv.type = 0x15;
+      camEv.target = tgt[0];
+      camEventExec(&camEv);
+    }
+    tgtUnitSet(tgt[0]);
+    unitActorGet(pTaskEnCur)->flags &= ~4;
+    if (pad & PAD_CIRCLE)
+    {
+      if (keyCmdChk(unit, tgt[0], KEY_CMD_ATTACK) == 0)
+      {
+        ap = keyCmdApGet(unit, KEY_CMD_ATTACK);
+        work->tgtSelect = MAN_SELECT_COMMAND_DONE;
+        cmd = KEY_CMD_ATTACK;
+        sndSysSePlay(1);
+      }
+      else
+      {
+        sndSysSePlay(5);
+      }
+    }
+    else if (pad & PAD_CROSS)
+    {
+      work->tgtSelect = MAN_SELECT_BAT_OPEN;
+      sndSysSePlay(2);
+    }
+    break;
+  }
+  work->field04 = cmd;
+  work->unitTask = unit;
+  return ap;
+}
+
+void camEventTurnStartSet(void)
+{
+    camEv.type = 6;
+    camEv.unit = pActUnit;
+    camEv.target = tgtUnitGet();
+    camEv.param = ((int)pActUnit->work->flags >> 6) & 1;
+    camEventExec(&camEv);
+}
+
+/*
+ * The two command-list buffers cmdListSet/cmdListChange/unitCmdListSet/
+ * cmdListCansel (still INCLUDE_ASM here) operate on (data still asm-owned,
+ * original ELF symbol names); cmdListPtrGet is the only place both addresses are
+ * taken together.
+ */
+/*
+ * The command-list record (0x14 bytes: five words) and its queue entry
+ * (0x18 bytes: the unit, then the record). The queue cursors have the layout
+ * of src/ov01/obj.h's Fifo (base, maxIndex, readIndex, writeIndex, count).
+ */
+typedef union CmdListBody {
+    int w[5];
+    CmdEntry entry;
+} CmdListBody;
+
+typedef struct CmdListEntry {
+    int unit;
+    CmdListBody body;
+} CmdListEntry;
+
+typedef struct CmdFifo {
+    int base;
+    int maxIndex;
+    int readIndex;
+    int writeIndex;
+    int count;
+} CmdFifo;
+
+int fifoPush(CmdFifo *fifo);
+int fifoPop(CmdFifo *fifo);
+int fifoEdGet(CmdFifo *fifo);
+int fifoStGet(CmdFifo *fifo);
+int fifoNumGet(CmdFifo *fifo);
+
+static int fifoCmd[6];
+static int cmdList[0xC0];
+
+void cmdListPtrGet(CmdFifo **fifo, CmdListEntry **list)
+{
+    *fifo = (CmdFifo *)fifoCmd;
+    *list = (CmdListEntry *)cmdList;
+}
+
+/* Queues one command record on the unit at the write cursor. */
+void cmdListSet(BattleUnit *unit, int *command)
+{
+    CmdFifo *fifo;
+    CmdListEntry *list;
+    CmdListEntry *entry;
+
+    cmdListPtrGet(&fifo, &list);
+    entry = (CmdListEntry *)((char *)(fifoEdGet(fifo) * sizeof(CmdListEntry)) + (int)list);
+    entry->unit = (int)unit;
+    entry->body = *(CmdListBody *)command;
+    fifoPush(fifo);
+}
+
+/* Overwrites the entry at the read cursor with the unit and record. */
+void cmdListChange(BattleUnit *unit, int *command)
+{
+    CmdFifo *fifo;
+    CmdListEntry *list;
+    CmdListEntry *entry;
+
+    cmdListPtrGet(&fifo, &list);
+    entry = (CmdListEntry *)((char *)(fifoStGet(fifo) * sizeof(CmdListEntry)) + (int)list);
+    entry->unit = (int)unit;
+    entry->body = *(CmdListBody *)command;
+}
+
+extern void dataItmBoxDec(int itemId);
+int keyCmd2tid(BattleUnit *unit, int command);
+int keyCmd2wno(BattleUnit *unit, int key);
+
+/*
+ * Turns the key input record (input[1] the command key, input[2] its
+ * argument) into the command record: kind, id, target and slot. Keys below
+ * 20 are battle commands; the higher keys are ether, item and state entries.
+ */
+int convKey2unit(BattleUnit *unit, int *command, int *input, int target)
+{
+    int tid;
+    int etherId;
+
+    if (input[1] != 0) {
+        if (input[1] == KEY_CMD_END) {
+            command[0] = CMD_END;
+        } else if (input[1] < KEY_CMD_WEAPON_LIMIT) {
+            tid = keyCmd2tid(unit, input[1]);
+            command[0] = CMD_ATK;
+            command[2] = target;
+            command[1] = tid;
+            command[3] = keyCmd2wno(unit, input[1]);
+            if (tid == 0) {
+                printf("** CMD ERR -> %d\n", input[1]);
+            }
+        } else {
+            switch (input[1]) {
+            case KEY_CMD_ETHER:
+                command[2] = target;
+                command[0] = CMD_ETHER;
+                etherId = input[2];
+                command[3] = etherId;
+                command[1] = dataEthGet(etherId)->tecId;
+                break;
+            case KEY_CMD_ITEM:
+                command[2] = target;
+                command[0] = CMD_ITEM;
+                {
+                    int itemId = input[2];
+                    command[1] = 0;
+                    command[3] = itemId;
+                }
+                dataItmBoxDec(input[2]);
+                break;
+            case KEY_CMD_GUARD:
+                command[0] = CMD_GUARD;
+                break;
+            case KEY_CMD_AGWS:
+                command[0] = CMD_AGWS;
+                command[1] = input[2];
+                break;
+            case KEY_CMD_MOVE:
+                command[0] = CMD_MOVE;
+                command[1] = input[2];
+                break;
+            case KEY_CMD_ITEM_WIDE:
+                command[2] = target;
+                command[0] = CMD_ITEM;
+                {
+                    int itemId = input[2];
+                    command[1] = 2;
+                    command[3] = itemId;
+                }
+                dataItmBoxDec(input[2]);
+                dataItmBoxDec(input[2]);
+                break;
+            }
+        }
+    }
+    return 1;
+}
+
+
+/* Queues one 0x14-byte command record on the unit (still asm here). */
+void cmdListSet(BattleUnit *unit, int *command);
+
 
 /*
  * Queues a unit's command together with the records that bracket it. A
@@ -603,7 +1762,7 @@ static __inline__ Actor *unitActorGet(ObjectTask *unit)
  * 0x10 (bit 0x200) record with the unit's position id and clears bits
  * 0x100, 0x200 and 0x1000. Always 1.
  */
-int unitCmdListSet(ObjectTask *unit, int *command)
+int unitCmdListSet(BattleUnit *unit, int *command)
 {
     CalcUnitParam *param = calcUPGet(unit);
     int record[5];
@@ -626,14 +1785,14 @@ int unitCmdListSet(ObjectTask *unit, int *command)
             }
             cmdListSet(unit, record);
         }
-        if (range == 0 && !(unitActorGet(unit)->flags & 0x100)) {
+        if (range == 0 && !(unitActorGet((ObjectTask *)unit)->flags & 0x100)) {
             record[0] = 0x11;
             cmdListSet(unit, record);
-            unitActorGet(unit)->flags |= 0x100;
+            unitActorGet((ObjectTask *)unit)->flags |= 0x100;
         }
-        unitActorGet(unit)->flags |= 0x200;
+        unitActorGet((ObjectTask *)unit)->flags |= 0x200;
         if (dataTecGet(command[1])->kind == 2) {
-            unitActorGet(unit)->flags |= 0x1000;
+            unitActorGet((ObjectTask *)unit)->flags |= 0x1000;
         }
     } else if (kind == 3) {
         record[0] = 0xE;
@@ -643,46 +1802,631 @@ int unitCmdListSet(ObjectTask *unit, int *command)
         record[4] = kind;
         cmdListSet(unit, record);
     } else if (kind == 8) {
-        if (unitActorGet(unit)->flags & 0x100) {
+        if (unitActorGet((ObjectTask *)unit)->flags & 0x100) {
             record[0] = 0x12;
             record[1] = param->posId;
             cmdListSet(unit, record);
-        } else if (unitActorGet(unit)->flags & 0x200) {
+        } else if (unitActorGet((ObjectTask *)unit)->flags & 0x200) {
             record[0] = 0x10;
             record[1] = param->posId;
             cmdListSet(unit, record);
         }
-        unitActorGet(unit)->flags &= ~0x1300;
+        unitActorGet((ObjectTask *)unit)->flags &= ~0x1300;
     }
     cmdListSet(unit, command);
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", cmdListCansel);
+/*
+ * Drops the unit's queued records from the read cursor on, stopping at the
+ * first record that belongs to another unit or is a kind 8 record.
+ */
+void cmdListCansel(BattleUnit *unit)
+{
+    CmdFifo *fifo;
+    CmdListEntry *list;
+    CmdListEntry *entry;
+
+    cmdListPtrGet(&fifo, &list);
+    while (fifoNumGet(fifo) != 0) {
+        entry = (CmdListEntry *)((char *)(fifoStGet(fifo) * sizeof(CmdListEntry)) + (int)list);
+        if (entry->unit != (int)unit || entry->body.w[0] == 8) {
+            break;
+        }
+        fifoPop(fifo);
+    }
+}
 
 /* Menu map-height toggle, defined by ov01/tu009 (src/ov01/menu.c). */
 extern void menuMapHSet(int enable);
 
 /* Enemy AI attack-selection entry point, defined by ov01/tu006.
  * thinkUnitAtkExec forwards this argument to calcUPGet as ObjectTask *. */
-extern void thinkUnitAtkExec(ObjectTask *unit);
+extern void thinkUnitAtkExec(BattleUnit *unit);
 
-int battleCtrlThink(ObjectTask *unit)
+int battleCtrlThink(BattleUnit *unit)
 {
     menuMapHSet(1);
     thinkUnitAtkExec(unit);
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleExec);
+extern ScenarioDstEntry *scenarioDstGet(int offset);
+extern int scenarioBatExec(void);
+extern int busyUnitChk(int side);
+extern int stat1Proc(StatUnit *stat);
+extern int stat2Proc();
+extern int battleExecDead(void);
+extern void sndInit2(void);
+extern int battleExecNorm(void);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleExecNorm);
+void battleExec(void)
+{
+    CmdEntry cmd;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleExecDead);
+    switch (batCtrl.field04)
+    {
+    case BATTLE_PHASE_EXEC_QUEUE:
+        battleExecNorm();
+        break;
+    case BATTLE_PHASE_SCENARIO_START:
+        if (scenarioDstGet(0) == 0)
+        {
+            batCtrl.field04 = BATTLE_PHASE_WAIT_UNIT;
+            batCtrl.field08 = BATTLE_PHASE_EXEC_QUEUE;
+            break;
+        }
+        batCtrl.field04 = BATTLE_PHASE_SCENARIO_RUN;
+        {
+            int *dst = (int *)scenarioDstGet(0);
+            statUnit.hpBonus = dst[2];
+        }
+    case BATTLE_PHASE_SCENARIO_RUN:
+        if (scenarioBatExec() != 0)
+        {
+            scenarioBatInit();
+            batCtrl.field04 = BATTLE_PHASE_EXEC_QUEUE;
+            if (battleExecNorm() == 0)
+            {
+                if (pExecUnit != 0)
+                {
+                    cmd.selector = CMD_STAND;
+                    unitCmdSet(pExecUnit, &cmd);
+                }
+            }
+        }
+        break;
+    case BATTLE_PHASE_STAT_PROC_1:
+        sndInit2();
+        if (stat1Proc(&statUnit) != 0)
+        {
+            sndInit2();
+            batCtrl.field04 = BATTLE_PHASE_WAIT_BUSY;
+            batCtrl.field08 = BATTLE_PHASE_DEAD;
+            break;
+        }
+        batCtrl.field04 = BATTLE_PHASE_DEAD;
+    case BATTLE_PHASE_DEAD:
+        if (battleExecDead() != 0)
+        {
+            break;
+        }
+    case BATTLE_PHASE_STAT_PROC_2:
+        menuTimeNext();
+        sndInit2();
+        if (stat2Proc(&statUnit) != 0)
+        {
+            batCtrl.field04 = BATTLE_PHASE_WAIT_BUSY;
+            batCtrl.field08 = BATTLE_PHASE_EXEC_QUEUE;
+            break;
+        }
+        batCtrl.field04 = BATTLE_PHASE_EXEC_QUEUE;
+        break;
+    case BATTLE_PHASE_WAIT_BUSY:
+        if (busyUnitChk(2) > 0)
+        {
+            break;
+        }
+        batCtrl.field04 = batCtrl.field08;
+        break;
+    case BATTLE_PHASE_WAIT_UNIT:
+        if (pExecUnit->work->flags & ACTOR_FLAG_CMD_PENDING)
+        {
+            break;
+        }
+        batCtrl.field04 = batCtrl.field08;
+        break;
+    case BATTLE_PHASE_WAIT_FRAMES:
+        if (busyUnitChk(0) > 0)
+        {
+            break;
+        }
+        if (batCtrl.field0C-- > 0)
+        {
+            break;
+        }
+        batCtrl.field04 = batCtrl.field08;
+        break;
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", stat1Proc);
+extern void menuCritDispOff(void);
+extern int unitMotGet(BattleUnit *unit);
+extern void thinkTurnEndExec(BattleUnit *unit);
+extern void calcTurnEnd(BattleUnit *unit);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", stat2Proc);
+int battleExecNorm(void)
+{
+    CmdFifo *fifo;
+    CmdListEntry *list;
+    CmdListEntry *e;
+    BattleUnit *unit;
+    int *cmd;
+    int cmdNo;
+
+    cmdListPtrGet(&fifo, &list);
+    if (fifoNumGet(fifo) == 0)
+    {
+        return 0;
+    }
+    e = (CmdListEntry *)((char *)(fifoStGet(fifo) * sizeof(CmdListEntry)) + (int)list);
+    unit = (BattleUnit *)e->unit;
+    cmd = e->body.w;
+    if (unitMotGet(unit) == 2 && (unit->actor->moveFlags & 2))
+    {
+        return 0;
+    }
+    if (unit != pExecUnit)
+    {
+        menuCritDispOff();
+        statUnit.unit = 0;
+        statUnit.cmd = 0;
+    }
+    cmdNo = *cmd;
+    if ((unsigned int)(cmdNo - 1) < 6)
+    {
+        statUnit.cmd = cmdNo;
+        statUnit.unit = unit;
+    }
+    if (unit != 0 && !(unit->work->flags & ACTOR_FLAG_DEAD))
+    {
+        pExecUnit = unit;
+        unitCmdSet(unit, &e->body.entry);
+        if (*cmd == CMD_END)
+        {
+            thinkTurnEndExec(unit);
+            calcTurnEnd(unit);
+            pLastUnit = pExecUnit;
+            pExecUnit = 0;
+        }
+    }
+    fifoPop(fifo);
+    cmdNo = (int)pExecUnit;
+    if (cmdNo == 0)
+    {
+        menuCritDispOff();
+        batCtrl.field04 = BATTLE_PHASE_WAIT_BUSY;
+        batCtrl.field08 = BATTLE_PHASE_STAT_PROC_1;
+    }
+    else
+    {
+        batCtrl.field04 = BATTLE_PHASE_SCENARIO_START;
+    }
+    return 1;
+}
+
+extern int unitCmdDeadSet(BattleUnit *unit);
+extern void monsGainSet(BattleUnit *unit);
+extern void menuStockDead(int n);
+extern void *dataSpecDataGet(int id, int tid);
+extern const char battleInitDEADTIDText[];
+extern void UmnDataBaseMonsterSet(void);
+extern int menuTimeGet(void);
+extern int menuTimeXGet(void);
+extern void menuCritDispOn(int mode);
+
+int battleExecDead(void)
+{
+  BattleUnit **table;
+  int count;
+  int i;
+  int flag;
+  const char *deadFormat;
+  int stock;
+  BattleUnit *linked;
+  char *bc;
+  CamEvent *ev;
+  const char *fmt;
+  flag = 0;
+  i = 0;
+  count = unitTblGet(2, &table);
+  if (count > 0)
+  {
+    bc = (char *) (&batCtrl);
+    ev = &camEv;
+    ;
+    do
+    {
+      if (table[i] != 0)
+      {
+        if ((calcBattleChk(table[i]) == 0) || (((short) calcUPGet(table[i])->currentHp) == 0))
+        {
+          if ((actStockRemove(table[i], &stock) != 0) && (stock > 0))
+          {
+            menuStockDead(stock);
+          }
+        }
+        if (unitCmdDeadSet(table[i]) != 0)
+        {
+          flag = 1;
+          if (table[i]->work->flags & ACTOR_FLAG_ENEMY)
+          {
+            decoEffCall(table[i], 0x68);
+            monsGainSet(table[i]);
+            {
+              short charaId = calcUPGet(table[i])->charaId;
+              if ((((charaId != 0x22) && (charaId != 0x24)) && (charaId != 0x99)) && (((unsigned) (charaId - 0x6F)) >= 0x28))
+              {
+                UmnDataBaseMonsterSet();
+              }
+            }
+            if (menuTimeGet() == 3)
+            {
+              int mode = menuTimeXGet();
+              if (mode == 10)
+              {
+                mode = 3;
+              }
+              else
+              {
+                mode = ((mode ^ 4) != 0) ? (1) : (2);
+              }
+              menuCritDispOn(mode);
+              *((int *) (bc + 0xC)) = 0x3C;
+            }
+            else
+            {
+              *((int *) (bc - -0xC)) = 0;
+            }
+          }
+          linked = *((BattleUnit **) (((char *) calcUPGet(table[i])) + 0x150));
+          if (linked != 0)
+          {
+            short cid = calcUPGet(linked)->charaId;
+            void *spec = dataSpecDataGet(cid, *((int *) (((char *) calcUPGet(table[i])) + 0x154)));
+            if (spec != 0)
+            {
+              if (((*((int *) (((char *) calcUPGet(table[i])) + 0x154))) != 0x61) || (calcUPGet(table[i])->flags & 0x2000))
+              {
+                *((unsigned short *) (((char *) spec) + 0xA)) = (*((unsigned short *) (((char *) spec) + 0xA))) + 1;
+              }
+            }
+          }
+          deadFormat = battleInitDEADTIDText;
+          {
+            short charaId = calcUPGet(table[i])->charaId;
+            int tid = *((int *) (((char *) calcUPGet(table[i])) + 0x154));
+            printf(deadFormat, charaId, tid);
+          }
+          {
+            BattleUnit *ty = (BattleUnit *) 0x13;
+            *(BattleUnit **) &ev->type = ty;
+            ev->unit = table[i];
+            ((void (*)(CamEvent *, BattleUnit *))camEventExec)(ev, ty);
+          }
+        }
+      }
+      i++;
+    }
+    while (i < count);
+  }
+  if (flag != 0)
+  {
+    batCtrl.field04 = 9;
+    batCtrl.field08 = 6;
+  }
+  else
+  {
+    batCtrl.field04 = 6;
+  }
+  return flag;
+}
+
+
+extern const char battleInitStatDmgSAFEText[];
+
+/* CalcUnitParam +0x150: a spec pointer (its type is not recovered), cleared
+ * by the unit-damage path below; calc.h's unmodeled_14e span covers it. */
+#define CALC_PARAM_SPEC_PTR_OFF 0x150
+
+int stat1Proc(StatUnit *stat)
+{
+    BattleUnit *unit = stat->unit;
+    int mode = stat->cmd;
+    int hp;
+    int ep;
+    int alive;
+    int neg;
+    int dmg;
+    int flags;
+    CmdEntry cmd;
+    struct
+    {
+        BattleUnit *unit;
+        int pad;
+        int dmg;
+        int flags;
+        int more[8];
+    } rec;
+    int curHp;
+    int ret = 0;
+
+    if (unit != 0)
+    {
+        hp = 0;
+        curHp = (short) calcUPGet(unit)->currentHp;
+        ep = 0;
+        if (calcStatGet(unit, 1, 0x100) != 0
+            && rnd(100) < (curHp % 10) * 5)
+        {
+            calcHp(unit, curHp);
+            return 1;
+        }
+        if (calcStatGet(unit, 0, 0x800) != 0)
+        {
+            hp = calcUPGet(unit)->maxHp / 5;
+        }
+        if (mode == 1)
+        {
+            if (calcStatGet(unit, 1, 0x400) != 0)
+            {
+                hp += calcUPGet(unit)->maxHp / 2;
+            }
+            if (calcStatGet(unit, 1, 0x80) != 0)
+            {
+                hp += stat->hpBonus;
+            }
+        }
+        if (mode == 2)
+        {
+            if (calcStatGet(unit, 1, 0x20) != 0)
+            {
+                ep = calcUPGet(unit)->maxEp / 8;
+            }
+        }
+        if (calcStatGet(unit, 4, 0x80) != 0)
+        {
+            ep += calcUPGet(unit)->maxEp / 8;
+        }
+        if (mode == 4)
+        {
+            if (calcStatGet(unit, 6, 0x200) != 0)
+            {
+                hp -= calcUPGet(unit)->maxHp / 10;
+            }
+            if (calcStatGet(unit, 6, 0x100) != 0)
+            {
+                calcStatReset(unit, 4, 0x7FFF, 0);
+                calcStatReset(unit, 5, 0x7FFF, 0);
+            }
+        }
+        if (hp != 0)
+        {
+            unitCmdClear(unit);
+            if (hp > 0)
+            {
+                if (unit->work->flags & ACTOR_FLAG_GUARD)
+                {
+                    cmd.selector = CMD_DEF;
+                }
+                else
+                {
+                    cmd.selector = CMD_DMG;
+                }
+                cmd.argument = 0;
+            }
+            else
+            {
+                cmd.selector = CMD_REC;
+            }
+            unitCmdSet(unit, &cmd);
+            neg = -hp;
+            alive = calcHp(unit, neg);
+            curHp = (hp > 0) ? 1 : 2;
+            if (alive == 0
+                && calcStatGet(unit, 2, 1) != 0)
+            {
+                calcHp(unit, 1);
+                calcStatReset(unit, 2, 1, 0);
+                printf(battleInitStatDmgSAFEText);
+            }
+            dmg = neg;
+            flags = curHp | 0x400;
+            if (hp >= 0)
+            {
+                dmg = hp;
+                alive = 0;
+            }
+            rec.dmg = dmg;
+            rec.flags = flags;
+            rec.unit = unit;
+            dmgValPut(0, &rec.unit);
+            *((int *) (((char *) calcUPGet(unit)) + CALC_PARAM_SPEC_PTR_OFF)) = 0;
+        }
+        if (ep != 0)
+        {
+            unitCmdClear(unit);
+            cmd.selector = CMD_DMG;
+            cmd.argument = 0;
+            unitCmdSet(unit, &cmd);
+            calcEp(unit, -ep);
+            rec.flags = 0x403;
+            rec.unit = unit;
+            rec.dmg = ep;
+            dmgValPut(0, &rec.unit);
+        }
+        if ((((UnitMotionHead *)unit->actor)->motionId == 20 && calcStatGet(unit, 7, 2) == 0)
+            || (((UnitMotionHead *)unit->actor)->motionId == 21 && calcStatGet(unit, 7, 1) == 0))
+        {
+            unitCmdClear(unit);
+            cmd.selector = CMD_UNITCHANGE;
+            cmd.argument = (calcUPGet(unit)->posId < 0)
+                ? -calcUPGet(unit)->posId : calcUPGet(unit)->posId;
+            cmd.extra = calcUPGet(unit)->charaId;
+            unitCmdSet(unit, &cmd);
+            cmd.selector = CMD_BTST;
+            cmd.argument = 0;
+            unitCmdSet(unit, &cmd);
+            return 1;
+        }
+        if (hp == 0 && ep == 0)
+        {
+            ret = 0;
+        }
+        else
+        {
+            ret = 1;
+        }
+    }
+    return ret;
+}
+
+typedef struct { unsigned char c[12]; } Str12;
+extern const char battleInitItemChangeText[];
+extern const char battleInitChangedToText[];
+extern const char battleInitJpText2[];
+
+int stat2Proc(void)
+{
+  CmdEntry cmd;
+  struct 
+  {
+    BattleUnit *unit;
+    int pad;
+    int dmg;
+    int flags;
+    int more[8];
+  } rec;
+  BattleUnit **table;
+  BattleUnit *unit;
+  int count;
+  int i;
+  int ret;
+  int dmg;
+  unsigned char *g;
+  unsigned char b17;
+  unsigned char b18;
+  unsigned short t;
+  char *name;
+  ret = 0;
+  i = 0;
+  count = unitTblGet(2, &table);
+  if (count > 0)
+  {
+    do
+    {
+      unit = table[i];
+      dmg = 0;
+      if (unit != 0)
+      {
+        if ((*((int *) unit->work)) & 0x80)
+        {
+          if (calcStatGet(unit, 2, 0x4000) != 0)
+          {
+            dmg = *((short *) calcUPGet(unit));
+            calcStatReset(unit, 2, 0x4000, 0);
+            goto block_27;
+          }
+          if (calcBackLineChk(unit, 0) != 0)
+          {
+            goto block_17;
+          }
+          if (calcStatGet(unit, 3, 0x800) == 0)
+          {
+            goto block_17;
+          }
+          dmg = ((short) (*((unsigned short *) calcUPGet(unit)))) / 2;
+          calcStatReset(unit, 3, 0x800, 0);
+          goto block_27;
+          block_17:
+          if ((*((int *) unit->work)) & 0x40)
+          {
+            if (calcStatGet(unit, 1, 1) != 0)
+            {
+              calcStatReset(unit, 1, 1, 0);
+              calcStatSet(unit, 1, 0x100, 0);
+              goto block_27;
+            }
+            if (((*((int *) unit->work)) & 0x40) && (calcStatGet(unit, 7, 4) != 0))
+            {
+              calcStatReset(unit, 7, 4, 0);
+              calcStatSet(unit, 1, 0x100, 0);
+              g = (unsigned char *) dataGainGet(calcUPGet(unit)->charaId);
+              b18 = g[0xF];
+              b17 = g[0x12];
+              if (itemGrpChk(b18, b17) == 0)
+              {
+                b18 = 0;
+                b17 = 0;
+              }
+              printf(battleInitItemChangeText, b18, b17);
+              if (b17 != 0)
+              {
+                name = (char *) itemNameGet(b18, b17);
+                if (name != 0)
+                {
+                  *((Str12 *) msgWork.text) = *((Str12 *) battleInitChangedToText);
+                  strcat(msgWork.text, name);
+                  strcat(msgWork.text, battleInitJpText2);
+                  battleMsg((int) (&msgWork));
+                  dataBoxInc(b18, b17);
+                  goto block_27;
+                }
+                goto next;
+              }
+              goto block_27;
+            }
+            else
+            {
+              goto block_27;
+            }
+          }
+          else
+          {
+            goto block_27;
+          }
+
+          block_27:
+          if (dmg != 0)
+          {
+            ret = 1;
+            unitCmdClear(unit);
+            cmd.selector = CMD_WAKE;
+            unitCmdSet(unit, &cmd);
+            calcHp(unit, dmg);
+            rec.dmg = dmg;
+            rec.flags = 0x802;
+            rec.unit = unit;
+            dmgValPut(0, &rec.unit);
+          }
+
+          block_29:
+          calcStatReset(unit, 7, 4, 0);
+
+        }
+        else
+        {
+          goto block_29;
+        }
+      }
+      next:
+      i += 1;
+
+    }
+    while (i < count);
+  }
+  return ret;
+}
 
 /*
  * sndSysSePlay is defined by ov01/tu013 snd.c (still asm); other TUs already
@@ -691,13 +2435,13 @@ INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", stat2Proc);
 extern int sndSysSePlay(int soundId);
 
 /* Defined by ov01/tu004 (src/ov01/calc.c). */
-extern int calcTuigekiChk(ObjectTask *unit);
+extern int calcTuigekiChk(BattleUnit *unit);
 void keyBuffClear(void);
-int keyBuffSet(ObjectTask *unit, unsigned short key);
-int keyBuffChk(ObjectTask *unit, int *apCost);
+int keyBuffSet(BattleUnit *unit, unsigned short key);
+int keyBuffChk(BattleUnit *unit, int *apCost);
 /* Still asm here: nonzero when command cannot be used on target (1 with
  * the refusal sound). */
-extern int keyCmdChk(ObjectTask *unit, BattleUnit *target, int command);
+extern int keyCmdChk(BattleUnit *unit, BattleUnit *target, int command);
 
 /*
  * One frame of command-key input for unit: 0x1A when it cannot act (too
@@ -707,7 +2451,7 @@ extern int keyCmdChk(ObjectTask *unit, BattleUnit *target, int command);
  * form no usable command (the rejected key is dropped again), else the
  * command keyBuffChk matched.
  */
-int keyCmdGet(ObjectTask *unit)
+int keyCmdGet(BattleUnit *unit)
 {
     Actor *actor;
     int key;
@@ -715,35 +2459,35 @@ int keyCmdGet(ObjectTask *unit)
     int apCost;
     int refusal;
 
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
         if (calcUPGet(unit)->dblActKind < 3) {
-            return 0x1A;
+            return KEY_CMD_END;
         }
     } else {
         if (calcUPGet(unit)->dblActKind < 2) {
-            return 0x1A;
+            return KEY_CMD_END;
         }
         actor = unit->work;
         if ((actor->flags & 0x1000) && calcTuigekiChk(unit) == 0) {
-            return 0x1A;
+            return KEY_CMD_END;
         }
     }
-    if (dataPadRead(0) & 0xA) {
+    if (dataPadRead(0) & (PAD_R1 | PAD_R2)) {
         return 0;
     }
     key = dataPadRead(1);
     if (key == 0) {
         return key;
     }
-    if (key == 0x40) {
+    if (key == PAD_CROSS) {
         keyBuffClear();
-        command = 0x1A;
+        command = KEY_CMD_END;
     } else {
         if (keyBuffSet(unit, key) == 0) {
             return 0;
         }
         command = keyBuffChk(unit, &apCost);
-        if (command == 0x1B) {
+        if (command == KEY_CMD_CANCEL) {
             if (keyBuffIdx > 0) {
                 keyBuffIdx--;
             }
@@ -757,19 +2501,294 @@ int keyCmdGet(ObjectTask *unit)
             if (refusal == 1) {
                 sndSysSePlay(5);
             }
-            command = 0x1B;
+            command = KEY_CMD_CANCEL;
         }
     }
     return command;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyCmdApGet);
+/*
+ * One entry of the sentinel-terminated (null sequence) key-command tables
+ * keyBuffChk walks in 0xC-byte steps (`addiu $16,$16,0xC` at 0x00a0b3b8):
+ * sequence[0] is the key count (`lhu $6,0x0($4)` at 0x00a0b2ec, compared
+ * with keyBuffIdx), the keys follow; apCost (+0x4) is stored for a
+ * character, command (+0x8) is returned. Data still asm-owned; original
+ * ELF symbol names.
+ */
+typedef struct KeyCmd {
+    const unsigned short *sequence; /* +0x0 */
+    int apCost;                     /* +0x4 */
+    int command;                    /* +0x8 */
+} KeyCmd;
+static KeyCmd keyCmdTblCha[16];
+static KeyCmd keyCmdTblAgws[13];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyCmdChk);
+/* The weapon slot a key command selects for a unit (-1: none); still
+ * asm here, menu.c declares it the same way. */
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyCmd2tid);
+/*
+ * Halfword tables in the unit's CalcUnitParam block that keyCmd2tid indexes
+ * by command number (no single struct member spells them out). Each offset
+ * names the table base; the index is added to it at the use.
+ */
+#define CALC_PARAM_NORMAL_CMD_TECH_OFF 0x74
+#define CALC_PARAM_CMD_TECH_OFF 0x6C
+#define CALC_PARAM_SLOT_TECH_OFF 0x82
+#define CALC_PARAM_HALF(unit, offset) (*(short *)((char *)calcUPGet(unit) + (offset)))
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", keyCmd2wno);
+extern int calcSameWpnChk(BattleUnit *unit);
+
+extern int calcDblActChk(BattleUnit *unit);
+
+
+
+extern const char battleInitPTGTNULLText[];
+extern int calcSpecChk(BattleUnit *unit, int specId);
+extern int calcWpnEnableChk(BattleUnit *unit, int slot);
+
+/*
+ * The action-point cost of a command: a character's from the command table,
+ * an enemy's from the weapon in the command's slot, and fixed values for the
+ * commands past the table.
+ */
+int keyCmdApGet(BattleUnit *unit, int command)
+{
+    int result = 0;
+    int slot;
+    KeyCmd *table;
+    int n;
+
+    if (command == KEY_CMD_NONE || command == KEY_CMD_CANCEL || command == KEY_CMD_END) {
+        return 0;
+    }
+    if (command < KEY_CMD_ETHER) {
+        if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
+            if (command != KEY_CMD_ATTACK) {
+                slot = keyCmd2wno(unit, command);
+                if (slot != -1) {
+                    result = dataWpnGet(calcUPGet(unit)->weaponId[slot])->apCost;
+                }
+            } else {
+                result = 6;
+            }
+        } else {
+            table = keyCmdTblCha;
+            n = 0;
+            for (;;) {
+                KeyCmd *entry = (KeyCmd *)((char *)(n * sizeof(KeyCmd)) + (int)table);
+
+                if (entry->sequence == 0) {
+                    break;
+                }
+                if (entry->command == command) {
+                    result = entry->apCost;
+                    break;
+                }
+                n++;
+            }
+        }
+    } else {
+        switch (command) {
+        case KEY_CMD_GUARD:
+        case KEY_CMD_MOVE:
+            result = 2;
+            break;
+        case KEY_CMD_ITEM:
+            result = 3;
+            break;
+        case KEY_CMD_ETHER:
+        case KEY_CMD_AGWS:
+            result = 4;
+            break;
+        case KEY_CMD_ITEM_WIDE:
+            result = 6;
+            break;
+        }
+    }
+    return result;
+}
+
+/*
+ * Whether unit may enter command cmd against tgt: 1 when it can, 2 when the
+ * command is refused outright (no target, no technique, unusable slot, or no
+ * tuigeki for a counter), and falls through to the action-point and attack
+ * checks at the end otherwise. Character and enemy paths differ in which
+ * status categories bar which commands.
+ */
+int keyCmdChk(BattleUnit *unit, BattleUnit *tgt, int cmd)
+{
+    int tid;
+    int apCost;
+
+    switch (cmd) {
+    case KEY_CMD_NONE:
+    case KEY_CMD_CANCEL:
+        return 2;
+    default:
+        if (tgt == 0) {
+            printf(battleInitPTGTNULLText);
+            return 2;
+        }
+    }
+    tid = keyCmd2tid(unit, cmd);
+    if (tid == 0) {
+        return 2;
+    }
+    if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+        if (cmd >= 0x11) {
+            if (calcTuigekiChk(unit) == 0) {
+                return 2;
+            }
+            if (calcSpecChk(unit, tid) == 0) {
+                return 1;
+            }
+        } else if (cmd >= 0xB) {
+            if (calcStatGet(unit, 0, 1) != 0 && (unsigned int)(cmd - 0xB) < 8) {
+                return 1;
+            }
+            if (calcSpecChk(unit, tid) == 0) {
+                return 1;
+            }
+        } else if (cmd == 7) {
+            if (calcStatGet(unit, 0, 1) != 0) {
+                return 1;
+            }
+            if (calcWpnEnableChk(unit, 1) == 0) {
+                return 1;
+            }
+        } else {
+            if (calcStatGet(unit, 0, 4) != 0) {
+                if (cmd == 1 || cmd == 3 || cmd == 4 || cmd == 6) {
+                    return 1;
+                }
+            }
+            if (calcStatGet(unit, 0, 2) != 0) {
+                if (cmd == 2 || cmd == 5 || cmd == 6 || cmd == 4) {
+                    return 1;
+                }
+            }
+        }
+    } else {
+        int wno = keyCmd2wno(unit, cmd);
+        if (wno == -1) {
+            return 2;
+        }
+        if (calcWpnEnableChk(unit, wno) == 0) {
+            return 1;
+        }
+        if (calcStatGet(unit, 4, 4) != 0) {
+            if (cmd == 1 || cmd == 3 || cmd == 4 || cmd == 0xB || cmd == 6 || cmd == 8) {
+                return 1;
+            }
+        }
+        if (calcStatGet(unit, 4, 2) != 0) {
+            if (cmd == 2 || cmd == 5 || cmd == 6 || cmd == 0xC || cmd == 4 || cmd == 9) {
+                return 1;
+            }
+        }
+        if (calcStatGet(unit, 4, 1) != 0) {
+            if (cmd == 7 || cmd == 9 || cmd == 8 || cmd == 0xA || cmd == 0xC || cmd == 0xB) {
+                return 1;
+            }
+        }
+    }
+
+    apCost = keyCmdApGet(unit, cmd);
+    if (((signed char *)calcUPGet(unit))[0x3A] < apCost) {
+        return 1;
+    }
+    return calcAtkChk(unit, tgt, tid) == 0 ? 1 : 0;
+}
+
+/*
+ * The technique id a command key runs for unit, 0 when none. Characters read
+ * the technique tables by command number; enemies read the technique of the
+ * weapon in the command's slot.
+ */
+int keyCmd2tid(BattleUnit *unit, int command)
+{
+    int tid = 0;
+    int slot;
+    int weaponId;
+
+    if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+        if (command >= 0x11) {
+            slot = command - 0x11;
+            slot = (slot == 1) ? 4 : 2;
+            tid = CALC_PARAM_HALF(unit, CALC_PARAM_SLOT_TECH_OFF + slot * 2);
+        } else if (command >= 0xB) {
+            tid = CALC_PARAM_HALF(unit, CALC_PARAM_CMD_TECH_OFF + command * 2);
+        } else if (command == 7) {
+            if (calcUPGet(unit)->flags & 0x10) {
+                weaponId = calcUPGet(unit)->weaponId[1];
+                if (weaponId != 0) {
+                    tid = dataWpnGet(weaponId)->tecId;
+                }
+            }
+        } else if (command != 0) {
+            tid = CALC_PARAM_HALF(unit, CALC_PARAM_NORMAL_CMD_TECH_OFF + command * 2);
+        }
+    } else {
+        slot = keyCmd2wno(unit, command);
+        if (slot != -1) {
+            weaponId = calcUPGet(unit)->weaponId[slot];
+            if (weaponId != 0) {
+                if (command == KEY_CMD_ATTACK && calcDblActChk(unit)) {
+                    tid = dataWpnGet(weaponId)->tecIdDblAct;
+                } else if (command == 3 || command == 5 || command == 10) {
+                    tid = dataWpnGet(weaponId)->tecIdMultiHit;
+                } else {
+                    tid = dataWpnGet(weaponId)->tecId;
+                }
+            }
+        }
+    }
+    return tid;
+}
+
+/*
+ * The weapon slot (0..2) a command key selects for unit, or -1. Enemies map
+ * the keys onto slots directly; characters only ever select slot 1 (key 7).
+ * The slot must hold a weapon (its weaponId is nonzero) to be selected.
+ */
+int keyCmd2wno(BattleUnit *unit, int key)
+{
+    CalcUnitParam *up;
+    int slot = -1;
+
+    up = calcUPGet(unit);
+    if (!(up->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+        slot = key == 7;
+    } else {
+        switch (key) {
+        case 1:
+        case 3:
+        case 6:
+        case 8:
+            slot = 0;
+            break;
+        case 2:
+        case 4:
+        case 5:
+        case 9:
+            slot = 1;
+            break;
+        case 7:
+        case 10:
+        case 11:
+        case 12:
+            slot = 2;
+            break;
+        case KEY_CMD_ATTACK:
+            slot = calcSameWpnChk(unit);
+            break;
+        }
+    }
+    if (slot != -1 && calcUPGet(unit)->weaponId[slot] == 0) {
+        slot = -1;
+    }
+    return slot;
+}
 
 /*
  * Buffered battle-input queue (data still asm-owned; original ELF symbol names):
@@ -791,11 +2810,11 @@ int keyBuffIdxGet(void)
  * 0x40 (the enemy-side bit objEnCurCreate/objCurDraw already read): data
  * still asm-owned, original ELF symbol names.
  */
-extern const unsigned short keyItemTblAgws[];
-extern const unsigned short keyItemTblCha[];
+static unsigned short keyItemTblAgws[4];
+static unsigned short keyItemTblCha[4];
 
 /* "** keyBuffSet: buff full\n"-style diagnostic; data still asm-owned. */
-extern const char D_00A43F60[];
+extern const char battleInitKeyBuffSetErrorText[];
 
 /*
  * Looks key up in the unit's own command-key table (enemy or character,
@@ -803,7 +2822,7 @@ extern const char D_00A43F60[];
  * appends it to the shared keyBuff queue. Returns whether it both matched a
  * table entry and fit in the queue.
  */
-int keyBuffSet(ObjectTask *unit, unsigned short key)
+int keyBuffSet(BattleUnit *unit, unsigned short key)
 {
     const unsigned short *table;
     int idx;
@@ -811,7 +2830,7 @@ int keyBuffSet(ObjectTask *unit, unsigned short key)
     int found;
 
     found = 0;
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
         table = keyItemTblAgws;
     } else {
         table = keyItemTblCha;
@@ -832,44 +2851,15 @@ int keyBuffSet(ObjectTask *unit, unsigned short key)
         return 0;
     }
 
-    if (keyBuffIdx < 8) {
+    if (keyBuffIdx < KEY_BUFF_COUNT) {
         keyBuff[keyBuffIdx] = key;
         keyBuffIdx++;
         return 1;
     }
-    printf(D_00A43F60);
+    printf(battleInitKeyBuffSetErrorText);
     return 0;
 }
 
-/*
- * One entry of the sentinel-terminated (null sequence) key-command tables
- * keyBuffChk walks in 0xC-byte steps (`addiu $16,$16,0xC` at 0x00a0b3b8):
- * sequence[0] is the key count (`lhu $6,0x0($4)` at 0x00a0b2ec, compared
- * with keyBuffIdx), the keys follow; apCost (+0x4) is stored for a
- * character, command (+0x8) is returned. Data still asm-owned; original
- * ELF symbol names.
- */
-typedef struct KeyCmd {
-    const unsigned short *sequence; /* +0x0 */
-    int apCost;                     /* +0x4 */
-    int command;                    /* +0x8 */
-} KeyCmd;
-extern KeyCmd keyCmdTblCha[];
-extern KeyCmd keyCmdTblAgws[];
-
-/* The weapon slot a key command selects for a unit (-1: none); still
- * asm here, menu.c declares it the same way. */
-extern int keyCmd2wno(ObjectTask *unit, int key);
-
-/*
- * dataWpnGet's record (src/ov01/data_unit_org_get.c, WpnRecord), as far as
- * keyBuffChk reads it; the name follows menu.c's MenuWpnData view.
- */
-typedef struct KeyWpnData {
-    unsigned char unmodeled_00[0x0F];
-    signed char apCost; /* +0x0F: `lb $3,0xF($2)` at 0x00a0b398 */
-} KeyWpnData;
-extern KeyWpnData *dataWpnGet(int weaponId);
 
 /*
  * Matches the buffered keys against the unit's key-command table (enemy or
@@ -879,7 +2869,7 @@ extern KeyWpnData *dataWpnGet(int weaponId);
  * empty buffer, 0x1B when nothing matches or an enemy has no weapon slot for
  * the matched command.
  */
-int keyBuffChk(ObjectTask *unit, int *apCost)
+int keyBuffChk(BattleUnit *unit, int *apCost)
 {
     KeyCmd *table;
     const unsigned short *keys;
@@ -892,7 +2882,7 @@ int keyBuffChk(ObjectTask *unit, int *apCost)
     if (keyBuffIdx == 0) {
         return 0;
     }
-    if (calcUPGet(unit)->flags & 0x40) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
         table = keyCmdTblAgws;
     } else {
         table = keyCmdTblCha;
@@ -909,10 +2899,10 @@ int keyBuffChk(ObjectTask *unit, int *apCost)
             }
         }
         if (i == length) {
-            if (calcUPGet(unit)->flags & 0x40) {
+            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
                 slot = keyCmd2wno(unit, table[n].command);
                 if (slot == -1) {
-                    return 0x1B;
+                    return KEY_CMD_CANCEL;
                 }
                 *apCost = dataWpnGet(calcUPGet(unit)->weaponId[slot])->apCost;
             } else {
@@ -921,7 +2911,7 @@ int keyBuffChk(ObjectTask *unit, int *apCost)
             return table[n].command;
         }
     }
-    return 0x1B;
+    return KEY_CMD_CANCEL;
 }
 
 int busyUnitChk(int side)
@@ -934,7 +2924,7 @@ int busyUnitChk(int side)
     for (i = 0; i < count; i++) {
         BattleUnit *unit = units[i];
 
-        if (unit != 0 && (unit->work->flags & 2) != 0) {
+        if (unit != 0 && (unit->work->flags & ACTOR_FLAG_CMD_PENDING) != 0) {
             busyCount++;
         }
     }
@@ -971,7 +2961,7 @@ int actUnitTblMake(int side, BattleUnit **actUnits)
             next++;
             if (unit != 0) {
                 flags = unit->work->flags;
-                if (!(flags & 0x80)) {
+                if (!(flags & ACTOR_FLAG_DEAD)) {
                     if (flags & 8) {
                         if (actUnits != 0) {
                             *out = unit;
@@ -997,7 +2987,51 @@ BattleUnit *tgtUnitPick(BattleUnit **table, int count)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", battleEndChk);
+extern int unitLiveNumGet2(int side);
+u8 cfEventGet(void);
+
+/* Battle end check: records the result in batRetCode and returns 1 while the battle goes on. */
+int battleEndChk(void)
+{
+    int mode;
+    int live0;
+
+    batRetCode = 0;
+    if (busyUnitChk(2) > 0)
+    {
+        return 1;
+    }
+    mode = batCtrl.field04;
+    if (mode != 1)
+    {
+        return 1;
+    }
+    live0 = unitLiveNumGet2(0);
+    if (live0 == 0)
+    {
+        batRetCode = BATTLE_RESULT_LOSE;
+        return 0;
+    }
+    if (unitLiveNumGet2(1) == 0)
+    {
+        batRetCode = mode;
+        if (cfEventGet() & 0x10)
+        {
+            batRetCode = BATTLE_RESULT_ESCAPE;
+        }
+        if (cfEventGet() & 0x20)
+        {
+            batRetCode = BATTLE_RESULT_ESCAPE;
+        }
+        return 0;
+    }
+    if (escapeFlag == mode)
+    {
+        batRetCode = BATTLE_RESULT_ESCAPE;
+        return 0;
+    }
+    return 1;
+}
 
 /*
  * The battle result code consumed by phase transitions and shutdown
@@ -1015,12 +3049,12 @@ void battleRetCodeSet(int retCode)
 
 int thinkNoGet(void)
 {
-    return D_00A57C80;
+    return thinkNo;
 }
 
-void thinkNoSet(int thinkNo)
+void thinkNoSet(int no)
 {
-    D_00A57C80 = thinkNo;
+    thinkNo = no;
 }
 
 /*
@@ -1162,7 +3196,22 @@ BattleUnit *lastUnitGet(void)
     return pLastUnit;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", tgtUnitAdrGet);
+static BattleUnit *pTgtUnit;
+static BattleUnit *pTgtUnit2;
+ManWork *manWorkGet(void);
+
+BattleUnit **tgtUnitAdrGet(void)
+{
+    switch (manWorkGet()->tgtSelect) {
+    case MAN_SELECT_ETH_MENU:
+    case MAN_SELECT_ETH_TARGET:
+    case MAN_SELECT_ITM_MENU:
+    case MAN_SELECT_ITM_TARGET:
+    case MAN_SELECT_ITM_TARGET_WIDE:
+        return &pTgtUnit2;
+    }
+    return &pTgtUnit;
+}
 
 BattleUnit *tgtUnitGet(void)
 {
@@ -1180,7 +3229,7 @@ ManWork *manWorkGet(void)
 }
 
 extern int menuOpenChkBat(void);
-extern int menuFlag;
+static int menuFlag;
 
 int menuChk(void)
 {
@@ -1265,20 +3314,6 @@ int scenarioBatNext(void)
     return 0;
 }
 
-/*
- * dataItmGet's return as far as scenarioCam reads it: the item's
- * target-selection flags byte (`lbu $3,0x8($2)` at 0x00a0bae0); calc.c's
- * ItmTrgView names the same member.
- */
-typedef struct ItmTrgView {
-    unsigned char unmodeled_00[0x08];
-    u8 trgFlags; /* +0x08 */
-    unsigned char unmodeled_09[0x10 - 0x09];
-    short effectNo; /* +0x10: the item's effect (`lh $4,0x10($2)` at
-                     * 0x00a0cb98 into sefIsFinishEffect) */
-} ItmTrgView;
-
-extern ItmTrgView *dataItmGet(int itmId);
 
 /*
  * Queues the camera event for a scenario-battle action: items (type 3) use
@@ -1286,26 +3321,25 @@ extern ItmTrgView *dataItmGet(int itmId);
  * tecId is set); techniques of kind 2 or 6, or with flag bit 0x10, get
  * none, the rest use event 2 or 3 by their range class. The CalcUnitParam
  * bit tested first (`lhu $3,0x1C($2)`/`andi $3,$3,0x40` at
- * 0x00a0ba98..0x00a0ba9c) is calc.h's CALC_UNIT_FLAG_IS_AGWS, which the
- * generated include/ov01/calc.h does not carry yet.
+ * 0x00a0ba98..0x00a0ba9c) is CALC_UNIT_FLAG_IS_AGWS (include/ov01/calc.h).
  */
 void scenarioCam(ScenarioBatExec *exec, BattleUnit **targets)
 {
     int tecKind;
     int range;
 
-    if (calcUPGet((ObjectTask *)exec->unit)->flags & 0x40) {
+    if (calcUPGet(exec->unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
         return;
     }
     if (exec->type == 3) {
-        D_00A57B80.type = 0x14;
-        D_00A57B80.unit = exec->unit;
-        D_00A57B80.target = *targets;
-        D_00A57B80.param = dataItmGet(exec->slotOrItemId)->trgFlags;
+        camEv.type = 0x14;
+        camEv.unit = exec->unit;
+        camEv.target = *targets;
+        camEv.param = dataItmGet(exec->slotOrItemId)->trgFlags;
         if (exec->tecId != 0) {
-            D_00A57B80.param |= 0x10;
+            camEv.param |= 0x10;
         }
-        camEventExec(&D_00A57B80);
+        camEventExec(&camEv);
         return;
     }
     tecKind = dataTecGet(exec->tecId)->kind;
@@ -1317,17 +3351,17 @@ void scenarioCam(ScenarioBatExec *exec, BattleUnit **targets)
     }
     range = dataTecGet(exec->tecId)->flags & 0x3;
     if (range == 0) {
-        D_00A57B80.type = 2;
-        D_00A57B80.unit = exec->unit;
-        D_00A57B80.param = exec->tecId;
-        D_00A57B80.target = *targets;
-        camEventExec(&D_00A57B80);
+        camEv.type = 2;
+        camEv.unit = exec->unit;
+        camEv.param = exec->tecId;
+        camEv.target = *targets;
+        camEventExec(&camEv);
     } else if (range == 1) {
-        D_00A57B80.type = 3;
-        D_00A57B80.unit = exec->unit;
-        D_00A57B80.param = exec->tecId;
-        D_00A57B80.target = *targets;
-        camEventExec(&D_00A57B80);
+        camEv.type = 3;
+        camEv.unit = exec->unit;
+        camEv.param = exec->tecId;
+        camEv.target = *targets;
+        camEventExec(&camEv);
     }
 }
 
@@ -1376,7 +3410,7 @@ int etehrCVGet(ScenarioBatExec *exec)
 {
     int voice = 4;
 
-    switch (calcUPGet((ObjectTask *)exec->unit)->charaId) {
+    switch (calcUPGet(exec->unit)->charaId) {
     case 3:
         if (exec->tecId >= 0x236 && exec->tecId <= 0x239) {
             voice = 5;
@@ -1432,7 +3466,7 @@ void hairWindOn(BattleUnit *unit)
             cur = *next;
             next++;
             if (cur != 0 && cur != unit) {
-                cur->actor->windFlags |= HAIR_WIND_BIT;
+                cur->actor->moveFlags |= HAIR_WIND_BIT;
             }
             remaining--;
         } while (remaining != 0);
@@ -1462,19 +3496,18 @@ void hairWindOff(BattleUnit *unit)
             cur = *next;
             next++;
             if (cur != 0 && cur != unit) {
-                cur->actor->windFlags &= ~HAIR_WIND_BIT;
+                cur->actor->moveFlags &= ~HAIR_WIND_BIT;
             }
             remaining--;
         } while (remaining != 0);
     }
 }
 
-void statEffOff(ObjectTask *unit);
+void statEffOff(BattleUnit *unit);
 /* Defined in src/main/sef.c and src/ov01/snd.c. */
 extern void sefLoadEffect(int effect_no, int character_id);
-extern int sndConvSpid(ObjectTask *unit, int mode, int tecId, int itmId);
-extern int sndSeRegChk(ObjectTask *unit, int seType);
-extern void dataSndSeLoad(ObjectTask *unit, int seId);
+extern int sndSeRegChk(BattleUnit *unit, int seType);
+extern void dataSndSeLoad(BattleUnit *unit, int seId);
 void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest);
 
 /*
@@ -1493,38 +3526,317 @@ void scenarioBatExecPhase10(int source, ScenarioDstEntry *dest)
     int seType;
 
     if (scenarioPtr.phaseTimer == 0) {
-        statEffOff((ObjectTask *)exec->unit);
+        statEffOff(exec->unit);
         scenarioCam(exec, (BattleUnit **)dest);
         if (exec->type != 3) {
             effectNo = dataTecGet(exec->tecId)->effectNo;
         } else {
             effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
         }
-        sefLoadEffect(effectNo, calcUPGet((ObjectTask *)exec->unit)->charaId);
-        seType = sndConvSpid((ObjectTask *)exec->unit, exec->type, exec->tecId,
+        sefLoadEffect(effectNo, calcUPGet(exec->unit)->charaId);
+        seType = sndConvSpid(exec->unit, exec->type, exec->tecId,
                              exec->slotOrItemId);
-        if (!sndSeRegChk((ObjectTask *)exec->unit, seType)) {
-            dataSndSeLoad((ObjectTask *)exec->unit, seType);
+        if (!sndSeRegChk(exec->unit, seType)) {
+            dataSndSeLoad(exec->unit, seType);
         }
     }
     scenarioPtrFuncSet(scenarioBatExecPhase20);
     scenarioBatExecPhase20(source, dest);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase20);
+extern void unitFaceMotSet(BattleUnit *unit, int face);
+extern void dataUnitFileLoadMotSp(BattleUnit *unit, int tecId, int animGroup);
+extern void dataFileLoadWepSp(int unit, int tecId);
+extern void scenarioBatExecPhase25(int source, ScenarioDstEntry *dest);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase25);
+void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest) {
+    ScenarioBatExec *arg0 = (ScenarioBatExec *)source;
+    int *ap = (int *)dest;
+    int temp_17;
+    int t;
+    int var_5;
+    int temp_2_2;
+    int temp_4_2;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecPhase30);
+    int state = arg0->type;
+    if (state == 2) {
+        /* phase 2 */
+        switch (scenarioPtr.phaseTimer) {
+        case 0:
+            unitMotSet(arg0->unit, 0x1F);
+            if (!(*(int *)*(int *)((char *)arg0->unit + 0x10) & ACTOR_FLAG_ENEMY) && !(calcUPGet(arg0->unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+                if ((calcUPGet(arg0->unit)->charaId < 0xBB) || (calcUPGet(arg0->unit)->charaId >= 0xC3)) {
+                    decoEffCall(arg0->unit, 0);
+                    unitFaceMotSet(arg0->unit, 0x36);
+                    unitWpnMotSet(arg0->unit, dataDefWpnGet(arg0->unit), 0, 0x31);
+                    if (calcUPGet(arg0->unit)->charaId == 7) {
+                        unitWpnMotSet(arg0->unit, 1, 0, 0x31);
+                    }
+                    sndSysSePlay(0x1D);
+                    sndSeTransPlay(arg0->unit, 0x17, ((int (*)(int *, int))etehrCVGet)((int *)arg0, (int)dest));
+                    hairWindOn(arg0->unit);
+                }
+            }
+            scenarioPtr.phaseTimer = 1;
+            /* fallthrough */
+        case 1:
+            scenarioMtd(arg0, (int)ap);
+            if (((int (*)(int *, int))scenarioBatDataSync)((int *)arg0, (int)dest) != 0 && (*(int *)((char *)*(int *)((char *)arg0->unit + 0x14) + 0x6F0) & 0x1000)) {
+                scenarioPtr.phaseTimer = 2;
+            } else {
+                return;
+            }
+            /* fallthrough */
+        default:
+            unitFaceMotSet(arg0->unit, 0x35);
+            hairWindOff(arg0->unit);
+            scenarioPtrFuncSet(scenarioBatExecPhase25);
+            scenarioBatExecPhase25(source, dest);
+            return;
+        }
+    }
+    if (state == 3) {
+        switch (scenarioPtr.phaseTimer) {
+        case 0:
+            if (((int (*)(int *, int))scenarioBatDataSync)((int *)arg0, (int)dest) == 0) {
+                return;
+            }
+            scenarioPtr.phaseTimer = 1;
+            /* fallthrough */
+        case 1:
+            sndSeTransPlay(arg0->unit, 0x17, ((int)arg0->unit ^ *ap) == 0 ? 1 : 2);
+            scenarioPtrFuncSet(scenarioBatExecPhase25);
+            scenarioBatExecPhase25(source, dest);
+            return;
+        }
+        return;
+    }
+    if (state == 1) {
+        switch (scenarioPtr.phaseTimer) {
+        case 0:
+            temp_17 = *(short *)((char *)dataTecGet(arg0->tecId) + 0x14);
+            temp_4_2 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0x11);
+            if (temp_17 != 0) {
+                if (temp_4_2 == 2) {
+                    goto case2;
+                } else if (temp_4_2 == 6) {
+                    goto block_38;
+                } else if (temp_4_2 == 5) {
+                    goto block_38;
+                } else {
+                    goto skip;
+                }
+case2:
+                unitMotSet(arg0->unit, 0x28);
+                decoEffCall(arg0->unit, 1);
+                sndSysSePlay(0x1E);
+                sndSeTransPlay(arg0->unit, 0x17, 8);
+block_38:
+                dataUnitFileLoadMotSp(arg0->unit, (int)temp_17, 4);
+                dataFileLoadWepSp((int)arg0->unit, arg0->tecId);
+skip:
+                ;
+            }
+            scenarioPtr.phaseTimer = 1;
+            /* fallthrough */
+        case 1:
+            if (((int (*)(int *, int))scenarioBatDataSync)((int *)arg0, (int)dest) != 0) {
+                temp_4_2 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0x11);
+                if (temp_4_2 == 2) {
+                    if (!(*(int *)((char *)*(int *)((char *)arg0->unit + 0x14) + 0x6F0) & 0x1000)) {
+                        return;
+                    }
+                }
+                if (!(*(int *)*(int *)((char *)arg0->unit + 0x10) & ACTOR_FLAG_ENEMY) && !(calcUPGet(arg0->unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+                    if ((calcUPGet(arg0->unit)->charaId < 0xBB) || (calcUPGet(arg0->unit)->charaId >= 0xC3)) {
+                        temp_2_2 = sndConvSpid(arg0->unit, arg0->type, arg0->tecId, arg0->slotOrItemId);
+                        var_5 = 5;
+                        if (temp_2_2 != 3) {
+                            var_5 = (temp_2_2 ^ 4) ? 0 : 7;
+                        }
+                        if (var_5 != 0) {
+                            dataSndSeLoad(arg0->unit, var_5);
+                        }
+                    }
+                }
+                scenarioPtrFuncSet(scenarioBatExecPhase25);
+                scenarioBatExecPhase25(source, dest);
+                return;
+            }
+            return;
+        default:
+            return;
+        }
+    }
+    if (scenarioBatDataSync((int *)arg0) != 0) {
+        scenarioPtrFuncSet(scenarioBatExecPhase25);
+        scenarioBatExecPhase25(source, dest);
+        return;
+    }
+    return;
+}
+
+extern void dataMapLoad(int no);
+extern int dataCdSync(void);
+extern int mapNoGet(void);
+extern void mapDispOffAll(void);
+extern void unitDispOffAll(void);
+extern void mapDispOnAll(void);
+extern void unitDispOnAll(void);
+extern void fadeIn(int a, int b);
+extern int MMv2IsPlaying(void);
+extern void MMv2Stop(void);
+extern int MMv2Play(const char *filename);
+static int loadNum[1];
+static const char *mvFname[5];
+void scenarioBatExecPhase30(int source, ScenarioDstEntry *dest);
+
+void scenarioBatExecPhase25(int source, ScenarioDstEntry *dest) {
+    int type = *(int *)((char *)source + 0x8);
+    if (type == 0x38 || type == 0x235 || type == 0x239) {
+        switch (scenarioPtr.phaseTimer) {
+        case 0:
+            mapDispOffAll();
+            unitDispOffAll();
+            scenarioPtr.phaseTimer++;
+            return;
+        case 1: {
+            int idx = 2;
+            if (type != 0x38) {
+                idx = (type == 0x235) ? 3 : 4;
+            }
+            MMv2Play(mvFname[idx]);
+            scenarioPtr.phaseTimer++;
+            return;
+        }
+        case 2:
+            if (MMv2IsPlaying() == 0) {
+                MMv2Stop();
+                loadNum[0] = dataCdSync();
+                dataMapLoad(mapNoGet());
+                scenarioPtr.phaseTimer++;
+            }
+            return;
+        case 3:
+            {
+                int cd = dataCdSync();
+                if (loadNum[0] >= cd) {
+                fadeIn(4, 0);
+                mapDispOnAll();
+                unitDispOnAll();
+                scenarioPtr.phaseTimer++;
+                }
+            }
+            return;
+        case 4:
+            scenarioPtrFuncSet(scenarioBatExecPhase30);
+            scenarioBatExecPhase30(source, dest);
+            return;
+        default:
+            return;
+        }
+    }
+phase30:
+    scenarioPtrFuncSet(scenarioBatExecPhase30);
+    scenarioBatExecPhase30(source, dest);
+}
+
+extern int sndConvSe(BattleUnit *unit, int type, int tecId);
+extern void dataUnitFileLoadMotSp2(BattleUnit *unit, int a, int b, int c, int d);
+extern void dataFileLoadWepSp2(BattleUnit *unit, int tecId);
+extern void unitMotSetEx(void *unit, int motion, int flags);
+extern const char battleInitMotPackMotActText[];
+extern int scenarioEffCall(ScenarioBatExec *arg0p, u8 *arg1p);
+void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest);
+
+void scenarioBatExecPhase30(int source, ScenarioDstEntry *dest) {
+    ScenarioBatExec *arg0 = (ScenarioBatExec *)source;
+    s16 temp_20;
+    int temp_19;
+    int var_18;
+    int temp_16_2;
+    int temp_2;
+    int var_18_3;
+    int var_7;
+    int i;
+    signed char temp_16;
+    signed char var_16;
+    u8 *temp_2_2;
+
+    if (arg0->type == 2) {
+        unitMotSet(arg0->unit, 0x20);
+        (*(int *)((char *)arg0->unit->work + 0x70)) = 1;
+    } else if (arg0->type == 3) {
+        unitMotSet(arg0->unit, 0x27);
+        unitWpnMotSet(arg0->unit, dataDefWpnGet(arg0->unit), 0, 0x33);
+    } else if (arg0->type == 1) {
+        temp_20 = *(s16 *)((char *)dataTecGet(arg0->tecId) + 0x14);
+        temp_19 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0x11);
+        if (temp_20 == 0) {
+            var_18 = 1;
+            temp_16 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0xB);
+            unitMotSet(arg0->unit, (int) temp_16);
+            if (arg0->tecId != 0x27) {
+                var_18 = arg0->slotOrItemId;
+            }
+            unitWpnMotSet(arg0->unit, var_18, 0, temp_16 + 0x22);
+        } else {
+            if (temp_19 == 2 || temp_19 == 6 || temp_19 == 5) {
+                var_18 = 2;
+                if (dataTid2WepSp(arg0->tecId) == 0) {
+                    var_18 = arg0->slotOrItemId;
+                }
+                dataUnitFileLoadMotSp2(arg0->unit, (int) temp_20, 4, var_18, (int) temp_19);
+                dataFileLoadWepSp2(arg0->unit, arg0->tecId);
+                var_16 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0xB);
+                unitMotSetEx(arg0->unit, (int) var_16, 4);
+                if (temp_19 != 5) {
+                    unitWpnMotSet(arg0->unit, var_18, 1, var_16 + 2);
+                } else {
+                    if (((signed char *)calcUPGet(arg0->unit))[0x5A] < 0x20) {
+                        var_7 = 3;
+                        var_18_3 = 4;
+                    } else {
+                        var_7 = 4;
+                        var_18_3 = 3;
+                    }
+                    unitWpnMotSet(arg0->unit, 0, 1, var_7);
+                    unitWpnMotSet(arg0->unit, 1, 1, var_18_3);
+                }
+            } else {
+                var_16 = *(signed char *)((char *)dataTecGet(arg0->tecId) + 0xB);
+                unitMotSetEx(arg0->unit, (int) var_16, arg0->slotOrItemId + 1);
+                unitWpnMotSet(arg0->unit, arg0->slotOrItemId, 0, var_16 + 2);
+            }
+            printf(battleInitMotPackMotActText, temp_20, var_16, temp_19);
+        }
+        if (dataMtdRead(arg0->unit, 2) == 0) {
+            spWepDispOn(arg0, dataDefWpnGet(arg0->unit));
+        }
+    }
+    temp_16_2 = sndConvSpid(arg0->unit, arg0->type, arg0->tecId, arg0->slotOrItemId);
+    temp_2 = sndConvSe(arg0->unit, arg0->type, arg0->tecId);
+    if (temp_16_2 > 0) {
+        sndSeTransPlay(arg0->unit, temp_16_2, temp_2);
+    }
+    for (i = 0; i < *(int *)((char *)arg0 + 0x10); i++) {
+        temp_2_2 = (u8 *)scenarioDstGet(i);
+        scenarioEffCall(arg0, temp_2_2);
+        (*(int *)((char *)temp_2_2 + 0x14)) = 0;
+    }
+    scenarioPtrFuncSet(scenarioBatExecPhase40);
+}
 
 #define TEC_PROC_FLOW_SPEC 0x20
-/* Actor.windFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
+/* Actor.moveFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
  * 0x00a0eae0): set, the unit is still held in its action motion. */
 #define ACTOR_MOTION_HOLD_BIT 0x1000
 
-void scenarioMtd(ScenarioBatExec *exec);
 int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done);
-void scenarioBatExecMain(int source, ScenarioDstEntry *dest);
+/* Unprototyped on purpose: scenarioBatExecPhase40 calls this with two
+ * arguments and specSyoukanProc with three, and the body reads only the
+ * first (the extra argument registers are passed through unchanged). */
+void scenarioBatExecMain();
 void scenarioBatExecPhase50(int source, ScenarioDstEntry *dest);
 /* The special-flow technique handlers (both still asm here): nonzero once
  * the flow is done. */
@@ -1536,17 +3848,14 @@ int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest);
  * bnel's delay slot runs only on the taken path).
  */
 extern int calcHitMotChk(BattleUnit *unit);
-/* Defined by src/main/sef.c. */
-extern int sefIsHitActor(Actor *actor);
 /* Defined by ov01/tu005 data_unit_org_get.c (still asm there). */
 extern void dataFileLoadWepSpEnd(BattleUnit *unit, int tecId);
-extern void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion);
 /*
  * Four-argument call: the original loads the target, the action type and
  * the technique id into $5..$7 (0x00a0cb14..0x00a0cb24) around
  * `jal unitCmdAtkEnd`; unit_cmd.c's definition reads only the unit.
  */
-extern void unitCmdAtkEnd(ObjectTask *unit, ObjectTask *target, int type, int tecId);
+extern void unitCmdAtkEnd(BattleUnit *unit, BattleUnit *target, int type, int tecId);
 
 /*
  * Install the next phase handler and run it within the same frame. The
@@ -1573,7 +3882,7 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
 {
     ScenarioBatExec *exec = (ScenarioBatExec *)source;
     int done;
-    ObjectTask *target;
+    BattleUnit *target;
 
     if (scenarioPtr.phaseTimer < 2) {
         if (scenarioPtr.phaseTimer >= 0) {
@@ -1582,7 +3891,7 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
             if (exec->type == 3 || !(dataTecGet(exec->tecId)->procFlags & TEC_PROC_FLOW_SPEC)) {
                 scenarioBatExecMain(source, dest);
             } else if (scenarioPtr.phaseTimer == 0) {
-                if ((exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT) || calcHitMotChk(exec->unit)
+                if ((exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT) || calcHitMotChk(exec->unit)
                     || sefIsHitActor(((BattleUnit *)dest->unit)->actor)) {
                     done = flowSpecProcInit(exec, dest);
                     scenarioPtr.phaseTimer = 1;
@@ -1597,12 +3906,12 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
                     }
                     dataFileLoadWepSpEnd(exec->unit, exec->tecId);
                 }
-                if (calcUPGet((ObjectTask *)exec->unit)->flags & 0x40) {
+                if (calcUPGet(exec->unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
                     int i;
 
                     for (i = 0; i < 3; i++) {
-                        if (calcUPGet((ObjectTask *)exec->unit)->weaponId[i] != 0) {
-                            unitWpnMotSet((ObjectTask *)exec->unit, i, 0, 5);
+                        if (calcUPGet(exec->unit)->weaponId[i] != 0) {
+                            unitWpnMotSet(exec->unit, i, 0, 5);
                         }
                     }
                     target = dest->unit;
@@ -1613,13 +3922,13 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
                     int i;
 
                     for (i = 0; i < 3; i++) {
-                        if (calcUPGet((ObjectTask *)exec->unit)->weaponId[i] != 0) {
-                            unitWpnMotSet((ObjectTask *)exec->unit, i, 0, 0xFF);
+                        if (calcUPGet(exec->unit)->weaponId[i] != 0) {
+                            unitWpnMotSet(exec->unit, i, 0, 0xFF);
                         }
                     }
                     target = dest->unit;
                 }
-                unitCmdAtkEnd((ObjectTask *)exec->unit, target, exec->type, exec->tecId);
+                unitCmdAtkEnd(exec->unit, target, exec->type, exec->tecId);
                 SCENARIO_PHASE_ENTER(scenarioBatExecPhase50);
             }
         }
@@ -1628,7 +3937,7 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
 
 /* Defined in src/main/sef.c; nonzero once the effect has finished. */
 extern int sefIsFinishEffect(int effect_no);
-void statEffOn(ObjectTask *unit);
+void statEffOn(BattleUnit *unit);
 
 /*
  * Wait for the action's effect (the item's for an item action, else the
@@ -1646,16 +3955,74 @@ void scenarioBatExecPhase50(int source, ScenarioDstEntry *dest)
         effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
     }
     if (sefIsFinishEffect(effectNo)) {
-        D_00A57B80.type = 1;
-        D_00A57B80.unit = exec->unit;
-        D_00A57B80.param = exec->tecId;
-        camEventExec(&D_00A57B80);
-        statEffOn((ObjectTask *)exec->unit);
+        camEv.type = 1;
+        camEv.unit = exec->unit;
+        camEv.param = exec->tecId;
+        camEventExec(&camEv);
+        statEffOn(exec->unit);
         scenarioBatNext();
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecMain);
+extern int sefIsSeSignal(int seSignal);
+extern int sndConvHitSe(BattleUnit *unit, int mode, int tecId);
+extern void sefHitEffect(void);
+extern void menuCritDispOn(int mode);
+extern int scenarioBatExecDst(int *arg0, int *arg1);
+
+void scenarioBatExecMain(ScenarioStep *rec, int arg1, int arg2)
+{
+    int *rw = (int *)rec;
+    int i;
+    int flag;
+    int hit;
+    int *d;
+
+    i = 0;
+    if (rw[4] > 0) {
+        do {
+            flag = 0;
+            d = (int *)scenarioDstGet(i);
+            if (sefIsSeSignal(*(int *)(*d + 0x14)) != 0) {
+                sndSePlay(rec->exec.unit, sndConvSpid(rec->exec.unit, rw[1], rw[2], rw[3]),
+                          sndConvHitSe(rec->exec.unit, rw[1], rw[2]) + d[5]);
+            }
+            hit = calcHitMotChk(rec->exec.unit);
+            if (hit != 0 || sefIsHitActor((Actor *) *(int *)(*d + 0x14)) != 0) {
+                if (d[1] != 0xA || (*(int *)(*(int *)(*d + 0x10)) & 0x4000) == 0) {
+                    scenarioBatExecDst((int *)rec, d);
+                    if (d[1] != 0xA) {
+                        sefHitEffect();
+                        if (hit != 0) {
+                            sndSePlay(rec->exec.unit,
+                                      sndConvSpid(rec->exec.unit, rw[1], rw[2], rw[3]),
+                                      sndConvHitSe(rec->exec.unit, rw[1], rw[2]) + d[5]);
+                        }
+                        flag = 1;
+                    }
+                    if (rw[1] != 3 && d[5] == *(signed char *)((char *)dataTecGet(rw[2]) + 0x10) - 1) {
+                        goto dmg;
+                    }
+                    if (rw[1] == 3 && d[5] == 0) {
+                        goto dmg;
+                    }
+                    if (d[1] == 0xA) {
+dmg:
+                        dmgValPut((int)rec, (BattleUnit **)d);
+                        if ((*(unsigned long long *)rec->exec.unit->work & 0x2040) == 0x2000) {
+                            menuCritDispOn(0);
+                        }
+                    }
+                    if (flag != 0) {
+                        d[5]++;
+                    }
+                    *(int *)(*(int *)(*d + 0x10)) |= 0x4000;
+                }
+            }
+            i++;
+        } while (i < rw[4]);
+    }
+}
 
 /*
  * The stolen-item state nusumeSet/nusumeGet share (data still asm-owned;
@@ -1673,33 +4040,167 @@ int nusumeGet(void)
     return nusumuFlag;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", flowSpecProcInit);
+extern const char battleInitFLOWSPECText[];
+static unsigned int jtypeIdx;
+extern void specAnalyzeProc(BattleUnit *unit);
+extern void specEscapeProc(void);
+extern int specNusumuProc(void *exec, BattleUnit **dest);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", flowSpecProc);
+int flowSpecProcInit(ScenarioBatExec *exec, ScenarioDstEntry *dest)
+{
+    jtypeIdx = 0;
+    switch (exec->tecId) {
+    case 555:
+        specAnalyzeProc(dest->unit);
+        break;
+    case 556:
+        specEscapeProc();
+        break;
+    case 559:
+        calcBc((BattleUnit *)dest->unit, 1);
+        break;
+    case 57:
+        calcStatSet(dest->unit, 0, 0x1000, 0);
+        calcStatSet(dest->unit, 0, 0x400, 0);
+        calcStatSet(dest->unit, 0, 0x80, 0);
+        calcStatSet(dest->unit, 4, 0x800, 0);
+        calcStatSet(dest->unit, 4, 0x200, 0);
+        calcStatSet(dest->unit, 4, 0x400, 0);
+        break;
+    case 90:
+        if (specNusumuProc(exec, &dest->unit)) {
+            nusumeSet(1);
+        } else {
+            nusumeSet(0);
+        }
+        sefHitEffect();
+        break;
+    case 596:
+        calcStatSet(exec->unit, 7, 2, 0);
+        exec->unit->work->movePhaseTimer = 0;
+        break;
+    case 599:
+        calcStatSet(exec->unit, 7, 1, 0);
+        exec->unit->work->movePhaseTimer = 0;
+        break;
+    case 605:
+        specNusumuProc(exec, &dest->unit);
+        break;
+    case 565 ... 568:
+    case 580:
+    case 593:
+    case 600:
+    case 606:
+    case 608:
+    case 610:
+    case 612:
+        break;
+    }
+    printf(battleInitFLOWSPECText, exec->tecId);
+    return 0;
+}
+
+int specSyoukanProc(ScenarioStep *rec, int arg1, unsigned int *state, int arg3);
+int specHensinProc(void *arg0, int arg1, unsigned int *arg2);
+void specInoriProc(void);
+int specNusumuProc(void *arg0, BattleUnit **arg1);
+
+int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest)
+{
+    int summonId;
+    int done = 0;
+
+    switch (exec->tecId) {
+    case 555:
+        eBattleWinMain3();
+        if (dataPadRead(1) & (PAD_CIRCLE | PAD_CROSS)) {
+            done = 1;
+            eBattleWinClose3();
+        }
+        break;
+    case 565:
+        done = sefIsFinishEffect(dataTecGet(565)->effectNo);
+        if (done == 1 && calcStatGet(dest->unit, 1, 0x100) == 0) {
+            specNusumuProc(exec, &dest->unit);
+            battleMsg((int)&msgWork);
+        }
+        break;
+    case 566:
+    case 567:
+    case 568:
+        if (exec->tecId == 566) {
+            summonId = 190;
+        } else if (exec->tecId == 567) {
+            summonId = 191;
+        } else {
+            summonId = exec->tecId == 568 ? 192 : 193;
+        }
+        done = specSyoukanProc((ScenarioStep *)exec, (int)dest, &jtypeIdx, summonId);
+        break;
+    case 57:
+        done = exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT;
+        break;
+    case 556:
+        done = exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT;
+        break;
+    case 559:
+        done = exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT;
+        break;
+    case 576:
+        done = specSyoukanProc((ScenarioStep *)exec, (int)dest, &jtypeIdx, 194);
+        break;
+    case 90:
+        if (sefIsFinishEffect(dataTecGet(90)->effectNo)
+            && (exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT)) {
+            done = 1;
+            battleMsg((int)&msgWork);
+        }
+        break;
+    case 593:
+        done = sefIsFinishEffect(dataTecGet(593)->effectNo);
+        if (done == 1) {
+            specInoriProc();
+        }
+        break;
+    case 596:
+    case 599:
+        done = specHensinProc(exec, (int)dest, &jtypeIdx);
+        break;
+    case 601:
+        done = specSyoukanProc((ScenarioStep *)exec, (int)dest, &jtypeIdx, 189);
+        break;
+    case 605:
+        done = sefIsFinishEffect(dataTecGet(605)->effectNo);
+        if (done == 1) {
+            battleMsg((int)&msgWork);
+        }
+        break;
+    case 610:
+    case 611:
+        summonId = exec->tecId == 610 ? 187 : 188;
+        done = specSyoukanProc((ScenarioStep *)exec, (int)dest, &jtypeIdx, summonId);
+        break;
+    case 666:
+    case 667:
+        done = sefIsFinishEffect(dataTecGet(exec->tecId)->effectNo);
+        break;
+    }
+    return done;
+}
 
 /*
  * The queued-command record unitCmdSet writes (src/ov01/unit_cmd.c, still
  * asm there); src/ov01/calc.c restates the same layout as CalcCmdEntry for
  * its own call into unitCmdSet, defined in that TU.
  */
-typedef struct SyoukanCmdEntry SyoukanCmdEntry;
 
-struct SyoukanCmdEntry {
-    int selector;      /* +0x00 */
-    int argument;      /* +0x04 */
-    int extra;         /* +0x08 */
-    unsigned char unmodeled_0c[8]; /* +0x0C: unwritten by any call here */
-};
-
-extern void unitCmdClear(ObjectTask *unit);
-extern void unitCmdSet(ObjectTask *unit, SyoukanCmdEntry *cmd);
 
 /*
  * syoukanFadeOut clears and re-queues (selector 0x30) every live side-0
  * unit except the acting unit itself; syoukanFadeIn (next) is its
  * counterpart with a different selector.
  */
-void syoukanFadeOut(ObjectTask *unit)
+void syoukanFadeOut(BattleUnit *unit)
 {
     BattleUnit **table;
     int count;
@@ -1707,12 +4208,12 @@ void syoukanFadeOut(ObjectTask *unit)
 
     count = unitTblGet(0, &table);
     for (i = 0; i < count; i++) {
-        if (table[i] != 0 && (ObjectTask *)table[i] != unit) {
-            SyoukanCmdEntry cmd;
+        if (table[i] != 0 && table[i] != unit) {
+            CmdEntry cmd;
 
-            cmd.selector = 0x30;
-            unitCmdClear((ObjectTask *)table[i]);
-            unitCmdSet((ObjectTask *)table[i], &cmd);
+            cmd.selector = CMD_FADEOUT;
+            unitCmdClear(table[i]);
+            unitCmdSet(table[i], &cmd);
         }
     }
 }
@@ -1721,7 +4222,7 @@ void syoukanFadeOut(ObjectTask *unit)
  * syoukanFadeIn is syoukanFadeOut's counterpart (selector 0x2F instead of
  * 0x30, same loop shape).
  */
-void syoukanFadeIn(ObjectTask *unit)
+void syoukanFadeIn(BattleUnit *unit)
 {
     BattleUnit **table;
     int count;
@@ -1729,12 +4230,12 @@ void syoukanFadeIn(ObjectTask *unit)
 
     count = unitTblGet(0, &table);
     for (i = 0; i < count; i++) {
-        if (table[i] != 0 && (ObjectTask *)table[i] != unit) {
-            SyoukanCmdEntry cmd;
+        if (table[i] != 0 && table[i] != unit) {
+            CmdEntry cmd;
 
-            cmd.selector = 0x2F;
-            unitCmdClear((ObjectTask *)table[i]);
-            unitCmdSet((ObjectTask *)table[i], &cmd);
+            cmd.selector = CMD_FADEIN;
+            unitCmdClear(table[i]);
+            unitCmdSet(table[i], &cmd);
         }
     }
 }
@@ -1748,73 +4249,350 @@ void syoukanFadeIn(ObjectTask *unit)
  * linkedUnit->charaId).
  */
 typedef struct Syoukan1SubArgs {
-    ObjectTask *unit; /* +0x00 */
+    BattleUnit *unit; /* +0x00 */
     unsigned char unmodeled_04[4];
     int tecId;         /* +0x08 */
 } Syoukan1SubArgs;
 
 void syoukan1Sub(Syoukan1SubArgs *args, int reserved, int replacementCharaId)
 {
-    SyoukanCmdEntry cmd;
+    CmdEntry cmd;
 
     unitCmdClear(args->unit);
 
-    cmd.selector = 0x2B;
+    cmd.selector = CMD_UNITCHANGE;
     cmd.argument = 8;
     cmd.extra = replacementCharaId;
     unitCmdSet(args->unit, &cmd);
 
     if (dataTecGet(args->tecId)->flags & 0x10) {
-        cmd.selector = 0x2C;
+        cmd.selector = CMD_TURNCENTER;
     } else {
-        cmd.selector = 0xF;
+        cmd.selector = CMD_TURNCHA;
     }
     unitCmdSet(args->unit, &cmd);
 
-    cmd.selector = 0x25;
+    cmd.selector = CMD_BTST;
     cmd.argument = 0;
     unitCmdSet(args->unit, &cmd);
 
-    cmd.selector = 0xD;
+    cmd.selector = CMD_MOT;
     cmd.argument = 7;
     cmd.extra = 0;
     unitCmdSet(args->unit, &cmd);
 }
 
-void syoukan2Sub(ObjectTask **unit)
+extern int unitTelOut(BattleUnit *unit);
+
+void syoukan2Sub(BattleUnit **unit)
 {
-    SyoukanCmdEntry cmd;
+    CmdEntry cmd;
 
     unitCmdClear(*unit);
 
-    cmd.selector = 0x2B;
+    cmd.selector = CMD_UNITCHANGE;
     cmd.argument = calcUPGet(*unit)->linkedUnit->posId;
     cmd.extra = calcUPGet(*unit)->linkedUnit->charaId;
     unitCmdSet(*unit, &cmd);
 
-    cmd.selector = 0xD;
+    cmd.selector = CMD_MOT;
     cmd.argument = 1;
     cmd.extra = 1;
     unitCmdSet(*unit, &cmd);
 
-    cmd.selector = 0x2F;
+    cmd.selector = CMD_FADEIN;
     unitCmdSet(*unit, &cmd);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specSyoukanProc);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specHensinProc);
+int specSyoukanProc(ScenarioStep *rec, int arg1, unsigned int *state, int arg3)
+{
+    int ret;
+    unsigned int s;
+    char *p;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specAnalyzeProc);
+    ret = 0;
+    s = *state;
+    switch (s) {
+    case 0:
+        syoukanFadeOut(rec->exec.unit);
+        p = *(char **)((char *)calcUPGet(rec->exec.unit) + 0x158);
+        if (p != 0) {
+            *(int *)(p + 0xA8C) |= 0x100;
+        }
+        s++;
+        statEffOff(rec->exec.unit);
+        break;
+    case 1:
+        if (unitTelOut(rec->exec.unit) != 0) {
+            s++;
+        }
+        break;
+    case 2:
+        s++;
+        syoukan1Sub((Syoukan1SubArgs *)rec, arg1, arg3);
+        break;
+    case 3:
+        scenarioBatExecMain(rec, arg1, arg3);
+        if (!(rec->exec.unit->work->flags & ACTOR_FLAG_CMD_PENDING)) {
+            s++;
+        }
+        break;
+    case 4:
+        s++;
+        syoukan2Sub(&rec->exec.unit);
+        break;
+    case 5:
+        if (!(rec->exec.unit->work->flags & ACTOR_FLAG_CMD_PENDING)) {
+            s++;
+            syoukanFadeIn(rec->exec.unit);
+        }
+        break;
+    case 6:
+        p = *(char **)((char *)calcUPGet(rec->exec.unit) + 0x158);
+        if (p != 0) {
+            *(int *)(p + 0xA8C) &= ~0x100;
+        }
+        ret = 1;
+        statEffOn(rec->exec.unit);
+        break;
+    }
+    *state = s;
+    return ret;
+}
+
+extern void dataLeaderCidReset(void);
+extern void mapDispOffAll(void);
+extern void unitDispOffAll(void);
+extern void mapDispOnAll(void);
+extern void unitDispOnAll(void);
+extern void fadeIn(int a, int b);
+extern void dataMapLoad(int no);
+extern int MMv2IsPlaying(void);
+extern void MMv2Stop(void);
+extern int MMv2Play(const char *filename);
+static int loadNum[1];
+static const char *mvFname[5];
+
+int specHensinProc(void *arg0, int arg1, unsigned int *arg2)
+{
+    int cmd[8];
+    int ret;
+    unsigned int s;
+    int v;
+
+    s = *arg2;
+    ret = 0;
+    switch (s) {
+    case 0:
+        s++;
+        /* fallthrough */
+    case 1:
+        if (unitTelOut(*(BattleUnit **)arg0) != 0) {
+            s++;
+        }
+        break;
+    case 2:
+        unitCmdClear(*(BattleUnit **)arg0);
+        dataLeaderCidReset();
+        cmd[0] = CMD_UNITCHANGE;
+        if (calcUPGet(*(BattleUnit **)arg0)->posId < 0) {
+            v = -calcUPGet(*(BattleUnit **)arg0)->posId;
+        } else {
+            v = calcUPGet(*(BattleUnit **)arg0)->posId;
+        }
+        s++;
+        cmd[1] = v;
+        cmd[2] = calcUPGet(*(BattleUnit **)arg0)->charaId;
+        unitCmdSet(*(BattleUnit **)arg0, (CmdEntry *)cmd);
+        cmd[0] = CMD_BTST;
+        cmd[1] = 0;
+        cmdListChange(*(BattleUnit **)arg0, cmd);
+        break;
+    case 3:
+        if (!(*(int *)(*(BattleUnit **)arg0)->work & ACTOR_FLAG_CMD_PENDING)) {
+            if (calcUPGet(*(BattleUnit **)arg0)->charaId == 6) {
+                s++;
+                mapDispOffAll();
+                unitDispOffAll();
+            } else {
+                ret = 1;
+            }
+        }
+        break;
+    case 4:
+        s++;
+        {
+            unsigned int x = *(unsigned int *)((char *)arg0 + 0x8);
+            unsigned int idx = x != 0x254;
+            MMv2Play(mvFname[idx]);
+        }
+        break;
+    case 5:
+        if (MMv2IsPlaying() == 0) {
+            s++;
+            MMv2Stop();
+            loadNum[0] = dataCdSync();
+            dataMapLoad(mapNoGet());
+        }
+        break;
+    case 6:
+        v = dataCdSync();
+        if (loadNum[0] >= v) {
+            fadeIn(4, 0);
+            s++;
+            mapDispOnAll();
+            unitDispOnAll();
+        }
+        break;
+    case 7:
+        ret = 1;
+        break;
+    }
+    *arg2 = s;
+    return ret;
+}
+
+/* Window record eBattleWinOpen3 reads; field order follows the stack stores. */
+typedef struct SpecAnalyzeWin {
+    int width;
+    int height;
+    int color;
+    const char *name;
+    unsigned short x;
+    unsigned short y;
+    unsigned short page;
+    int title;
+    int text;
+    int picture;
+    int sound;
+    unsigned long long model;
+    unsigned short f30;
+    unsigned short f32;
+} SpecAnalyzeWin;
+
+extern void UmnDataBaseAnalisisSet(int charaId);
+extern const char **dataEnemyNameGet(int index);
+extern void eBattleWinOpen3(SpecAnalyzeWin *win);
+
+void specAnalyzeProc(BattleUnit *arg0)
+{
+    SpecAnalyzeWin w;
+    unsigned char *temp;
+
+    temp = dataGainGet(calcUPGet(arg0)->charaId);
+    UmnDataBaseAnalisisSet(calcUPGet(arg0)->charaId);
+    w.width = 0x10;
+    w.height = 0x6C;
+    w.color = 0xFFFFFD;
+    w.name = *dataEnemyNameGet(calcUPGet(arg0)->charaId);
+    w.x = calcUPGet(arg0)->currentHp;
+    w.y = ((unsigned short *)calcUPGet(arg0))[0];
+    w.page = calcUPGet(arg0)->conditions;
+    w.title = temp[0x6];
+    w.text = temp[0x7];
+    w.picture = temp[0x8];
+    w.model = ((unsigned short *)temp)[2];
+    w.sound = *(int *)temp;
+    w.f30 = temp[0x10] + (temp[0xD] << 8);
+    w.f32 = temp[0x11] + (temp[0xE] << 8);
+    eBattleWinOpen3(&w);
+}
 
 void specEscapeProc(void)
 {
     escapeFlag = 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specInoriProc);
+typedef struct InoriAq {
+    signed char s[9];
+} InoriAq;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", specNusumuProc);
+typedef struct InoriEnt {
+    int thr;
+    int cnt;
+    int *tab;
+} InoriEnt;
+
+extern const char battleInitInoriItemText[];
+extern const char battleInitAquiredText[];
+extern const char battleInitJpText2[];
+extern char *strcat(char *dst, const char *src);
+static InoriEnt inoriTbl[4];
+
+void specInoriProc(void)
+{
+    int roll;
+    int item;
+    int i;
+
+    roll = rnd(0x63);
+    item = 0;
+    for (i = 0; i < 4; i++)
+    {
+        if (roll < inoriTbl[i].thr)
+        {
+            item = inoriTbl[i].tab[rnd(inoriTbl[i].cnt - 1)];
+            break;
+        }
+    }
+    printf(battleInitInoriItemText, item);
+    *(InoriAq *)msgWork.text = *(InoriAq *)battleInitAquiredText;
+    strcat(msgWork.text, *dataItmNameGet(item));
+    strcat(msgWork.text, battleInitJpText2);
+    battleMsg((int)&msgWork);
+    dataBoxInc(0, item);
+}
+
+typedef struct { signed char s[7]; } NusumuStole;
+typedef struct { signed char s[25]; } NusumuNone;
+extern int itemGrpChk(int group, int item);
+extern const char *itemNameGet(int group, int index);
+
+int specNusumuProc(void *arg0, BattleUnit **arg1)
+{
+    unsigned char *temp;
+    int check;
+    unsigned char grp;
+    unsigned char id;
+    const char *name;
+
+    temp = dataGainGet(calcUPGet(*arg1)->charaId);
+    check = 1;
+    if (*(int *)((char *)arg0 + 0x8) != 0x5A) {
+        check = rnd(0x64) >= 0x33;
+    }
+    if (check != 0 && temp[0x11] != 0 && calcStatGet(*arg1, 7, 8) == 0) {
+        grp = temp[0xE];
+        id = temp[0x11];
+        calcStatSet(*arg1, 7, 8, 0);
+    } else if (temp[0x10] != 0 && calcStatGet(*arg1, 7, 0x10) == 0) {
+        grp = temp[0xD];
+        id = temp[0x10];
+        calcStatSet(*arg1, 7, 0x10, 0);
+    } else {
+        grp = 0;
+        id = 0;
+    }
+    if (itemGrpChk(grp, id) == 0) {
+        grp = 0;
+        id = 0;
+    }
+    printf("** Nusumu grp=%d item=%d\n", grp, id);
+    if (id != 0) {
+        name = itemNameGet(grp, id);
+        if (name != 0) {
+            *(NusumuStole *)msgWork.text = *(NusumuStole *)"Stole ";
+            strcat((char *)msgWork.text, name);
+            strcat((char *)msgWork.text, battleInitJpText2);
+            dataBoxInc(grp, id);
+            return 1;
+        }
+        return (int)name;
+    }
+    *(NusumuNone *)msgWork.text = *(NusumuNone *)"Couldn't steal anything!";
+    return 0;
+}
 
 const char *itemNameGet(int group, int index)
 {
@@ -1846,9 +4624,126 @@ void battleMsg(int msgId)
     battleMsgPut(0x10, 0x15C, msgId, 0x1E);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatExecDst);
+extern const char battleInitScenarioBatExecDstErrText[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", decoEffCall);
+
+int scenarioBatExecDst(int *arg0, int *arg1)
+{
+    CmdEntry cmd;
+    int self;
+    int type;
+
+    type = arg1[1];
+    cmd.argument = arg0[2];
+    self = arg0[0];
+    cmd.itmId = arg0[3];
+    cmd.extra = self;
+    switch (type) {
+    case 9:
+        cmd.selector = CMD_DMG;
+        cmd.argument = arg1[4];
+        break;
+    case 11:
+        cmd.selector = CMD_DEF;
+        break;
+    case 10:
+        cmd.selector = CMD_EVA;
+        break;
+    case 39:
+        cmd.selector = CMD_REC;
+        if (self == arg1[0]) {
+            cmd.argument = 1;
+        } else {
+            cmd.argument = 0;
+        }
+        break;
+    case 40:
+        cmd.selector = CMD_WAKE;
+        break;
+    case 41:
+        cmd.selector = CMD_STAT;
+        if (self == arg1[0]) {
+            cmd.argument = 1;
+        } else {
+            cmd.argument = 0;
+        }
+        break;
+    default:
+        printf(battleInitScenarioBatExecDstErrText, type);
+        return 0;
+    }
+    unitCmdClear((BattleUnit *)arg1[0]);
+    unitCmdSet((BattleUnit *)arg1[0], &cmd);
+    return 1;
+}
+
+/* One row of the decoEff table: the character id and two sub-effect ids. */
+typedef struct DecoEffEntry {
+    int charaId;
+    int subId[2];
+} DecoEffEntry;
+static DecoEffEntry decoEff[8];
+void decoEffCallSub(BattleUnit *unit, int subId);
+
+void decoEffCall(BattleUnit *unit, int type)
+{
+    short charaId;
+    int subId;
+    int i;
+
+    subId = 0;
+    charaId = calcUPGet(unit)->charaId;
+    if (type == 0x64)
+    {
+        switch (calcUPGet(unit)->sizeClass)
+        {
+        case 0:
+        case 1:
+            subId = 0xA3D;
+            break;
+        case 2:
+            subId = 0xA3E;
+            break;
+        case 3:
+        case 4:
+            subId = 0xA3F;
+            break;
+        }
+    }
+    else if (type == 0x65)
+    {
+        subId = 0xA28;
+    }
+    else if (type == 0x66)
+    {
+        subId = 0xA40;
+    }
+    else if (type == 0x67)
+    {
+        subId = 0xA41;
+    }
+    else if (type == 0x68)
+    {
+        subId = 0x4000;
+    }
+    else
+    {
+        i = 0;
+        while (decoEff[i].charaId != 0)
+        {
+            if (charaId == decoEff[i].charaId)
+            {
+                subId = decoEff[i].subId[type];
+                break;
+            }
+            i++;
+        }
+    }
+    if (subId != 0)
+    {
+        decoEffCallSub((BattleUnit *)unit, subId);
+    }
+}
 
 /*
  * decoEffCallSub's own signed byte inside calc.h's unmodeled_10 span (that
@@ -1889,15 +4784,128 @@ void decoEffCallSub(BattleUnit *unit, int subId) {
 
     memset(&params, 0, sizeof(params));
     params.actor = unit->actor;
-    params.moveVariant = (signed char)((signed char *)calcUPGet((ObjectTask *)unit))[CALC_PARAM_DECO_EFF_OFF];
-    charaId = *(unsigned short *)((unsigned char *)calcUPGet((ObjectTask *)unit) + CALC_PARAM_CHARA_ID_OFF);
+    params.moveVariant = (signed char)((signed char *)calcUPGet(unit))[CALC_PARAM_DECO_EFF_OFF];
+    charaId = *(unsigned short *)((unsigned char *)calcUPGet(unit) + CALC_PARAM_CHARA_ID_OFF);
     params.subId = (short)subId;
     params.charaId = charaId;
-    params.flags = (short)calcUPGet((ObjectTask *)unit)->flags;
+    params.flags = (short)calcUPGet(unit)->flags;
     sefCreateEffect((int *)&params);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioEffCall);
+extern int calcAtrChg(BattleUnit *unit, int attribute);
+typedef struct ScnEffArg {
+    BattleUnit *unit;  /* +0x00 */
+    int kind;          /* +0x04: 3 = item, otherwise technique */
+    int tec;           /* +0x08 */
+    int slot;          /* +0x0C: item id when kind == 3, else weapon slot */
+} ScnEffArg;
+typedef struct ScnEffTgt {
+    BattleUnit *unit;            /* +0x00 */
+    unsigned char unmodeled_04[0x0C - 0x04];
+    unsigned short slot;         /* +0x0C */
+} ScnEffTgt;
+typedef struct ScnEffParams {
+    Actor *actor0;               /* +0x00 */
+    Actor *actor1;               /* +0x04 */
+    Actor *weapon;               /* +0x08 */
+    short var0c;                 /* +0x0C */
+    short var0e;                 /* +0x0E */
+    unsigned short cid0;         /* +0x10 */
+    unsigned short cid1;         /* +0x12 */
+    short spid;                  /* +0x14 */
+    unsigned short slot16;       /* +0x16 */
+    short atr;                   /* +0x18 */
+    unsigned short flags1;       /* +0x1A */
+    short cfev;                  /* +0x1C */
+    short stat;                  /* +0x1E */
+    short var20;                 /* +0x20 */
+} ScnEffParams;
+
+int scenarioEffCall(ScenarioBatExec *arg0p, u8 *arg1p)
+{
+  ScnEffArg *arg0 = (ScnEffArg *)arg0p;
+  ScnEffTgt *arg1 = (ScnEffTgt *)arg1p;
+  Actor *new_var;
+  ScnEffParams p;
+  int idx;
+  int sl;
+  short spid;
+  signed char cat;
+  if (arg0->kind == 3)
+  {
+    cat = 0;
+    spid = ((short *)dataItmGet(arg0->slot))[8];
+    p.weapon = 0;
+    p.atr = 0;
+  }
+  else
+  {
+    short *tec;
+    tec = (short *)dataTecGet(arg0->tec);
+    spid = tec[11];
+    tec = (short *)dataTecGet(arg0->tec);
+    do
+    {
+    }
+    while (0);
+    p.atr = calcAtrChg(arg0->unit, *((unsigned short *) (tec + 9)));
+    cat = ((signed char *) dataTecGet(arg0->tec))[0x11];
+    if (arg0->slot >= 0)
+    {
+      idx = 0;
+      if (cat != 5)
+      {
+        if (0 != dataTid2WepSp(arg0->tec))
+        {
+          idx = 2;
+        }
+        else
+        {
+          idx = arg0->slot;
+        }
+      }
+      p.weapon = arg0->unit->weapon[idx & 3];
+    }
+    else
+    {
+      p.weapon = 0;
+    }
+  }
+  new_var = arg0->unit->actor;
+  p.actor1 = arg1->unit->actor;
+  p.actor0 = new_var;
+  p.var0c = calcUPGet(arg0->unit)->sizeClass;
+  p.var0e = calcUPGet(arg1->unit)->sizeClass;
+  p.cid0 = *((unsigned short *) (((char *) calcUPGet(arg0->unit)) + 0x38));
+  p.cid1 = *((unsigned short *) (((char *) calcUPGet(arg1->unit)) + 0x38));
+  p.slot16 = arg1->slot;
+  p.spid = spid;
+  p.flags1 = calcUPGet(arg1->unit)->flags;
+  p.cfev = 0;
+  {
+    int upi = (int) calcUPGet(arg0->unit);
+    idx = arg0->slot;
+    idx += upi;
+    p.var20 = (signed char) *(unsigned char *)(idx + 0x5A);
+  }
+  p.cfev = cfEventGet();
+  if (calcStatGet(arg1->unit, 1, 0x100) != 0)
+  {
+    p.stat = 1;
+  }
+  else
+  {
+    p.stat = 0;
+  }
+  sefCreateEffect((int *) (&p));
+  if (cat == 5)
+  {
+    p.weapon = arg0->unit->weapon[1];
+    p.var20 = ((signed char *) calcUPGet(arg0->unit))[0x5B];
+    p.spid = spid + 100;
+    sefCreateEffect((int *) (&p));
+  }
+}
 
 void scenarioMtd(ScenarioBatExec *exec)
 {
@@ -1954,7 +4962,7 @@ void spWepDispOn(ScenarioBatExec *exec, int weapon)
     } else {
         wepSp = dataTid2WepSp(exec->tecId);
         if (wepSp != 0) {
-            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[2];
+            weaponId = calcUPGet(exec->unit)->weaponId[2];
             if ((unsigned int)(weaponId - 0xD) >= 4) {
                 weaponActor = exec->unit->weapon[weapon & 3];
                 if (weaponActor != 0) {
@@ -1966,7 +4974,7 @@ void spWepDispOn(ScenarioBatExec *exec, int weapon)
             }
             spWepDispOnSub(exec->unit, 2, 0);
         } else if (exec->tecId == 8 || exec->tecId == 0xB) {
-            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[exec->slotOrItemId];
+            weaponId = calcUPGet(exec->unit)->weaponId[exec->slotOrItemId];
             if (weaponId == 0xC) {
                 spWepDispOnSub(exec->unit, exec->slotOrItemId, 0);
             }
@@ -2008,7 +5016,7 @@ void spWepDispOff(ScenarioBatExec *exec, int weapon)
         return;
     }
 
-    weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[2];
+    weaponId = calcUPGet(exec->unit)->weaponId[2];
     if (tecKind == 6) {
         spWepDispOffSub(exec->unit, exec->slotOrItemId, 1);
     } else if (weaponId == 0x11 || weaponId == 0xB) {
@@ -2016,7 +5024,7 @@ void spWepDispOff(ScenarioBatExec *exec, int weapon)
     } else {
         wepSp = dataTid2WepSp(exec->tecId);
         if (wepSp != 0) {
-            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[2];
+            weaponId = calcUPGet(exec->unit)->weaponId[2];
             if ((unsigned int)(weaponId - 0xD) >= 4) {
                 weaponActor = exec->unit->weapon[weapon & 3];
                 if (weaponActor != 0 && weaponId != 0x11) {
@@ -2027,7 +5035,7 @@ void spWepDispOff(ScenarioBatExec *exec, int weapon)
             }
             spWepDispOffSub(exec->unit, 2, 0);
         } else if (exec->tecId == 8 || exec->tecId == 0xB) {
-            weaponId = calcUPGet((ObjectTask *)exec->unit)->weaponId[exec->slotOrItemId];
+            weaponId = calcUPGet(exec->unit)->weaponId[exec->slotOrItemId];
             if (weaponId == 0xC) {
                 spWepDispOffSub(exec->unit, exec->slotOrItemId, 0);
             }
@@ -2098,7 +5106,6 @@ void transWepOutDraw(Actor *actor) {
     }
 }
 
-extern void unitMotStandSet(ObjectTask *unit);
 
 /*
  * Whether the scenario action has finished: a special-flow technique
@@ -2107,6 +5114,8 @@ extern void unitMotStandSet(ObjectTask *unit);
  * the standing motion while it is held); anything else waits for the
  * motion hold to be set.
  */
+extern void unitMotStandSet(BattleUnit *unit);
+
 int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done)
 {
     int effectNo;
@@ -2120,21 +5129,247 @@ int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done)
             effectNo = dataTecGet(exec->tecId)->effectNo;
         } else {
             effectNo = dataItmGet(exec->slotOrItemId)->effectNo;
-            if (exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT) {
-                unitMotStandSet((ObjectTask *)exec->unit);
+            if (exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT) {
+                unitMotStandSet(exec->unit);
             }
         }
         return sefIsFinishEffect(effectNo) != 0;
     }
-    held = exec->unit->actor->windFlags & ACTOR_MOTION_HOLD_BIT;
+    held = exec->unit->actor->moveFlags & ACTOR_MOTION_HOLD_BIT;
     return held != 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", scenarioBatEnd);
+extern int calcIdol2Chk(BattleUnit *unit);
+extern int calcHpDmg(void *attacker, BattleUnit *target, int dmgType, int power);
+extern int calcWct(BattleUnit *unit);
+extern void calcStatResetAll(BattleUnit *unit);
+extern void calcStatResetCha(BattleUnit *unit);
+extern void thinkUnitDmgExec(BattleUnit *unit, BattleUnit *src);
+extern const char battleInitDmgSAFEText[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", counterProc);
+void scenarioBatEnd(void)
+{
+    int *src;
+    ScenarioDstEntry *dst;
+    int i;
+    int idolBefore;
+    int idolAfter;
+    int dmg;
+    int stat;
+    BattleUnit *unit;
+    BattleUnit *unitB;
+    CalcUnitParam *up;
+    CalcUnitParam *up2;
+    int wct;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", dmgValPut);
+    scenarioPtr.index = 0;
+    if (scenarioDstGet(0) != 0) {
+        i = 0;
+        src = (int *)scenarioSrcGet(0);
+        if (src[4] > 0) {
+            do {
+                dst = scenarioDstGet(i);
+                unit = dst->unit;
+                unit->work->flags &= ~0x4000;
+                idolBefore = calcIdol2Chk(unit);
+                unitB = dst->unit;
+                if (unitB == 0 || (unitB->work->flags & ACTOR_FLAG_DEAD)) {
+                    idolBefore = 0;
+                }
+                if (src[1] == 3) {
+                    dmg = calcUseItem((BattleUnit *)src[0], unitB, src[3]);
+                } else {
+                    dmg = calcHpDmg((void *)src[0], unitB, dst->word0c, dst->word08);
+                }
+                if (src[2] == 0x24C) {
+                    up = calcUPGet(dst->unit);
+                    up2 = calcUPGet(dst->unit);
+                    wct = calcWct(dst->unit);
+                    up2->waitCount = wct;
+                    up->waitCountBase = (short)wct;
+                    calcUPGet(dst->unit)->turnBias = 0;
+                }
+                if (src[2] == 0x24D) {
+                    calcStatResetAll(dst->unit);
+                }
+                if (calcStatGet(dst->unit, 2, 1) != 0 && dmg == 0) {
+                    calcHp(dst->unit, 1);
+                    calcStatReset(dst->unit, 2, 1, 0);
+                    printf(battleInitDmgSAFEText);
+                }
+                stat = dst->word18;
+                if (stat != 8) {
+                    calcStatSet(dst->unit, stat, dst->word1c, 0);
+                }
+                stat = dst->word20;
+                if (stat == 8) {
+                    if (dst->word24 != 0) {
+                        calcStatResetCha(dst->unit);
+                    }
+                } else {
+                    calcStatReset(dst->unit, stat, dst->word24, 0);
+                }
+                idolAfter = calcIdol2Chk(dst->unit);
+                if (idolBefore == 0) {
+                    if (idolAfter == 0) {
+                    } else {
+                        goto block_30;
+                    }
+                } else if (idolAfter == 0) {
+block_30:
+                    unitMotStandSet(dst->unit);
+                }
+                if (dst->unit->work->flags & 0x20) {
+                    thinkUnitDmgExec(dst->unit, (BattleUnit *)src);
+                }
+                if (dmg != 0 && src[1] == 1) {
+                    counterProc(src, (BattleUnit **)dst);
+                }
+                i++;
+            } while (i < src[4]);
+        }
+    }
+}
+
+extern int calcCounter(BattleUnit *unit, int tecId);
+extern int unitNoGet(BattleUnit *unit);
+extern const char battleInitCounterText[];
+
+int counterProc(int *arg0, BattleUnit **arg1)
+{
+    BattleUnit *unit;
+    int hit;
+
+    hit = 0;
+    unit = *arg1;
+    if (!(*(unsigned char *)dataTecGet(arg0[2]) & 0x80))
+    {
+        return 0;
+    }
+    if (!(*(int *)unit->work & ACTOR_FLAG_ENEMY))
+    {
+        if (calcCounter(unit, arg0[2]) != 0)
+        {
+            if (calcStatGet(unit, 7, 0x800) != 0 && calcBoostChk(unit, 0) != 0)
+            {
+                goto boost;
+            }
+            calcBp(unit, 0x19);
+            hit = 1;
+        }
+    }
+    else if (calcCounter(unit, arg0[2]) != 0 && calcBoostChk(unit, 0) != 0)
+    {
+boost:
+        calcBoost(unit, 0);
+        hit = 1;
+    }
+    if (hit == 1)
+    {
+        pCounterUnit = (BattleUnit *)arg0[0];
+        printf(battleInitCounterText, unitNoGet(unit));
+    }
+    else
+    {
+        pCounterUnit = 0;
+    }
+    return 1;
+}
+
+void *objDmgNumCreate(void *target, int value, int flags);
+extern const char battleInitJpText3[];
+extern const char battleInitCRITText[];
+extern const char battleInitDEFText[];
+extern const char battleInitSTATText[];
+extern const char battleInitWAKEText[];
+extern const char battleInitMISSText[];
+extern const char battleInitHPDMGText[];
+extern const char battleInitHPRECText[];
+extern const char battleInitEPDMGText[];
+extern const char battleInitEPRECText[];
+extern const char battleInitSTATSETText[];
+extern const char battleInitSTATRECText[];
+extern const char battleInitHPDRAINText[];
+extern const char battleInitHPDRAIN2Text[];
+extern const char battleInitEPDRAINText[];
+extern const char battleInitEPDRAIN2Text[];
+extern const char battleInitDmgTypeErrText[];
+
+int dmgValPut(int arg0, BattleUnit **arg1) {
+    int *d = (int *)arg1;
+    int flags;
+    int value;
+    int type;
+    int bits;
+    int dst;
+    void *first = *(void **)d;
+    flags = d[3];
+    type = flags & 0xFF;
+    value = d[2];
+    if (type != 0xB) {
+        bits = (flags >> 8) & 0xFF;
+        objDmgNumCreate(first, value, flags);
+        if ((unsigned)(type - 7) < 2U) {
+            dst = 2;
+        } else {
+            dst = 4;
+            if ((unsigned)(type - 9) >= 2U) {
+                dst = 0xB;
+            }
+        }
+        if (dst != 0xB) {
+            objDmgNumCreate(*(void **)arg0, value, dst);
+        }
+        printf(battleInitJpText3);
+        if (bits & 1) {
+            printf(battleInitCRITText);
+        } else if (bits & 2) {
+            printf(battleInitDEFText);
+        } else if (bits & 4) {
+            printf(battleInitSTATText);
+        } else if (bits & 8) {
+            printf(battleInitWAKEText);
+        }
+        switch (*(unsigned char *)((char *)arg1 + 0xC)) {
+        case 0:
+            printf(battleInitMISSText);
+            break;
+        case 1:
+            printf(battleInitHPDMGText, value);
+            break;
+        case 2:
+            printf(battleInitHPRECText, value);
+            break;
+        case 3:
+            printf(battleInitEPDMGText, value);
+            break;
+        case 4:
+            printf(battleInitEPRECText, value);
+            break;
+        case 5:
+            printf(battleInitSTATSETText);
+            break;
+        case 6:
+            printf(battleInitSTATRECText);
+            break;
+        case 7:
+            printf(battleInitHPDRAINText, value);
+            break;
+        case 8:
+            printf(battleInitHPDRAIN2Text, value);
+            break;
+        case 9:
+            printf(battleInitEPDRAINText, value);
+            break;
+        case 10:
+            printf(battleInitEPDRAIN2Text, value);
+            break;
+        default:
+            printf(battleInitDmgTypeErrText);
+            break;
+        }
+    }
+}
 
 /*
  * Battle monster-gain tallies (original ELF symbol name; only its total size is
@@ -2155,7 +5390,90 @@ void monsGainInit(void)
     memset(&monsGain, 0, sizeof(MonsGain));
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", monsGainSet);
+extern int calcSkill(BattleUnit *unit, int a, int b);
+extern const char battleInitPOINTUpEventTimerBXText[];
+extern int menuTimeGet(void);
+extern int menuTimeXGet(void);
+extern int itemGrpChk(int group, int item);
+
+void monsGainSet(BattleUnit *unit)
+{
+  BattleUnit *arg0 = unit;
+  CalcUnitParam *up;
+  unsigned char *rec;
+  unsigned char *mg;
+  void *p150;
+  int sk_val;
+  int x;
+  int var_3;
+  int grp;
+  int id;
+  int var_16;
+  int t4;
+  int cnt;
+  int *cp;
+  unsigned char *g;
+  unsigned char *ar;
+  up = calcUPGet(arg0);
+  mg = (char *) up;
+  p150 = *((void **) (mg + 0x150));
+  if (p150 != 0)
+  {
+    grp = 0;
+    mg = (unsigned char *) (&monsGain);
+    rec = (unsigned char *) dataGainGet(up->charaId);
+    id = 0;
+    *((int *) (mg + 0x10)) = (*((int *) (mg + 0x10))) + (*((unsigned short *) (rec + 4)));
+    *((int *) (mg + 0x0)) = (*((int *) (mg + 0x0))) + (*((int *) rec));
+    if (menuTimeGet() == 3)
+    {
+      x = menuTimeXGet();
+      *((int *) (mg + 0x4)) = (*((int *) (mg + 0x4))) + (rec[6] * x);
+      *((int *) (mg + 0x8)) = (*((int *) (mg + 0x8))) + (rec[7] * x);
+      t4 = (*((int *) (mg + 0xC))) + (rec[8] * x);
+      *((int *) (mg + 0xC)) = t4;
+      printf(battleInitPOINTUpEventTimerBXText, x, *((int *) (mg + 0x4)), *((int *) (mg + 0x8)), t4);
+    }
+    else
+    {
+      *((int *) (mg + 0x4)) = (*((int *) (mg + 0x4))) + rec[6];
+      *((int *) (mg + 0x8)) = (*((int *) (mg + 0x8))) + rec[7];
+      *((int *) (mg + 0xC)) = (*((int *) (mg + 0xC))) + rec[8];
+    }
+    var_16 = rec[0xB], sk_val = calcSkill(p150, 0x1000, 0x8000);
+    var_3 = var_16 < 0x65;
+    if (sk_val > 0)
+    {
+      var_16 += (var_16 * sk_val) / 100;
+      ;
+    }
+    if ((var_16 < 0x65) == 0)
+    {
+      var_16 = 0x64;
+    }
+    if ((rnd(0x64) < var_16) && (calcStatGet((BattleUnit *) arg0, 7, 8) == 0))
+    {
+      grp = rec[0xE];
+      id = rec[0x11];
+    }
+    else
+      if ((rnd(0x64) < rec[0xA]) && (calcStatGet((BattleUnit *) arg0, 7, 0x10) == 0))
+    {
+      grp = rec[0xD];
+      id = rec[0x10];
+    }
+    if ((id != 0) && (itemGrpChk(grp, id) != 0))
+    {
+      g = (unsigned char *) (&monsGain);
+      ar = g + 4;
+      *((int *) ((ar + ((*((int *) (g + 0x54))) * 4)) + 0x10)) = grp;
+      cp = (int *) (g + 0x54);
+      cnt = *cp;
+      *((int *) ((ar + (cnt * 4)) + 0x30)) = id;
+      *cp = cnt + 1;
+    }
+  }
+}
 
 int itemGrpChk(int group, int item)
 {
@@ -2178,10 +5496,7 @@ int itemGrpChk(int group, int item)
     return 1;
 }
 
-extern int calcStatGet(ObjectTask *unit, int category, int flag);
 extern int calcStatIdx2Bit(int statIdx);
-/* Defined by ov01/tu002 unit_cmd.c (still asm there). */
-extern void unitFaceMotSet(ObjectTask *unit, int face);
 /* Defined by src/main/sef.c. */
 extern SchedulerState *sefCreateEffect2(SefEffectRequest *request);
 extern void sefDeleteEffect2(SchedulerState *scheduler);
@@ -2192,22 +5507,22 @@ extern void sefDeleteEffect2(SchedulerState *scheduler);
  * a status shows in (`lb $2,0x0($16)` at 0x00a0f45c, -1 for none), effId
  * each slot's effect number (`lhu $3,0x0($2)` at 0x00a0f50c).
  */
-extern signed char effTbl[8][16];
-extern int effId[8];
+static signed char effTbl[8][16];
+static int effId[7];
 
 #define STAT_EFF_SLOT_COUNT 8
-/* Bit of Actor.windFlags set while the effect slot 3 is shown. */
+/* Bit of Actor.moveFlags set while the effect slot 3 is shown. */
 #define ACTOR_MOTION_STOPPED_BIT 0x80000
 
 /*
  * The unit's actor record read from BattleUnit.actor as an int-sized word,
  * menu.c's menuStockWorkGet idiom: statEffProc reloads the slot after the
- * int store to windFlags (`lw $3,0x14($18)` at 0x00a0f558 after `sw
+ * int store to moveFlags (`lw $3,0x14($18)` at 0x00a0f558 after `sw
  * $2,0x6F0($4)`).
  */
-static __inline__ Actor *unitStatActorGet(ObjectTask *unit)
+static __inline__ Actor *unitStatActorGet(BattleUnit *unit)
 {
-    return (Actor *)*(u32 *)&((BattleUnit *)unit)->actor;
+    return (Actor *)*(u32 *)&unit->actor;
 }
 
 /*
@@ -2215,7 +5530,7 @@ static __inline__ Actor *unitStatActorGet(ObjectTask *unit)
  * unit and removes it once none is: slot 0 also switches the face motion
  * (0x37 on, 0x35 off), slot 3 stops the actor's motion while shown.
  */
-void statEffProc(ObjectTask *unit)
+void statEffProc(BattleUnit *unit)
 {
     SefEffectRequest request;
     int counts[STAT_EFF_SLOT_COUNT];
@@ -2245,8 +5560,8 @@ void statEffProc(ObjectTask *unit)
                     unitFaceMotSet(unit, 0x37);
                 }
                 if (i == 3) {
-                    unitStatActorGet(unit)->windFlags |= ACTOR_MOTION_STOPPED_BIT;
-                    unitStatActorGet(unit)->motionStep = 0.0f;
+                    unitStatActorGet(unit)->moveFlags |= ACTOR_MOTION_STOPPED_BIT;
+                    unitStatActorGet(unit)->moveStepRate = 0.0f;
                 }
             }
         } else if (calcUPGet(unit)->statEffUnits[i] != 0) {
@@ -2256,8 +5571,8 @@ void statEffProc(ObjectTask *unit)
                 unitFaceMotSet(unit, 0x35);
             }
             if (i == 3) {
-                unitStatActorGet(unit)->windFlags &= ~ACTOR_MOTION_STOPPED_BIT;
-                unitStatActorGet(unit)->motionStep = 1.0f / 30.0f;
+                unitStatActorGet(unit)->moveFlags &= ~ACTOR_MOTION_STOPPED_BIT;
+                unitStatActorGet(unit)->moveStepRate = 1.0f / 30.0f;
             }
         }
     }
@@ -2267,25 +5582,14 @@ void statEffProc(ObjectTask *unit)
  * calcUPGet's return type comes from its definer, ov01/tu004 calc.c
  * (published in include/ov01/calc.h); calcUPGet itself is still asm there.
  */
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
 #define UNIT_WORK_TABLE_COUNT 8
 #define UNIT_WORK_STATUS_BLOCKED 0x100u
 /* CalcUnitParam's own UnitWork* table base and per-slot pointer offset
- * (see the comment below); named to match this file's own CURSOR_STATE_OFF
+ * (see the comment below); named as the cursor's state record
  * convention instead of leaving the offsets as bare literals. */
 #define UNIT_WORK_TABLE_BASE_OFF 0x150
 #define UNIT_WORK_PTR_OFF 0xC
-
-/*
- * Each battle unit's own large parameter block, reached only through the
- * per-unit table below; nothing else in this TU dereferences it.
- */
-typedef struct UnitWork {
-    unsigned char unmodeled_00[0xA8C];
-    unsigned int flags; /* +0xA8C: UNIT_WORK_STATUS_BLOCKED suppresses
-                          * status-effect ticks for this unit */
-} UnitWork;
 
 /*
  * calcUPGet's own CalcUnitParam (ov01/tu004 calc.c, still asm there, not
@@ -2297,7 +5601,7 @@ typedef struct UnitWork {
  * keeping the first call's result. The offset walks the table forward
  * (+4 each pass) while a separate trip counter counts the 8 passes down.
  */
-void statEffOn(ObjectTask *unit)
+void statEffOn(BattleUnit *unit)
 {
     int offset;
     int i;
@@ -2312,7 +5616,7 @@ void statEffOn(ObjectTask *unit)
     }
 }
 
-void statEffOff(ObjectTask *unit)
+void statEffOff(BattleUnit *unit)
 {
     int offset;
     int i;
@@ -2339,12 +5643,22 @@ extern void objStdInit(ObjectTask *task);
 void objCur(CursorObject *cursor);
 void objCurDraw(CursorObject *cursor);
 
+/* curCmdSet selectors: 1 moves the cursor to a position, 2 to a unit; 3 is
+ * accepted by objCur alongside 2. */
+#define CURSOR_CMD_POSITION 1
+#define CURSOR_CMD_UNIT 2
+#define CURSOR_CMD_TARGET 3
+/* Cursor state flag bits: 0x2 is set by curCmdSet while a command is
+ * queued; 0x4 hides the cursor (objCurDraw); 0x8 marks a unit selection;
+ * 0x40 is the enemy-side bit objCurDraw tests to pick objDispEnCur. */
+#define CURSOR_STATE_FLAG_QUEUED 0x2
+#define CURSOR_STATE_FLAG_HIDDEN 0x4
+#define CURSOR_STATE_FLAG_UNIT_SELECT 0x8
+#define CURSOR_STATE_FLAG_ENEMY 0x40
+
 /*
- * state + 0x04 is cleared at creation and read nowhere else in this TU. The
- * 0x40 bit set in flags is the enemy-side bit objCurDraw tests to pick
- * objDispEnCur.
+ * state + 0x04 is cleared at creation and read nowhere else in this TU.
  */
-#define STATE_UNK04_OFF 0x04
 
 ObjectTask *objEnCurCreate(float x, float y, float z)
 {
@@ -2359,8 +5673,8 @@ ObjectTask *objEnCurCreate(float x, float y, float z)
     position->x = x;
     position->y = y;
     position->z = z;
-    state->flags |= 0x40;
-    *(int *)((char *)state + STATE_UNK04_OFF) = 0;
+    state->flags |= CURSOR_STATE_FLAG_ENEMY;
+    state->unmodeled_04 = 0;
     state->targetPosId = 0;
     state->selectActive = 0;
     return task;
@@ -2387,17 +5701,6 @@ extern int objStdMove(ObjectTask *task);
 /* src/main/sef.c, spelled as src/ov01/menu.c and src/ov01/m_cam.c do. */
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
 
-/* curCmdSet selectors: 1 moves the cursor to a position, 2 to a unit; 3 is
- * accepted by objCur alongside 2. */
-#define CURSOR_CMD_POSITION 1
-#define CURSOR_CMD_UNIT 2
-#define CURSOR_CMD_TARGET 3
-/* Cursor state flag bits: 0x2 is set by curCmdSet while a command is
- * queued; 0x4 hides the cursor (objCurDraw); 0x8 marks a unit selection. */
-#define CURSOR_STATE_FLAG_QUEUED 0x2
-#define CURSOR_STATE_FLAG_HIDDEN 0x4
-#define CURSOR_STATE_FLAG_UNIT_SELECT 0x8
-
 /*
  * The cursor task's per-frame step: run the queued command. A position
  * move steps the cursor until objStdMove reports arrival; a unit command
@@ -2414,7 +5717,7 @@ void objCur(CursorObject *cursor)
 
     switch (cmd->selector) {
     case CURSOR_CMD_UNIT:
-    case 3:
+    case CURSOR_CMD_TARGET:
         unit = (BattleUnit *)cmd->argument;
         flags = state->flags;
         if (!(flags & CURSOR_STATE_FLAG_HIDDEN)) {
@@ -2437,8 +5740,8 @@ extern void objDispPlCur(void);
 extern void objDispEnCur(CursorObject *cursor);
 
 /*
- * cursor + 0x10 (CURSOR_STATE_OFF) reaches the same state record curCmdSet
- * writes; this function reads back state + 0x00 (STATE_FLAGS_OFF) and
+ * cursor + 0x10 reaches the same state record curCmdSet
+ * writes; this function reads back state + 0x00 (flags) and
  * returns without drawing when bit 0x4 is set, otherwise dispatches to the
  * enemy-side draw callee (bit 0x40 set) or the player-side one (objDispPlCur,
  * which takes no argument).
@@ -2448,12 +5751,12 @@ void objCurDraw(CursorObject *cursor)
     CursorCommandState *state;
     unsigned int flags;
 
-    state = *(CursorCommandState **)((char *)cursor + CURSOR_STATE_OFF);
-    flags = *(unsigned int *)((char *)state + STATE_FLAGS_OFF);
-    if (flags & 4) {
+    state = cursor->state;
+    flags = state->flags;
+    if (flags & CURSOR_STATE_FLAG_HIDDEN) {
         return;
     }
-    if (!(flags & 0x40)) {
+    if (!(flags & CURSOR_STATE_FLAG_ENEMY)) {
         objDispPlCur();
         return;
     }
@@ -2478,14 +5781,14 @@ void curCmdSet(CursorObject *cursor, const CursorCommand *command)
     CursorCommand *tail;
     unsigned int flags;
 
-    state = *(CursorCommandState **)((char *)cursor + CURSOR_STATE_OFF);
+    state = cursor->state;
     tail = objCmdTailGet(cursor);
-    *(unsigned int *)((char *)state + STATE_UNK70_OFF) = 0;
-    *(unsigned int *)((char *)state + STATE_UNK74_OFF) = 0;
+    state->unmodeled_70 = 0;
+    state->unmodeled_74 = 0;
     *tail = *command;
     if (tail->selector != 0) {
-        flags = *(unsigned int *)((char *)state + STATE_FLAGS_OFF);
-        *(unsigned int *)((char *)state + STATE_FLAGS_OFF) = flags | 2;
+        flags = state->flags;
+        state->flags = flags | CURSOR_STATE_FLAG_QUEUED;
     }
 }
 
@@ -2597,7 +5900,7 @@ void curMove2Pos(CursorObject *cursor, CursorSelectList *list)
 
     if (list->posMode == 0) {
         sefGetNullPosition(&transform->fields.goal, list->units[list->curIdx]->actor, 0, 0);
-        sizeClass = calcUPGet((ObjectTask *)list->units[list->curIdx])->sizeClass;
+        sizeClass = calcUPGet(list->units[list->curIdx])->sizeClass;
         if (sizeClass < 3) {
             transform->fields.offset.y = 1.0f;
         } else if (sizeClass < 4) {
@@ -2626,7 +5929,55 @@ void curMove2Pos(CursorObject *cursor, CursorSelectList *list)
     curCmdSet(cursor, &cmd);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curEnProcInit);
+/*
+ * Fills curMove with the living units of one side and points *target at the
+ * unit the cursor starts on. Returns 1 when a unit was found.
+ */
+int curEnProcInit(BattleUnit **target, int side)
+{
+    ObjectTask *task = pTaskEnCur;
+    CursorSelectList *list = &curMove;
+    BattleUnit **table[1];
+    int count;
+    int i = 0;
+    int ret;
+
+    list->curIdx = 0;
+    list->count = 0;
+    count = unitTblGet(side, table);
+    for (; i < count; i++)
+    {
+        BattleUnit *u = table[0][i];
+        if (u == 0)
+        {
+            continue;
+        }
+        if (u->work->flags & ACTOR_FLAG_DEAD)
+        {
+            continue;
+        }
+        if (*target == u)
+        {
+            list->curIdx = list->count;
+        }
+        list->units[list->count] = table[0][i];
+        list->entries[list->count] = calcUPGet(table[0][i])->posId;
+        list->count++;
+    }
+    if (list->count == 0)
+    {
+        printf(battleInitCurEnProcNoTgtText);
+        ret = 0;
+    }
+    else
+    {
+        int idx = list->curIdx;
+        ret = 1;
+        *(int *)((char *)task->work + 0x78) = 1;
+        *target = list->units[idx];
+    }
+    return ret;
+}
 
 /*
  * The cursor's state record read from CursorObject.state as an int-sized
@@ -2642,7 +5993,7 @@ static __inline__ CursorCommandState *curStateGet(CursorObject *cursor)
 
 /*
  * One frame of enemy selection with the battle cursor: the pad steps
- * through curMove's units (0x2000 next, 0x8000 previous), *target receives
+ * through curMove's units (PAD_RIGHT next, PAD_LEFT previous), *target receives
  * the selection and the cursor is sent to it unless a command is still
  * queued. The result is whether the selection changed.
  */
@@ -2656,7 +6007,7 @@ int curEnProc(BattleUnit **target)
 
     list->posMode = 0;
     curStateGet(cursor)->flags |= CURSOR_STATE_FLAG_UNIT_SELECT;
-    curSel(cursor, list, 0x2000, 0x8000);
+    curSel(cursor, list, PAD_RIGHT, PAD_LEFT);
     changed = list->prevIdx != list->curIdx;
     unit = list->units[list->curIdx];
     *target = unit;
@@ -2668,14 +6019,81 @@ int curEnProc(BattleUnit **target)
     return changed;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curPosProcInit);
+static char chaTbl_00A3D7E0[28];
+static char agwsTbl_00A3D800[16];
+extern const char battleInitCurPosProcNoTgtText[];
+extern int calcMoveChk(BattleUnit *unit, int move);
+
+int curPosProcInit(BattleUnit *arg0, int arg1)
+{
+    ObjectTask *task = pTaskEnCur;
+    CursorSelectList *list = &curMove;
+    BattleUnit **table;
+    int *var;
+    int j;
+    int *cnt;
+    int count;
+    int i;
+    int ret;
+
+    if (arg1 == 5)
+    {
+        var = (calcUPGet(arg0)->flags & CALC_UNIT_FLAG_IS_AGWS) ? (int *)chaTbl_00A3D7E0 : (int *)agwsTbl_00A3D800;
+    }
+    else
+    {
+        var = (calcUPGet(arg0)->flags & CALC_UNIT_FLAG_IS_AGWS) ? (int *)agwsTbl_00A3D800 : (int *)chaTbl_00A3D7E0;
+    }
+    list->curIdx = 0;
+    list->count = 0;
+    count = unitTblGet(2, &table);
+    if (var[0] != 0)
+    {
+        j = 0;
+        cnt = &list->count;
+        do
+        {
+            if (arg1 != 5 && !calcMoveChk(arg0, var[j]))
+            {
+                goto next;
+            }
+            for (i = 0; i < count && (table[i] == 0 || var[j] != calcUPGet(table[i])->posId); i++)
+            {
+            }
+            if (i == count)
+            {
+                int idx;
+                if (var[j] == *(int *)((char *)task->work + 0x80))
+                {
+                    list->curIdx = list->count;
+                }
+                idx = *cnt;
+                list->entries[idx] = var[j];
+                *cnt = idx + 1;
+            }
+next:
+            j++;
+        } while (var[j] != 0);
+    }
+    if (list->count == 0)
+    {
+        printf(battleInitCurPosProcNoTgtText);
+        ret = 0;
+    }
+    else
+    {
+        ret = 1;
+    }
+    *(int *)((char *)task->work + 0x78) = 0;
+    return ret;
+}
 
 /*
  * One frame of field-position selection with the battle cursor: as
  * curEnProc, but over curMove's position ids, which the cursor is sent to
  * (command CURSOR_CMD_POSITION) and *posId receives. unit is not read.
  */
-int curPosProc(ObjectTask *unit, int *posId)
+int curPosProc(BattleUnit *unit, int *posId)
 {
     CursorObject *cursor = (CursorObject *)pTaskEnCur;
     CursorSelectList *list = &curMove;
@@ -2684,7 +6102,7 @@ int curPosProc(ObjectTask *unit, int *posId)
 
     list->posMode = 1;
     curStateGet(cursor)->flags &= ~CURSOR_STATE_FLAG_UNIT_SELECT;
-    curSel(cursor, list, 0x2000, 0x8000);
+    curSel(cursor, list, PAD_RIGHT, PAD_LEFT);
     changed = list->prevIdx != list->curIdx;
     if (!(curStateGet(cursor)->flags & CURSOR_STATE_FLAG_QUEUED)) {
         cmd.selector = CURSOR_CMD_POSITION;
@@ -2695,14 +6113,71 @@ int curPosProc(ObjectTask *unit, int *posId)
     return changed;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", curTgtProcInit);
+extern int calcTgtUnitTbl(BattleUnit *self, int flags, BattleUnit **table);
+
+int curTgtProcInit(BattleUnit **target, BattleUnit *self, int flags)
+{
+    ObjectTask *task = pTaskEnCur;
+    CursorSelectList *list = &curMove;
+    BattleUnit *table[8];
+    int count;
+    int n;
+    int i;
+    int ret;
+
+    list->curIdx = 0;
+    if ((flags & 0xC0) == 0xC0)
+    {
+        curGrpSel((CursorObject *)task, list, PAD_UP, PAD_DOWN);
+    }
+    count = calcTgtUnitTbl(self, flags, table);
+    n = 0;
+    for (i = 0; i < count; i++)
+    {
+        if ((list->groupFlag == 0 && !(table[i]->work->flags & ACTOR_FLAG_ENEMY)) ||
+            (list->groupFlag == 1 && (table[i]->work->flags & ACTOR_FLAG_ENEMY)))
+        {
+            list->units[n++] = table[i];
+        }
+    }
+    list->count = n;
+    for (i = 0; i < list->count; i++)
+    {
+        list->entries[i] = calcUPGet(list->units[i])->posId;
+        if (oldCurGrp == list->groupFlag)
+        {
+            if (*target == list->units[i])
+            {
+                list->curIdx = i;
+            }
+        }
+        else if (list->groupFlag == 0 && self == list->units[i])
+        {
+            list->curIdx = i;
+        }
+    }
+    if (list->count == 0)
+    {
+        printf(battleInitCurEnProcNoTgtText);
+        ret = 0;
+    }
+    else
+    {
+        int idx = list->curIdx;
+        ret = 1;
+        *(int *)((char *)task->work + 0x78) = 1;
+        *target = list->units[idx];
+    }
+    oldCurGrp = list->groupFlag;
+    return ret;
+}
 
 extern int frameCntGet(void);
 
 /*
  * One frame of target selection with the battle cursor. Without bit 0x10
- * of targetFlags the pad steps through curMove's units (0x2000 next,
- * 0x8000 previous), the cursor is sent to the selection unless a command
+ * of targetFlags the pad steps through curMove's units (PAD_RIGHT next,
+ * PAD_LEFT previous), the cursor is sent to the selection unless a command
  * is still queued, and the result is whether the selection changed. With
  * it the cursor stays on its current unit, advancing to the next one
  * every fourth frame, and the result is 0. *target receives the selection
@@ -2722,7 +6197,7 @@ int curTgtProc(BattleUnit **target, int targetFlags)
     if (!(targetFlags & 0x10)) {
         list->posMode = 0;
         curStateGet(cursor)->flags &= ~CURSOR_STATE_FLAG_UNIT_SELECT;
-        curSel(cursor, list, 0x2000, 0x8000);
+        curSel(cursor, list, PAD_RIGHT, PAD_LEFT);
         changed = list->prevIdx != list->curIdx;
         unit = list->units[list->curIdx];
         *target = unit;
@@ -2750,7 +6225,7 @@ int curTgtProc(BattleUnit **target, int targetFlags)
             cmd.argument = (int)list->units[i];
             curCmdSet(cursor, &cmd);
             curStateGet(cursor)->targetUnit = list->units[i];
-            sizeClass = calcUPGet((ObjectTask *)curStateGet(cursor)->targetUnit)->sizeClass;
+            sizeClass = calcUPGet(curStateGet(cursor)->targetUnit)->sizeClass;
             if (sizeClass < 3) {
                 transform->fields.offset.y = 1.0f;
             } else if (sizeClass >= 4) {
@@ -2802,23 +6277,7 @@ void objDispPlCur(void)
 extern void curTexTrans(int unused);
 extern void objDispCur(CursorObject *cursor, int isPlayer);
 extern void menuStatTexTrans(void);
-extern void grGpInit(void *packet);
-extern void grPacketSend(void *packet);
-/* src/ov01/menu.c takes a GrPacket *; this file passes grGpInit's
- * `int packet[2]` record as void *, as objDispCur does. */
-extern void menuActCurPut(void *packet, ObjectTask *cursor, ObjectTask *unit, int frame);
-extern void monsNameDisp(void *packet, ObjectTask *unitTask, int x, int y, int isEnemy);
-
-/*
- * Bit 0x40 of the target's work-record flags word (`lw $3,0x10($2)`/`lw
- * $2,0x0($3)`/`andi $2,$2,0x40` at 0x00a106e8..0x00a106f0); the name is the
- * one src/ov01/data_unit_org_get.h gives the same Actor.flags bit (that
- * header is not included here).
- */
-#define BATTLE_ACTOR_FLAG_ENEMY 0x40
-/* Bit 0x80 of the same word: objDispEnCur skips the name of a target that
- * has it (`andi $2,$2,0x80` at 0x00a10620). */
-#define BATTLE_ACTOR_FLAG_DEAD 0x80
+extern void monsNameDisp(void *packet, BattleUnit *unitTask, int x, int y, int isEnemy);
 
 /*
  * Draw the enemy-side cursor: the cursor itself, the acting unit's marker
@@ -2827,7 +6286,7 @@ extern void monsNameDisp(void *packet, ObjectTask *unitTask, int x, int y, int i
  */
 void objDispEnCur(CursorObject *cursor)
 {
-    int packet[2]; /* grGpInit's record, as in curTexTrans */
+    GrPacket packet; /* grGpInit's record, as in curTexTrans */
     int selectActive;
     unsigned int enemyBit;
     int isEnemy;
@@ -2835,9 +6294,9 @@ void objDispEnCur(CursorObject *cursor)
     curTexTrans(0);
     objDispCur(cursor, 0);
     menuStatTexTrans();
-    if (tgtUnitGet() != 0 && (tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY)) {
-        grGpInit(packet);
-        menuActCurPut(packet, (ObjectTask *)cursor, (ObjectTask *)actUnitGet(),
+    if (tgtUnitGet() != 0 && (tgtUnitGet()->work->flags & ACTOR_FLAG_ENEMY)) {
+        grGpInit(&packet);
+        menuActCurPut(&packet, (ObjectTask *)cursor, actUnitGet(),
                       ((unsigned int)frameCntGet() >> 1) & 7);
     }
     if (tgtUnitGet() == 0) {
@@ -2847,24 +6306,17 @@ void objDispEnCur(CursorObject *cursor)
     if (selectActive != 1 || battleCtrlHelpGet() == 2) {
         return;
     }
-    enemyBit = tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY;
+    enemyBit = tgtUnitGet()->work->flags & ACTOR_FLAG_ENEMY;
     isEnemy = enemyBit != 0;
     if (isEnemy == selectActive) {
-        if (tgtUnitGet() == 0 || (tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_DEAD)) {
+        if (tgtUnitGet() == 0 || (tgtUnitGet()->work->flags & ACTOR_FLAG_DEAD)) {
             return;
         }
     }
-    grGpInit(packet);
-    monsNameDisp(packet, (ObjectTask *)tgtUnitGet(), 8, 0x5C, isEnemy);
-    grPacketSend(packet);
+    grGpInit(&packet);
+    monsNameDisp(&packet, tgtUnitGet(), 8, 0x5C, isEnemy);
+    grPacketSend(&packet);
 }
-
-/*
- * Bit 0x8 of the cursor state's flags word (`andi $2,$2,0x8` at
- * 0x00a106ac): set, objDispCur runs the tgtUnitGet/calcLineChk test below.
- * Nothing here shows what sets it, so it is named by the bit only.
- */
-#define CURSOR_STATE_FLAG_BIT3 0x8
 
 /*
  * objDispCur calls it with $a0 = packet (`daddu $4,$29,$0` at 0x00a1072c, the
@@ -2878,7 +6330,7 @@ void objDispCurSubPl(void *packet, CursorObject *cursor);
 extern void curEnvMake(void *packet, int isAlly);
 extern void objDispCurSubEn(void *packet, CursorObject *cursor, int outOfLine);
 extern void curPutSub(void *packet, CursorObject *cursor);
-extern int calcLineChk(ObjectTask *unit);
+extern int calcLineChk(BattleUnit *unit);
 
 /*
  * Draw the battle cursor into one GS packet: the player-side cursor, or the
@@ -2887,16 +6339,16 @@ extern int calcLineChk(ObjectTask *unit);
  */
 void objDispCur(CursorObject *cursor, int isPlayer)
 {
-    int packet[2]; /* grGpInit's record, as in curTexTrans */
+    GrPacket packet; /* grGpInit's record, as in curTexTrans */
     int outOfLine;
     int isAlly;
 
-    grGpInit(packet);
+    grGpInit(&packet);
     if (!isPlayer) {
         /* The original calls it (0x00a1069c) and ignores the result. */
         objCmdPtrGet((ObjectTask *)cursor);
-        if ((cursor->state->flags & CURSOR_STATE_FLAG_BIT3) &&
-            tgtUnitGet() != 0 && calcLineChk((ObjectTask *)tgtUnitGet()) == 0) {
+        if ((cursor->state->flags & CURSOR_STATE_FLAG_UNIT_SELECT) &&
+            tgtUnitGet() != 0 && calcLineChk(tgtUnitGet()) == 0) {
             outOfLine = 1;
             isAlly = 0;
         } else {
@@ -2909,36 +6361,94 @@ void objDispCur(CursorObject *cursor, int isPlayer)
              * `jal tgtUnitGet` at 0x00a106e0): no null test exists on this
              * path, so none is written.
              */
-            isEnemy = tgtUnitGet()->work->flags & BATTLE_ACTOR_FLAG_ENEMY;
+            isEnemy = tgtUnitGet()->work->flags & ACTOR_FLAG_ENEMY;
             isAlly = isEnemy == 0;
         }
-        curEnvMake(packet, isAlly);
-        objDispCurSubEn(packet, cursor, outOfLine);
-        curPutSub(packet, cursor);
+        curEnvMake(&packet, isAlly);
+        objDispCurSubEn(&packet, cursor, outOfLine);
+        curPutSub(&packet, cursor);
     } else {
-        objDispCurSubPl(packet, cursor);
+        objDispCurSubPl(&packet, cursor);
     }
-    grPacketSend(packet);
+    grPacketSend(&packet);
 }
 
 void objDispCurSubPl(void *packet, CursorObject *cursor)
 {
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/battle_init", objDispCurSubEn);
+typedef struct CurSubEnRgba {
+    unsigned char c[4];
+} CurSubEnRgba;
+
+typedef struct CurSubEnSpr {
+    float x0, y0, z0, pad0;
+    float x1, y1, z1, pad1;
+    CurSubEnRgba col;
+    short u0, u1, v0, v1;
+} CurSubEnSpr;
+
+typedef struct CurSubEnCol {
+    CurSubEnRgba c[3];
+} CurSubEnCol;
+
+extern const CurSubEnCol curSubEnCol;
+extern int grBBCalc(ObjectTask *task, int *x, int *y);
+extern void grOpenSpr(void *packet);
+extern void grPutSpr(void *packet, CurSubEnSpr *spr, int flag);
+extern void grCloseSpr(void);
+
+void objDispCurSubEn(void *packet, CursorObject *cursor, int outOfLine)
+{
+    CurSubEnSpr spr;
+    CurSubEnCol cols;
+    int x;
+    int y;
+    unsigned int frame;
+    int w;
+    int h;
+    int u;
+    int v;
+
+    cols = curSubEnCol;
+    if (grBBCalc((ObjectTask *)cursor, &x, &y) != 0)
+    {
+        w = 0x24;
+        h = 0x32;
+        x -= 0x12;
+        y -= 0x32;
+        frame = ((unsigned int)frameCntGet() >> 2) % 6;
+        u = (int)frame % 3 * w;
+        v = (int)frame / 3 * h;
+        spr.z0 = 16777212.0f;
+        spr.x0 = x;
+        spr.y0 = y;
+        spr.x1 = x + w;
+        spr.y1 = y + h;
+        spr.z1 = 16777212.0f;
+        spr.u0 = u;
+        spr.v0 = v;
+        spr.u1 = u + w + 1;
+        spr.v1 = v + h + 1;
+        __builtin_memcpy(&spr.col, (unsigned char *)&cols + outOfLine * 4, 4);
+        grOpenSpr(packet);
+        grPutSpr(packet, &spr, 0);
+        grCloseSpr();
+    }
+}
 
 /*
  * grPutFT4STQ's quad record (src/ov01/gr_gp_init.c, TU-local there: four
  * corners, one shared RGBA, per-corner S/T); restated for the cursor quad.
  */
 typedef struct CursorQuad {
-    Vector4 points[4];       /* +0x00 */
+    AlignedVector4 points[4]; /* +0x00 */
     unsigned char color[4];  /* +0x40: R, G, B, A */
     float s[4];              /* +0x44 */
     float t[4];              /* +0x54 */
 } CursorQuad;
 /* The enemy-target cursor quad (data still asm-owned; original ELF symbol name). */
-extern CursorQuad cur1;
+static CursorQuad cur1;
 
 extern void grCalcMatrix(CursorObject *cursor, Matrix4 matrix);
 extern void grGsRegSet(void *packet, int reg, int value);
@@ -3008,13 +6518,13 @@ extern void xglPacketTextureTrans(int textureId);
  */
 void curTexTrans(int unused)
 {
-    int packet[2]; /* grGpInit's own record: a data pointer and an element
-                     * count (this call site's own evidence for the size). */
+    GrPacket packet; /* grGpInit's own record: a data pointer and an element
+                      * count (this call site's own evidence for the size). */
 
     xglPacketTextureTrans(dataXtxFileGet(CURSOR_XTX_SLOT)->textureId);
-    grGpInit(packet);
-    grGsRegSet(packet, GS_REG_TEXFLUSH, 1);
-    grPacketSend(packet);
+    grGpInit(&packet);
+    grGsRegSet(&packet, GS_REG_TEXFLUSH, 1);
+    grPacketSend(&packet);
 }
 
 /*
@@ -3047,3 +6557,253 @@ void curEnvMake(void *packet, int isAlly)
     GS_REG_SET(packet, 0x8, 0);
     GS_REG_SET(packet, 0x14, 0);
 }
+
+extern const char battleInitDataYamamotoMvMomoBPssText[32];
+extern const char battleInitDataYamamotoMvMomoAPssText[32];
+extern const char battleInitDataYamamotoMvGameraPssText[32];
+extern const char battleInitDataYamamotoMvKissPssText[32];
+extern const char battleInitDataYamamotoMvGrPssText[24];
+
+static const char *mvFname[5] = { battleInitDataYamamotoMvMomoAPssText, battleInitDataYamamotoMvMomoBPssText, battleInitDataYamamotoMvGameraPssText, battleInitDataYamamotoMvKissPssText, battleInitDataYamamotoMvGrPssText };
+
+static unsigned short keyItemTblCha[4] = { 128, 16, 32, 0 };
+
+static unsigned short keyItemTblAgws[4] = { 128, 16, 32, 0 };
+
+static unsigned short keyCmd01[2] = { PAD_L2, PAD_SQUARE };
+
+static unsigned short keyCmd02[2] = { PAD_L2, PAD_TRIANGLE };
+
+static unsigned short keyCmd03[3] = { PAD_R2, PAD_SQUARE, PAD_SQUARE };
+
+static unsigned short keyCmd04[3] = { PAD_R2, PAD_SQUARE, PAD_TRIANGLE };
+
+static unsigned short keyCmd05[3] = { PAD_R2, PAD_TRIANGLE, PAD_TRIANGLE };
+
+static unsigned short keyCmd06[3] = { PAD_R2, PAD_TRIANGLE, PAD_SQUARE };
+
+static unsigned short keyCmd07[3] = { PAD_R2, PAD_SQUARE, PAD_CIRCLE };
+
+static unsigned short keyCmd08[3] = { PAD_R2, PAD_TRIANGLE, PAD_CIRCLE };
+
+static unsigned short keyCmd09[4] = { (PAD_L2 | PAD_R2),PAD_SQUARE, PAD_SQUARE, PAD_CIRCLE };
+
+static unsigned short keyCmd10[4] = { (PAD_L2 | PAD_R2),PAD_SQUARE, PAD_TRIANGLE, PAD_CIRCLE };
+
+static unsigned short keyCmd11[4] = { (PAD_L2 | PAD_R2),PAD_TRIANGLE, PAD_TRIANGLE, PAD_CIRCLE };
+
+static unsigned short keyCmd12[4] = { (PAD_L2 | PAD_R2),PAD_TRIANGLE, PAD_SQUARE, PAD_CIRCLE };
+
+static unsigned short keyCmd13[4] = { (PAD_L2 | PAD_R2),PAD_SQUARE, PAD_CIRCLE, PAD_CIRCLE };
+
+static unsigned short keyCmd14[4] = { (PAD_L2 | PAD_R2),PAD_TRIANGLE, PAD_CIRCLE, PAD_CIRCLE };
+
+static unsigned short keyCmd15[2] = { PAD_L2, PAD_CIRCLE };
+
+static unsigned short keyCmd16[3] = { PAD_R2, PAD_CIRCLE, PAD_SQUARE };
+
+static unsigned short keyCmd17[3] = { PAD_R2, PAD_CIRCLE, PAD_TRIANGLE };
+
+static unsigned short keyCmd18[3] = { PAD_R2, PAD_CIRCLE, PAD_CIRCLE };
+
+static KeyCmd keyCmdTblCha[16] = {
+    { keyCmd13, 2, 17 },
+    { keyCmd14, 2, 18 },
+    { keyCmd07, 2, 11 },
+    { keyCmd08, 2, 12 },
+    { keyCmd09, 2, 13 },
+    { keyCmd10, 2, 14 },
+    { keyCmd11, 2, 15 },
+    { keyCmd12, 2, 16 },
+    { keyCmd03, 2, 3 },
+    { keyCmd04, 2, 4 },
+    { keyCmd05, 2, 5 },
+    { keyCmd06, 2, 6 },
+    { keyCmd01, 2, 1 },
+    { keyCmd02, 2, 2 },
+    { keyCmd15, 6, 7 },
+    { 0, 0, 0 }
+};
+
+static KeyCmd keyCmdTblAgws[13] = {
+    { keyCmd03, 0, 3 },
+    { keyCmd04, 0, 4 },
+    { keyCmd07, 0, 11 },
+    { keyCmd05, 0, 5 },
+    { keyCmd06, 0, 6 },
+    { keyCmd08, 0, 12 },
+    { keyCmd16, 0, 8 },
+    { keyCmd17, 0, 9 },
+    { keyCmd18, 0, 10 },
+    { keyCmd01, 0, 1 },
+    { keyCmd02, 0, 2 },
+    { keyCmd15, 0, 7 },
+    { 0, 0, 0 }
+};
+
+static int itemGrp1[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+static int itemGrp2[5] = { 10, 12, 13, 14, 16 };
+
+static int itemGrp3[5] = { 15, 17, 20, 24, 25 };
+
+static int itemGrp4[2] = { 9, 11 };
+
+static InoriEnt inoriTbl[4] = {
+    { 4, 2, itemGrp4 },
+    { 12, 5, itemGrp3 },
+    { 50, 5, itemGrp2 },
+    { 100, 8, itemGrp1 }
+};
+
+static DecoEffEntry decoEff[8] = { { .charaId = 1, .subId = { 2509, 2512 } }, { .charaId = 2, .subId = { 2505, 2508 } }, { .charaId = 3, .subId = { 2501, 2504 } }, { .charaId = 4, .subId = { 2525, 2528 } }, { .charaId = 5, .subId = { 2517, 2520 } }, { .charaId = 6, .subId = { 2513, 2516 } }, { .charaId = 7, .subId = { 2521, 2524 } }, { .charaId = 0, .subId = { 0, 0 } } };
+
+static int effId[7] = { 0xa4c, 0xa4b, 0xa4a, 0xa49, 0xa48, 0xa47, 0xa46 };
+
+static signed char effTbl[8][16] = { { 6, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 4, 5, 3, -1, -1 }, { -1, -1, 6, 6, 6, -1, 6, 6, -1, -1, 4, 5, 6, 0, 2, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, { 6, 6, 6, -1, 6, 6, 6, 6, 5, 5, 5, 6, 5, 3, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, 0, 1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 } };
+
+static char chaTbl_00A3D7E0[28] = { 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0 };
+
+static char agwsTbl_00A3D800[16] = { 7, 0, 0, 0, 8, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0 };
+
+static CursorQuad cur1 = {
+    {
+        { -0.5f, 0.0f, -0.5f, 1.0f },
+        { 0.5f, 0.0f, -0.5f, 1.0f },
+        { -0.5f, 0.0f, 0.5f, 1.0f },
+        { 0.5f, 0.0f, 0.5f, 1.0f }
+    },
+    { 0x80, 0x80, 0x80, 0x80 },
+    { 0.7795f, 1.0f, 0.7795f, 1.0f },
+    { 0.7795f, 0.7795f, 1.0f, 1.0f }
+};
+
+int moveTbl[6][5] = { { 2, 4, 5, -1, -1 }, { 1, 3, 4, 5, 6 }, { 2, 5, 6, -1, -1 }, { 1, 2, 5, -1, -1 }, { 1, 2, 3, 4, 6 }, { 2, 3, 5, -1, -1 } };
+
+const char battleInitDataYamamotoMvGrPssText[24] = "data\\yamamoto\\mv\\gr.pss";
+
+const char battleInitDataYamamotoMvKissPssText[32] = "data\\yamamoto\\mv\\kiss.pss";
+
+const char battleInitDataYamamotoMvGameraPssText[32] = "data\\yamamoto\\mv\\gamera.pss";
+
+const char battleInitDataYamamotoMvMomoBPssText[32] = "data\\yamamoto\\mv\\momo_b.pss";
+
+const char battleInitDataYamamotoMvMomoAPssText[32] = "data\\yamamoto\\mv\\momo_a.pss";
+
+const char battleInitPLWinText[16] = "** PL Win!\n";
+
+const char battleInitPLEscText[16] = "** PL Esc!\n";
+
+const char battleInitENWinText[16] = "** EN Win!\n";
+
+const MsgText battleInitUnableToMoveMsg = { .text = "Unable to move due to \"Power Loss\"" };
+
+const char battleInitMakeMaxNumText[32] = "** Make Max=%d Num=%d **\n** ";
+
+const char battleInitUIDText[16] = "%d:U=%X(ID=%d) ";
+
+const char battleInitJpText[8] = "\n";
+
+const char battleInitSP0Text[8] = "** SP0:";
+
+const char battleInitSP1Text[8] = "** SP1:";
+
+const char battleInitPickIDText[32] = "** Pick=%X(ID=%d) %d/%d\n";
+
+const char battleInitBOOSTPLText[24] = "** BOOST PL=%d (%d)\n";
+
+const char battleInitMENUEXITText[16] = "** MENU_EXIT\n";
+
+const char battleInitDEADTIDText[24] = "** DEAD! ->%d /TID=%d\n";
+
+const char battleInitStatDmgSAFEText[24] = "** Stat Dmg: SAFE\n";
+
+const char battleInitItemChangeText[24] = "** item change=%d %d\n";
+
+const char battleInitChangedToText[16] = "Changed to ";
+
+const char battleInitJpText2[16] = "!";
+
+const char battleInitPTGTNULLText[24] = "** pTGT NULL\n";
+
+const char battleInitKeyBuffSetErrorText[32] = "** keyBuffSet: error\n";
+
+const char battleInitMotPackMotActText[32] = "** Mot Pack=%d mot=%d act=%d\n";
+
+const char battleInitFLOWSPECText[24] = "** FLOW_SPEC %d\n";
+
+const char battleInitInoriItemText[24] = "** Inori item=%d\n";
+
+const char battleInitAquiredText[16] = "Aquired ";
+
+const char battleInitScenarioBatExecDstErrText[40] = "** scenarioBatExecDst err: %d\n";
+
+const char battleInitDmgSAFEText[16] = "** Dmg: SAFE\n";
+
+const char battleInitCounterText[16] = "** Counter =%d\n";
+
+const char battleInitJpText3[8] = "** ";
+
+const char battleInitCRITText[8] = "CRIT ";
+
+const char battleInitDEFText[8] = "DEF ";
+
+const char battleInitSTATText[8] = "STAT ";
+
+const char battleInitWAKEText[8] = "WAKE ";
+
+const char battleInitMISSText[8] = "MISS !\n";
+
+const char battleInitHPDMGText[16] = "HP DMG = %d\n";
+
+const char battleInitHPRECText[16] = "HP REC = %d\n";
+
+const char battleInitEPDMGText[16] = "EP DMG = %d\n";
+
+const char battleInitEPRECText[16] = "EP REC = %d\n";
+
+const char battleInitSTATSETText[16] = "STAT SET\n";
+
+const char battleInitSTATRECText[16] = "STAT REC\n";
+
+const char battleInitHPDRAINText[16] = "HP DRAIN = %d\n";
+
+const char battleInitHPDRAIN2Text[16] = "HP DRAIN2 = %d\n";
+
+const char battleInitEPDRAINText[16] = "EP DRAIN = %d\n";
+
+const char battleInitEPDRAIN2Text[16] = "EP DRAIN2 = %d\n";
+
+const char battleInitDmgTypeErrText[24] = "Dmg Type err\n";
+
+const char battleInitPOINTUpEventTimerBXText[40] = "** POINT up: EventTimer B (x%d)\n";
+
+const char battleInitCurEnProcNoTgtText[24] = "curEnProc: no Tgt\n";
+
+const char battleInitCurPosProcNoTgtText[24] = "curPosProc: no Tgt\n";
+
+const CurSubEnCol curSubEnCol = { { { { 0x80, 0x80, 0x80, 0x80 } }, { { 0x30, 0x30, 0x30, 0x80 } }, { { 0x60, 0xd0, 0xb0, 0x80 } } } };
+
+static ConfTgt atkTbl_0[48];
+
+static BattleUnit * pExecUnit;
+
+static BattleUnit * pManUnit;
+
+static BattleUnit * pTgtUnit;
+
+static BattleUnit * pTgtUnit2;
+
+static BattleUnit * pCounterUnit;
+
+static int thinkWk;
+
+static int menuFlag;
+
+static StatUnit statUnit;
+
+static int loadNum[1];
+
+static MsgText msgWork;
+
+static unsigned int jtypeIdx;

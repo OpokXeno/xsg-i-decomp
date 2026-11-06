@@ -851,6 +851,12 @@ HARDWARE_MACROS = {
     'QuadwordMergeMatrixPosition': ('quadword.h', ('destination', 'matrix', 'position'), ('r', 'r', 'r'),
         ['lq $8, 0(%1)', 'lq $9, 16(%1)', 'lq $10, 32(%1)', 'lq $11, 0(%2)', 'sq $8, 0(%0)', 'sq $9, 16(%0)', 'sq $10, 32(%0)', 'sq $11, 48(%0)'],
         ('$8', '$9', '$10', '$11', 'memory')),
+    'QuadwordCopyXyzT0': ('quadword.h', ('destination', 'source'), ('r', 'r'),
+        ['ld $8, 0(%1)', 'lw $9, 8(%1)', 'sd $8, 0(%0)', 'sw $9, 8(%0)'],
+        ('$8', '$9', 'memory')),
+    'LoadWordUnaligned': ('quadword.h', ('result', 'address'), ('=&r', 'r'),
+        ['lwl %0, 3(%1)', 'lwr %0, 0(%1)'],
+        ()),
     'QuadwordCopyArray': ('quadword.h', ('destination', 'source', 'count'), ('+r', '+r', '+r'),
         ['1:', 'lq $2, 0(%1)', 'sq $2, 0(%0)', 'addi %2, %2, -1', 'addi %0, %0, 16', 'addi %1, %1, 16', 'bne $0, %2, 1b'],
         ('$2', 'memory')),
@@ -955,6 +961,8 @@ HARDWARE_MACROS = {
         ('memory',)),
 }
 HARDWARE_MACRO_HEADERS = {'quadword.h': 'QUADWORD_H', 'vu0_macro.h': 'VU0_MACRO_H'}
+# User 2026-11-05, docs/ee-mmi.md: admitted as these macros only, not as inline lines.
+MACRO_ONLY_ADMISSION = {'QuadwordCopyXyzT0', 'LoadWordUnaligned'}
 
 
 def _macro_asm(name, args):
@@ -964,6 +972,9 @@ def _macro_asm(name, args):
     outputs = ', '.join(f'"{c}" ({a})' for c, a in pairs if c[0] in '=+')
     inputs = ', '.join(f'"{c}" ({a})' for c, a in pairs if c[0] not in '=+')
     clobber = ', '.join(chr(34) + c + chr(34) for c in clobbers)
+    if not clobbers:
+        # LoadWordUnaligned: a plain read, scheduled like the load it stands for.
+        return f'__asm__( {body} : {outputs} : {inputs})'
     return f'__asm__ __volatile__( {body} : {outputs} : {inputs} : {clobber})'
 
 
@@ -1030,7 +1041,12 @@ def hardware_macro_admission_text(text):
         if args is None or len(args) != len(HARDWARE_MACROS[m.group(1)][1]):
             continue
         out.append(text[pos:m.start()])
-        out.append(_macro_asm(m.group(1), args))
+        if m.group(1) in MACRO_ONLY_ADMISSION:
+            # Its lines are outside the class's line table and admitted only as
+            # this macro: the class validates one admitted statement in its place.
+            out.append(_macro_asm('QuadwordZero', [args[-1]]))
+        else:
+            out.append(_macro_asm(m.group(1), args))
         pos = end
     out.append(text[pos:])
     return ''.join(out)

@@ -12,8 +12,7 @@
 #include "ov01/m_ef_create_ead_00.h"
 #include "ov01/m_ef_create_so_14.h"
 #include "ov01/m_ef_create_kosbw_02.h"
-
-extern int MEfCreate_SOLB(MEfObjRecord *self);
+#include "m_ef_create_solb.h"
 
 /* Constructor callbacks and instance counts for each effect type. */
 static MEfObjCtor func_0[MEF_TYPE_COUNT] = {
@@ -46,7 +45,7 @@ int MEfCreate(MEfCreateParam *param)
     }
 
     for (i = 0; i < ntbl_1[param->fields.type]; i++) {
-        object = (MEfObjRecord *)MEfObjCreate();
+        object = MEfObjCreate();
         if (object == 0) {
             MOutputDebugStringWarn("MEfCreate: Couldn't create an Object");
             return 0;
@@ -61,3 +60,12 @@ int MEfCreate(MEfCreateParam *param)
 
     return 1;
 }
+
+
+
+const float McEfSTQtbl[4][4] = {
+    { 0.0f, 0.0f, 1.0f, 0.0f },
+    { 0.0f, 1.0f, 1.0f, 0.0f },
+    { 1.0f, 0.0f, 1.0f, 0.0f },
+    { 1.0f, 1.0f, 1.0f, 0.0f }
+};

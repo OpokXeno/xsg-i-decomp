@@ -5,7 +5,6 @@
 #include "shared.h"
 #include "main/xgl_packet.h"
 
-/* EE scratchpad RAM base. */
 /* Default packet capacity used when no custom buffer is supplied. */
 #define MGS_PACKET_DEFAULT_CAPACITY 0x400
 /* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */

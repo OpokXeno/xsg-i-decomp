@@ -5,22 +5,31 @@
 #include "shared.h"
 
 /*
- * .bss for this TU is still scaffold-owned: the flag word keeps its ledger
+ * .bss for this TU is C-owned: the flag word keeps its ledger
  * name (config/symbols/ov01.txt) and the MPEG context its splat name.
  */
 static int mvFlags_00A43724 = 0;
-static unsigned char D_00A5B838[0xC0];
+static unsigned char mv2MpegContext[0xC0];
 
 #define MV2_FLAG_INITIALIZED 0x1
 #define MV2_FLAG_PLAYING 0x2
 #define MV2_FLAG_SKIP_ENABLED 0x4
 #define MV2_PLAYING_BIT 1
 
+/* Pad bit that skips a playing movie (PadData.half_2a). */
+#define MV2_PAD_SKIP_PRESSED 0x800
+/* Decoder arena and audio buffer size handed to xglMpeg2InfoInit2. */
+#define MV2_ARENA_BASE 0x01b9e000
+#define MV2_AUDIO_BUFFER_SIZE 0x80000
+/* Retry policy: a failed decode is retried until the counter reaches the limit. */
+#define MV2_RETRY_LIMIT 2
+#define MV2_RETRY_SLEEP_CALLS 10
+
 extern void xglRenderCopyDisp2Draw(void);
 extern int xglMpeg2Close(unsigned char *mpegContext);
 
 /*
- * D_00A5B7B0 (0x88 bytes, scaffold-owned, immediately precedes D_00A5B838)
+ * mv2Params (0x88 bytes, C-owned, immediately precedes mv2MpegContext)
  * is the movie-parameter block MMv2Play fills in: MMv2Play strncpy()s its
  * filename argument into the first 0x80 bytes (n=128, byte 0x7f forced to
  * '\0') and MMv2Exec/MMv2Play both read, increment and clear a retry counter
@@ -33,7 +42,7 @@ typedef struct Mv2Params {
     unsigned char unmodeled_82[6];
 } Mv2Params;
 
-static Mv2Params D_00A5B7B0;
+static Mv2Params mv2Params;
 
 extern void xglSleep(void);
 extern int xglMpeg2Play(unsigned char *mpegContext);
@@ -53,7 +62,7 @@ int MMv2Init(void)
 
 void MMv2Exec(void)
 {
-    unsigned char *mpegContext = D_00A5B838;
+    unsigned char *mpegContext = mv2MpegContext;
     int retryFailed = 0;
     int playResult;
 
@@ -61,7 +70,7 @@ void MMv2Exec(void)
         return;
     }
 
-    if ((mvFlags_00A43724 & MV2_FLAG_SKIP_ENABLED) && (PadData.half_2a & 0x800)) {
+    if ((mvFlags_00A43724 & MV2_FLAG_SKIP_ENABLED) && (PadData.half_2a & MV2_PAD_SKIP_PRESSED)) {
         MMv2Stop();
         return;
     }
@@ -71,21 +80,21 @@ void MMv2Exec(void)
     if (playResult < 0) {
         int i;
 
-        D_00A5B7B0.retryCount++;
+        mv2Params.retryCount++;
         xglMpeg2Close(mpegContext);
 
-        for (i = 9; i >= 0; i--) {
+        for (i = MV2_RETRY_SLEEP_CALLS - 1; i >= 0; i--) {
             xglSleep();
         }
 
-        if (D_00A5B7B0.retryCount >= 2) {
+        if (mv2Params.retryCount >= MV2_RETRY_LIMIT) {
             retryFailed = 1;
         } else {
-            MOutputDebugStringWarn("MMv2Exec: Retrying...(%d/%d)", D_00A5B7B0.retryCount, 1);
-            memset(mpegContext, 0, sizeof(D_00A5B838));
-            xglMpeg2InfoInit2(mpegContext, (void *) 0x01b9e000, 0x80000);
-            if (xglMpeg2Open(mpegContext, D_00A5B7B0.filename) != 0) {
-                MOutputDebugStringWarn("MMv2Exec: Failed to open '%s'", D_00A5B7B0.filename);
+            MOutputDebugStringWarn("MMv2Exec: Retrying...(%d/%d)", mv2Params.retryCount, 1);
+            memset(mpegContext, 0, sizeof(mv2MpegContext));
+            xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_AUDIO_BUFFER_SIZE);
+            if (xglMpeg2Open(mpegContext, mv2Params.filename) != 0) {
+                MOutputDebugStringWarn("MMv2Exec: Failed to open '%s'", mv2Params.filename);
                 retryFailed = 1;
             }
         }
@@ -106,7 +115,7 @@ void MMv2Exec(void)
 
 int MMv2Play(const char *filename)
 {
-    unsigned char *mpegContext = D_00A5B838;
+    unsigned char *mpegContext = mv2MpegContext;
     Mv2Params *params;
 
     if (mvFlags_00A43724 & MV2_FLAG_PLAYING) {
@@ -115,11 +124,11 @@ int MMv2Play(const char *filename)
     }
 
     params = (Mv2Params *) (mpegContext - sizeof(Mv2Params));
-    memset(params, 0, sizeof(Mv2Params) + sizeof(D_00A5B838));
+    memset(params, 0, sizeof(Mv2Params) + sizeof(mv2MpegContext));
     strncpy(params->filename, filename, sizeof(params->filename));
     params->filename[sizeof(params->filename) - 1] = '\0';
     params->retryCount = 0;
-    xglMpeg2InfoInit2(mpegContext, (void *) 0x01b9e000, 0x80000);
+    xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_AUDIO_BUFFER_SIZE);
 
     if (xglMpeg2Open(mpegContext, params->filename) != 0) {
         MOutputDebugStringWarn("MMv2Play: Failed to open '%s'", params->filename);
@@ -132,7 +141,7 @@ int MMv2Play(const char *filename)
 
 void MMv2Stop(void)
 {
-    unsigned char *mpegContext = D_00A5B838;
+    unsigned char *mpegContext = mv2MpegContext;
 
     if (mvFlags_00A43724 & MV2_FLAG_PLAYING) {
         xglRenderCopyDisp2Draw();

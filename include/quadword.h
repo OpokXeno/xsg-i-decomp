@@ -105,6 +105,38 @@
         : "$8", "$9", "$10", "$11", "memory")
 
 /*
+ * The x, y and z of a vector, through $8/$9: a doubleword and a word, loads
+ * first. w of the destination is left alone.
+ *
+ *   QuadwordCopyXyzT0(d, v)  d->xyz = v->xyz
+ */
+
+#define QuadwordCopyXyzT0(destination, source) \
+    __asm__ __volatile__( \
+        "ld $8, 0(%1)\n" \
+        "lw $9, 8(%1)\n" \
+        "sd $8, 0(%0)\n" \
+        "sw $9, 8(%0)\n" \
+        : \
+        : "r" (destination), "r" (source) \
+        : "$8", "$9", "memory")
+
+/*
+ * A word read from an address with no alignment guarantee: the lwl/lwr pair,
+ * never scheduled apart. A C spelling needs a packed member. Not volatile: it
+ * schedules like the plain load it stands for.
+ *
+ *   LoadWordUnaligned(r, a)  r = *(int *)a
+ */
+
+#define LoadWordUnaligned(result, address) \
+    __asm__( \
+        "lwl %0, 3(%1)\n" \
+        "lwr %0, 0(%1)\n" \
+        : "=&r" (result) \
+        : "r" (address))
+
+/*
  * Copy loops (xglMemCopy16 / xglMemCopy64): n > 0 quadwords or 64-byte
  * blocks; d, v and n are advanced by the loop, so they must be lvalues.
  *

@@ -3,8 +3,12 @@
  */
 #include "common.h"
 
+/* batFlags bits: set once MBattleInit has run, set while paused. */
+#define MBATTLE_FLAG_INITIALIZED 0x1
+#define MBATTLE_FLAG_PAUSED 0x2
+
 static int batFlags = 0;
-static const char D_00A50EA8[32] = "MBattleInit: Called to double";
+static const char battleMBattleInitCalledToDoubleText[32] = "MBattleInit: Called to double";
 
 extern void MOutputDebugStringWarn(const char *format, ...);
 extern void MEfObjInit(void);
@@ -23,8 +27,8 @@ void MBattlePause(short pause);
 
 int MBattleInit(void)
 {
-    if (batFlags & 1) {
-        MOutputDebugStringWarn(D_00A50EA8);
+    if (batFlags & MBATTLE_FLAG_INITIALIZED) {
+        MOutputDebugStringWarn(battleMBattleInitCalledToDoubleText);
         return 0;
     }
 
@@ -32,13 +36,13 @@ int MBattleInit(void)
     MCamInit();
     MMvInit();
     MMv2Init();
-    batFlags = 1;
+    batFlags = MBATTLE_FLAG_INITIALIZED;
     return 1;
 }
 
 void MBattleCreate(void)
 {
-    if (!(batFlags & 1)) {
+    if (!(batFlags & MBATTLE_FLAG_INITIALIZED)) {
         MBattleInit();
     }
     MEfObjInit();
@@ -65,13 +69,14 @@ void MBattleExec(void)
 void MBattlePause(short pause)
 {
     if (pause != 0) {
-        batFlags |= 2;
+        batFlags |= MBATTLE_FLAG_PAUSED;
         return;
     }
+    /* Clears the pause bit and 0x4, whose role is not established (not a named flag). */
     batFlags &= ~6;
 }
 
 int MBattleIsInPause(void)
 {
-    return (batFlags >> 1) & 1;
+    return (batFlags & MBATTLE_FLAG_PAUSED) != 0;
 }

@@ -2,77 +2,58 @@
  * OV01 original TU 5: 0x00a191c0..0x00a1d348 (93 functions)
  */
 #include "common.h"
+#include "ov01/actor.h"
 #include "data_unit_org_get.h"
 #include "ov01/calc.h"
 #include "main/xgl_pad.h"
 #include "main/party.h"
+#include "main/sdv.h"
+#include "quadword.h"
 
-extern const char D_00A457B0[32];
+extern const char unitOrgDataSpecLearnSetErrText[32];
 
 /*
- * orgData is a 33-entry table of 0x180-byte unit-origin records; callers
+ * orgData is a 33-entry table of 0x180-byte unit record table entries; callers
  * pass a one-based index, so dataUnitOrgGet returns orgData[id - 1].
  */
+#define UNIT_ORG_RECORD_SIZE 0x180
+#define UNIT_ORG_COUNT 0x21
+
 typedef struct UnitOrgRecord {
     unsigned char unmodeled_0[0x180];
 } UnitOrgRecord;
 
-static const char D_00A456A8[32];
+static const char unitOrgDataUnitOrgGetErrText[32];
 extern UnitOrgRecord orgData[];
 
 /* This string precedes dataEtherTecSet's jump table in the original rodata. */
-static const char D_00A456A8[32] = "** dataUnitOrgGet: err %d\n";
+static const char unitOrgDataUnitOrgGetErrText[32] = "** dataUnitOrgGet: err %d\n";
 
 void *dataUnitOrgGet(int unitOrgId)
 {
-    if (unitOrgId >= 0x21) {
-        printf(D_00A456A8, unitOrgId);
+    if (unitOrgId >= UNIT_ORG_COUNT) {
+        printf(unitOrgDataUnitOrgGetErrText, unitOrgId);
         return 0;
     }
     return &orgData[unitOrgId - 1];
 }
 
-extern const char D_00A456C8[];
+extern const char unitOrgDataPlChaGetErrText[];
 extern PlCharacter plChaData[];
 
 PlCharacter *dataPlChaGet(int cid)
 {
     if (cid >= PL_CHARACTER_ID_END) {
-        printf(D_00A456C8, cid);
+        printf(unitOrgDataPlChaGetErrText, cid);
         return 0;
     }
     return &plChaData[cid - 1];
 }
 
-/* Battle-data header offsets are byte offsets from the loaded block at
- * 0x00426F40. Public symbols name the offset words, not the block itself.
+/* Battle-data header offsets are byte offsets from the loaded block batDatBuf.
  * Other record contents remain opaque until a consumer evidences their fields. */
-typedef struct BattleDataHeader {
-    unsigned int sectionCount;
-    unsigned int byteSize;
-    int unitInitOffset;
-    int techniqueOffset;
-    int normalInitOffset;
-    int specialInitOffset;
-    int etherInitOffset;
-    int weaponOffset;
-    int ethOffset;
-    int itmOffset;
-    int attOffset;
-    int accessoryOffset;
-    int skillOffset;
-    int gainOffset;
-    int experienceOffset;
-    int parameterOffset;
-    int specialTableOffset;
-    int defaultEquipmentOffset;
-    int frameOffset;
-    int engOffset;
-} BattleDataHeader;
-
-extern unsigned char batDatBuf[0x10000];
-
 #define BATTLE_DATA_FIELD_OFFSET(member) ((unsigned int)&((BattleDataHeader *)0)->member)
+
 
 typedef struct NormalInitRecord { unsigned char opaque[0x0C]; } NormalInitRecord;
 typedef struct SpecialInitRecord { unsigned char opaque[0x0C]; } SpecialInitRecord;
@@ -81,48 +62,44 @@ typedef struct ParameterRecord { unsigned char opaque[0x20]; } ParameterRecord;
 typedef struct DefaultEquipmentRecord { unsigned char opaque[0x20]; } DefaultEquipmentRecord;
 typedef struct SpecialTableRecord { unsigned char opaque[0x20]; } SpecialTableRecord;
 
-extern int D_426F48;
-
 UnitInitData *dataUnitInitGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F48 - BATTLE_DATA_FIELD_OFFSET(unitInitOffset);
-    int byteOffset = D_426F48;
+    int *field = &batDatBuf.header.unitInitOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(unitInitOffset);
+    int byteOffset = *field;
     UnitInitData *records = (UnitInitData *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
     return &records[entry - 1];
 }
 
-extern int D_426F50;
-
 NormalInitRecord *dataNormInitGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F50 - BATTLE_DATA_FIELD_OFFSET(normalInitOffset);
-    int byteOffset = D_426F50;
+    int *field = &batDatBuf.header.normalInitOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(normalInitOffset);
+    int byteOffset = *field;
     NormalInitRecord *records = (NormalInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
     return &records[entry - 1];
 }
 
-extern int D_426F54;
-
 SpecialInitRecord *dataSpecInitGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F54 - BATTLE_DATA_FIELD_OFFSET(specialInitOffset);
-    int byteOffset = D_426F54;
+    int *field = &batDatBuf.header.specialInitOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(specialInitOffset);
+    int byteOffset = *field;
     SpecialInitRecord *records = (SpecialInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
     return &records[entry - 1];
 }
 
-extern int D_426F58;
-
 EtherInitRecord *dataEtherInitGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F58 - BATTLE_DATA_FIELD_OFFSET(etherInitOffset);
-    int byteOffset = D_426F58;
+    int *field = &batDatBuf.header.etherInitOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(etherInitOffset);
+    int byteOffset = *field;
     EtherInitRecord *records = (EtherInitRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
@@ -130,47 +107,44 @@ EtherInitRecord *dataEtherInitGet(int entry)
 }
 
 /*
- * D_426F78 is a selector field 0x38 bytes into a loaded battle-data table;
- * dataExpTblGet returns the table entry that selector picks out. Splat has
- * not named the table's own base, only this field.
+ * batDatBuf.header.experienceOffset is the experience table's byte offset from
+ * the loaded block; dataExpTblGet returns the table.
  */
-extern int D_426F78;
-
 unsigned char *dataExpTblGet(void)
 {
-    return (unsigned char *)&D_426F78 - 0x38 + D_426F78;
-}
+    int *field = &batDatBuf.header.experienceOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(experienceOffset);
 
-extern int D_426F7C;
+    return *field + block;
+}
 
 ParameterRecord *dataParaTblGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F7C - BATTLE_DATA_FIELD_OFFSET(parameterOffset);
-    int byteOffset = D_426F7C;
+    int *field = &batDatBuf.header.parameterOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(parameterOffset);
+    int byteOffset = *field;
     ParameterRecord *records = (ParameterRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
     return &records[entry - 1];
 }
 
-extern int D_426F84;
-
 DefaultEquipmentRecord *dataDefEquipGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F84 - BATTLE_DATA_FIELD_OFFSET(defaultEquipmentOffset);
-    int byteOffset = D_426F84;
+    int *field = &batDatBuf.header.defaultEquipmentOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(defaultEquipmentOffset);
+    int byteOffset = *field;
     DefaultEquipmentRecord *records = (DefaultEquipmentRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
     return &records[entry - 1];
 }
 
-extern int D_426F80;
-
 SpecialTableRecord *dataSpecTblGet(int entry)
 {
-    unsigned char *block = (unsigned char *)&D_426F80 - BATTLE_DATA_FIELD_OFFSET(specialTableOffset);
-    int byteOffset = D_426F80;
+    int *field = &batDatBuf.header.specialTableOffset;
+    unsigned char *block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(specialTableOffset);
+    int byteOffset = *field;
     SpecialTableRecord *records = (SpecialTableRecord *)(block + byteOffset);
 
     /* Caller indices are one-based; retain the original lack of bounds checks. */
@@ -178,12 +152,11 @@ SpecialTableRecord *dataSpecTblGet(int entry)
 }
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
-/* The scaffold-owned D_00A456C8 string lies between this and the first
+/* The C-owned unitOrgDataPlChaGetErrText string lies between this and the first
  * definition above; the following switch table is emitted after this string. */
-static const char D_00A456E8[40] = "dataEtherTecSet: err %d\n";
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
-extern void *dataUnitFileGet(ObjectTask *unit, int charaId);
-extern int dataUnitFileLoadMot(ObjectTask *unit, int motionId, int slot, void *fileInfo);
+static const char unitOrgDataEtherTecSetErrText[40] = "dataEtherTecSet: err %d\n";
+extern void *dataUnitFileGet(BattleUnit *unit, int charaId);
+extern int dataUnitFileLoadMot(BattleUnit *unit, int motionId, int slot, UnitFileInfo *file);
 
 extern void dataSpecLearnSet(int cid, int specialId);
 
@@ -230,7 +203,7 @@ void dataEtherTecSet(int selector)
         specialId = 88;
         break;
     default:
-        printf(D_00A456E8, selector);
+        printf(unitOrgDataEtherTecSetErrText, selector);
         return;
     }
 
@@ -242,7 +215,7 @@ void dataEtherTecSet(int selector)
     }
 }
 
-extern const char D_00A45730[];
+extern const char unitOrgDataEtherLearnSetErrText[];
 
 /* The third argument is supplied by dataEtherTecSet but is not read here. */
 void dataEtherLearnSet(int cid, int techniqueId, int selector)
@@ -251,7 +224,7 @@ void dataEtherLearnSet(int cid, int techniqueId, int selector)
     int index;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A45730, cid);
+        printf(unitOrgDataEtherLearnSetErrText, cid);
         return;
     }
     if (techniqueId != 0) {
@@ -261,7 +234,7 @@ void dataEtherLearnSet(int cid, int techniqueId, int selector)
     }
 }
 
-extern const char D_00A45750[];
+extern const char unitOrgDataEtherLearnGetErrText[];
 
 int dataEtherLearnGet(int cid, int techniqueId)
 {
@@ -269,7 +242,7 @@ int dataEtherLearnGet(int cid, int techniqueId)
     int index;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A45750, cid);
+        printf(unitOrgDataEtherLearnGetErrText, cid);
         return 0;
     }
     pl = dataPlChaGet(cid);
@@ -277,7 +250,7 @@ int dataEtherLearnGet(int cid, int techniqueId)
     return pl->learnedEther[index / 8] & (1 << (index % 8));
 }
 
-extern const char D_00A45770[];
+extern const char unitOrgDataSkillLearnSetErrText[];
 
 void dataSkillLearnSet(int cid, int skillId)
 {
@@ -285,7 +258,7 @@ void dataSkillLearnSet(int cid, int skillId)
     int index;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A45770, cid);
+        printf(unitOrgDataSkillLearnSetErrText, cid);
         return;
     }
     if (skillId != 0) {
@@ -295,7 +268,7 @@ void dataSkillLearnSet(int cid, int skillId)
     }
 }
 
-extern const char D_00A45790[];
+extern const char unitOrgDataSkillLearnGetErrText[];
 
 int dataSkillLearnGet(int cid, int skillId)
 {
@@ -303,7 +276,7 @@ int dataSkillLearnGet(int cid, int skillId)
     int index;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A45790, cid);
+        printf(unitOrgDataSkillLearnGetErrText, cid);
         return 0;
     }
     pl = dataPlChaGet(cid);
@@ -351,7 +324,7 @@ void dataSpecLearnSet(int cid, int specialId)
     PlCharacter *pl;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A457B0, cid);
+        printf(unitOrgDataSpecLearnSetErrText, cid);
         return;
     }
     if (specialId != 0) {
@@ -366,14 +339,13 @@ void dataSpecLearnSet(int cid, int specialId)
  * before indexing PlCharacter.special, the same subtraction
  * dataSpecLearnSet performs through dataSpecBaseGet.
  */
-static const char D_00A457D0[32];
-
+static const char unitOrgDataSpecLearnGetErrText[32];
 short dataSpecLearnGet(int cid, int specialId)
 {
     short learned;
 
     if (cid >= PL_LEARNING_CHARACTER_ID_END) {
-        printf(D_00A457D0, cid);
+        printf(unitOrgDataSpecLearnGetErrText, cid);
         return 0;
     }
     learned = 0;
@@ -403,7 +375,7 @@ PlSpecialSlot *dataSpecDataGet(int cid, int specialId)
     return 0;
 }
 
-int dataNormIdxGet(ObjectTask *unit, int normalId)
+int dataNormIdxGet(BattleUnit *unit, int normalId)
 {
     int i;
     int result = -1;
@@ -417,11 +389,185 @@ int dataNormIdxGet(ObjectTask *unit, int normalId)
     return result;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPlUnitInit);
+typedef struct PlInitCopy12 { unsigned char b[0xC]; } PlInitCopy12;
+typedef struct PlInitCopy24 { unsigned char b[0x18]; } PlInitCopy24;
+typedef struct PlInitCopy34 { unsigned char b[0x34]; } PlInitCopy34;
+typedef struct PlUnitSub {
+    unsigned char pad0[4];
+    unsigned short f4;
+    unsigned short f6;
+    unsigned short f8;
+    unsigned char b[3];
+    unsigned char padD;
+    unsigned short s[3][3];
+} PlUnitSub;
+typedef struct PlUnitInit {
+    unsigned short w0;
+    unsigned short w2;
+    unsigned char pad4[0x10];
+    signed char level;
+    unsigned char pad15[0x34 - 0x15];
+} PlUnitInit;
+typedef struct PlUnitRec {
+    unsigned short w0;
+    unsigned short w2;
+    unsigned char pad4[0x10];
+    signed char level;
+    unsigned char pad15[0x30 - 0x15];
+    PlUnitSub a;
+    PlUnitSub b;
+    unsigned char pad70[0x180 - 0x70];
+} PlUnitRec;
+typedef struct PlEquipSlot {
+    unsigned short s0;
+    unsigned char b;
+    unsigned char pad;
+    unsigned short s1;
+} PlEquipSlot;
+typedef struct PlChaSpec {
+    short id;
+    short pad2[2];
+    short lv;
+    unsigned char pad8[4];
+} PlChaSpec;
+typedef struct PlChaRec {
+    unsigned char pad0[4];
+    int nextExp;
+    unsigned char pad8[0x10];
+    unsigned short growth[8];
+    unsigned char pad28[0x20];
+    PlChaSpec spec[8];
+} PlChaRec;
+typedef struct PlShortTbl {
+    short v[12];
+} PlShortTbl;
+
+/*
+ * The init tables inside orgData[0] (+0x76, +0x82, +0x8E). dataPlUnitInit
+ * addresses them as symbols of their own: orgData-relative forms make CSE
+ * derive them from one base and change the original's instructions.
+ */
+typedef struct PlNormSlot { PlInitCopy12 norm; unsigned char pad[0x180 - 0xC]; } PlNormSlot;
+extern PlNormSlot orgNormalInit[];
+extern PlInitCopy12 orgSpecialInit;
+extern PlInitCopy24 orgEtherInit;
+
+void dataPlUnitInit(void)
+{
+  PlInitCopy12 *nb;
+  unsigned char *cha;
+  int i;
+  int id;
+  int k;
+  int ofs;
+  int ofs2;
+  int j;
+  PlUnitRec *rec;
+  PlUnitSub *p;
+  PlUnitSub *p2;
+  unsigned char *q4;
+  PlEquipSlot *eq;
+  unsigned char *q;
+  unsigned char *exp;
+  unsigned short *para;
+  PlInitCopy12 *sb;
+  PlInitCopy24 *new_var;
+  unsigned char *new_var2;
+  unsigned short *d2;
+  PlChaRec *chaRec;
+  int nextExp;
+  int expEntry;
+  new_var = &orgEtherInit;
+  cha = (unsigned char *) plChaData;
+  for (i = 0; i < 0x20; i++)
+  {
+    rec = &((PlUnitRec *) orgData)[i];
+    nb = &orgNormalInit[i].norm;
+    memset(rec, 0, UNIT_ORG_RECORD_SIZE);
+    id = i + 1;
+    *((PlUnitInit *) rec) = *((PlUnitInit *) dataUnitInitGet(id));
+    ofs = (i * UNIT_ORG_RECORD_SIZE) + 0x30;
+    p = (PlUnitSub *) (((unsigned char *) orgData) + ofs);
+    p->f4 = ((PlUnitInit *) rec)->w0;
+    p->f6 = ((PlUnitInit *) rec)->w2;
+    p->f8 = id;
+    *nb = *((PlInitCopy12 *) dataNormInitGet(id));
+    eq = (PlEquipSlot *) dataDefEquipGet(id);
+    d2 = rec->b.s[2];
+    for (k = 0; k < 3; k++)
+    {
+      j = k * 6;
+      q = ((unsigned char *) eq) + 2;
+      q4 = ((unsigned char *) eq) + 4;
+      rec->b.b[k] = q[j];
+      d2[-6] = *((unsigned short *) (((unsigned char *) eq) + j));
+      *d2 = *((unsigned short *) (q4 + j));
+      d2++;
+    }
+
+    for (k = 0; k < 3; k++)
+    {
+      ((PlUnitRec *) (((unsigned char *) orgData) + (UNIT_ORG_RECORD_SIZE * i)))->b.s[1][k] = ((unsigned short *) (q + 0x10))[k];
+    }
+
+    new_var2 = (unsigned char *) new_var;
+    ofs2 = (i * UNIT_ORG_RECORD_SIZE) + 0x50;
+    p2 = (PlUnitSub *) (((unsigned char *) orgData) + ofs2);
+    p2->f4 = *((unsigned short *) (((unsigned char *) eq) + 0x18));
+    p2->f8 = *((unsigned short *) (((unsigned char *) eq) + 0x1A));
+    p2->f6 = *((unsigned short *) (((unsigned char *) eq) + 0x1C));
+    if (i < 0x10)
+    {
+      memset((void *) ((i * 0xA8) + ((int) cha)), 0, 0xA8);
+      for (k = 7; k >= 0; k--)
+      {
+        ((short *) (cha + (i * 0xA8)))[(k * 6) + 0x27] = 2;
+      }
+
+      exp = ((unsigned char *(*)(int)) dataExpTblGet)(id);
+      chaRec = (PlChaRec *) dataPlChaGet(id);
+      expEntry = ((PlUnitRec *) (((unsigned char *) orgData) + (i * UNIT_ORG_RECORD_SIZE)))->level * 4;
+      expEntry += (int) exp;
+      LoadWordUnaligned(nextExp, expEntry);
+      chaRec->nextExp = nextExp;
+      para = (unsigned short *) dataParaTblGet(id);
+      for (k = 0; k < 8; k++)
+      {
+        ((PlChaRec *) dataPlChaGet(id))->growth[k] = ((PlShortTbl *) para)->v[k];
+      }
+
+      for (k = 0; k < 6; k++)
+      {
+        dataSpecLearnSet(i + 1, ((PlShortTbl *) dataSpecInitGet(i + 1))->v[k]);
+      }
+
+      for (k = 0; k < 12; k++)
+      {
+        ((void (*)(int, int)) dataEtherLearnSet)(i + 1, ((PlShortTbl *) dataEtherInitGet(i + 1))->v[k]);
+      }
+
+      sb = (PlInitCopy12 *) (((unsigned char *) (&orgSpecialInit)) + (i * UNIT_ORG_RECORD_SIZE));
+      *sb = *((PlInitCopy12 *) dataSpecInitGet(id));
+      *((PlInitCopy24 *) (new_var2 + (i * UNIT_ORG_RECORD_SIZE))) = *((PlInitCopy24 *) dataEtherInitGet(id));
+      nb = &orgNormalInit[i].norm;
+    }
+  }
+
+}
 
 void dataDummySet(void)
 {
 }
+
+#define BATTLE_UNIT_STAT_OFFSET 0x30
+
+/* The part of a unit record dataUnitInitSet's slot searches read: the
+ * character id sits 8 bytes into the 0x20-byte block at record offset 0x30. */
+typedef struct BattleUnitStat {
+    unsigned char unmodeled_00[8];
+    short charaId; /* +0x08 */
+    unsigned char unmodeled_0A[0x20 - 0x0A];
+} BattleUnitStat;
 
 /*
  * playerData (7 entries) and enemyData (5 entries) are 0x180-byte battle
@@ -429,9 +575,17 @@ void dataDummySet(void)
  * calc-record index at +0x38.
  */
 typedef struct BattleUnitInfo {
-    unsigned char unmodeled_00[0x38];
-    short calcIdx; /* +0x38 */
-    unsigned char unmodeled_3A[0x146];
+    UnitInitData init; /* +0x00: copy of dataUnitInitGet's record */
+    unsigned short currentHp; /* +0x34: init.maxHp */
+    unsigned short currentEp; /* +0x36: init.maxEp */
+    short charaId; /* +0x38 */
+    unsigned char unmodeled_3A[0x5E - 0x3A];
+    short weaponId[3]; /* +0x5E */
+    unsigned char unmodeled_64[0x76 - 0x64];
+    NormalInitRecord normalInit; /* +0x76: dataNormInitGet's 0xC-byte record */
+    unsigned char unmodeled_82[0x8E - 0x82];
+    EtherInitRecord etherInit; /* +0x8E: dataEtherInitGet's 0x18-byte record */
+    unsigned char unmodeled_A6[0x180 - 0xA6];
 } BattleUnitInfo;
 
 extern void dataFileInfoInit(void);
@@ -449,14 +603,135 @@ void dataBattleInit(void)
 
     dataFileInfoInit();
     for (i = 6; i >= 0; i--) {
-        playerData[i].calcIdx = 0;
+        playerData[i].charaId = 0;
     }
     for (i = 4; i >= 0; i--) {
-        enemyData[i].calcIdx = 0;
+        enemyData[i].charaId = 0;
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitInitSet);
+/*
+ * dataUnitInitSet binds a battle unit record to unit->work (Actor +0x84).
+ * Ids 1 to 32 reuse the player slot already holding the id, else take a free
+ * player slot and fill it from the origin record (dataUnitOrgGet). Ids 33 to
+ * 186 take a free enemy slot and build it from the init, normal and ether
+ * tables. Ids 187 to 194 take a free player slot and copy the player slot that
+ * holds the mapped id (7, 6, 3 or 2), then clear its three weapon ids. A slot
+ * is free when its id at +0x38 is zero. The messages: no free player slot (PL),
+ * no free enemy slot (EN), and no free slot or an unknown id in the
+ * special-model range (SKJ).
+ */
+extern const char unitOrgDataUnitInitSetErrText[32];
+extern const char unitOrgDataUnitInitSetErrPLText[32];
+extern const char unitOrgDataUnitInitSetErrENText[32];
+extern const char unitOrgDataUnitInitSetErrSKJText[32];
+
+void dataUnitInitSet(BattleUnit *unit, int charaId)
+{
+    BattleUnitInfo *slot;
+    Actor *work;
+    BattleUnitStat *stat;
+    int i;
+    int sourceSlotId;
+    int srcSlotOffset;
+    int srcStatBlockOffset;
+    BattleUnitStat *srcStat;
+    int statBlockOffset;
+    int slotOffset;
+
+    slot = 0;
+    if (charaId < 1) {
+        printf(unitOrgDataUnitInitSetErrText);
+        return;
+    }
+    work = unit->work;
+    if (charaId <= 32) {
+        for (i = 0; i < 7; i++) {
+            slotOffset = i * sizeof(BattleUnitInfo);
+            statBlockOffset = slotOffset + BATTLE_UNIT_STAT_OFFSET;
+            stat = (BattleUnitStat *)((unsigned char *)playerData + statBlockOffset);
+            if (stat->charaId == charaId) {
+                work->up = (CalcUnitParam *)((unsigned char *)playerData + slotOffset);
+                return;
+            }
+        }
+        for (i = 0; i < 7; i++) {
+            if (playerData[i].charaId == 0) {
+                slot = &playerData[i];
+                break;
+            }
+        }
+        if (!slot) {
+            printf(unitOrgDataUnitInitSetErrPLText);
+            return;
+        }
+        work->up = (CalcUnitParam *)slot;
+        calcCopyParaMake(dataUnitOrgGet(charaId), (unsigned char *)work->up);
+        calcSkillInit(unit);
+    } else if (charaId <= 186) {
+        for (i = 0; i < 5; i++) {
+            if (enemyData[i].charaId == 0) {
+                slot = &enemyData[i];
+                break;
+            }
+        }
+        if (!slot) {
+            printf(unitOrgDataUnitInitSetErrENText);
+            return;
+        }
+        work->up = (CalcUnitParam *)slot;
+        memset(slot, 0, sizeof(*slot));
+        slot->init = *dataUnitInitGet(charaId);
+        slot->currentHp = slot->init.maxHp;
+        slot->currentEp = slot->init.maxEp;
+        slot->normalInit = *dataNormInitGet(charaId);
+        slot->etherInit = *dataEtherInitGet(charaId);
+    } else {
+        for (i = 0; i < 7; i++) {
+            if (playerData[i].charaId == 0) {
+                slot = &playerData[i];
+                break;
+            }
+        }
+        if (!slot) {
+            printf(unitOrgDataUnitInitSetErrSKJText);
+            return;
+        }
+        switch (charaId) {
+        case 188:
+        case 187:
+            sourceSlotId = 7;
+            break;
+        case 189:
+            sourceSlotId = 6;
+            break;
+        case 193:
+        case 192:
+        case 191:
+        case 190:
+            sourceSlotId = 3;
+            break;
+        case 194:
+            sourceSlotId = 2;
+            break;
+        default:
+            printf(unitOrgDataUnitInitSetErrSKJText);
+            return;
+        }
+        work->up = (CalcUnitParam *)slot;
+        for (i = 0; i < 7; i++) {
+            srcSlotOffset = i * sizeof(BattleUnitInfo);
+            srcStatBlockOffset = srcSlotOffset + BATTLE_UNIT_STAT_OFFSET;
+            srcStat = (BattleUnitStat *)((unsigned char *)playerData + srcStatBlockOffset);
+            if (srcStat->charaId == sourceSlotId) {
+                *slot = *(BattleUnitInfo *)((unsigned char *)playerData + srcSlotOffset);
+            }
+        }
+        for (i = 0; i < 3; i++) {
+            slot->weaponId[i] = 0;
+        }
+    }
+}
 
 /*
  * posTbl is a table of 0x20-byte position records; dataPosTblGet and
@@ -488,25 +763,25 @@ short dataPosLineGet(int id)
     return posTbl[id].line;
 }
 
-static const unsigned char D_00A45890[24]; /* "** dataCidGet: err %d\n" */
+static const unsigned char unitOrgDataCidGetErrText[24]; /* "** dataCidGet: err %d\n" */
 static short cidChgTbl[];
 
 short dataCidGet(unsigned int cid)
 {
     if (cid >= 0xC4) {
-        printf(D_00A45890, cid);
+        printf(unitOrgDataCidGetErrText, cid);
         return 0;
     }
     return cidChgTbl[cid];
 }
 
-static const unsigned char D_00A458A8[24]; /* "** dataWidGet: err %d" */
+static const unsigned char unitOrgDataWidGetErrText[24]; /* "** dataWidGet: err %d" */
 static short widChgTbl[];
 
 short dataWidGet(unsigned int wid)
 {
     if (wid >= 0x75) {
-        printf(D_00A458A8, wid);
+        printf(unitOrgDataWidGetErrText, wid);
         return 0;
     }
     return widChgTbl[wid];
@@ -527,21 +802,22 @@ typedef struct TecRecord {
     unsigned char unmodeled_16[0x18 - 0x16];
 } TecRecord;
 
-extern int D_426F4C;
-extern const char D_00A458C0[];
+extern const char unitOrgDataTecGetErrText[];
 
 TecRecord *dataTecGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     TecRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A458C0, entry);
+        printf(unitOrgDataTecGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F4C - BATTLE_DATA_FIELD_OFFSET(techniqueOffset);
-    byteOffset = D_426F4C;
+    field = &batDatBuf.header.techniqueOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(techniqueOffset);
+    byteOffset = *field;
     records = (TecRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
@@ -557,168 +833,176 @@ typedef struct WpnRecord {
     unsigned char unmodeled_16[0x20 - 0x16];
 } WpnRecord;
 
-extern int D_426F5C;
-extern const char D_00A458D8[];
+extern const char unitOrgDataWpnGetErrText[];
 
 WpnRecord *dataWpnGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     WpnRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A458D8, entry);
+        printf(unitOrgDataWpnGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F5C - BATTLE_DATA_FIELD_OFFSET(weaponOffset);
-    byteOffset = D_426F5C;
+    field = &batDatBuf.header.weaponOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(weaponOffset);
+    byteOffset = *field;
     records = (WpnRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct AttRecord { unsigned char opaque[0x0E]; } AttRecord;
 
-extern int D_426F68;
-extern const char D_00A458F0[];
+extern const char unitOrgDataAttGetErrText[];
 
 AttRecord *dataAttGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     AttRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A458F0, entry);
+        printf(unitOrgDataAttGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F68 - BATTLE_DATA_FIELD_OFFSET(attOffset);
-    byteOffset = D_426F68;
+    field = &batDatBuf.header.attOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(attOffset);
+    byteOffset = *field;
     records = (AttRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct EthRecord { unsigned char opaque[0x0C]; } EthRecord;
 
-extern int D_426F60;
-extern const char D_00A45908[];
+extern const char unitOrgDataEthGetErrText[];
 
 EthRecord *dataEthGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     EthRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45908, entry);
+        printf(unitOrgDataEthGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F60 - BATTLE_DATA_FIELD_OFFSET(ethOffset);
-    byteOffset = D_426F60;
+    field = &batDatBuf.header.ethOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(ethOffset);
+    byteOffset = *field;
     records = (EthRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct ItmRecord { unsigned char opaque[0x14]; } ItmRecord;
 
-extern int D_426F64;
-extern const char D_00A45920[];
+extern const char unitOrgDataItmGetErrText[];
 
 ItmRecord *dataItmGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     ItmRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45920, entry);
+        printf(unitOrgDataItmGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F64 - BATTLE_DATA_FIELD_OFFSET(itmOffset);
-    byteOffset = D_426F64;
+    field = &batDatBuf.header.itmOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(itmOffset);
+    byteOffset = *field;
     records = (ItmRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct AccRecord { unsigned char opaque[0x10]; } AccRecord;
 
-extern int D_426F6C;
-extern const char D_00A45938[];
+extern const char unitOrgDataAccGetErrText[];
 
 AccRecord *dataAccGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     AccRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45938, entry);
+        printf(unitOrgDataAccGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F6C - BATTLE_DATA_FIELD_OFFSET(accessoryOffset);
-    byteOffset = D_426F6C;
+    field = &batDatBuf.header.accessoryOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(accessoryOffset);
+    byteOffset = *field;
     records = (AccRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct FrmRecord { unsigned char opaque[0x10]; } FrmRecord;
 
-extern int D_426F88;
-extern const char D_00A45950[];
+extern const char unitOrgDataFrmGetErrText[];
 
 FrmRecord *dataFrmGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     FrmRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45950, entry);
+        printf(unitOrgDataFrmGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F88 - BATTLE_DATA_FIELD_OFFSET(frameOffset);
-    byteOffset = D_426F88;
+    field = &batDatBuf.header.frameOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(frameOffset);
+    byteOffset = *field;
     records = (FrmRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct EngRecord { unsigned char opaque[0x0C]; } EngRecord;
 
-extern int D_426F8C;
-extern const char D_00A45968[];
+extern const char unitOrgDataEngGetErrText[];
 
 EngRecord *dataEngGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     EngRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45968, entry);
+        printf(unitOrgDataEngGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F8C - BATTLE_DATA_FIELD_OFFSET(engOffset);
-    byteOffset = D_426F8C;
+    field = &batDatBuf.header.engOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(engOffset);
+    byteOffset = *field;
     records = (EngRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
 
 typedef struct SklRecord { unsigned char opaque[0x08]; } SklRecord;
 
-extern int D_426F70;
-extern const char D_00A45980[];
+extern const char unitOrgDataSklGetErrText[];
 
 SklRecord *dataSklGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     SklRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45980, entry);
+        printf(unitOrgDataSklGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F70 - BATTLE_DATA_FIELD_OFFSET(skillOffset);
-    byteOffset = D_426F70;
+    field = &batDatBuf.header.skillOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(skillOffset);
+    byteOffset = *field;
     records = (SklRecord *)(block + byteOffset);
     return &records[entry - 1];
 }
@@ -726,31 +1010,48 @@ SklRecord *dataSklGet(int entry)
 typedef struct GainRecord { unsigned char opaque[0x14]; } GainRecord;
 
 /*
- * D_426F74 is a selector field 0x34 bytes into a loaded battle-data table;
+ * batDatBuf.header.gainOffset is the gain table's byte offset from the loaded block;
  * dataGainGet's table starts 0x294 bytes before this field's own byte
  * offset, the same idiom dataExpTblGet uses for its own table. Splat has
  * not named the table's own base, only this field.
  */
-extern int D_426F74;
-extern const char D_00A45998[];
+extern const char unitOrgDataGainGetErrText[];
 
 GainRecord *dataGainGet(int entry)
 {
+    int *field;
     unsigned char *block;
     int byteOffset;
     GainRecord *records;
 
     if (entry <= 0) {
-        printf(D_00A45998, entry);
+        printf(unitOrgDataGainGetErrText, entry);
         return 0;
     }
-    block = (unsigned char *)&D_426F74 - BATTLE_DATA_FIELD_OFFSET(gainOffset);
-    byteOffset = D_426F74;
+    field = &batDatBuf.header.gainOffset;
+    block = (unsigned char *)field - BATTLE_DATA_FIELD_OFFSET(gainOffset);
+    byteOffset = *field;
     records = (GainRecord *)(block + byteOffset);
     return (GainRecord *)((unsigned char *)&records[entry] - 0x294);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoad);
+extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
+extern int printf(const char *format, ...);
+extern const char unitOrgReadErrText[];
+extern const char unitOrgReadText[];
+
+/* Reads a whole file into dst; returns 1 on success and 0 when the read fails. */
+int dataFileLoad(const char *name, void *dst)
+{
+    long size = xglCdReadFile(name, dst, 0, 0);
+
+    if (size < 0) {
+        printf(unitOrgReadErrText, name);
+        return 0;
+    }
+    printf(unitOrgReadText, name, (int) size);
+    return 1;
+}
 
 int dataCdSync(void)
 {
@@ -762,25 +1063,23 @@ void dataCdSyncClear(void)
     cdReqNum = 0;
 }
 
-extern int printf(const char *format, ...);
-static const char D_00A459E0[24];
-static const char D_00A459F8[24];
+static const char unitOrgNBreadErrText[24];
+static const char unitOrgNBreadEndText[24];
 
 void dataNBreadCB(int result) {
     if (result < 0) {
-        printf(D_00A459E0, result);
+        printf(unitOrgNBreadErrText, result);
         return;
     }
     if (result == 4) {
         if (--cdReqNum == 0) {
-            printf(D_00A459F8, 0);
+            printf(unitOrgNBreadEndText, 0);
         }
     }
 }
 
-extern int xglCdReadFile(const char *name, void *buffer, int mode, int flags);
-extern const char D_00A45A10[];
-extern const char D_00A45A28[];
+extern const char unitOrgNBreadErrText2[];
+extern const char unitOrgNBreadText[];
 
 int dataFileLoadNB(const char *filename, void *destination)
 {
@@ -793,21 +1092,252 @@ int dataFileLoadNB(const char *filename, void *destination)
     int result = xglCdReadFile(filename, destination, 1, (int)dataNBreadCB);
 
     if (result < 0) {
-        printf(D_00A45A10, filename);
+        printf(unitOrgNBreadErrText2, filename);
         return 0;
     }
     cdReqNum++;
-    printf(D_00A45A28, cdReqNum, filename, destination);
+    printf(unitOrgNBreadText, cdReqNum, filename, destination);
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileInfoInit);
+extern void *motAdrTbl[];
+extern int mdlAdrTbl[];
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileInfoInitChg);
+void dataFileInfoInit(void)
+{
+    int i;
+    int j;
+    int k;
+    UnitFileInfo *info = unitFileInfo;
+    int *tail;
+    int *slot;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataEnemyMdlChk);
+    i = 0;
+    tail = (int *) ((unsigned char *) info + 16);
+    for (; i < 6; i++) {
+        unitFileInfo[i].charaId = 0;
+        for (j = 0; j < 5; j++) {
+            unitFileInfo[i].motion[j].motionId = 0;
+            unitFileInfo[i].motion[j].adr = 0;
+            unitFileInfo[i].motion[j].size = 0;
+        }
+        unitFileInfo[i].motion[0].adr = motAdrTbl[i];
+        unitFileInfo[i].motion[4].adr = motAdrTbl[6];
+        for (j = 0; j < 3; j++) {
+            UnitFileInfo *file = &unitFileInfo[i];
+            int *mdl = &file->modelCharaId;
+            int *face = (int *) file->unmodeled_114;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataLeaderChk);
+            mdl[j * 3 + 1] = mdlAdrTbl[i];
+            mdl[j * 3] = 0;
+            mdl[j * 3 + 2] = 0;
+            slot = &tail[i * 76 + 64 + j * 3];
+            face[j * 3 - 2] = 0;
+            *slot = 0;
+            k = (int) slot;
+            face[j * 3] = 0;
+            for (k = 0; k < 3; k++) {
+                unitFileInfo[i].wpn[k].part[j].id = 0;
+                unitFileInfo[i].wpn[k].part[j].adr = 0;
+                unitFileInfo[i].wpn[k].part[j].size = 0;
+            }
+        }
+    }
+}
+
+extern const char unitOrgDataFileInfoInitChgErrText[];
+
+/*
+ * Clears the unit file's modelCharaId, three 0x18-byte records at +0x38 and,
+ * inside each record, three 0xC-byte groups from +0xA0 (see dataFileInfoInit).
+ */
+void dataFileInfoInitChg(BattleUnit *unit, int charaId)
+{
+    unsigned char *file = dataUnitFileGet(unit, charaId);
+    unsigned char *p4;
+    unsigned char *p8;
+    unsigned char *pc;
+    unsigned char *p10;
+    int i;
+    int j;
+
+    if (file == 0) {
+        printf(unitOrgDataFileInfoInitChgErrText);
+        return;
+    }
+    i = 0;
+    p8 = file + 8;
+    pc = file + 12;
+    p10 = file + 16;
+    *(int *) (file + 4) = 0;
+    p4 = file + 4;
+    for (; i < 3; i++) {
+        int off = 0x38 + i * 24;
+
+        *(int *) (p8 + off) = 0;
+        *(float *) (pc + off) = 0.0f;
+        *(int *) (p10 + off) = 0;
+        for (j = 0; j < 3; j++) {
+            int k = 0xa0 + i * 36 + j * 12;
+
+            *(int *) (file + k) = 0;
+            *(int *) (p4 + k) = 0;
+            *(int *) (p8 + k) = 0;
+        }
+    }
+}
+
+/* A GameResource block of an enemy model: top, then the animation part at mid
+ * and the texture part at end (offsets from top). */
+typedef struct EnemyMdlHdr {
+    unsigned int top;
+    unsigned char *mid;
+    unsigned char *end;
+} EnemyMdlHdr;
+
+typedef struct EnemyMdlRes {
+    EnemyMdlHdr *address;
+    int size;
+    int pad[2];
+} EnemyMdlRes;
+
+typedef struct EnemyMdlEnt {
+    short id;
+    short pad[3];
+} EnemyMdlEnt;
+
+extern EnemyMdlRes GameResource[];
+extern const char unitOrgSrcText[];
+extern const char unitOrgDstText[];
+extern const char unitOrgEnemyMdlFoundText[];
+extern int GameResourceSearch(int type, int id);
+extern void xglMemCopy16(unsigned int dst, unsigned int src, int n);
+extern void xglMemCopy16b(unsigned int dst, unsigned int src, int n);
+
+/*
+ * For each entry of tbl (at most three, ended by id 0), finds the enemy's
+ * GameResource block. The first block whose parts are ordered is copied to
+ * the enemy unit slot 3 + i, and the copy is rebased to the slot's model
+ * address; the animation and texture parts follow it.
+ */
+typedef struct EnemyMdlFile {
+    int charaId;
+    int cid;
+    unsigned char *base;
+    int pad0c[2];
+    unsigned char *mid;
+    int pad18[2];
+    unsigned char *end;
+    unsigned char pad24[0x130 - 0x24];
+} EnemyMdlFile;
+
+void dataEnemyMdlChk(EnemyMdlEnt *tbl)
+{
+    EnemyMdlFile *dst;
+    EnemyMdlHdr *h;
+    int id;
+    int cid;
+    int idx;
+    int sz;
+    int i;
+    unsigned char *n;
+    unsigned char **p;
+
+    for (i = 0; (tbl[i].id != 0) && (i < 3); i++) {
+        id = dataCidGet(tbl[i].id);
+        cid = id;
+        idx = GameResourceSearch(0, cid);
+        if (idx != -1) {
+            h = GameResource[idx].address;
+            sz = GameResource[idx].size;
+            printf(unitOrgSrcText, h->top, h->mid, h->end, sz);
+            if (h->top != 0 && h->mid != 0 && h->end != 0 && h->top < (unsigned int) h->mid && h->mid < h->end) {
+                id = tbl[i].id;
+                dst = (EnemyMdlFile *) &unitFileInfo[3 + i];
+                do {
+                    n = dst->base;
+                } while (0);
+                dst->charaId = id;
+                do {
+                    p = &h->mid;
+                    n += ((unsigned int) (*p)) - h->top;
+                    dst->cid = cid;
+                    dst->mid = n;
+                    p = &h->end;
+                    n += (*p) - h->mid;
+                    dst->end = n;
+                } while (0);
+                if (((unsigned int) dst->base) < h->top) {
+                    xglMemCopy16((unsigned int) dst->base, h->top, sz / 16);
+                } else {
+                    xglMemCopy16b((((unsigned int) dst->base) + sz) - 0x10, (h->top + sz) - 0x10, sz / 16);
+                }
+                printf(unitOrgDstText, dst->base, dst->mid, dst->end);
+                printf(unitOrgEnemyMdlFoundText, tbl[i].id);
+                return;
+            }
+        }
+    }
+}
+
+typedef struct LeaderChkWork {
+    unsigned char unmodeled_0[0x84];
+    void *org; /* +0x84: dataUnitOrgGet record of the candidate */
+    unsigned char unmodeled_88[0x88];
+} LeaderChkWork;
+
+extern int calcAccEquChk(BattleUnit *unit, int accId);
+/* The leader's character id (`lw $3,0x0($16)`, $16 = &leaderId), compared
+ * with charaId; a static of the original TU at 0x00a597b8, still asm-owned. */
+static int leaderId;
+
+/*
+ * Scans the first three party candidates (ids[0], ids[4], ids[8]). The first
+ * one whose battle id matches the party leader and who has no accessory
+ * equipped becomes the leader: its character id is recorded, and its file
+ * slot's model address is exchanged with slot 0.
+ */
+typedef struct LeaderUnitFile {
+    int charaId;
+    unsigned char unmodeled_4[0x12c];
+} LeaderUnitFile;
+
+void dataLeaderChk(short *ids)
+{
+    union {
+        BattleUnit unit;
+        unsigned char pad[0x80];
+    } t;
+    LeaderChkWork work;
+    PartyDataPrefix *party;
+    LeaderUnitFile *base;
+    int *p0;
+    int i;
+
+    party = PartyDataGet();
+    dataLeaderCidReset();
+    base = (LeaderUnitFile *) unitFileInfo;
+    for (i = 0; i < 3; i++) {
+        unsigned short cid;
+
+        p0 = (int *) (base[0].unmodeled_4 + 4);
+        p0 = (int *) ((*((LeaderUnitFile *) unitFileInfo + 0)).unmodeled_4 + 4);
+        t.unit.work = (Actor *) &work;
+        work.org = dataUnitOrgGet(ids[i * 4]);
+        cid = party->leader_battle_id;
+        if ((cid == dataCidGet(ids[i * 4])) && (calcAccEquChk(&t.unit, 0x2D) == 0)) {
+            int tmp = *((int *) (base[i].unmodeled_4 + 4));
+            int tmp0 = ((int *) base)[2];
+
+            *((void **) p0) = (void *) tmp;
+            *((unsigned int *) (&leaderCid)) = party->leader_battle_id;
+            *((int *) (base[i].unmodeled_4 + 4)) = tmp0;
+            leaderId = ids[(i * 2) * 2];
+            *((int *) (base[i].unmodeled_4 + 4)) = tmp0;
+            return;
+        }
+    }
+}
 
 int dataLeaderCidGet(void) {
     return leaderCid;
@@ -817,22 +1347,22 @@ void dataLeaderCidReset(void) {
     leaderCid = 0;
 }
 
-extern const char D_00A45AB0[];
+extern const char unitOrgDataLeaderReloadText[];
 
 void dataLeaderReload(void)
 {
     unsigned short leaderBattleId = PartyDataGet()->leader_battle_id;
 
     if (leaderBattleId != leaderCid) {
-        printf(D_00A45AB0);
+        printf(unitOrgDataLeaderReloadText);
     }
 }
 
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int dataMotNameGetSub(char *name, CalcUnitParam *up, int motionId, int weaponId);
-static char *motNameBase;
-static char *motNameExt;
+static const char *motNameBase;
+static const char *motNameExt;
 
 /*
  * Menu-side motion name lookup. The unit-origin record is the unit's own
@@ -868,13 +1398,7 @@ int dataMotNameGetMenu(char *name, int orgId, int weaponSlot)
     return found;
 }
 
-extern char *strcpy(char *destination, const char *source);
-extern char *strcat(char *destination, const char *source);
-extern int dataMotNameGetSub(char *name, CalcUnitParam *up, int motionId, int weaponId);
-static char *motNameBase;
-static char *motNameExt;
-
-int dataMotNameGet(char *name, ObjectTask *unit, int motionId, int weaponId)
+int dataMotNameGet(char *name, BattleUnit *unit, int motionId, int weaponId)
 {
     int found;
 
@@ -887,21 +1411,68 @@ int dataMotNameGet(char *name, ObjectTask *unit, int motionId, int weaponId)
     return found;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMotNameGetSub);
+static const char *motFile[303];
+static const char *agwsName[13];
+static const char *agwsLRName[3];
 
-extern int unitCidGet(ObjectTask *unit);
-extern int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file);
-extern int dataUnitFileLoadWep(ObjectTask *unit, int weaponId, int slot, UnitFileInfo *fileInfo);
-/* The leader's character id (`lw $3,0x0($16)`, $16 = &leaderId), compared
- * with charaId; a static of the original TU at 0x00a597b8, still asm-owned. */
-extern int leaderId;
+/* Motion ids at or above MOTION_NAME_ID_LIMIT have no suffix. From
+ * MOTION_NAME_REMAP_ID on, the suffix index is the id minus
+ * MOTION_NAME_REMAP_OFFSET; from MOTION_NAME_AGWS_ID on, a unit with flag 0x40
+ * takes its AGWS name. The names are guesses from this use: the meaning of the
+ * id ranges is not established. */
+#define MOTION_NAME_ID_LIMIT 0x157
+#define MOTION_NAME_REMAP_ID 0x12E
+#define MOTION_NAME_REMAP_OFFSET 0x2A
+#define MOTION_NAME_AGWS_ID 0x103
+
+/* dataWidGet returns this id for a weapon that has no model (widChgTbl). */
+#define WEAPON_MODEL_ID_NONE 0x3000
+
+/* Appends the motion-name suffix of motionId to name, with the AGWS name and
+ * left/right part for flag-0x40 units from MOTION_NAME_AGWS_ID on. */
+int dataMotNameGetSub(char *name, CalcUnitParam *up, int motionId, int weaponId)
+{
+    const char *suffix;
+    int lrIdx;
+    int tableIdx;
+    int agwsIdx;
+
+    if (motionId < MOTION_NAME_ID_LIMIT) {
+        tableIdx = motionId;
+        if (motionId >= MOTION_NAME_REMAP_ID) {
+            tableIdx = motionId - MOTION_NAME_REMAP_OFFSET;
+        }
+        suffix = motFile[tableIdx - 1];
+        if (suffix != 0) {
+            if (motionId >= MOTION_NAME_AGWS_ID && (up->flags & 0x40)) {
+                agwsIdx = up->charaId - 0x11;
+                if (motionId >= MOTION_NAME_REMAP_ID) {
+                    lrIdx = 2;
+                } else {
+                    lrIdx = *(signed char *) (weaponId + (int) up + 0x5A) < 0x20;
+                }
+                strcat(name, agwsName[agwsIdx]);
+                strcat(name, suffix);
+                strcat(name, agwsLRName[lrIdx]);
+            } else {
+                strcat(name, suffix);
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+extern int unitCidGet(BattleUnit *unit);
+extern int dataUnitFileLoadMdl(BattleUnit *unit, int charaId, UnitFileInfo *file);
+extern int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *fileInfo);
 
 /*
  * Load a unit's model, its weapons (except kind-6 techniques' weapons), its
  * base motion and the motions of weapons that carry their own (motion type
  * 1 with a kind-4 technique, into motion slot weapon slot + 1).
  */
-int dataUnitFileLoad(ObjectTask *unit, int charaId)
+int dataUnitFileLoad(BattleUnit *unit, int charaId)
 {
     UnitFileInfo *file;
     int weaponId;
@@ -915,7 +1486,7 @@ int dataUnitFileLoad(ObjectTask *unit, int charaId)
         dataLeaderCidReset();
     }
     charaId = calcUPGet(unit)->charaId;
-    dataUnitFileLoadMdl((UnitEquipInfo *)unit, unitCidGet(unit), file);
+    dataUnitFileLoadMdl(unit, unitCidGet(unit), file);
     for (i = 0; i < 3; i++) {
         weaponId = calcUPGet(unit)->weaponId[i];
         if (weaponId != 0 && dataTecGet(dataWpnGet(weaponId)->tecId)->kind != 6) {
@@ -933,9 +1504,9 @@ int dataUnitFileLoad(ObjectTask *unit, int charaId)
     return 1;
 }
 
-static const char D_00A45AC8[32];
+static const char unitOrgDataUnitFileLoadErrText[32];
 
-void *dataUnitFileGet(ObjectTask *unit, int charaId)
+void *dataUnitFileGet(BattleUnit *unit, int charaId)
 {
     UnitFileInfo *slot;
     int lo;
@@ -966,27 +1537,95 @@ void *dataUnitFileGet(ObjectTask *unit, int charaId)
             }
         }
         if (slot == 0) {
-            printf(D_00A45AC8);
+            printf(unitOrgDataUnitFileLoadErrText);
         }
     }
     return slot;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataPackPcMdlNameGet);
+typedef struct PackMdlEntry {
+    int charaId;
+    const char *mdlName;
+} PackMdlEntry;
+
+static PackMdlEntry pcPack_0[15];
+extern const char unitOrgShionmText[];
+extern const char unitOrgMomomText[];
+extern const char unitOrgChaosmText[];
+extern const char unitOrgJrmText[];
+extern const char unitOrgKosmos1Text[];
+extern const char unitOrgMomoaText[];
+extern const char unitOrgMomobText[];
+extern int MenuScenarioNoGet(void);
+
+/*
+ * Picks the packed model name for a party member. Units outside the special
+ * character range, or carrying the AGWS flag in their work or parameter
+ * record, use the pcPack_0 table; the special range takes the fixed names
+ * chosen by the accessory and status checks.
+ */
+const char *dataPackPcMdlNameGet(BattleUnit *unit)
+{
+    const char *name;
+    short charaId;
+    int i;
+
+    if ((unit->work->flags & CALC_UNIT_FLAG_IS_AGWS) != 0
+        || (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) != 0
+        || (calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_BEGIN
+            && calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_END)) {
+        if (calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+            || calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END) {
+            return 0;
+        }
+    }
+
+    name = 0;
+    charaId = calcUPGet(unit)->charaId;
+    for (i = 0; pcPack_0[i].charaId != 0; i++) {
+        if (charaId == pcPack_0[i].charaId) {
+            name = pcPack_0[i].mdlName;
+            break;
+        }
+    }
+    if (calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+        || calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END) {
+        if (calcAccEquChk(unit, 0x2D) != 0) {
+            if (charaId == 3) {
+                name = unitOrgShionmText;
+            } else if (charaId == 6) {
+                name = unitOrgMomomText;
+            } else if (charaId == 1) {
+                name = unitOrgChaosmText;
+            } else if (charaId == 7) {
+                name = unitOrgJrmText;
+            }
+        }
+        if (charaId == 2 && MenuScenarioNoGet() < 0xA) {
+            name = unitOrgKosmos1Text;
+        }
+        if (calcStatGet(unit, 7, 2) != 0) {
+            name = unitOrgMomoaText;
+        } else if (calcStatGet(unit, 7, 1) != 0) {
+            name = unitOrgMomobText;
+        }
+    }
+    return name;
+}
 
 /* pcPack_1 is a 38-entry table (0x130 bytes, 8-byte stride), terminated by
  * a zero weaponId; dataPackWpnMdlNameGet searches it and returns the packed
  * model name for a matching weapon. */
 typedef struct PcPackEntry {
     int weaponId;
-    char *name;
+    const char *name;
 } PcPackEntry;
 
-extern PcPackEntry pcPack_1[];
+static PcPackEntry pcPack_1[38];
 
-char *dataPackWpnMdlNameGet(int weaponId)
+const char *dataPackWpnMdlNameGet(int weaponId)
 {
-    char *name;
+    const char *name;
     int index;
 
     name = 0;
@@ -999,7 +1638,7 @@ char *dataPackWpnMdlNameGet(int weaponId)
     return name;
 }
 
-extern void ACT_initMotion(BattleModelActor *actor);
+extern void ACT_initMotion(Actor *actor);
 
 #define CD_SECTOR_SIZE 0x800
 /* Leader model data is already resident: these are the animation and
@@ -1014,20 +1653,20 @@ extern void ACT_initMotion(BattleModelActor *actor);
  * the MOVE slot, not the MATRIX slot). */
 #define FACE_TEXTURE_ADDRESS ((void *)0x010E6000)
 
-extern char mdlFileName[];
-extern char mdlFileName2[];
-extern char *pcNameBase;
-extern char D_00A44898[];
-extern const char D_00A45DD0[];
-extern const char D_00A45DF8[];
-extern const char D_00A45E00[];
-extern const char D_00A45E08[];
-extern const char D_00A45E10[];
-extern const char D_00A45E38[];
-extern char *dataPackPcMdlNameGet(ObjectTask *unit);
+static char mdlFileName[256];
+static char mdlFileName2[256];
+static const char *pcNameBase;
+extern char unitOrgBinText[];
+extern const char unitOrgDataUnitFileLoadMdlLeaderText[];
+extern const char unitOrgLexText[];
+extern const char unitOrgXtxText[];
+extern const char unitOrgJntText[];
+extern const char unitOrgDataUnitFileLoadMdlHitText[];
+extern const char unitOrgMDLReadSizeText[];
+extern const char *dataPackPcMdlNameGet(BattleUnit *unit);
 extern void RES_GetMdlFileName(char *name, int charaId);
 extern int xglCdGetFileSize(const char *name);
-extern int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file);
+extern int dataUnitFileLoadFaceMdl(BattleUnit *unit, int charaId, UnitFileInfo *file);
 
 /*
  * Reuse cached model data when the character id agrees. Otherwise use
@@ -1036,29 +1675,29 @@ extern int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *
  * Repeated calcUPGet calls and signed division preserve the original
  * call sequence and sector-rounding behavior.
  */
-int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file)
+int dataUnitFileLoadMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
 {
-    BattleModelActor *actor;
-    char *packedName;
+    Actor *actor;
+    const char *packedName;
 
-    actor = unit->motionActor;
+    actor = unit->actor;
     if (charaId != file->modelCharaId) {
         file->modelCharaId = charaId;
-        if (((unit->task.battle.work->flags & BATTLE_ACTOR_FLAG_ENEMY) == 0
-             && (calcUPGet(&unit->task.object)->flags & CALC_UNIT_FLAG_AGWS) == 0
-             && (calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
-                 || calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END))
-            || (calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_BEGIN
-                && calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_END)) {
+        if (((unit->work->flags & ACTOR_FLAG_ENEMY) == 0
+             && (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) == 0
+             && (calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                 || calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END))
+            || (calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                && calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_END)) {
             if (dataLeaderCidGet() == charaId) {
                 file->animationAdr = LEADER_ANIMATION_ADDRESS;
                 file->textureAdr = LEADER_TEXTURE_ADDRESS;
-                printf(D_00A45DD0, charaId);
+                printf(unitOrgDataUnitFileLoadMdlLeaderText, charaId);
             } else {
-                packedName = dataPackPcMdlNameGet(&unit->task.object);
+                packedName = dataPackPcMdlNameGet(unit);
                 strcpy(mdlFileName2, pcNameBase);
                 strcat(mdlFileName2, packedName);
-                strcat(mdlFileName2, D_00A44898);
+                strcat(mdlFileName2, unitOrgBinText);
                 dataFileLoadNB(mdlFileName2, file->modelAdr);
                 file->modelSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
                                / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
@@ -1068,53 +1707,48 @@ int dataUnitFileLoadMdl(UnitEquipInfo *unit, int charaId, UnitFileInfo *file)
         } else {
             RES_GetMdlFileName(mdlFileName, charaId);
             strcpy(mdlFileName2, mdlFileName);
-            strcat(mdlFileName2, D_00A45DF8);
+            strcat(mdlFileName2, unitOrgLexText);
             dataFileLoadNB(mdlFileName2, file->modelAdr);
             file->modelSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
                                / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
             file->animationAdr = (unsigned char *)file->modelAdr + file->modelSize;
             strcpy(mdlFileName2, mdlFileName);
-            strcat(mdlFileName2, D_00A45E00);
+            strcat(mdlFileName2, unitOrgXtxText);
             dataFileLoadNB(mdlFileName2, file->animationAdr);
             file->animationSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
                                / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
             file->textureAdr = (unsigned char *)file->animationAdr + file->animationSize;
             strcpy(mdlFileName2, mdlFileName);
-            strcat(mdlFileName2, D_00A45E08);
+            strcat(mdlFileName2, unitOrgJntText);
             dataFileLoadNB(mdlFileName2, file->textureAdr);
             file->textureSize = ((xglCdGetFileSize(mdlFileName2) + (CD_SECTOR_SIZE - 1))
                                / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
         }
     } else {
-        printf(D_00A45E10, charaId, file->modelAdr);
+        printf(unitOrgDataUnitFileLoadMdlHitText, charaId, file->modelAdr);
     }
     actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = file->modelAdr;
     actor->resource[BATTLE_ACTOR_RESOURCE_MATRIX] = file->animationAdr;
     actor->resource[BATTLE_ACTOR_RESOURCE_MOVE] = file->textureAdr;
     ACT_initMotion(actor);
-    printf(D_00A45E38, file->modelSize + file->animationSize + file->textureSize);
-    if ((unit->task.battle.work->flags & BATTLE_ACTOR_FLAG_ENEMY) == 0
-        && (calcUPGet(&unit->task.object)->flags & CALC_UNIT_FLAG_AGWS) == 0
-        && (calcUPGet(&unit->task.object)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
-                 || calcUPGet(&unit->task.object)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END)) {
-        dataUnitFileLoadFaceMdl(&unit->task.object, charaId, file);
+    printf(unitOrgMDLReadSizeText, file->modelSize + file->animationSize + file->textureSize);
+    if ((unit->work->flags & ACTOR_FLAG_ENEMY) == 0
+        && (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) == 0
+        && (calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN
+                 || calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END)) {
+        dataUnitFileLoadFaceMdl(unit, charaId, file);
     } else {
         file->faceCharaId = 0;
     }
     return 1;
 }
 
-extern const char D_00A45E50[];
+extern const char unitOrgDataUnitFileLoadFaceMdlHitText[];
 extern void *dataChildActorCreate(int callerId);
 
-int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file)
+int dataUnitFileLoadFaceMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
 {
-    /* The caller (dataUnitFileLoadMdl, this file:996) passes
-     * &unit->task.object; ObjectTask is the first member of UnitEquipInfo's
-     * `task` union (this file's header, data_unit_org_get.h:150-151), so
-     * that ObjectTask pointer is the UnitEquipInfo record itself. */
-    UnitEquipInfo *equip = (UnitEquipInfo *)unit;
-    BattleModelActor *actor;
+    Actor *actor;
 
     if (charaId != file->faceCharaId) {
         file->faceCharaId = charaId;
@@ -1123,82 +1757,244 @@ int dataUnitFileLoadFaceMdl(ObjectTask *unit, int charaId, UnitFileInfo *file)
             file->faceTextureAdr = FACE_TEXTURE_ADDRESS;
         }
     } else {
-        printf(D_00A45E50, charaId, file->faceModelAdr);
+        printf(unitOrgDataUnitFileLoadFaceMdlHitText, charaId, file->faceModelAdr);
     }
 
     actor = dataChildActorCreate(charaId);
     actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = file->faceModelAdr;
-    equip->faceActor = actor;
+    unit->subActor = (Actor *) actor;
     actor->resource[BATTLE_ACTOR_RESOURCE_MATRIX] = file->animationAdr;
     actor->resource[BATTLE_ACTOR_RESOURCE_MOVE] = file->faceTextureAdr;
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadMot);
+/* Word view of a Actor's pack slots. Its int lvalues keep the
+ * original alias set: stores through the void * fields of Actor
+ * move the size load in dataUnitFileLoadMot (measured by tucheck). */
+typedef struct ActorWords {
+    unsigned char unmodeled_0[0x100];
+    int packEntry[4]; /* +0x100 */
+    unsigned char unmodeled_110[0x8D0 - 0x110];
+    int resource[11]; /* +0x8D0 */
+} ActorWords;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoadWep);
+static char motFileName[256];
+extern const char unitOrgFPKDataNothingText[];
+extern const char unitOrgDataUnitFileLoadMotHitText[];
+extern const char unitOrgMOTReadSizeText[];
 
-int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo)
+int dataUnitFileLoadMot(BattleUnit *unit, int motionId, int slot, UnitFileInfo *file)
+{
+    Actor *actor;
+    char *pack;
+    int index;
+    int i;
+
+    actor = unit->actor;
+    if (motionId != file->motion[slot].motionId) {
+        if (dataMotNameGet(motFileName, unit, motionId, slot - 1) == 0) {
+            printf(unitOrgFPKDataNothingText);
+            return 0;
+        }
+        file->motion[slot].size = ((xglCdGetFileSize(motFileName) + (CD_SECTOR_SIZE - 1))
+                                   / CD_SECTOR_SIZE) * CD_SECTOR_SIZE;
+        if (slot == 0 || slot == 4) {
+            pack = file->motion[slot].adr;
+        } else {
+            pack = file->motion[0].adr;
+            pack += (unit->work->flags & ACTOR_FLAG_ENEMY) == 0 ? 0x40000 : 0x32000;
+            for (i = 1; i < 4; i++) {
+                if (file->motion[i].motionId != 0 && file->motion[i].adr != 0
+                    && (unsigned)file->motion[i].adr < (unsigned)pack) {
+                    pack = file->motion[i].adr;
+                }
+            }
+            pack -= file->motion[slot].size;
+        }
+        file->motion[slot].adr = pack;
+        dataFileLoadNB(motFileName, pack);
+        if (slot != 4) {
+            file->motion[slot].motionId = motionId;
+        }
+    } else {
+        printf(unitOrgDataUnitFileLoadMotHitText, motionId, file->motion[slot].adr);
+    }
+    pack = file->motion[slot].adr;
+    index = BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot;
+    ((ActorWords *)actor)->resource[index] = (int)pack;
+    ((ActorWords *)actor)->packEntry[slot] = (int)pack;
+    printf(unitOrgMOTReadSizeText, file->motion[slot].size, slot);
+    return 1;
+}
+
+static const char *wpnNameBase;
+extern const char unitOrgDataUnitFileLoadWepHitText[];
+extern const char unitOrgWEPReadSizeText[];
+extern const char unitOrgWpnActotText[];
+
+#define WPN_FILE_SECTORS(name) \
+    (((xglCdGetFileSize(name) + (CD_SECTOR_SIZE - 1)) / CD_SECTOR_SIZE) * CD_SECTOR_SIZE)
+
+int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *file)
+{
+    UnitWeaponActors *equip = (UnitWeaponActors *)unit;
+    Actor *actor;
+    const char *packedName;
+    int packed;
+    unsigned char *address;
+    int i;
+
+    if (dataWidGet(weaponId) == WEAPON_MODEL_ID_NONE) {
+        return 0;
+    }
+    if (weaponId != file->wpn[slot].part[0].id) {
+        packedName = dataPackWpnMdlNameGet(weaponId);
+        if (packedName != 0) {
+            packed = 1;
+            strcpy(mdlFileName2, wpnNameBase);
+            strcat(mdlFileName2, packedName);
+            strcat(mdlFileName2, unitOrgBinText);
+            file->wpn[slot].part[0].size = WPN_FILE_SECTORS(mdlFileName2);
+            file->wpn[slot].part[1].size = 0;
+            file->wpn[slot].part[2].size = 0;
+        } else {
+            packed = 0;
+            RES_GetMdlFileName(mdlFileName, dataWidGet(weaponId));
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgLexText);
+            file->wpn[slot].part[0].size = WPN_FILE_SECTORS(mdlFileName2);
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgXtxText);
+            file->wpn[slot].part[1].size = WPN_FILE_SECTORS(mdlFileName2);
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgJntText);
+            file->wpn[slot].part[2].size = WPN_FILE_SECTORS(mdlFileName2);
+        }
+        if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) && slot == 2) {
+            address = (unsigned char *)mdlAdrTbl[6];
+            file->wpn[2].part[0].id = 0x3000;
+        } else {
+            address = file->modelAdr;
+            if (!(equip->work->flags & ACTOR_FLAG_ENEMY)) {
+                address += 0x180000;
+            } else {
+                address += 0x100000;
+            }
+            for (i = 0; i < 3; i++) {
+                if (file->wpn[i].part[0].id != 0 && file->wpn[i].part[0].adr != 0
+                    && (unsigned char *)file->wpn[i].part[0].adr < address) {
+                    address = file->wpn[i].part[0].adr;
+                }
+            }
+            address -= file->wpn[slot].part[0].size + file->wpn[slot].part[1].size
+                       + file->wpn[slot].part[2].size;
+            file->wpn[slot].part[0].id = weaponId;
+        }
+        if (packed == 1) {
+            if (dataWpnLRChk(unit, weaponId, slot, file)) {
+                file->wpn[slot].part[0].adr = file->wpn[0].part[0].adr;
+            } else {
+                file->wpn[slot].part[0].adr = address;
+                dataFileLoadNB(mdlFileName2, address);
+            }
+            file->wpn[slot].part[1].adr = 0;
+            file->wpn[slot].part[2].adr = 0;
+        } else if (dataWpnLRChk(unit, weaponId, slot, file)) {
+            file->wpn[slot].part[0].adr = file->wpn[0].part[0].adr;
+            file->wpn[slot].part[1].adr = file->wpn[0].part[1].adr;
+            file->wpn[slot].part[2].adr = file->wpn[0].part[2].adr;
+        } else {
+            file->wpn[slot].part[0].adr = address;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgLexText);
+            dataFileLoadNB(mdlFileName2, file->wpn[slot].part[0].adr);
+            file->wpn[slot].part[1].adr =
+                (unsigned char *)file->wpn[slot].part[0].adr + file->wpn[slot].part[0].size;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgXtxText);
+            dataFileLoadNB(mdlFileName2, file->wpn[slot].part[1].adr);
+            file->wpn[slot].part[2].adr =
+                (unsigned char *)file->wpn[slot].part[1].adr + file->wpn[slot].part[1].size;
+            strcpy(mdlFileName2, mdlFileName);
+            strcat(mdlFileName2, unitOrgJntText);
+            dataFileLoadNB(mdlFileName2, file->wpn[slot].part[2].adr);
+        }
+    } else {
+        printf(unitOrgDataUnitFileLoadWepHitText, weaponId, file->wpn[slot].part[0].adr);
+    }
+    printf(unitOrgWEPReadSizeText, file->wpn[slot].part[0].size + file->wpn[slot].part[1].size
+                           + file->wpn[slot].part[2].size);
+    actor = dataChildActorCreate(dataWidGet(weaponId));
+    actor->resource[BATTLE_ACTOR_RESOURCE_MODEL] = file->wpn[slot].part[0].adr;
+    actor->drawEnvFlags |= 0x200;
+    actor->resource[BATTLE_ACTOR_RESOURCE_MATRIX] = file->wpn[slot].part[1].adr;
+    equip->equipActor[slot & 3] = (int) actor;
+    actor->resource[BATTLE_ACTOR_RESOURCE_MOVE] = file->wpn[slot].part[2].adr;
+    printf(unitOrgWpnActotText, actor, ((Actor *) equip->motionActor)->weaponLoadInfo);
+    return 1;
+}
+
+int dataWpnLRChk(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *fileInfo)
 {
     (void)unit;
-    if (slot != 1 || weaponId != fileInfo->weaponId) {
+    if (slot != 1 || weaponId != fileInfo->wpn[0].part[0].id) {
         return 0;
     }
     return 1;
 }
 
-extern BattleModelActor *ACT_create(int parent, int callerId);
-static const char D_00A45F38[32];
+extern Actor *ACT_create(int parent, int callerId);
+static const char unitOrgDataChildActorCreateErrText[32];
 
 void *dataChildActorCreate(int callerId)
 {
-    BattleModelActor *actor;
+    Actor *actor;
 
     actor = ACT_create(-1, callerId);
     if (actor == 0) {
-        printf(D_00A45F38);
+        printf(unitOrgDataChildActorCreateErrText);
         return 0;
     }
     ACT_initMotion(actor);
-    actor->state.update = 0;
-    actor->state.draw = 0;
-    actor->state.flags = 0x208;
+    actor->update = 0;
+    actor->draw = 0;
+    actor->flags = 0x208;
     return actor;
 }
 
-int dataUnitFileLoadMotSp(ObjectTask *unit, int motionId, int slot) {
+int dataUnitFileLoadMotSp(BattleUnit *unit, int motionId, int slot) {
     dataUnitFileLoadMot(unit, motionId, slot, dataUnitFileGet(unit, calcUPGet(unit)->charaId));
     return 1;
 }
 
-int dataUnitFileLoadMotSp2(UnitEquipInfo *unit, int motionId, int slot, int p3, int p4)
+int dataUnitFileLoadMotSp2(BattleUnit *unit, int motionId, int slot, int p3, int p4)
 {
-    BattleModelActor *actor;
+    Actor *actor;
 
-    dataMotAdrSet(unit->motionActor, slot);
+    dataMotAdrSet(unit->actor, slot);
     if (p4 == 5) {
-        actor = unit->equipActor[0];
+        actor = unit->weapon[0];
         if (actor != 0) {
             actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
-                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
+                unit->actor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
         }
-        actor = unit->equipActor[1];
+        actor = unit->weapon[1];
         if (actor != 0) {
             actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
-                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
+                unit->actor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
         }
     } else if (p3 >= 0) {
-        actor = unit->equipActor[p3 & 3];
+        actor = unit->weapon[p3 & 3];
         if (actor != 0) {
             actor->resource[BATTLE_ACTOR_RESOURCE_WEAPON_MOTION] =
-                unit->motionActor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
+                unit->actor->resource[BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + slot];
         }
     }
     return 1;
 }
 
-extern const char D_00A45F58[];
-extern void dataUnitFileLoad2Sub(ObjectTask *unit);
+extern const char unitOrgDataUnitFileLoad2Text[];
+extern void dataUnitFileLoad2Sub(BattleUnit *unit);
 
 /* unitCmdSet's queued-command record: src/ov01/unit_cmd.h:157-162 (CmdEntry)
  * and src/ov01/calc.c:28-34 (CalcCmdEntry) both restate this same layout
@@ -1214,18 +2010,17 @@ typedef struct CmdEntry {
     int extra;    /* +0x08: unwritten by this call */
     unsigned char unmodeled_0c[8]; /* +0x0C: unwritten by this call */
 } CmdEntry;
-extern void unitCmdSet(ObjectTask *unit, CmdEntry *cmd);
 extern int rnd(int max);
 
-void dataUnitFileLoad2(ObjectTask *unit)
+void dataUnitFileLoad2(BattleUnit *unit)
 {
     CmdEntry cmd;
 
-    printf(D_00A45F58, unit);
+    printf(unitOrgDataUnitFileLoad2Text, unit);
     dataUnitFileLoad2Sub(unit);
 
     cmd.selector = 0x25;
-    if (!(((BattleActor *)unit->work)->flags & BATTLE_ACTOR_FLAG_ENEMY)) {
+    if (!(unit->work->flags & ACTOR_FLAG_ENEMY)) {
         cmd.argument = 0;
     } else {
         cmd.argument = rnd(0xA);
@@ -1233,7 +2028,156 @@ void dataUnitFileLoad2(ObjectTask *unit)
     unitCmdSet(unit, &cmd);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataUnitFileLoad2Sub);
+typedef struct EquipActor {
+    int flags; /* +0x00: Actor.flags */
+    void (*update)(Actor *self); /* +0x04: Actor.update */
+    unsigned char unmodeled_08[0x86 - 0x08];
+    short handType; /* +0x86: compared with 4, 0x14 and 0x15 to select ACT_setHand's hand */
+    unsigned char unmodeled_88[0x8d0 - 0x88];
+    unsigned char *wpnMdl[3]; /* +0x8d0 */
+    int baseMotionAdr; /* +0x8dc: the motion pack's slot[0] address (MotionAdrTable) */
+    int wpnMotionAdr[3]; /* +0x8e0: one motion address per weapon slot */
+} EquipActor;
+
+extern void ACT_setHand(void *actor, int hand);
+extern void ACT_setFace(void *actor, void *other, int flags);
+extern void unitFaceMotSet(BattleUnit *unit, int motionId);
+extern void *sefCreateEffect2(void *param);
+extern void dataSndSeRegLoad2(BattleUnit *unit);
+extern void dataPackWpnMdl2(Actor *actor);
+extern void ACT_setArms(Actor *actor, Actor *parent, int accId, int flags);
+extern void ACT_allocMatrix(Actor *actor, int count);
+extern void ACT_setModelWrapper(Actor *actor, int flags);
+extern void ACT_updateDefault(Actor *self);
+extern const char unitOrgDataUnitFileLoad2SubMdlPackText[];
+extern const char unitOrgDataUnitFileLoad2SubWpnPackText[];
+
+void dataUnitFileLoad2Sub(BattleUnit *unit)
+{
+    unsigned char effectParam[0x24];
+    EquipActor *mot;
+    EquipActor *face;
+    EquipActor *actor;
+    unsigned char *pack;
+    UnitWork *effect;
+    int i;
+    int off;
+    int tecKind;
+    short wpnId;
+
+    mot = (EquipActor *) unit->actor;
+    face = (EquipActor *) unit->subActor;
+    if (mot->wpnMdl[1] == 0) {
+        int *wpnHdr;
+        int t;
+
+        pack = mot->wpnMdl[0];
+        wpnHdr = (int *) pack;
+        t = wpnHdr[2];
+        mot->wpnMdl[0] = pack + t;
+        t = wpnHdr[3];
+        mot->wpnMdl[1] = pack + t;
+        t = wpnHdr[4];
+        mot->wpnMdl[2] = pack + t;
+        if (face != 0) {
+            face->wpnMdl[1] = pack + wpnHdr[3];
+            t = wpnHdr[5];
+            face->wpnMdl[0] = pack + t;
+            t = wpnHdr[6];
+            do {
+                face->wpnMdl[2] = pack + t;
+            } while (0);
+        }
+        printf(unitOrgDataUnitFileLoad2SubMdlPackText);
+    }
+    i = 0;
+    off = 0x50;
+    do {
+        if (effectParam) {
+        }
+        wpnId = *((short *) ((((char *) calcUPGet(unit)) + (off + (i * 2))) + 0xE));
+        actor = ((EquipActor **) unit->weapon)[i & 3];
+        i += 1;
+        if (wpnId != 0x3000) {
+            if (actor != 0) {
+                if (actor->wpnMdl[1] == 0) {
+                    dataPackWpnMdl2((Actor *) actor);
+                    printf(unitOrgDataUnitFileLoad2SubWpnPackText);
+                }
+            }
+        }
+    } while (i < 3);
+    ACT_allocMatrix((Actor *) mot, -1);
+    ACT_setModelWrapper((Actor *) mot, 0);
+    if (((!(unit->work->flags & ACTOR_FLAG_ENEMY)) && (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS))) && ((calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN) || (calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END))) {
+        short hand;
+        int handSel;
+
+        hand = mot->handType;
+        if (((hand == 4) || (hand == 0x14)) || ((handSel = 0, hand == 0x15))) {
+            handSel = 1;
+        }
+        ACT_setHand(mot, handSel);
+    }
+    dataMotAdrSet((Actor *) mot, 0);
+    if (face != 0) {
+        ACT_setFace(face, mot, 0);
+        ACT_allocMatrix((Actor *) face, -1);
+        ACT_setModelWrapper((Actor *) face, 0);
+        face->update = ACT_updateDefault;
+        face->baseMotionAdr = mot->baseMotionAdr;
+        face->flags = face->flags & (~8);
+        unitFaceMotSet(unit, 0x35);
+    }
+    for (i = 0; i < 3; i++) {
+        wpnId = calcUPGet(unit)->weaponId[i];
+        actor = ((EquipActor **) unit->weapon)[i & 3];
+        if (wpnId != 0) {
+            tecKind = ((signed char *) dataTecGet(*((short *) ((unsigned char *) dataWpnGet(wpnId) + 0x14))))[0x11];
+            if ((*((short *) ((unsigned char *) dataWpnGet(wpnId) + 0xA))) == 1) {
+                if (tecKind == 4) {
+                    dataMotAdrSet((Actor *) mot, i + 1);
+                }
+            }
+            off = 0x5A;
+            if ((dataWidGet(wpnId) != WEAPON_MODEL_ID_NONE) && (0 != actor)) {
+                ACT_setArms((Actor *) actor, (Actor *) mot, ((signed char *) calcUPGet(unit))[off + i], 0);
+                ACT_allocMatrix((Actor *) actor, -1);
+                ACT_setModelWrapper((Actor *) actor, 0);
+                actor->update = ACT_updateDefault;
+                if ((tecKind != 6) && (wpnId != 0xC)) {
+                    actor->flags = actor->flags & (~8);
+                }
+                if (!(unit->work->flags & ACTOR_FLAG_ENEMY)) {
+                    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
+                        actor->baseMotionAdr = mot->wpnMotionAdr[i];
+                        unitWpnMotSet(unit, i, 0, 5);
+                    } else {
+                        actor->baseMotionAdr = mot->baseMotionAdr;
+                        unitWpnMotSet(unit, i, 0, 0xFF);
+                    }
+                }
+            }
+        }
+    }
+
+    if ((((!(unit->work->flags & ACTOR_FLAG_ENEMY)) && (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS))) && ((calcUPGet(unit)->charaId < SPECIAL_MODEL_CHARACTER_ID_BEGIN) || (calcUPGet(unit)->charaId >= SPECIAL_MODEL_CHARACTER_ID_END))) || ((calcUPGet(unit)->charaId >= 0x97) && (calcUPGet(unit)->charaId < 0xBB))) {
+        if ((calcStatGet(unit, 7, 2) == 0) && (calcStatGet(unit, 7, 1) == 0)) {
+            memset(effectParam, 0, 0x24);
+            *((short *) (effectParam + 0x14)) = 0x4001;
+            *((void **) effectParam) = unit->actor;
+            *((short *) (effectParam + 0x10)) = calcUPGet(unit)->charaId;
+            effect = sefCreateEffect2(effectParam);
+            calcUPGet(unit)->effectUnit = effect;
+            if (effect != 0) {
+                effect->flags = effect->flags | 0x100;
+            }
+        }
+    } else {
+        calcUPGet(unit)->effectUnit = 0;
+    }
+    dataSndSeRegLoad2(unit);
+}
 
 /*
  * A packed model or animation file: 8 bytes not recovered, then one byte
@@ -1245,7 +2189,7 @@ typedef struct PackedFile {
     int entryOffset[3]; /* +0x08 */
 } PackedFile;
 
-void dataPackWpnMdl2(BattleModelActor *actor)
+void dataPackWpnMdl2(Actor *actor)
 {
     PackedFile *pack;
     int offset;
@@ -1267,7 +2211,7 @@ void dataPackWpnMdl2(BattleModelActor *actor)
  * motionPackEntry store uses (`daddu $5,$3,$0`); both header offsets are read
  * before the stores.
  */
-void dataMotAdrSet(BattleModelActor *actor, int motionId)
+void dataMotAdrSet(Actor *actor, int motionId)
 {
     PackedFile *pack;
     unsigned char *motion;
@@ -1297,17 +2241,7 @@ void *dataFpkAdrGet(FpkHeader *fpk)
     return (unsigned char *)fpk + fpk->data_offset;
 }
 
-/*
- * One 12-byte entry of the special-weapon table, terminated by a zero
- * tecId. dataTid2WepSp only reads tecId; dataFileLoadWepSp* (still asm)
- * read the words at +0x04 and +0x08.
- */
-typedef struct WepSpEntry {
-    int tecId;                       /* +0x00 */
-    unsigned char unmodeled_04[8];
-} WepSpEntry;
-
-extern WepSpEntry wepSpTbl[];        /* original storage, still asm-owned */
+extern WepSpEntry wepSpTbl[];        /* original storage, defined below */
 
 /* Returns the special-weapon entry of technique `tecId`, or 0. */
 WepSpEntry *dataTid2WepSp(int tecId)
@@ -1321,20 +2255,187 @@ WepSpEntry *dataTid2WepSp(int tecId)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadWepSp);
+extern void ACT_dispose(Actor *actor);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadWepSp2);
+/*
+ * Loads the special weapon of technique tecId into slot 2, or into slot 1 for
+ * a kind-6 technique without a table entry. Returns 0 when neither applies.
+ */
+int dataFileLoadWepSp(BattleUnit *unit, int tecId)
+{
+    WepSpEntry *ent;
+    UnitFileInfo *fileInfo;
+    int slot;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataFileLoadWepSpEnd);
+    fileInfo = dataUnitFileGet(unit, calcUPGet(unit)->charaId);
+    ent = dataTid2WepSp(tecId);
+    slot = 2;
+    if (ent == 0) {
+        if (dataTecGet(tecId)->kind == 6) {
+            slot = 1;
+        } else {
+            return 0;
+        }
+    }
+    if (slot == 2) {
+        calcUPGet(unit)->weaponId[2] = ent->weaponId;
+        *(unsigned char *) ((unsigned char *) calcUPGet(unit) + 0x5C) = ent->unk8;
+        dataUnitFileLoadWep(unit, ent->weaponId, 2, fileInfo);
+        return 1;
+    } else if (slot == 1) {
+        dataUnitFileLoadWep(unit, calcUPGet(unit)->weaponId[1], 1, fileInfo);
+        return 1;
+    }
+    return 0;
+}
+
+/* Attaches the already loaded special-weapon model of slot 1 or 2 to its
+ * equipment actor and starts its update. */
+int dataFileLoadWepSp2(BattleUnit *unit, int tecId)
+{
+    int slot;
+    Actor *parent;
+    short wid;
+    Actor *actor;
+
+    slot = 2;
+    if (dataTid2WepSp(tecId) == 0) {
+        slot = 1;
+        if (dataTecGet(tecId)->kind != 6) {
+            return 0;
+        }
+    }
+    parent = unit->actor;
+    wid = calcUPGet(unit)->weaponId[slot];
+    actor = unit->weapon[slot];
+    if (wid != 0) {
+        if (dataWidGet(wid) == WEAPON_MODEL_ID_NONE) {
+            return 1;
+        }
+        if (actor == 0) {
+            return 1;
+        }
+        if (actor->resource[1] == 0) {
+            dataPackWpnMdl2(actor);
+        }
+        if ((unsigned int) (wid - 0xD) >= 4) {
+            ACT_setArms(actor, parent, *(signed char *) (slot + (int) calcUPGet(unit) + 0x5A), 0);
+        }
+        ACT_allocMatrix(actor, -1);
+        ACT_setModelWrapper(actor, 0);
+        actor->update = ACT_updateDefault;
+    }
+    return 1;
+}
+
+/* Releases the equipment actor of the special-weapon slot of tecId and clears
+ * its weapon id when that slot is slot 2. */
+int dataFileLoadWepSpEnd(BattleUnit *unit, int tecId)
+{
+    int slot;
+    int off;
+    Actor **equipSlot;
+
+    slot = 2;
+    if (dataTid2WepSp(tecId) == 0) {
+        slot = 1;
+        if (dataTecGet(tecId)->kind != 6) {
+            return 0;
+        }
+    }
+    off = slot * 4 + 0x1C;
+    equipSlot = (Actor **) ((unsigned char *) unit + off);
+    if (*equipSlot != 0) {
+        ACT_dispose(*equipSlot);
+        *equipSlot = 0;
+    }
+    if (slot == 2) {
+        calcUPGet(unit)->weaponId[2] = 0;
+        *(unsigned char *) ((unsigned char *) calcUPGet(unit) + 0x5C) = 0;
+    }
+    return 1;
+}
 
 /* Callers pass the unit whose default weapon they want; the function
  * always returns 0 and ignores it. */
-int dataDefWpnGet(void *unit)
+int dataDefWpnGet(BattleUnit *unit)
 {
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/data_unit_org_get", dataMtdRead);
+extern const char unitOrgMTDIdFrameText[];
+
+/*
+ * Looks up the motion record for the actor's current motion slot and
+ * trigger. The record's key list is searched for the trigger; when that
+ * entry lists the current frame, the motion's frame table is scanned.
+ * Returns 1 on a frame hit, 2 on a trigger without that frame, else 0.
+ */
+int dataMtdRead(BattleUnit *unit, short trigger)
+{
+    unsigned char *act;
+    unsigned char *base;
+    unsigned char *rec;
+    unsigned char *r;
+    short *p;
+    unsigned int off;
+    unsigned int v;
+    int idx;
+    int id;
+    int i;
+    int sk;
+    int frame;
+    unsigned short key;
+    unsigned short k;
+    float ft;
+    short n;
+
+    act = (unsigned char *) unit->actor;
+    idx = (*(unsigned short *) (act + 0x704) & 0x700) >> 8;
+    id = (*(unsigned short *) (act + 0x704) & 0xFF) + 1;
+    if (idx >= 5) {
+        return 0;
+    }
+    base = *(unsigned char **) (act + 0x100 + idx * 4);
+    if (base == 0) {
+        return 0;
+    }
+    off = *(short *) base;
+    p = (short *) (base + ((off >> 1) << 1));
+    rec = 0;
+    for (i = 0; (sk = p[i]) != 0; i += 2) {
+        if (sk == id) {
+            v = p[i + 1];
+            rec = base + ((v >> 1) << 1);
+            break;
+        }
+    }
+    if (rec == 0) {
+        return 0;
+    }
+    r = rec;
+    key = *(unsigned short *) r;
+    ft = *(float *) (act + 0x6F4) / 0.033333335f + 0.5f;
+    frame = (int) ft;
+    k = key;
+    while (k != 0) {
+        if ((short) k == trigger) {
+            for (i = 0; i < *(short *) (r + 2); i++) {
+                idx = *(short *) (r + 4 + (i << 1));
+                if (idx == frame) {
+                    printf(unitOrgMTDIdFrameText, (short) key);
+                    return 1;
+                }
+            }
+            return 2;
+        }
+        n = *(short *) (r + 2);
+        rec = (unsigned char *) ((short *) rec + n + 2);
+        r = rec;
+        key = k = *(unsigned short *) r;
+    }
+    return 0;
+}
 
 typedef struct XtxFileEntry {
     const char *name;
@@ -1348,7 +2449,7 @@ void *dataXtxFileGet(int index)
     return &xtxFile[index];
 }
 
-static const char D_00A45FE8[32];
+static const char unitOrgDataXtxAdrGetErrText[32];
 static unsigned short xtxAdr[0x13];
 
 unsigned short dataXtxAdrGet(int index)
@@ -1364,7 +2465,7 @@ unsigned short dataXtxAdrGet(int index)
         }
     } else {
     fail:
-        printf(D_00A45FE8, index);
+        printf(unitOrgDataXtxAdrGetErrText, index);
     }
     return value;
 }
@@ -1380,11 +2481,11 @@ void dataXtxLoad(void)
 
 extern int dataFileLoad(const char *name, void *dst);
 
-static const char D_00A46008[32];
+static const char unitOrgDataYamamotoBatdatBinText[32];
 
 void dataBatDatLoad(void)
 {
-    dataFileLoad(D_00A46008, batDatBuf);
+    dataFileLoad(unitOrgDataYamamotoBatdatBinText, &batDatBuf);
 }
 
 extern unsigned char thinkBuf[0x4000];
@@ -1410,10 +2511,10 @@ extern int thinkMapGet(int mapNo);
 extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 extern int sprintf(char *buffer, const char *format, ...);
-static char *thinkName;
-static char *thinkNameBase;
-static char *thinkNameExt;
-static const char D_00A46028[8];
+static const char *thinkName;
+static const char *thinkNameBase;
+static const char *thinkNameExt;
+static const char unitOrgJpText[8];
 
 int dataThinkNameGet(char *name, int thinkNo)
 {
@@ -1424,7 +2525,7 @@ int dataThinkNameGet(char *name, int thinkNo)
     if (mappedNo != -1) {
         strcpy(name, thinkNameBase);
         strcat(name, thinkName);
-        sprintf(num, D_00A46028, mappedNo);
+        sprintf(num, unitOrgJpText, mappedNo);
         strcat(name, num);
         strcat(name, thinkNameExt);
         return 1;
@@ -1466,11 +2567,6 @@ int dataThinkFileLoad(int thinkNo)
     return 0;
 }
 
-static char *thinkName;
-static char *thinkNameBase;
-static char *thinkNameExt;
-static const char D_00A46028[8];
-
 void dataThinkLoad(int thinkNo)
 {
     char path[256];
@@ -1478,7 +2574,7 @@ void dataThinkLoad(int thinkNo)
 
     strcpy(path, thinkNameBase);
     strcat(path, thinkName);
-    sprintf(num, D_00A46028, thinkNo);
+    sprintf(num, unitOrgJpText, thinkNo);
     strcat(path, num);
     strcat(path, thinkNameExt);
     dataFileLoad(path, thinkBuf);
@@ -1502,11 +2598,10 @@ void *dataMapCameraAdrGet(int mapNo)
     return (unsigned char *)map + map->cameraOffset;
 }
 
-static char *mapNameBase;
-static char *mapName;
-static char *mapNameExt;
-static const char D_00A46028[8];
-static const char D_00A46030[32];
+static const char *mapNameBase;
+static const char *mapName;
+static const char *mapNameExt;
+static const char unitOrgDataMapLoadErrText[32];
 
 void dataMapLoad(int mapNo)
 {
@@ -1516,14 +2611,259 @@ void dataMapLoad(int mapNo)
     if (mapNo < 100) {
         strcpy(path, mapNameBase);
         strcat(path, mapName);
-        sprintf(num, D_00A46028, mapNo);
+        sprintf(num, unitOrgJpText, mapNo);
         strcat(path, num);
         strcat(path, mapNameExt);
         dataFileLoadNB(path, dataMapLoadAdrGet(mapNo));
         return;
     }
-    printf(D_00A46030, mapNo);
+    printf(unitOrgDataMapLoadErrText, mapNo);
 }
+
+extern const char unitOrgChaoText[8];
+extern const char unitOrgKosmText[8];
+extern const char unitOrgShioText[8];
+extern const char unitOrgShitText[8];
+extern const char unitOrgZiggText[8];
+extern const char unitOrgMomoText[8];
+extern const char unitOrgJrText[8];
+extern const char unitOrgCeciText[8];
+extern const char unitOrgCathText[8];
+extern const char unitOrgVirgText[8];
+extern const char unitOrgVx01Text[8];
+extern const char unitOrgVx02Text[8];
+extern const char unitOrgVx03Text[8];
+extern const char unitOrgVx04Text[8];
+extern const char unitOrgVx05Text[8];
+extern const char unitOrgVx06Text[8];
+extern const char unitOrgAg01Text[8];
+extern const char unitOrgAg02Text[8];
+extern const char unitOrgAg03Text[8];
+extern const char unitOrgAg04Text[8];
+extern const char unitOrgAg05Text[8];
+extern const char unitOrgUknText[8];
+extern const char unitOrgSldText[8];
+extern const char unitOrgGuno001Text[16];
+extern const char unitOrgGuno002Text[16];
+extern const char unitOrgGuno003Text[16];
+extern const char unitOrgGuno004Text[16];
+extern const char unitOrgGuno005Text[16];
+extern const char unitOrgGuno006Text[16];
+extern const char unitOrgGuno007Text[16];
+extern const char unitOrgGuno008Text[16];
+extern const char unitOrgGuno009Text[16];
+extern const char unitOrgGuno010Text[16];
+extern const char unitOrgGuno011Text[16];
+extern const char unitOrgGuno012Text[16];
+extern const char unitOrgGuno013Text[16];
+extern const char unitOrgGuno014Text[16];
+extern const char unitOrgGuno015Text[16];
+extern const char unitOrgGuno016Text[16];
+extern const char unitOrgGuno017Text[16];
+extern const char unitOrgGuno018Text[16];
+extern const char unitOrgGuno019Text[16];
+extern const char unitOrgGuno020Text[16];
+extern const char unitOrgGuno021Text[16];
+extern const char unitOrgGuno022Text[16];
+extern const char unitOrgGuno023Text[16];
+extern const char unitOrgGuno024Text[16];
+extern const char unitOrgGuno025Text[16];
+extern const char unitOrgGuno114Text[16];
+extern const char unitOrgFema001Text[16];
+extern const char unitOrgFema002Text[16];
+extern const char unitOrgFema003Text[16];
+extern const char unitOrgFema004Text[16];
+extern const char unitOrgFema005Text[16];
+extern const char unitOrgFema006Text[16];
+extern const char unitOrgFere001Text[16];
+extern const char unitOrgFere002Text[16];
+extern const char unitOrgFere003Text[16];
+extern const char unitOrgFero001Text[16];
+extern const char unitOrgFeso001Text[16];
+extern const char unitOrgFeso002Text[16];
+extern const char unitOrgFeso003Text[16];
+extern const char unitOrgFeso004Text[16];
+extern const char unitOrgUtma001Text[16];
+extern const char unitOrgUtma002Text[16];
+extern const char unitOrgUtma003Text[16];
+extern const char unitOrgUtma004Text[16];
+extern const char unitOrgUtma005Text[16];
+extern const char unitOrgUtma006Text[16];
+extern const char unitOrgUtma007Text[16];
+extern const char unitOrgUtma008Text[16];
+extern const char unitOrgUtma009Text[16];
+extern const char unitOrgUtma010Text[16];
+extern const char unitOrgUtma011Text[16];
+extern const char unitOrgUtma012Text[16];
+extern const char unitOrgUtma013Text[16];
+extern const char unitOrgUtma014Text[16];
+extern const char unitOrgUtre001Text[16];
+extern const char unitOrgUtre002Text[16];
+extern const char unitOrgUtre003Text[16];
+extern const char unitOrgUtre004Text[16];
+extern const char unitOrgUtre005Text[16];
+extern const char unitOrgUtre006Text[16];
+extern const char unitOrgUtro001Text[16];
+extern const char unitOrgUtro002Text[16];
+extern const char unitOrgUtro003Text[16];
+extern const char unitOrgUtro004Text[16];
+extern const char unitOrgUtro005Text[16];
+extern const char unitOrgUtro006Text[16];
+extern const char unitOrgUtro007Text[16];
+extern const char unitOrgUtso001Text[16];
+extern const char unitOrgUtso002Text[16];
+extern const char unitOrgUtso003Text[16];
+extern const char unitOrgUtso004Text[16];
+extern const char unitOrgUtso005Text[16];
+extern const char unitOrgUtso006Text[16];
+extern const char unitOrgUtso007Text[16];
+extern const char unitOrgBoss001Text[16];
+extern const char unitOrgBoss002Text[16];
+extern const char unitOrgBoss003Text[16];
+extern const char unitOrgBoss004Text[16];
+extern const char unitOrgBoss005Text[16];
+extern const char unitOrgBoss006Text[16];
+extern const char unitOrgBoss007Text[16];
+extern const char unitOrgBoss008Text[16];
+extern const char unitOrgBoss009Text[16];
+extern const char unitOrgBoss010Text[16];
+extern const char unitOrgBoss011Text[16];
+extern const char unitOrgBoss012Text[16];
+extern const char unitOrgBoss013Text[16];
+extern const char unitOrgBoss014Text[16];
+extern const char unitOrgBoss015Text[16];
+extern const char unitOrgBoss016Text[16];
+extern const char unitOrgBoss017Text[16];
+extern const char unitOrgBoss018Text[16];
+extern const char unitOrgBoss019Text[16];
+extern const char unitOrgBoss020Text[16];
+extern const char unitOrgBoss021Text[16];
+extern const char unitOrgBoss022Text[16];
+extern const char unitOrgBoss023Text[16];
+extern const char unitOrgBoss024Text[16];
+extern const char unitOrgBoss025Text[16];
+extern const char unitOrgBoss026Text[16];
+extern const char unitOrgBoss027Text[16];
+extern const char unitOrgBoss028Text[16];
+extern const char unitOrgBoss029Text[16];
+extern const char unitOrgBoss030Text[16];
+extern const char unitOrgBoss031Text[16];
+extern const char unitOrgBoss032Text[16];
+extern const char unitOrgBoss033Text[16];
+extern const char unitOrgSkjJr1Text[8];
+extern const char unitOrgSkjJr2Text[8];
+extern const char unitOrgSkjMomo1Text[16];
+extern const char unitOrgSkjShion1Text[16];
+extern const char unitOrgSkjShion2Text[16];
+extern const char unitOrgSkjShion3Text[16];
+extern const char unitOrgSkjShion4Text[16];
+extern const char unitOrgSkjKosmos1Text[16];
+extern const char unitOrgChaoSp1Text[16];
+extern const char unitOrgChaoSp2Text[16];
+extern const char unitOrgChaoSp3Text[16];
+extern const char unitOrgChaoSp4Text[16];
+extern const char unitOrgChaoSp5Text[16];
+extern const char unitOrgChaoSp6Text[16];
+extern const char unitOrgChaoSp7Text[16];
+extern const char unitOrgChaoSp8Text[16];
+extern const char unitOrgKosmSp1Text[16];
+extern const char unitOrgKosmSp2Text[16];
+extern const char unitOrgKosmSp3Text[16];
+extern const char unitOrgKosmSp4Text[16];
+extern const char unitOrgKosmSp5Text[16];
+extern const char unitOrgKosmSp6Text[16];
+extern const char unitOrgKosmSp7Text[16];
+extern const char unitOrgShioSp1Text[16];
+extern const char unitOrgShioSp2Text[16];
+extern const char unitOrgShioSp3Text[16];
+extern const char unitOrgShioSp4Text[16];
+extern const char unitOrgShioSp5Text[16];
+extern const char unitOrgShioSp6Text[16];
+extern const char unitOrgShioSp7Text[16];
+extern const char unitOrgShioSp8Text[16];
+extern const char unitOrgShitSp1Text[16];
+extern const char unitOrgShitSp2Text[16];
+extern const char unitOrgShitSp3Text[16];
+extern const char unitOrgShitSp4Text[16];
+extern const char unitOrgShitSp5Text[16];
+extern const char unitOrgShitSp6Text[16];
+extern const char unitOrgShitSp7Text[16];
+extern const char unitOrgShitSp8Text[16];
+extern const char unitOrgZiggSp1Text[16];
+extern const char unitOrgZiggSp2Text[16];
+extern const char unitOrgZiggSp3Text[16];
+extern const char unitOrgZiggSp4Text[16];
+extern const char unitOrgZiggSp5Text[16];
+extern const char unitOrgZiggSp6Text[16];
+extern const char unitOrgZiggSp7Text[16];
+extern const char unitOrgMomoSp1Text[16];
+extern const char unitOrgMomoSp2Text[16];
+extern const char unitOrgMomoSp3Text[16];
+extern const char unitOrgMomoSp4Text[16];
+extern const char unitOrgMomoSp5Text[16];
+extern const char unitOrgMomoSp6Text[16];
+extern const char unitOrgMomoSp7Text[16];
+extern const char unitOrgMomoSp8Text[16];
+extern const char unitOrgJrSp1Text[8];
+extern const char unitOrgJrSp2Text[8];
+extern const char unitOrgJrSp3Text[8];
+extern const char unitOrgJrSp4Text[8];
+extern const char unitOrgJrSp5Text[8];
+extern const char unitOrgJrSp6Text[8];
+extern const char unitOrgJrSp7Text[8];
+extern const char unitOrgJrSp8Text[8];
+extern const char unitOrgKosmWp1Text[16];
+extern const char unitOrgKosmWp2Text[16];
+extern const char unitOrgKosmWp3Text[16];
+extern const char unitOrgKosmWp4Text[16];
+extern const char unitOrgKosmWp5Text[16];
+extern const char unitOrgKosmWp6Text[16];
+extern const char unitOrgZiggWp1Text[16];
+extern const char unitOrgZiggWp2Text[16];
+extern const char unitOrgZiggWp3Text[16];
+extern const char unitOrgZiggWp4Text[16];
+extern const char unitOrgSut0Text[8];
+extern const char unitOrgAx0Text[8];
+extern const char unitOrgBd0Text[8];
+extern const char unitOrgBd1Text[8];
+extern const char unitOrgBdf0Text[8];
+extern const char unitOrgHg0Text[8];
+extern const char unitOrgHg1Text[8];
+extern const char unitOrgHmr0Text[8];
+extern const char unitOrgHmr1Text[8];
+extern const char unitOrgHmr2Text[8];
+extern const char unitOrgMg0Text[8];
+extern const char unitOrgMg1Text[8];
+extern const char unitOrgRf0Text[8];
+extern const char unitOrgRf1Text[8];
+extern const char unitOrgRf2Text[8];
+extern const char unitOrgBam0Text[8];
+extern const char unitOrgBs0Text[8];
+extern const char unitOrgLsr0Text[8];
+extern const char unitOrgPbk0Text[8];
+extern const char unitOrgFl0Text[8];
+extern const char unitOrgGnd0Text[8];
+extern const char unitOrgGlg0Text[8];
+extern const char unitOrgHb0Text[8];
+extern const char unitOrgMsp0Text[8];
+extern const char unitOrgMsp2Text[8];
+extern const char unitOrgBl0Text[8];
+extern const char unitOrgCb0Text[8];
+extern const char unitOrgEac0Text[8];
+extern const char unitOrgBp0Text[8];
+extern const char unitOrgLgc0Text[8];
+extern const char unitOrgAmp2Text[8];
+extern const char unitOrgShb0Text[8];
+extern const char unitOrgFsd0Text[8];
+extern const char unitOrgVsd0Text[8];
+extern const char unitOrgBbc0Text[8];
+extern const char unitOrgEad0Text[8];
+extern const char unitOrgEcm1Text[8];
+extern const char unitOrgEcm2Text[8];
+extern const char unitOrgSmp1Text[8];
+extern const char unitOrgWir0Text[8];
+extern const char unitOrgSol0Text[8];
+extern const char unitOrgDef0Text[8];
 
 #include "data_unit_org_get_data.inc"
 
@@ -1536,7 +2876,7 @@ void dataVPadModeSet(int mode)
 
 #define VIRTUAL_PAD_BIT_COUNT 14
 
-extern unsigned short padConvTbl[VIRTUAL_PAD_BIT_COUNT];
+static unsigned short padConvTbl[14];
 void dataVPadSet(int virtualPad)
 {
     unsigned short result = 0;
@@ -1587,20 +2927,833 @@ int dataPadRead(int padNo)
 
 
 
-char D_00A44880[24] = "data\\yamamoto\\mot\\";
+char unitOrgDataYamamotoMotText[24] = "data\\yamamoto\\mot\\";
 
-char D_00A44898[8] = ".bin";
+char unitOrgBinText[8] = ".bin";
 
-char D_00A448A0[24] = "data\\yamamoto\\map\\";
+char unitOrgDataYamamotoMapText[24] = "data\\yamamoto\\map\\";
 
-char D_00A448B8[8] = "map";
+char unitOrgMapText[8] = "map";
 
-char D_00A448C0[24] = "data\\yamamoto\\think\\";
+char unitOrgDataYamamotoThinkText[24] = "data\\yamamoto\\think\\";
 
-char D_00A448D8[8] = "think";
+char unitOrgThinkText[8] = "think";
 
-char D_00A448E0[32] = "data\\yamamoto\\stat\\cur.xtx";
+char unitOrgDataYamamotoStatCurXtxText[32] = "data\\yamamoto\\stat\\cur.xtx";
 
-char D_00A44900[32] = "data\\yamamoto\\stat\\manu.xtx";
+char unitOrgDataYamamotoStatManuXtxText[32] = "data\\yamamoto\\stat\\manu.xtx";
 
-char D_00A44920[32] = "data\\yamamoto\\stat\\stat.xtx";
+char unitOrgDataYamamotoStatStatXtxText[32] = "data\\yamamoto\\stat\\stat.xtx";
+
+extern const char unitOrgV6Text[8];
+extern const char unitOrgV3Text[8];
+extern const char unitOrgA1Text[8];
+extern const char unitOrgV4Text[8];
+extern const char unitOrgV1Text[8];
+extern const char unitOrgV5Text[8];
+extern const char unitOrgA3Text[8];
+extern const char unitOrgA5Text[8];
+extern const char unitOrgUkText[8];
+extern const char unitOrgA2Text[8];
+extern const char unitOrgA4Text[8];
+extern const char unitOrgA6Text[8];
+extern const char unitOrgV2Text[8];
+extern const char unitOrgDText[8];
+extern const char unitOrgLText[8];
+extern const char unitOrgRText[8];
+extern const char unitOrgDataYamamotoPcText[24];
+extern const char unitOrgChaosText[];
+extern const char unitOrgKosmosText[];
+extern const char unitOrgShionText[];
+extern const char unitOrgZiggyText[];
+extern const char unitOrgVirgilText[];
+extern const char unitOrgSkjJrText[];
+extern const char unitOrgDataYamamotoWpnText[24];
+extern const char unitOrgChoWingText[];
+extern const char unitOrgKosHw01Text[];
+extern const char unitOrgKosHw02Text[];
+extern const char unitOrgKosHw03Text[];
+extern const char unitOrgKosHw04Text[];
+extern const char unitOrgKosHw05Text[];
+extern const char unitOrgKosHw06Text[];
+extern const char unitOrgKosBw01Text[];
+extern const char unitOrgKosBw02Text[];
+extern const char unitOrgKosBw03Text[];
+extern const char unitOrgKosBw04Text[];
+extern const char unitOrgMmoRd01Text[];
+extern const char unitOrgMmoRd02Text[];
+extern const char unitOrgMmoRd03Text[];
+extern const char unitOrgMmoRd04Text[];
+extern const char unitOrgMmoRd05Text[];
+extern const char unitOrgMmoRd06Text[];
+extern const char unitOrgMmoRd07Text[];
+extern const char unitOrgMmoRd08Text[];
+extern const char unitOrgMmoRd09Text[];
+extern const char unitOrgMmoRd13Text[];
+extern const char unitOrgMmoRd14Text[];
+extern const char unitOrgMmoRd15Text[];
+extern const char unitOrgMmoRd16Text[];
+extern const char unitOrgMmoRd17Text[];
+extern const char unitOrgZigSw01Text[];
+extern const char unitOrgZigBw01Text[];
+extern const char unitOrgZigBw02Text[];
+extern const char unitOrgJrGun01Text[];
+extern const char unitOrgJrGun02Text[];
+extern const char unitOrgJrGun03Text[];
+extern const char unitOrgJrGun04Text[];
+extern const char unitOrgJrGun05Text[];
+extern const char unitOrgJrGun06Text[];
+extern const char unitOrgJrGun07Text[];
+extern const char unitOrgJrGun08Text[];
+extern const char unitOrgSonMboxText[];
+
+static char mdlFileName[256] = "";
+
+static char mdlFileName2[256] = "";
+
+static char motFileName[256] = "";
+
+
+static const char *agwsName[13] = { unitOrgV1Text, unitOrgV2Text, unitOrgV3Text, unitOrgV4Text, unitOrgV5Text, unitOrgV6Text, unitOrgA1Text, unitOrgA2Text, unitOrgA3Text, unitOrgA4Text, unitOrgA5Text, unitOrgA6Text, unitOrgUkText };
+
+static const char *agwsLRName[3] = { unitOrgRText, unitOrgLText, unitOrgDText };
+
+static int bakpTbl[16] = {
+    0, 0x2ed, 0, 0,
+    0x305, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0
+};
+
+int mdlAdrTbl[7] = { 16777216, 18350080, 19922944, 21495808, 22544384, 23592960, 24641536 };
+
+void *motAdrTbl[7] = {
+    (void *)0x0179E000, (void *)0x017DE000, (void *)0x0181E000, (void *)0x0185E000,
+    (void *)0x01890000, (void *)0x018C2000, (void *)0x018F4000
+};
+
+static const char *pcNameBase = unitOrgDataYamamotoPcText;
+
+static PackMdlEntry pcPack_0[15] = { { .charaId = 1, .mdlName = unitOrgChaosText }, { .charaId = 2, .mdlName = unitOrgKosmosText }, { .charaId = 3, .mdlName = unitOrgShionText }, { .charaId = 5, .mdlName = unitOrgZiggyText }, { .charaId = 6, .mdlName = unitOrgMomoText }, { .charaId = 7, .mdlName = unitOrgJrText }, { .charaId = 10, .mdlName = unitOrgVirgilText }, { .charaId = 187, .mdlName = unitOrgSkjJrText }, { .charaId = 188, .mdlName = unitOrgSkjJrText }, { .charaId = 189, .mdlName = unitOrgSkjMomo1Text }, { .charaId = 190, .mdlName = unitOrgSkjShion1Text }, { .charaId = 191, .mdlName = unitOrgSkjShion2Text }, { .charaId = 192, .mdlName = unitOrgSkjShion3Text }, { .charaId = 194, .mdlName = unitOrgSkjKosmos1Text }, { .charaId = 0, .mdlName = 0 } };
+
+static const char *wpnNameBase = unitOrgDataYamamotoWpnText;
+
+static PcPackEntry pcPack_1[38] = { { .weaponId = 11, .name = unitOrgChoWingText }, { .weaponId = 12, .name = unitOrgKosHw01Text }, { .weaponId = 13, .name = unitOrgKosHw02Text }, { .weaponId = 14, .name = unitOrgKosHw03Text }, { .weaponId = 15, .name = unitOrgKosHw04Text }, { .weaponId = 16, .name = unitOrgKosHw05Text }, { .weaponId = 17, .name = unitOrgKosHw06Text }, { .weaponId = 18, .name = unitOrgKosBw01Text }, { .weaponId = 19, .name = unitOrgKosBw02Text }, { .weaponId = 20, .name = unitOrgKosBw03Text }, { .weaponId = 21, .name = unitOrgKosBw04Text }, { .weaponId = 24, .name = unitOrgMmoRd01Text }, { .weaponId = 25, .name = unitOrgMmoRd02Text }, { .weaponId = 26, .name = unitOrgMmoRd03Text }, { .weaponId = 27, .name = unitOrgMmoRd04Text }, { .weaponId = 28, .name = unitOrgMmoRd05Text }, { .weaponId = 29, .name = unitOrgMmoRd06Text }, { .weaponId = 30, .name = unitOrgMmoRd07Text }, { .weaponId = 31, .name = unitOrgMmoRd08Text }, { .weaponId = 32, .name = unitOrgMmoRd09Text }, { .weaponId = 36, .name = unitOrgMmoRd13Text }, { .weaponId = 37, .name = unitOrgMmoRd14Text }, { .weaponId = 38, .name = unitOrgMmoRd15Text }, { .weaponId = 39, .name = unitOrgMmoRd16Text }, { .weaponId = 40, .name = unitOrgMmoRd17Text }, { .weaponId = 41, .name = unitOrgZigSw01Text }, { .weaponId = 42, .name = unitOrgZigBw01Text }, { .weaponId = 43, .name = unitOrgZigBw02Text }, { .weaponId = 46, .name = unitOrgJrGun01Text }, { .weaponId = 47, .name = unitOrgJrGun02Text }, { .weaponId = 48, .name = unitOrgJrGun03Text }, { .weaponId = 49, .name = unitOrgJrGun04Text }, { .weaponId = 50, .name = unitOrgJrGun05Text }, { .weaponId = 51, .name = unitOrgJrGun06Text }, { .weaponId = 52, .name = unitOrgJrGun07Text }, { .weaponId = 53, .name = unitOrgJrGun08Text }, { .weaponId = 69, .name = unitOrgSonMboxText }, { .weaponId = 0, .name = 0 } };
+
+WepSpEntry wepSpTbl[16] = { { .tecId = 48, .weaponId = 11, .unk8 = 27 }, { .tecId = 53, .weaponId = 13, .unk8 = 0 }, { .tecId = 54, .weaponId = 14, .unk8 = 0 }, { .tecId = 55, .weaponId = 15, .unk8 = 0 }, { .tecId = 58, .weaponId = 16, .unk8 = 0 }, { .tecId = 59, .weaponId = 17, .unk8 = 32 }, { .tecId = 83, .weaponId = 36, .unk8 = 32 }, { .tecId = 84, .weaponId = 37, .unk8 = 32 }, { .tecId = 86, .weaponId = 38, .unk8 = 32 }, { .tecId = 87, .weaponId = 37, .unk8 = 32 }, { .tecId = 88, .weaponId = 39, .unk8 = 32 }, { .tecId = 90, .weaponId = 40, .unk8 = 32 }, { .tecId = 92, .weaponId = 51, .unk8 = 32 }, { .tecId = 95, .weaponId = 51, .unk8 = 32 }, { .tecId = 97, .weaponId = 52, .unk8 = 32 }, { .tecId = 0, .weaponId = 0, .unk8 = 0 } };
+
+static unsigned short padConvTbl[14] = { 4096, 16384, 32768, 8192, 16, 64, 128, 32, 4, 1, 8, 2, 2048, 256 };
+
+const char unitOrgDef0Text[8] = "def0";
+
+const char unitOrgSol0Text[8] = "sol0";
+
+const char unitOrgWir0Text[8] = "wir0";
+
+const char unitOrgSmp1Text[8] = "smp1";
+
+const char unitOrgEcm2Text[8] = "ecm2";
+
+const char unitOrgEcm1Text[8] = "ecm1";
+
+const char unitOrgEad0Text[8] = "ead0";
+
+const char unitOrgBbc0Text[8] = "bbc0";
+
+const char unitOrgVsd0Text[8] = "vsd0";
+
+const char unitOrgFsd0Text[8] = "fsd0";
+
+const char unitOrgShb0Text[8] = "shb0";
+
+const char unitOrgAmp2Text[8] = "amp2";
+
+const char unitOrgLgc0Text[8] = "lgc0";
+
+const char unitOrgBp0Text[8] = "bp0";
+
+const char unitOrgEac0Text[8] = "eac0";
+
+const char unitOrgCb0Text[8] = "cb0";
+
+const char unitOrgBl0Text[8] = "bl0";
+
+const char unitOrgMsp2Text[8] = "msp2";
+
+const char unitOrgMsp0Text[8] = "msp0";
+
+const char unitOrgHb0Text[8] = "hb0";
+
+const char unitOrgGlg0Text[8] = "glg0";
+
+const char unitOrgGnd0Text[8] = "gnd0";
+
+const char unitOrgFl0Text[8] = "fl0";
+
+const char unitOrgPbk0Text[8] = "pbk0";
+
+const char unitOrgLsr0Text[8] = "lsr0";
+
+const char unitOrgBs0Text[8] = "bs0";
+
+const char unitOrgBam0Text[8] = "bam0";
+
+const char unitOrgRf2Text[8] = "rf2";
+
+const char unitOrgRf1Text[8] = "rf1";
+
+const char unitOrgRf0Text[8] = "rf0";
+
+const char unitOrgMg1Text[8] = "mg1";
+
+const char unitOrgMg0Text[8] = "mg0";
+
+const char unitOrgHmr2Text[8] = "hmr2";
+
+const char unitOrgHmr1Text[8] = "hmr1";
+
+const char unitOrgHmr0Text[8] = "hmr0";
+
+const char unitOrgHg1Text[8] = "hg1";
+
+const char unitOrgHg0Text[8] = "hg0";
+
+const char unitOrgBdf0Text[8] = "bdf0";
+
+const char unitOrgBd1Text[8] = "bd1";
+
+const char unitOrgBd0Text[8] = "bd0";
+
+const char unitOrgAx0Text[8] = "ax0";
+
+const char unitOrgSut0Text[8] = "sut0";
+
+const char unitOrgZiggWp4Text[16] = "zigg_wp4";
+
+const char unitOrgZiggWp3Text[16] = "zigg_wp3";
+
+const char unitOrgZiggWp2Text[16] = "zigg_wp2";
+
+const char unitOrgZiggWp1Text[16] = "zigg_wp1";
+
+const char unitOrgKosmWp6Text[16] = "kosm_wp6";
+
+const char unitOrgKosmWp5Text[16] = "kosm_wp5";
+
+const char unitOrgKosmWp4Text[16] = "kosm_wp4";
+
+const char unitOrgKosmWp3Text[16] = "kosm_wp3";
+
+const char unitOrgKosmWp2Text[16] = "kosm_wp2";
+
+const char unitOrgKosmWp1Text[16] = "kosm_wp1";
+
+const char unitOrgJrSp8Text[8] = "jr_sp8";
+
+const char unitOrgJrSp7Text[8] = "jr_sp7";
+
+const char unitOrgJrSp6Text[8] = "jr_sp6";
+
+const char unitOrgJrSp5Text[8] = "jr_sp5";
+
+const char unitOrgJrSp4Text[8] = "jr_sp4";
+
+const char unitOrgJrSp3Text[8] = "jr_sp3";
+
+const char unitOrgJrSp2Text[8] = "jr_sp2";
+
+const char unitOrgJrSp1Text[8] = "jr_sp1";
+
+const char unitOrgMomoSp8Text[16] = "momo_sp8";
+
+const char unitOrgMomoSp7Text[16] = "momo_sp7";
+
+const char unitOrgMomoSp6Text[16] = "momo_sp6";
+
+const char unitOrgMomoSp5Text[16] = "momo_sp5";
+
+const char unitOrgMomoSp4Text[16] = "momo_sp4";
+
+const char unitOrgMomoSp3Text[16] = "momo_sp3";
+
+const char unitOrgMomoSp2Text[16] = "momo_sp2";
+
+const char unitOrgMomoSp1Text[16] = "momo_sp1";
+
+const char unitOrgZiggSp7Text[16] = "zigg_sp7";
+
+const char unitOrgZiggSp6Text[16] = "zigg_sp6";
+
+const char unitOrgZiggSp5Text[16] = "zigg_sp5";
+
+const char unitOrgZiggSp4Text[16] = "zigg_sp4";
+
+const char unitOrgZiggSp3Text[16] = "zigg_sp3";
+
+const char unitOrgZiggSp2Text[16] = "zigg_sp2";
+
+const char unitOrgZiggSp1Text[16] = "zigg_sp1";
+
+const char unitOrgShitSp8Text[16] = "shit_sp8";
+
+const char unitOrgShitSp7Text[16] = "shit_sp7";
+
+const char unitOrgShitSp6Text[16] = "shit_sp6";
+
+const char unitOrgShitSp5Text[16] = "shit_sp5";
+
+const char unitOrgShitSp4Text[16] = "shit_sp4";
+
+const char unitOrgShitSp3Text[16] = "shit_sp3";
+
+const char unitOrgShitSp2Text[16] = "shit_sp2";
+
+const char unitOrgShitSp1Text[16] = "shit_sp1";
+
+const char unitOrgShioSp8Text[16] = "shio_sp8";
+
+const char unitOrgShioSp7Text[16] = "shio_sp7";
+
+const char unitOrgShioSp6Text[16] = "shio_sp6";
+
+const char unitOrgShioSp5Text[16] = "shio_sp5";
+
+const char unitOrgShioSp4Text[16] = "shio_sp4";
+
+const char unitOrgShioSp3Text[16] = "shio_sp3";
+
+const char unitOrgShioSp2Text[16] = "shio_sp2";
+
+const char unitOrgShioSp1Text[16] = "shio_sp1";
+
+const char unitOrgKosmSp7Text[16] = "kosm_sp7";
+
+const char unitOrgKosmSp6Text[16] = "kosm_sp6";
+
+const char unitOrgKosmSp5Text[16] = "kosm_sp5";
+
+const char unitOrgKosmSp4Text[16] = "kosm_sp4";
+
+const char unitOrgKosmSp3Text[16] = "kosm_sp3";
+
+const char unitOrgKosmSp2Text[16] = "kosm_sp2";
+
+const char unitOrgKosmSp1Text[16] = "kosm_sp1";
+
+const char unitOrgChaoSp8Text[16] = "chao_sp8";
+
+const char unitOrgChaoSp7Text[16] = "chao_sp7";
+
+const char unitOrgChaoSp6Text[16] = "chao_sp6";
+
+const char unitOrgChaoSp5Text[16] = "chao_sp5";
+
+const char unitOrgChaoSp4Text[16] = "chao_sp4";
+
+const char unitOrgChaoSp3Text[16] = "chao_sp3";
+
+const char unitOrgChaoSp2Text[16] = "chao_sp2";
+
+const char unitOrgChaoSp1Text[16] = "chao_sp1";
+
+const char unitOrgSkjKosmos1Text[16] = "skj_kosmos1";
+
+const char unitOrgSkjShion4Text[16] = "skj_shion4";
+
+const char unitOrgSkjShion3Text[16] = "skj_shion3";
+
+const char unitOrgSkjShion2Text[16] = "skj_shion2";
+
+const char unitOrgSkjShion1Text[16] = "skj_shion1";
+
+const char unitOrgSkjMomo1Text[16] = "skj_momo1";
+
+const char unitOrgSkjJr2Text[8] = "skj_jr2";
+
+const char unitOrgSkjJr1Text[8] = "skj_jr1";
+
+const char unitOrgBoss033Text[16] = "boss_033";
+
+const char unitOrgBoss032Text[16] = "boss_032";
+
+const char unitOrgBoss031Text[16] = "boss_031";
+
+const char unitOrgBoss030Text[16] = "boss_030";
+
+const char unitOrgBoss029Text[16] = "boss_029";
+
+const char unitOrgBoss028Text[16] = "boss_028";
+
+const char unitOrgBoss027Text[16] = "boss_027";
+
+const char unitOrgBoss026Text[16] = "boss_026";
+
+const char unitOrgBoss025Text[16] = "boss_025";
+
+const char unitOrgBoss024Text[16] = "boss_024";
+
+const char unitOrgBoss023Text[16] = "boss_023";
+
+const char unitOrgBoss022Text[16] = "boss_022";
+
+const char unitOrgBoss021Text[16] = "boss_021";
+
+const char unitOrgBoss020Text[16] = "boss_020";
+
+const char unitOrgBoss019Text[16] = "boss_019";
+
+const char unitOrgBoss018Text[16] = "boss_018";
+
+const char unitOrgBoss017Text[16] = "boss_017";
+
+const char unitOrgBoss016Text[16] = "boss_016";
+
+const char unitOrgBoss015Text[16] = "boss_015";
+
+const char unitOrgBoss014Text[16] = "boss_014";
+
+const char unitOrgBoss013Text[16] = "boss_013";
+
+const char unitOrgBoss012Text[16] = "boss_012";
+
+const char unitOrgBoss011Text[16] = "boss_011";
+
+const char unitOrgBoss010Text[16] = "boss_010";
+
+const char unitOrgBoss009Text[16] = "boss_009";
+
+const char unitOrgBoss008Text[16] = "boss_008";
+
+const char unitOrgBoss007Text[16] = "boss_007";
+
+const char unitOrgBoss006Text[16] = "boss_006";
+
+const char unitOrgBoss005Text[16] = "boss_005";
+
+const char unitOrgBoss004Text[16] = "boss_004";
+
+const char unitOrgBoss003Text[16] = "boss_003";
+
+const char unitOrgBoss002Text[16] = "boss_002";
+
+const char unitOrgBoss001Text[16] = "boss_001";
+
+const char unitOrgUtso007Text[16] = "utso_007";
+
+const char unitOrgUtso006Text[16] = "utso_006";
+
+const char unitOrgUtso005Text[16] = "utso_005";
+
+const char unitOrgUtso004Text[16] = "utso_004";
+
+const char unitOrgUtso003Text[16] = "utso_003";
+
+const char unitOrgUtso002Text[16] = "utso_002";
+
+const char unitOrgUtso001Text[16] = "utso_001";
+
+const char unitOrgUtro007Text[16] = "utro_007";
+
+const char unitOrgUtro006Text[16] = "utro_006";
+
+const char unitOrgUtro005Text[16] = "utro_005";
+
+const char unitOrgUtro004Text[16] = "utro_004";
+
+const char unitOrgUtro003Text[16] = "utro_003";
+
+const char unitOrgUtro002Text[16] = "utro_002";
+
+const char unitOrgUtro001Text[16] = "utro_001";
+
+const char unitOrgUtre006Text[16] = "utre_006";
+
+const char unitOrgUtre005Text[16] = "utre_005";
+
+const char unitOrgUtre004Text[16] = "utre_004";
+
+const char unitOrgUtre003Text[16] = "utre_003";
+
+const char unitOrgUtre002Text[16] = "utre_002";
+
+const char unitOrgUtre001Text[16] = "utre_001";
+
+const char unitOrgUtma014Text[16] = "utma_014";
+
+const char unitOrgUtma013Text[16] = "utma_013";
+
+const char unitOrgUtma012Text[16] = "utma_012";
+
+const char unitOrgUtma011Text[16] = "utma_011";
+
+const char unitOrgUtma010Text[16] = "utma_010";
+
+const char unitOrgUtma009Text[16] = "utma_009";
+
+const char unitOrgUtma008Text[16] = "utma_008";
+
+const char unitOrgUtma007Text[16] = "utma_007";
+
+const char unitOrgUtma006Text[16] = "utma_006";
+
+const char unitOrgUtma005Text[16] = "utma_005";
+
+const char unitOrgUtma004Text[16] = "utma_004";
+
+const char unitOrgUtma003Text[16] = "utma_003";
+
+const char unitOrgUtma002Text[16] = "utma_002";
+
+const char unitOrgUtma001Text[16] = "utma_001";
+
+const char unitOrgFeso004Text[16] = "feso_004";
+
+const char unitOrgFeso003Text[16] = "feso_003";
+
+const char unitOrgFeso002Text[16] = "feso_002";
+
+const char unitOrgFeso001Text[16] = "feso_001";
+
+const char unitOrgFero001Text[16] = "fero_001";
+
+const char unitOrgFere003Text[16] = "fere_003";
+
+const char unitOrgFere002Text[16] = "fere_002";
+
+const char unitOrgFere001Text[16] = "fere_001";
+
+const char unitOrgFema006Text[16] = "fema_006";
+
+const char unitOrgFema005Text[16] = "fema_005";
+
+const char unitOrgFema004Text[16] = "fema_004";
+
+const char unitOrgFema003Text[16] = "fema_003";
+
+const char unitOrgFema002Text[16] = "fema_002";
+
+const char unitOrgFema001Text[16] = "fema_001";
+
+const char unitOrgGuno114Text[16] = "guno_114";
+
+const char unitOrgGuno025Text[16] = "guno_025";
+
+const char unitOrgGuno024Text[16] = "guno_024";
+
+const char unitOrgGuno023Text[16] = "guno_023";
+
+const char unitOrgGuno022Text[16] = "guno_022";
+
+const char unitOrgGuno021Text[16] = "guno_021";
+
+const char unitOrgGuno020Text[16] = "guno_020";
+
+const char unitOrgGuno019Text[16] = "guno_019";
+
+const char unitOrgGuno018Text[16] = "guno_018";
+
+const char unitOrgGuno017Text[16] = "guno_017";
+
+const char unitOrgGuno016Text[16] = "guno_016";
+
+const char unitOrgGuno015Text[16] = "guno_015";
+
+const char unitOrgGuno014Text[16] = "guno_014";
+
+const char unitOrgGuno013Text[16] = "guno_013";
+
+const char unitOrgGuno012Text[16] = "guno_012";
+
+const char unitOrgGuno011Text[16] = "guno_011";
+
+const char unitOrgGuno010Text[16] = "guno_010";
+
+const char unitOrgGuno009Text[16] = "guno_009";
+
+const char unitOrgGuno008Text[16] = "guno_008";
+
+const char unitOrgGuno007Text[16] = "guno_007";
+
+const char unitOrgGuno006Text[16] = "guno_006";
+
+const char unitOrgGuno005Text[16] = "guno_005";
+
+const char unitOrgGuno004Text[16] = "guno_004";
+
+const char unitOrgGuno003Text[16] = "guno_003";
+
+const char unitOrgGuno002Text[16] = "guno_002";
+
+const char unitOrgGuno001Text[16] = "guno_001";
+
+const char unitOrgSldText[8] = "sld";
+
+const char unitOrgUknText[8] = "ukn";
+
+const char unitOrgAg05Text[8] = "ag05";
+
+const char unitOrgAg04Text[8] = "ag04";
+
+const char unitOrgAg03Text[8] = "ag03";
+
+const char unitOrgAg02Text[8] = "ag02";
+
+const char unitOrgAg01Text[8] = "ag01";
+
+const char unitOrgVx06Text[8] = "vx06";
+
+const char unitOrgVx05Text[8] = "vx05";
+
+const char unitOrgVx04Text[8] = "vx04";
+
+const char unitOrgVx03Text[8] = "vx03";
+
+const char unitOrgVx02Text[8] = "vx02";
+
+const char unitOrgVx01Text[8] = "vx01";
+
+const char unitOrgVirgText[8] = "virg";
+
+const char unitOrgCathText[8] = "cath";
+
+const char unitOrgCeciText[8] = "ceci";
+
+const char unitOrgJrText[8] = "jr";
+
+const char unitOrgMomoText[8] = "momo";
+
+const char unitOrgZiggText[8] = "zigg";
+
+const char unitOrgShitText[8] = "shit";
+
+const char unitOrgShioText[8] = "shio";
+
+const char unitOrgKosmText[8] = "kosm";
+
+const char unitOrgChaoText[8] = "chao";
+
+const char unitOrgUkText[8] = "uk_";
+
+const char unitOrgA6Text[8] = "a6_";
+
+const char unitOrgA5Text[8] = "a5_";
+
+const char unitOrgA4Text[8] = "a4_";
+
+const char unitOrgA3Text[8] = "a3_";
+
+const char unitOrgA2Text[8] = "a2_";
+
+const char unitOrgA1Text[8] = "a1_";
+
+const char unitOrgV6Text[8] = "v6_";
+
+const char unitOrgV5Text[8] = "v5_";
+
+const char unitOrgV4Text[8] = "v4_";
+
+const char unitOrgV3Text[8] = "v3_";
+
+const char unitOrgV2Text[8] = "v2_";
+
+const char unitOrgV1Text[8] = "v1_";
+
+const char unitOrgDText[8] = "d";
+
+const char unitOrgLText[8] = "l";
+
+const char unitOrgRText[8] = "r";
+
+const char unitOrgDataPlChaGetErrText[32] = "** dataPlChaGet: err %d\n";
+
+const char unitOrgDataEtherLearnSetErrText[32] = "** dataEtherLearnSet: err %d\n";
+
+const char unitOrgDataEtherLearnGetErrText[32] = "** dataEtherLearnGet: err %d\n";
+
+const char unitOrgDataSkillLearnSetErrText[32] = "** dataSkillLearnSet: err %d\n";
+
+const char unitOrgDataSkillLearnGetErrText[32] = "** dataSkillLearnGet: err %d\n";
+
+const char unitOrgDataUnitInitSetErrText[32] = "** dataUnitInitSet: err %d\n";
+
+const char unitOrgDataUnitInitSetErrPLText[32] = "** dataUnitInitSet: err PL\n";
+
+const char unitOrgDataUnitInitSetErrENText[32] = "** dataUnitInitSet: err EN\n";
+
+const char unitOrgDataUnitInitSetErrSKJText[32] = "** dataUnitInitSet: err SKJ\n";
+
+const char unitOrgDataTecGetErrText[24] = "** dataTecGet: err %d\n";
+
+const char unitOrgDataWpnGetErrText[24] = "** dataWpnGet: err %d\n";
+
+const char unitOrgDataAttGetErrText[24] = "** dataAttGet: err %d\n";
+
+const char unitOrgDataEthGetErrText[24] = "** dataEthGet: err %d\n";
+
+const char unitOrgDataItmGetErrText[24] = "** dataItmGet: err %d\n";
+
+const char unitOrgDataAccGetErrText[24] = "** dataAccGet: err %d\n";
+
+const char unitOrgDataFrmGetErrText[24] = "** dataFrmGet: err %d\n";
+
+const char unitOrgDataEngGetErrText[24] = "** dataEngGet: err %d\n";
+
+const char unitOrgDataSklGetErrText[24] = "** dataSklGet: err %d\n";
+
+const char unitOrgDataGainGetErrText[24] = "** dataGainGet: err %d\n";
+
+const char unitOrgReadErrText[24] = "** read: err %s\n";
+
+const char unitOrgReadText[24] = "** read: %s / %d\n";
+
+const char unitOrgNBreadErrText2[24] = "** NBread: err %s\n";
+
+const char unitOrgNBreadText[32] = "** NBread: (%d) %s = %X\n";
+
+const char unitOrgDataFileInfoInitChgErrText[32] = "** dataFileInfoInitChg: err\n";
+
+const char unitOrgSrcText[24] = "** src %X,%X,%X %d\n";
+
+const char unitOrgDstText[24] = "** dst %X,%X,%X\n";
+
+const char unitOrgEnemyMdlFoundText[24] = "** enemy Mdl found %d\n";
+
+const char unitOrgDataLeaderReloadText[24] = "dataLeaderReload\n";
+
+const char unitOrgDataYamamotoPcText[24] = "data\\yamamoto\\pc\\";
+
+const char unitOrgSkjJrText[8] = "skj_jr";
+
+const char unitOrgVirgilText[8] = "virgil";
+
+const char unitOrgZiggyText[8] = "ziggy";
+
+const char unitOrgShionText[8] = "shion";
+
+const char unitOrgKosmosText[8] = "kosmos";
+
+const char unitOrgChaosText[8] = "chaos";
+
+const char unitOrgShionmText[8] = "shionm";
+
+const char unitOrgMomomText[8] = "momom";
+
+const char unitOrgChaosmText[8] = "chaosm";
+
+const char unitOrgJrmText[8] = "jrm";
+
+const char unitOrgKosmos1Text[8] = "kosmos1";
+
+const char unitOrgMomoaText[8] = "momoa";
+
+const char unitOrgMomobText[8] = "momob";
+
+const char unitOrgDataYamamotoWpnText[24] = "data\\yamamoto\\wpn\\";
+
+const char unitOrgSonMboxText[16] = "son_mbox";
+
+const char unitOrgJrGun08Text[16] = "jr_gun08";
+
+const char unitOrgJrGun07Text[16] = "jr_gun07";
+
+const char unitOrgJrGun06Text[16] = "jr_gun06";
+
+const char unitOrgJrGun05Text[16] = "jr_gun05";
+
+const char unitOrgJrGun04Text[16] = "jr_gun04";
+
+const char unitOrgJrGun03Text[16] = "jr_gun03";
+
+const char unitOrgJrGun02Text[16] = "jr_gun02";
+
+const char unitOrgJrGun01Text[16] = "jr_gun01";
+
+const char unitOrgZigBw02Text[16] = "zig_bw02";
+
+const char unitOrgZigBw01Text[16] = "zig_bw01";
+
+const char unitOrgZigSw01Text[16] = "zig_sw01";
+
+const char unitOrgMmoRd17Text[16] = "mmo_rd17";
+
+const char unitOrgMmoRd16Text[16] = "mmo_rd16";
+
+const char unitOrgMmoRd15Text[16] = "mmo_rd15";
+
+const char unitOrgMmoRd14Text[16] = "mmo_rd14";
+
+const char unitOrgMmoRd13Text[16] = "mmo_rd13";
+
+const char unitOrgMmoRd09Text[16] = "mmo_rd09";
+
+const char unitOrgMmoRd08Text[16] = "mmo_rd08";
+
+const char unitOrgMmoRd07Text[16] = "mmo_rd07";
+
+const char unitOrgMmoRd06Text[16] = "mmo_rd06";
+
+const char unitOrgMmoRd05Text[16] = "mmo_rd05";
+
+const char unitOrgMmoRd04Text[16] = "mmo_rd04";
+
+const char unitOrgMmoRd03Text[16] = "mmo_rd03";
+
+const char unitOrgMmoRd02Text[16] = "mmo_rd02";
+
+const char unitOrgMmoRd01Text[16] = "mmo_rd01";
+
+const char unitOrgKosBw04Text[16] = "kos_bw04";
+
+const char unitOrgKosBw03Text[16] = "kos_bw03";
+
+const char unitOrgKosBw02Text[16] = "kos_bw02";
+
+const char unitOrgKosBw01Text[16] = "kos_bw01";
+
+const char unitOrgKosHw06Text[16] = "kos_hw06";
+
+const char unitOrgKosHw05Text[16] = "kos_hw05";
+
+const char unitOrgKosHw04Text[16] = "kos_hw04";
+
+const char unitOrgKosHw03Text[16] = "kos_hw03";
+
+const char unitOrgKosHw02Text[16] = "kos_hw02";
+
+const char unitOrgKosHw01Text[16] = "kos_hw01";
+
+const char unitOrgChoWingText[16] = "cho_wing";
+
+const char unitOrgDataUnitFileLoadMdlLeaderText[40] = "** dataUnitFileLoadMdl: Leader %d\n";
+
+const char unitOrgLexText[8] = ".lex";
+
+const char unitOrgXtxText[8] = ".xtx";
+
+const char unitOrgJntText[8] = ".jnt";
+
+const char unitOrgDataUnitFileLoadMdlHitText[40] = "** dataUnitFileLoadMdl: hit %d / %X\n";
+
+const char unitOrgMDLReadSizeText[24] = "** MDL read Size = %d\n";
+
+const char unitOrgDataUnitFileLoadFaceMdlHitText[48] = "** dataUnitFileLoadFaceMdl: hit %d / %X\n";
+
+const char unitOrgFPKDataNothingText[24] = "** FPK data nothing!\n";
+
+const char unitOrgDataUnitFileLoadMotHitText[40] = "** dataUnitFileLoadMot: hit %d / %X\n";
+
+const char unitOrgMOTReadSizeText[32] = "** MOT read Size = %d %d\n";
+
+const char unitOrgDataUnitFileLoadWepHitText[40] = "** dataUnitFileLoadWep: hit %d / %X\n";
+
+const char unitOrgWEPReadSizeText[24] = "** WEP read Size = %d\n";
+
+const char unitOrgWpnActotText[24] = "** wpnActot=%X %d\n";
+
+const char unitOrgDataUnitFileLoad2Text[32] = "** dataUnitFileLoad2 %X\n";
+
+const char unitOrgDataUnitFileLoad2SubMdlPackText[40] = "** dataUnitFileLoad2Sub: Mdl Pack\n";
+
+const char unitOrgDataUnitFileLoad2SubWpnPackText[40] = "** dataUnitFileLoad2Sub: Wpn Pack\n";
+
+const char unitOrgMTDIdFrameText[32] = "** MTD id=%d frame=%d **\n";

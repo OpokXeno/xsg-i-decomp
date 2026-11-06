@@ -6,8 +6,9 @@
 #include "ov01/m_ef.h"
 #include "shared.h"
 #include "main/m_math.h"
-
-typedef unsigned int DoraQuadword __attribute__((mode(TI)));
+#include "vu0_macro.h"
+#include "main/m_ef_obj.h"
+#include "main/xgl_packet.h"
 
 /* Trail history length: trail_active +0xa0..+0xe4, trail_segment
  * +0xe4..+0x128 (0x44 bytes = 34 shorts each, the memset sizes in
@@ -27,12 +28,12 @@ typedef struct DoraHermiteState {
     unsigned char unmodeled_2c[0x44];
     short frame;
     unsigned char unmodeled_72[0x0e];
-    DoraQuadword weapon_coord;
+    Quadword weapon_coord;
     Vector4 actor_coord;
     short trail_active[DORA_TRAIL_SLOTS];
     short trail_segment[DORA_TRAIL_SLOTS];
     unsigned char unmodeled_128[8];
-    DoraQuadword trail[DORA_TRAIL_SLOTS];
+    Vector4 trail[DORA_TRAIL_SLOTS];
     short segment;
     short segment_frame;
     unsigned char unmodeled_354[0x0c];
@@ -40,10 +41,13 @@ typedef struct DoraHermiteState {
     float path_progress[4];
     HermiteVector tangent_start;
     HermiteVector tangent_end;
-    unsigned char mg_packet;
+    MEfGsPacket mg_packet;
 } DoraHermiteState;
 
-typedef void (*DoraCallback)(void *self, void *work);
+struct DoraState;
+
+typedef void (*DoraCallback)(void *self, DoraHermiteState *work);
+typedef void (*DoraPostCallback)(void *self, struct DoraState *work);
 
 /* The pooled effect object, offsets as MEfCreate_DORA proves them: the
  * callback stores `sw $3,0x4($17)` (process), `sw $4,0xC($17)` (draw_packet)
@@ -56,7 +60,7 @@ typedef struct DoraObject {
     DoraCallback process;      /* +0x04 */
     unsigned int : 32;
     DoraCallback draw_packet;  /* +0x0c */
-    DoraCallback post_process; /* +0x10 */
+    DoraPostCallback post_process; /* +0x10 */
     unsigned int : 32;
     unsigned int : 32;
     unsigned int : 32;
@@ -68,9 +72,9 @@ extern void MGsGPInit(void *packet, void *address, int size);
 
 static void makePath(DoraHermiteState *state);
 static void makeHermiteParams(int segment, DoraHermiteState *state);
-static void fnDORA_PR000(void *self, void *work);
-static void fnDORA_DP000(void *self, void *work);
-static void fnDORA_PO000(void *self, void *work);
+static void fnDORA_PR000(void *self, DoraHermiteState *work);
+static void fnDORA_DP000(void *self, DoraHermiteState *work);
+static void fnDORA_PO000(void *self, struct DoraState *work);
 
 int MEfCreate_DORA(MEfObjRecord *self)
 {
@@ -102,15 +106,14 @@ int MEfCreate_DORA(MEfObjRecord *self)
 
 /* Radial and forward distance of each Hermite control point from the
  * actor-relative origin (rodata owned by this TU's data file). */
-extern float disttbl_0_00A51820[4];
-extern float rtbl_1_00A51830[4];
+static const float disttbl_0_00A51820[4];
+static const float rtbl_1_00A51830[4];
 
 extern void MMathTranslateMatrix(Matrix4 *destination, Matrix4 *matrix, Vector4 *translation);
 extern void MMathRotateMatrixX(Matrix4 *destination, Matrix4 *matrix, float angle);
 extern float MMathMakeRandom2PI(void);
 extern float MMathMakeRandom(void);
 extern unsigned short xglSRand(void);
-extern void *MMathApplyMatrix(void *destination, const void *matrix, const void *point);
 
 /* Lay out the four control points on a widening spiral in front of the
  * source actor, turning either way at random. */
@@ -145,7 +148,7 @@ static void makePath(DoraHermiteState *state)
             : "=f"(cosine)
             : "f"(angle)
             : "$8", "memory");
-        offset.x = cosine * rtbl_1_00A51830[point] * radius;
+        offset.x = cosine * *(rtbl_1_00A51830 + point) * radius;
         __asm__ __volatile__(
             "mfc1 $8, %1\n"
             "qmtc2 $8, $vf4\n"
@@ -155,8 +158,8 @@ static void makePath(DoraHermiteState *state)
             : "=f"(sine)
             : "f"(angle)
             : "$8", "memory");
-        offset.y = sine * rtbl_1_00A51830[point] * radius;
-        offset.z = disttbl_0_00A51820[point];
+        offset.y = sine * *(rtbl_1_00A51830 + point) * radius;
+        offset.z = *(disttbl_0_00A51820 + point);
         MMathApplyMatrix(&state->control_points[point], &matrix, &offset);
         state->path_progress[point] = angle;
         angle += angle_step;
@@ -200,24 +203,23 @@ static void makeHermiteParams(int segment, DoraHermiteState *state)
                         point_previous, point_start, point_end, point_next);
 }
 
-static void makeHermiteCoord(float *destination, void *effect)
+static void makeHermiteCoord(float *destination, DoraHermiteState *state)
 {
-    unsigned char *base = (unsigned char *)effect;
-    short segment = *(short *)(base + 848);
-    short frame = *(short *)(base + 850);
+    short segment = state->segment;
+    short frame = state->segment_frame;
 
     MMathCalcHermite(destination, (float)frame * 0.200000003f,
-                     (HermiteVector *)(base + 944),
-                     (HermiteVector *)(base + 960),
-                     (HermiteVector *)(base + 864 + (segment << 4)),
-                     (HermiteVector *)(base + 880 + (segment << 4)));
+                     &state->tangent_start,
+                     &state->tangent_end,
+                     &state->control_points[segment],
+                     &state->control_points[segment + 1]);
 }
 
 /* Shift the trail history back one slot, then while the effect is still
  * emitting append the current Hermite position and advance the segment. */
-static void fnDORA_PR000(void *self, void *work)
+static void fnDORA_PR000(void *self, DoraHermiteState *work)
 {
-    DoraHermiteState *state = (DoraHermiteState *)work;
+    DoraHermiteState *state = work;
     int slot;
 
     /* Shift slots 0..32 into 1..33 (the last of DORA_TRAIL_SLOTS); written
@@ -239,7 +241,7 @@ static void fnDORA_PR000(void *self, void *work)
     if (state->frame < DORA_TRAIL_FRAMES) {
         state->trail_active[0] = 1;
         state->trail_segment[0] = state->segment;
-        makeHermiteCoord((float *)&state->trail[0], state);
+        makeHermiteCoord(&state->trail[0].x, state);
         state->segment_frame++;
         if (state->segment_frame >= DORA_SEGMENT_FRAMES) {
             state->segment_frame = 0;
@@ -249,7 +251,142 @@ static void fnDORA_PR000(void *self, void *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_dora", fnDORA_DP000);
+extern void MGsGPTerm(MEfGsPacket *packet);
+static const MEfGsQword coltbl_2_00A51840[4];
+extern MEfObjCamParams mefCamParams;
+extern int MMathRotTransPersClip(Vector4 *destination, const StudioCamera *camera,
+                                 Matrix4 *matrix, const Vector4 *point);
+
+#define DORA_STRIP_SEGMENTS 33
+
+/* Writes one A+D register setting. */
+static inline void doraSetRegister(MEfGsQword *qword, unsigned char address, u64 data)
+{
+    qword->ad.data = data;
+    qword->ad.address = address;
+}
+
+/* Writes the GIF tag that opens the packet's next primitive and returns
+ * the first data quadword after it. */
+static inline MEfGsQword *doraOpenTag(MEfGsPacket *packet, int pre, int prim, int reg_count,
+                                       u64 registers)
+{
+    MEfGsQword *qword = packet->current;
+
+    qword->gif.tag = GIF_TAG_EOP | ((u64)pre << 46) | ((u64)prim << 47) | ((u64)reg_count << 60);
+    qword->gif.registers = registers;
+    packet->reg_count = reg_count;
+    return qword + 1;
+}
+
+/* Stores NLOOP into the open GIF tag and moves past its data. */
+static inline void doraCloseTag(MEfGsPacket *packet, int nloop)
+{
+    int size;
+
+    size = packet->reg_count * nloop + 1;
+    packet->current->nloop |= nloop;
+    packet->current += size;
+    packet->count += size;
+}
+
+static void fnDORA_DP000(void *self, DoraHermiteState *work)
+{
+    DoraHermiteState *state = work;
+    MEfGsQword colour[2];
+    MEfGsQword matrix[4];
+    Vector4 angle;
+    MEfGsQword offset[2];
+    MEfGsQword vertex[2];
+    StudioCamera *screen;
+    Matrix4 *view;
+    MEfGsPacket *packet;
+    MEfGsPacket *strip_packet;
+    MEfGsQword *setting;
+    MEfGsQword *qword;
+    float inner;
+    float outer;
+    int clip;
+    int drawn;
+    int axis;
+    int side;
+    int slot;
+
+    screen = mefCamParams.screen;
+    view = mefCamParams.matrix;
+    packet = &state->mg_packet;
+    MGsGPInit(packet, 0, 0);
+    setting = packet->current;
+    setting[0].gif.tag = MEF_GS_SETUP_TAG;
+    setting[0].gif.registers = MEF_GS_SETUP_REGS;
+    packet->reg_count = 1;
+    doraSetRegister(&setting[1], SCE_GS_TEST_1, MEF_GS_TEST_1_ALPHA_GREATER_ZGEQUAL);
+    doraSetRegister(&setting[2], SCE_GS_ZBUF_1, MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE);
+    doraSetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
+    doraCloseTag(packet, 3);
+
+    packet = &state->mg_packet;
+    strip_packet = packet;
+    for (axis = 0; axis < 2; axis++) {
+        Vu0SetOrigin(&offset[0]);
+        Vu0SetOrigin(&offset[1]);
+        for (side = -1; side < 2; side += 2) {
+            inner = (float)side * -0.025f;
+            outer = (float)side * 0.3f;
+            drawn = 0;
+            clip = 0;
+            qword = doraOpenTag(&state->mg_packet, 1, MEF_GS_STRIP_PRIM, 4, MEF_GS_STRIP_REGS);
+            for (slot = 0; slot < DORA_STRIP_SEGMENTS; slot++) {
+                if (state->trail_active[slot] == 0) {
+                    continue;
+                }
+                colour[0].whole = coltbl_2_00A51840[0].whole;
+                colour[1].whole = coltbl_2_00A51840[1].whole;
+                if (slot == 0 || slot == DORA_STRIP_SEGMENTS - 1) {
+                    colour[0].channel[3] = colour[1].channel[3] = 0;
+                    offset[0].element[axis] = offset[1].element[axis] = 0.0f;
+                } else {
+                    offset[0].element[axis] = inner;
+                    offset[1].element[axis] = outer;
+                }
+                MEfCalcAngle(&angle, &state->trail[slot], &state->trail[slot + 1]);
+                angle.z = state->path_progress[state->trail_segment[slot]];
+                MMathRotateMatrixYXZ((Matrix4 *)matrix, 0, &angle);
+                __asm__ __volatile__(
+                    "lqc2 vf1, 0(%1)\n"
+                    "vmove.w vf1, vf0\n"
+                    "sqc2 vf1, 48(%0)\n"
+                    :
+                    : "r"(matrix), "r"(&state->trail[slot])
+                    : "memory");
+                MMathApplyMatrix(&angle, matrix, &offset[0].vector);
+                if (MMathRotTransPersClip(&vertex[0].vector, screen, view, &angle)) {
+                    clip = 2;
+                } else if (clip != 0) {
+                    clip--;
+                    vertex[0].xyz.adc = MEF_GS_XYZ_ADC;
+                }
+                MMathApplyMatrix(&angle, matrix, &offset[1].vector);
+                if (MMathRotTransPersClip(&vertex[1].vector, screen, view, &angle)) {
+                    clip = 2;
+                } else if (clip != 0) {
+                    clip--;
+                    vertex[1].xyz.adc = MEF_GS_XYZ_ADC;
+                }
+                drawn++;
+                qword[0].whole = colour[0].whole;
+                qword[1].whole = vertex[0].whole;
+                qword[2].whole = colour[1].whole;
+                qword[3].whole = vertex[1].whole;
+                qword += 4;
+            }
+            if (drawn > 0) {
+                doraCloseTag(strip_packet, drawn);
+            }
+        }
+    }
+    MGsGPTerm(strip_packet);
+}
 
 /* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
  * is defined by src/main/sef.c. */
@@ -266,9 +403,9 @@ typedef struct DoraState {
     short frame; /* +0x70 */
 } DoraState;
 
-static void fnDORA_PO000(void *self, void *work)
+static void fnDORA_PO000(void *self, DoraState *work)
 {
-    DoraState *state = (DoraState *)work;
+    DoraState *state = work;
 
     state->frame++;
     if (state->frame == DORA_HIT_FRAME) {
@@ -278,3 +415,16 @@ static void fnDORA_PO000(void *self, void *work)
         MEfObjDestroy(self);
     }
 }
+
+
+
+static const float disttbl_0_00A51820[4] = { 0.0f, 3.0f, 9.0f, 20.0f };
+
+static const float rtbl_1_00A51830[4] = { 0.0f, 3.0f, 6.0f, 9.0f };
+
+static const MEfGsQword coltbl_2_00A51840[4] = {
+    { .channel = { 0x60, 0x18, 0x18, 0xff } },
+    { .channel = { 0x0, 0x0, 0x0, 0xff } },
+    { .channel = { 0x40, 0x40, 0x40, 0xff } },
+    { .channel = { 0xff, 0xff, 0x60, 0xff } }
+};

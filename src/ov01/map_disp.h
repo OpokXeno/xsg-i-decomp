@@ -16,11 +16,7 @@ void mapInit(void);
 
 void mapMulSet(const MapMultiplier *value);
 
-extern unsigned int mapDispWork[];
-
 MapMultiplier *mapMulGet(void);
-
-extern MapMultiplier mapMul;
 
 void mapDispTest(void);
 

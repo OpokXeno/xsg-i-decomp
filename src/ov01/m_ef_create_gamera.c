@@ -6,6 +6,8 @@
 #include "ov01/m_ef.h"
 #include "shared.h"
 #include "main/m_math.h"
+#include "main/m_ef_obj.h"
+#include "main/xgl_packet.h"
 
 extern void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tangent_end,
                                 const HermiteVector *point_prev,
@@ -15,38 +17,6 @@ extern void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tan
 
 #define GAMERA_TRAIL_LENGTH 28
 #define GAMERA_PATH_POINTS 4
-
-typedef unsigned int GameraQuadword __attribute__((mode(TI)));
-
-/* One quadword of a GIF packet: a GIF tag, an A+D register write, or a
- * packed RGBAQ / XYZ2 register value. */
-typedef union GameraGsQword {
-    GameraQuadword whole;
-    unsigned short nloop; /* low halfword of a GIF tag: NLOOP and EOP */
-    struct {
-        u64 tag;
-        u64 registers;
-    } gif;
-    struct {
-        u64 data;
-        unsigned char address;
-    } ad;
-    struct {
-        int r, g, b, a;
-    } rgba;
-    struct {
-        int x, y, z, adc;
-    } xyz;
-} GameraGsQword;
-
-/* The GS packet MGsGPInit prepares and MGsGPTerm flushes (ov01 m_gs.c). */
-typedef struct GameraGsPacket {
-    void *data;
-    int capacity;
-    GameraGsQword *current; /* the open GIF tag */
-    int count;              /* queued quadwords */
-    int regCount;           /* NREG of the open GIF tag */
-} GameraGsPacket;
 
 /* The GAMERA record, at +0x20 of the pooled effect object. */
 typedef struct GameraWork {
@@ -63,7 +33,7 @@ typedef struct GameraWork {
     Vector4 target; /* +0x90 */
     short trail_active[GAMERA_TRAIL_LENGTH]; /* +0xa0 */
     short trail_segment[GAMERA_TRAIL_LENGTH]; /* +0xd8 */
-    HermiteVector trail[GAMERA_TRAIL_LENGTH]; /* +0x110 */
+    Vector4 trail[GAMERA_TRAIL_LENGTH]; /* +0x110 */
     short segment; /* +0x2d0 */
     short path_frame; /* +0x2d2 */
     unsigned char unmodeled_2d4[12];
@@ -71,10 +41,10 @@ typedef struct GameraWork {
     float path_angle[GAMERA_PATH_POINTS]; /* +0x320 */
     HermiteVector tangent_start; /* +0x330 */
     HermiteVector tangent_end; /* +0x340 */
-    GameraGsPacket packet; /* +0x350 */
+    MEfGsPacket packet; /* +0x350 */
 } GameraWork;
 
-typedef void (*GameraCallback)(void *self, void *work);
+typedef void (*GameraCallback)(void *self, GameraWork *work);
 
 /* The pooled effect object: callbacks in its prefix, the record at +0x20. */
 typedef struct GameraEffect {
@@ -89,12 +59,12 @@ typedef struct GameraEffect {
     GameraWork work; /* +0x20 */
 } GameraEffect;
 
-extern void MGsGPInit(GameraGsPacket *packet, void *address, int size);
+extern void MGsGPInit(MEfGsPacket *packet, void *address, int size);
 static void makePath(GameraWork *state);
 static void makeHermiteParams(int segment, GameraWork *state);
-static void fnGAMERA_PR000(void *self, void *work);
-static void fnGAMERA_DP000(void *self, void *work);
-static void fnGAMERA_PO000(void *self, void *work);
+static void fnGAMERA_PR000(void *self, GameraWork *work);
+static void fnGAMERA_DP000(void *self, GameraWork *work);
+static void fnGAMERA_PO000(void *self, GameraWork *work);
 
 /* Copies one sixteen-byte-aligned vector whole through the original's $8. */
 #define GAMERA_COPY_VECTOR(destination, source)                          \
@@ -105,7 +75,7 @@ int MEfCreate_GAMERA(MEfObjRecord *self)
 {
     GameraEffect *effect = (GameraEffect *)self;
     GameraWork *state = &effect->work;
-    HermiteVector *trail = state->trail;
+    Vector4 *trail = state->trail;
     Vector4 *origin = &state->origin;
 
     state->frame = 0;
@@ -126,14 +96,13 @@ int MEfCreate_GAMERA(MEfObjRecord *self)
     return 1;
 }
 
-extern Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector);
 extern float MMathMakeRandom(void);
 extern float MMathMakeRandom2PI(void);
 extern unsigned short xglSRand(void);
 
 /* Per-point forward distance and radius of the path (splat-named rodata). */
-extern float disttbl_0_00A517D0[GAMERA_PATH_POINTS];
-extern float rtbl_1_00A517E0[GAMERA_PATH_POINTS];
+static const float disttbl_0_00A517D0[4];
+static const float rtbl_1_00A517E0[4];
 
 /* Start angles inside (210, 330) degrees are rejected. */
 #define GAMERA_START_ANGLE_MIN 3.6651914f
@@ -175,7 +144,7 @@ static void makePath(GameraWork *state)
             : "=f"(cosine)
             : "f"(angle)
             : "$8", "memory");
-        point.x = cosine * rtbl_1_00A517E0[i] * scale;
+        point.x = cosine * *(rtbl_1_00A517E0 + i) * scale;
         __asm__ __volatile__(
             "mfc1 $8,%1\n\t"
             "qmtc2.ni $8,$vf4\n\t"
@@ -185,8 +154,8 @@ static void makePath(GameraWork *state)
             : "=f"(sine)
             : "f"(angle)
             : "$8", "memory");
-        point.y = sine * rtbl_1_00A517E0[i] * scale;
-        point.z = disttbl_0_00A517D0[i];
+        point.y = sine * *(rtbl_1_00A517E0 + i) * scale;
+        point.z = *(disttbl_0_00A517D0 + i);
         MMathApplyMatrix((Vector4 *)&state->control_points[i], &matrix, &point);
         state->path_angle[i] = angle;
         angle += step;
@@ -217,17 +186,16 @@ static void makeHermiteParams(int segment, GameraWork *state)
                         point_end, point_next);
 }
 
-static void makeHermiteCoord(float *destination, void *effect)
+static void makeHermiteCoord(float *destination, GameraWork *state)
 {
-    unsigned char *base = (unsigned char *)effect;
-    short segment = *(short *)(base + 720);
-    short frame = *(short *)(base + 722);
+    short segment = state->segment;
+    short frame = state->path_frame;
 
     MMathCalcHermite(destination, (float)frame * 0.125f,
-                     (HermiteVector *)(base + 816),
-                     (HermiteVector *)(base + 832),
-                     (HermiteVector *)(base + 736 + (segment << 4)),
-                     (HermiteVector *)(base + 752 + (segment << 4)));
+                     &state->tangent_start,
+                     &state->tangent_end,
+                     &state->control_points[segment],
+                     &state->control_points[segment + 1]);
 }
 
 /* Frames per path segment (makeHermiteCoord steps by 1/8) and the frames
@@ -235,10 +203,10 @@ static void makeHermiteCoord(float *destination, void *effect)
 #define GAMERA_SEGMENT_FRAMES 8
 #define GAMERA_TRAVEL_FRAMES 0x18
 
-static void fnGAMERA_PR000(void *self, void *work)
+static void fnGAMERA_PR000(void *self, GameraWork *work)
 {
-    GameraWork *state = (GameraWork *)work;
-    HermiteVector *head;
+    GameraWork *state = work;
+    Vector4 *head;
     int i;
 
     for (i = GAMERA_TRAIL_LENGTH - 2; i >= 0; i--) {
@@ -261,7 +229,157 @@ static void fnGAMERA_PR000(void *self, void *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_gamera", fnGAMERA_DP000);
+#define GAMERA_DRAWN_SEGMENTS 27
+#define GAMERA_TRAIL_WIDTH_Y -0.005f
+#define GAMERA_TRAIL_WIDTH_X 0.05f
+
+extern void MGsGPTerm(MEfGsPacket *packet);
+extern MEfObjCamParams mefCamParams;
+static const MEfGsQword coltbl_2_00A517F0[3];
+
+/* Writes the GIF tag that opens the packet's next primitive and returns
+ * the first data quadword after it. */
+static inline MEfGsQword *gameraOpenTag(MEfGsPacket *packet, int pre, int prim,
+                                           int reg_count, u64 registers)
+{
+    MEfGsQword *qword = packet->current;
+
+    qword->gif.tag = GIF_TAG_EOP | ((u64)pre << 46) | ((u64)prim << 47) | ((u64)reg_count << 60);
+    qword->gif.registers = registers;
+    packet->reg_count = reg_count;
+    return qword + 1;
+}
+
+/* Writes one A+D register setting. */
+static inline void gameraSetRegister(MEfGsQword *qword, unsigned char address, u64 data)
+{
+    qword->ad.data = data;
+    qword->ad.address = address;
+}
+
+/* Stores NLOOP into the open GIF tag and moves past its data. */
+static inline void gameraCloseTag(MEfGsPacket *packet, int nloop)
+{
+    int size;
+
+    size = packet->reg_count * nloop + 1;
+    packet->current->nloop |= nloop;
+    packet->current += size;
+    packet->count += size;
+}
+
+/* The two trail offsets of a strip side, overlaid on the offset vectors so a
+ * line can index their components. */
+typedef struct GameraOffsets {
+    float inner[4];
+    float outer[4];
+} GameraOffsets;
+
+static void fnGAMERA_DP000(void *self, GameraWork *work)
+{
+    GameraWork *state = work;
+    MEfGsQword colour[2];
+    Matrix4 matrix;
+    Vector4 angles;
+    Vector4 offset[2];
+    MEfGsQword vertex[2];
+    const void *screen;
+    const void *view;
+    MEfGsPacket *packet;
+    MEfGsPacket *tail;
+    MEfGsQword *setting;
+    MEfGsQword *qword;
+    int clip;
+    int drawn;
+    int line;
+    int side;
+    MEfGsPacket *opener;
+    int segment;
+    GameraOffsets *slots;
+    Vector4 *outer_offset;
+    float inner;
+    float outer;
+
+    screen = mefCamParams.screen;
+    view = mefCamParams.matrix;
+    packet = &state->packet;
+    MGsGPInit(packet, 0, 0);
+    setting = packet->current;
+    setting[0].gif.tag = MEF_GS_SETUP_TAG;
+    setting[0].gif.registers = MEF_GS_SETUP_REGS;
+    packet->reg_count = 1;
+    gameraSetRegister(&setting[1], SCE_GS_TEST_1, MEF_GS_TEST_1_ALPHA_GREATER_ZGEQUAL);
+    gameraSetRegister(&setting[2], SCE_GS_ZBUF_1, MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE);
+    gameraSetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
+    gameraCloseTag(packet, 3);
+    line = 0;
+    outer_offset = &offset[1];
+    opener = packet;
+    tail = packet;
+
+    slots = (GameraOffsets *)offset;
+    for (; line < 2; line++) {
+        __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&offset[0]) : "memory");
+        __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(outer_offset) : "memory");
+        for (side = -1; side < 2; side += 2) {
+            drawn = 0;
+            inner = (float)side * GAMERA_TRAIL_WIDTH_Y;
+            outer = (float)side * GAMERA_TRAIL_WIDTH_X;
+            qword = gameraOpenTag(opener, 1, MEF_GS_STRIP_PRIM, 4, MEF_GS_STRIP_REGS);
+            packet = &state->packet;
+            clip = 0;
+            for (segment = 0; segment < GAMERA_DRAWN_SEGMENTS; segment++) {
+                if (state->trail_active[segment] == 0) {
+                    continue;
+                }
+                colour[0].whole = coltbl_2_00A517F0[0].whole;
+                colour[1].whole = coltbl_2_00A517F0[1].whole;
+                if (segment == 0 || segment == GAMERA_DRAWN_SEGMENTS - 1) {
+                    colour[0].rgba.a = colour[1].rgba.a = 0;
+                    slots->inner[line] = slots->outer[line] = 0.0f;
+                } else {
+                    slots->inner[line] = inner;
+                    slots->outer[line] = outer;
+                }
+                MEfCalcAngle(&angles, &state->trail[segment],
+                             &state->trail[segment + 1]);
+                angles.z = state->path_angle[state->trail_segment[segment]];
+                MMathRotateMatrixYXZ(&matrix, 0, &angles);
+                __asm__ __volatile__(
+                    "lqc2 $vf1,0(%1)\n\t"
+                    "vmove.w $vf1w,$vf0w\n\t"
+                    "sqc2 $vf1,48(%0)\n\t"
+                    :
+                    : "r"(matrix), "r"(&state->trail[segment])
+                    : "memory");
+                MMathApplyMatrix(&angles, &matrix, &offset[0]);
+                if (MMathRotTransPersClip(&vertex[0].vector, screen, view, &angles)) {
+                    clip = 2;
+                } else if (clip != 0) {
+                    clip--;
+                    vertex[0].xyz.adc = MEF_GS_XYZ_ADC;
+                }
+                MMathApplyMatrix(&angles, &matrix, outer_offset);
+                if (MMathRotTransPersClip(&vertex[1].vector, screen, view, &angles)) {
+                    clip = 2;
+                } else if (clip != 0) {
+                    clip--;
+                    vertex[1].xyz.adc = MEF_GS_XYZ_ADC;
+                }
+                drawn++;
+                qword[0].whole = colour[0].whole;
+                qword[1].whole = vertex[0].whole;
+                qword[2].whole = colour[1].whole;
+                qword[3].whole = vertex[1].whole;
+                qword += 4;
+            }
+            if (drawn > 0) {
+                gameraCloseTag(tail, drawn);
+            }
+        }
+    }
+    MGsGPTerm(tail);
+}
 
 /* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
  * is defined by src/main/sef.c. */
@@ -273,14 +391,9 @@ extern void sefHitEffect(void);
 #define GAMERA_HIT_FRAME 0x18
 #define GAMERA_LIFETIME 0x33
 
-typedef struct GameraState {
-    unsigned char unmodeled_00[0x70];
-    short frame; /* +0x70 */
-} GameraState;
-
-static void fnGAMERA_PO000(void *self, void *work)
+static void fnGAMERA_PO000(void *self, GameraWork *work)
 {
-    GameraState *state = (GameraState *)work;
+    GameraWork *state = work;
 
     state->frame++;
     if (state->frame == GAMERA_HIT_FRAME) {
@@ -290,3 +403,15 @@ static void fnGAMERA_PO000(void *self, void *work)
         MEfObjDestroy(self);
     }
 }
+
+
+
+static const float disttbl_0_00A517D0[4] = { 0.0f, 2.0f, 9.0f, 20.0f };
+
+static const float rtbl_1_00A517E0[4] = { 0.0f, 5.0f, 7.0f, 8.0f };
+
+static const MEfGsQword coltbl_2_00A517F0[3] = {
+    { .rgba = { 0x10, 0x30, 0xa0, 0xff } },
+    { .rgba = { 0x0, 0x10, 0x80, 0xff } },
+    { .rgba = { 0x20, 0x20, 0x0, 0xff } }
+};

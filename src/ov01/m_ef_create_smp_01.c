@@ -3,27 +3,24 @@
  */
 #include "common.h"
 #include "ov01/m_ef_create.h"
+#include "ov01/m_ef.h"
 #include "shared.h"
+#include "main/xgl_packet.h"
 #include "m_ef_create_smp_01.h"
-
-extern void *MEfCalcAngle(Vector4 *destination, const Vector4 *from,
-                          const Vector4 *to);
-extern void *MMathApplyMatrix(Vector4 *destination, const Vector4 *matrix,
-                              const Vector4 *point);
 
 extern Vector4 *MEfCalcCircumXZ(Vector4 *destination, const Vector4 *center,
                                 float radius);
 extern float MMathMakeRandom2PI(void);
-extern void MGsGPInit(Smp01Packet *packet, void *address, int size);
+extern void MGsGPInit(MEfGsPacket *packet, void *address, int size);
 extern Smp01ImageParameter *svGetPrmFromName(const char *name,
                                              Smp01ImageParameter *output);
-extern const char D_00A51480[];
-extern const char D_00A51490[];
+extern const char efSmp01DeCld01Text[];
+extern const char efSmp01DeCld02Text[];
 
 static void fnSMP01_PR000(Smp01Object *object, Smp01Work *work);
 static void fnSMP01_DM000(Smp01Object *self, Smp01Work *work);
 static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work);
-static void fnSMP01_PO000(void *object, void *work);
+static void fnSMP01_PO000(Smp01Object *object, Smp01Work *work);
 
 /* Place the smoke at the actor, aim it at a point on a circle around the
  * target and reset the smoke trails. */
@@ -40,7 +37,7 @@ int MEfCreate_SMP01(MEfObjRecord *self)
     work->phase = 0;
     work->phaseCount = 0;
     MEfGetActorMatrix(&actorMatrix, work->sourceActor, work->sourceCoordinate);
-    MMathApplyMatrix(&work->spawnPoint, (const Vector4 *)actorMatrix, &work->sourceOffset);
+    MMathApplyMatrix(&work->spawnPoint, actorMatrix, &work->sourceOffset);
     MEfGetActorCoord(&targetPoint, work->targetActor, MEF_POINT_ACTOR);
     MEfCalcCircumXZ(&work->targetPosition, &targetPoint, 1.0f);
     __asm__ __volatile__("lq $8,0(%1)\n\tsq $8,0(%0)"
@@ -53,9 +50,9 @@ int MEfCreate_SMP01(MEfObjRecord *self)
     work->phaseAngle = MMathMakeRandom2PI();
 
     MGsGPInit(&work->packet, 0, 0);
-    svGetPrmFromName(D_00A51480, &parameter);
+    svGetPrmFromName(efSmp01DeCld01Text, &parameter);
     work->smokeTexture0First = parameter.texture;
-    svGetPrmFromName(D_00A51490, &parameter);
+    svGetPrmFromName(efSmp01DeCld02Text, &parameter);
     work->smokeTexture0Second = parameter.texture;
     memset(work->smokeActive, 0, sizeof(work->smokeActive));
     memset(work->smokePoints, 0, sizeof(work->smokePoints));
@@ -71,8 +68,8 @@ int MEfCreate_SMP01(MEfObjRecord *self)
 extern float MMathMakeRandom(void);
 extern Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first,
                                          const Vector4 *second, float parameter);
-extern void MMathRotateMatrixYX(Vector4 *destination, const Vector4 *source,
-                               const Vector4 *angles);
+extern Vector4 *MMathRotateMatrixYX(Vector4 *destination, const Vector4 *source,
+                                    const Vector4 *angles);
 
 /* Smoke is emitted for as many frames as the model is drawn. */
 enum { SMP01_DRAW_FRAME_LIMIT = 15 };
@@ -168,12 +165,7 @@ static void fnSMP01_PR000(Smp01Object *object, Smp01Work *work)
     offset.z = (float)work->phaseCount * -0.02f;
 
     MMathRotateMatrixYX(matrix, 0, &work->angles);
-    {
-        /* Keep the translation load's address in v1, as at 0x00a352ec. */
-        register Vector4 *spawnPoint asm("$3") = &work->spawnPoint;
-
-        __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(spawnPoint) : "memory");
-    }
+    __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&work->spawnPoint) : "memory");
     __asm__ __volatile__("vmove.w vf1, vf0" : : : "memory");
     __asm__ __volatile__("sqc2 vf1, 48(%0)" : : "r"(matrix) : "memory");
     MMathApplyMatrix(&work->position, matrix, &offset);
@@ -224,7 +216,6 @@ static void fnSMP01_PR010(Smp01Object *object, Smp01Work *work)
 
 extern Vector4 *MMathRotateMatrixYXZ(Vector4 *out, const Vector4 *matrix, const Vector4 *angles);
 extern Vector4 *MMathScaleMatrix(Vector4 *out, const Vector4 *matrix, const Vector4 *scale);
-extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
 static void fnSMP01_DM000(Smp01Object *self, Smp01Work *work)
 {
     static const Vector4 scale = { 0.038f, 0.038f, 0.15f, 1.0f };
@@ -241,19 +232,159 @@ static void fnSMP01_DM000(Smp01Object *self, Smp01Work *work)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_smp_01", fnSMP01_DP000);
+extern void MGsGPTerm(void *packet);
+extern Quadword McEfSTQtbl[];
+static const Quadword coltbl_1_00A514B0[10];
+static const float sztbl_2_00A51550[10];
+
+static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work)
+{
+    int i;
+    long regs;
+    int nreg;
+    float *szp;
+    Vector4 verts[4];
+    MEfGsPacket *pk;
+    MEfGsPacket *gp;
+    MEfGsQword *q;
+    volatile MEfGsQword *a1;
+    volatile MEfGsQword *a2;
+    volatile MEfGsQword *a3;
+    volatile MEfGsQword *a4;
+    volatile MEfGsQword *a5;
+    Quadword color;
+    unsigned long *tex;
+    int j;
+    int n;
+    int lo;
+    int nloop;
+    int texReg;
+    int off;
+    unsigned char *base;
+
+    pk = &work->packet;
+    MGsGPInit(&work->packet, 0, 0);
+    q = pk->current;
+    q[0].gif.tag = MEF_GS_SETUP_TAG;
+    q[0].gif.registers = MEF_GS_SETUP_REGS;
+    pk->reg_count = 1;
+    a1 = q + 1;
+    a2 = q + 2;
+    a3 = q + 3;
+    a4 = q + 4;
+    a5 = q + 5;
+    a1->ad.address = SCE_GS_TEST_1;
+    a1->ad.data = MEF_GS_TEST_1_ALPHA_GREATER_ZGEQUAL;
+    a2->ad.address = SCE_GS_TEX1_1;
+    a2->ad.data = MEF_GS_TEX1_1_LINEAR_FILTER;
+    a3->ad.address = SCE_GS_CLAMP_1;
+    a3->ad.data = 5;
+    a4->ad.address = SCE_GS_ZBUF_1;
+    a4->ad.data = MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE;
+    a5->ad.address = SCE_GS_ALPHA_1;
+    a5->ad.data = MEF_GS_ALPHA_1_ADDITIVE;
+    nreg = 5;
+    n = pk->reg_count * nreg + 1;
+    pk->current->nloop |= nreg;
+    pk->current += n;
+    pk->count += n;
+    for (i = 0; i < SMP01_SMOKE_TRAILS; i++) {
+        base = (unsigned char *)&work->sourceActor;
+        if (((short *)(base + 256))[i] != 0) {
+            color = coltbl_1_00A514B0[i];
+            lo = i < 5;
+            off = 248;
+            if (lo) {
+                off = 240;
+            }
+            tex = (unsigned long *)(base + off);
+            for (j = 0; j < SMP01_SMOKE_POINTS; j++) {
+                if (MEfMake4Vertex2(verts, &work->smokePoints[i][j], sztbl_2_00A51550[i], work->smokeAngles[i][j]) == 0) {
+                    MEfGsQword *t;
+                    MEfGsQword *g;
+                    unsigned long texVal;
+                    int n1;
+                    int n2;
+
+                    gp = &work->packet;
+                    texReg = SCE_GS_TEX0_1;
+                    regs = MEF_GS_TEXTURED_STRIP_REGS;
+                    nloop = 3;
+                    t = gp->current;
+                    t[0].gif.tag = MEF_GS_SETUP_TAG;
+                    t[0].gif.registers = MEF_GS_SETUP_REGS;
+                    gp->reg_count = 1;
+                    a1 = ++t;
+                    texVal = *tex;
+                    a1->ad.address = texReg;
+                    a1->ad.data = texVal;
+                    n1 = gp->reg_count + 1;
+                    gp->current->nloop |= 1;
+                    gp->current += n1;
+                    gp->count += n1;
+                    g = gp->current;
+                    g[0].gif.tag = MEF_GS_TEXTURED_STRIP_TAG;
+                    g[0].gif.registers = regs;
+                    gp->reg_count = nloop;
+                    (++g)->whole =McEfSTQtbl[0];
+                    (++g)->whole =color;
+                    (++g)->whole =*(Quadword *)&verts[0];
+                    (++g)->whole =McEfSTQtbl[1];
+                    (++g)->whole =color;
+                    (++g)->whole =*(Quadword *)&verts[1];
+                    (++g)->whole =McEfSTQtbl[2];
+                    (++g)->whole =color;
+                    (++g)->whole =*(Quadword *)&verts[2];
+                    (++g)->whole =McEfSTQtbl[3];
+                    (++g)->whole =color;
+                    (++g)->whole =*(Quadword *)&verts[3];
+                    n2 = gp->reg_count * 4 + 1;
+                    gp->current->nloop |= 4;
+                    gp->current += n2;
+                    gp->count += n2;
+                }
+            }
+        }
+    }
+    MGsGPTerm(&work->packet);
+}
+
 
 extern void sefHitEffect(void);
 
-static void fnSMP01_PO000(void *object, void *work)
-{
-    Smp01State *state = (Smp01State *)work;
+/* The frame sefHitEffect fires on and the frame the object's lifetime
+ * expires on (fnSMP01_PO000). */
+#define SMP01_HIT_FRAME 15
+#define SMP01_LIFETIME  25
 
-    state->frame++;
-    if (state->frame == 15) {
+static void fnSMP01_PO000(Smp01Object *object, Smp01Work *work)
+{
+    work->frame++;
+    if (work->frame == SMP01_HIT_FRAME) {
         sefHitEffect();
     }
-    if (state->frame >= 25) {
+    if (work->frame >= SMP01_LIFETIME) {
         MEfObjDestroy(object);
     }
 }
+
+
+
+const char efSmp01DeCld01Text[16] = "de_cld01";
+
+const char efSmp01DeCld02Text[16] = "de_cld02";
+
+static const Quadword coltbl_1_00A514B0[10] = {
+    0x20000000800000008000000080,
+    0x28000000800000008000000080,
+    0x28000000800000008000000080,
+    0x28000000800000008000000080,
+    0x28000000800000008000000080,
+    0x24000000800000008000000080,
+    0x20000000800000008000000080,
+    0x18000000800000008000000080,
+    0x10000000800000008000000080,
+    0x8000000800000008000000080
+};
+
+static const float sztbl_2_00A51550[10] = { 0.10000000149011612f, 0.12999999523162842f, 0.15999999642372131f, 0.18000000715255737f, 0.20000000298023224f, 0.2199999988079071f, 0.23999999463558197f, 0.25999999046325684f, 0.2800000011920929f, 0.25f };

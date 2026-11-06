@@ -7,41 +7,7 @@
 
 #include "shared.h"
 #include "ov01/calc.h"
-
-/* dataUnitInitGet selects 0x34-byte records. MCamGetAtkRange and
- * MCamGetDefRange read signed halfwords at +0x10 and +0x12, respectively;
- * both ranges are stored in hundredths. Other fields remain unmodeled. */
-typedef struct UnitInitData {
-    unsigned char unmodeled_00[0x10];
-    short atkRange;
-    short defRange;
-    unsigned char unmodeled_14[0x34 - 0x14];
-} UnitInitData;
-
-UnitInitData *dataUnitInitGet(int entry);
-
-/* Rendered and equipment actors extend the same head with model storage.
- * The calc-only scratch actor stops at the head and must not acquire this
- * larger extent (calc.c's 0x110-byte temporary allocation). */
-typedef struct BattleModelActor {
-    BattleActor state;
-    unsigned char unmodeled_88[0x100 - 0x88];
-    /* dataMotAdrSet stores the address of a motion pack's second entry here by
-     * motion id (`sw $2,0x100($5)`, $5 = actor + motionId * 4). No instruction
-     * here bounds the array or shows what the entry holds. */
-    void *motionPackEntry[4]; /* +0x100 */
-    unsigned char unmodeled_110[0x8D0 - 0x110];
-    /*
-     * +0x8D0: the block include/main/act_1.h names modelResource,
-     * matrixResource, move and animPackTables[8]. One array here is what
-     * dataMotAdrSet's address needs: the original adds the slot constant to the
-     * scaled index before the actor base (`addiu $3,$3,0x8DC` / `addu $4,$4,$3`
-     * at 0x00a1c8e0), while a member array at +0x8DC indexed by motionId adds
-     * the base first (`addu $6,$5,$4` / `addiu $6,$6,0x8DC`). This TU's loaders
-     * store file->animationAdr in the MATRIX slot and file->textureAdr in MOVE.
-     */
-    void *resource[11]; /* +0x8D0 */
-} BattleModelActor;
+#include "ov01/data_unit_org_get.h"
 
 #define BATTLE_ACTOR_RESOURCE_MODEL 0
 #define BATTLE_ACTOR_RESOURCE_MATRIX 1
@@ -50,8 +16,6 @@ typedef struct BattleModelActor {
 /* Table slot 1 (+0x8E0): dataUnitFileLoadMotSp2's weapon motion. */
 #define BATTLE_ACTOR_RESOURCE_WEAPON_MOTION (BATTLE_ACTOR_RESOURCE_ANIM_PACK_TABLE + 1)
 
-#define BATTLE_ACTOR_FLAG_ENEMY 0x40
-#define CALC_UNIT_FLAG_AGWS 0x40
 /* unitLoad uses this same range to skip the ordinary sound setup. */
 #define SPECIAL_MODEL_CHARACTER_ID_BEGIN 0xBB
 #define SPECIAL_MODEL_CHARACTER_ID_END 0xC3
@@ -77,11 +41,7 @@ void dataNBreadCB(int result);
 int dataLeaderCidGet(void);
 void dataLeaderCidReset(void);
 
-int dataUnitFileLoadMotSp(ObjectTask *unit, int motionId, int slot);
-
-/* Callers pass the unit whose default weapon they want; the function
- * always returns 0 and ignores it. */
-int dataDefWpnGet(void *unit);
+int dataUnitFileLoadMotSp(BattleUnit *unit, int motionId, int slot);
 
 /*
  * A player character's learned-special-technique slot: dataSpecLearnSet
@@ -123,13 +83,34 @@ extern int dataSpecBaseGet(int cid);
  * string dataSpecLearnSet (0x00a19750) hands to printf when its character id
  * is out of the zero-to-0x10 range. */
 extern int printf(const char *format, ...);
-extern const char D_00A457B0[];
+extern const char unitOrgDataSpecLearnSetErrText[];
 
 /*
  * The six 0x130-byte unit-file records are selected by dataUnitFileGet.
  * dataUnitFileLoadMdl reads the cached character id, model/animation/texture
  * addresses and CD-sector-rounded sizes, and clears the face cache at +0x10C.
  */
+/* dataUnitFileLoadMot's per-slot motion pack record (24-byte stride from
+ * UnitFileInfo +0x28): cached motion id, load address and CD-sector size.
+ * Slot 0 is the base motion, slots 1-3 weapon motions, slot 4 a pack
+ * loaded without caching its id. */
+typedef struct UnitMotionFile {
+    int motionId;
+    void *adr; /* +0x04 */
+    int size; /* +0x08 */
+    unsigned char unmodeled_0c[12];
+} UnitMotionFile;
+
+typedef struct UnitFileEnt {
+    int id;
+    void *adr; /* +0x04 */
+    int size; /* +0x08 */
+} UnitFileEnt;
+
+typedef struct UnitWpnFile {
+    UnitFileEnt part[3]; /* model, animation and texture of one weapon slot */
+} UnitWpnFile;
+
 typedef struct UnitFileInfo {
     int charaId;
     int modelCharaId; /* +0x04 */
@@ -141,7 +122,8 @@ typedef struct UnitFileInfo {
     unsigned char unmodeled_1c[4];
     void *textureAdr; /* +0x20 */
     int textureSize; /* +0x24 */
-    unsigned char unmodeled_28[0x10C - 0x28];
+    UnitMotionFile motion[5]; /* +0x28 */
+    UnitWpnFile wpn[3]; /* +0xA0, 0x24-byte records selected by weapon slot */
     int faceCharaId; /* +0x10C */
     void *faceModelAdr; /* +0x110: dataUnitFileLoadFaceMdl's cached face model buffer */
     unsigned char unmodeled_114[0x128 - 0x114];
@@ -150,33 +132,19 @@ typedef struct UnitFileInfo {
 } UnitFileInfo;
 
 
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
 
-/* UnitRecord in unit_cmd.h evidences the same task prefix, separate
- * motion actor (+0x14) and four equipment actors (+0x1C). */
-typedef struct UnitEquipInfo {
-    /* Generic scheduler helpers use ObjectTask; battle code knows the
-     * work allocation is a BattleActor. Both views have the same prefix. */
-    union {
-        ObjectTask object;
-        struct {
-            XglTaskPrefix scheduler;
-            BattleActor *work;
-        } battle;
-    } task;
-    BattleModelActor *motionActor;
+/* The same task layout with the actor slots read as 32-bit words, as
+ * dataUnitFileLoadWep stores and reloads them. */
+typedef struct UnitWeaponActors {
+    XglTaskPrefix scheduler;
+    Actor *work;
+    int motionActor;
     unsigned char unmodeled_18[4];
-    BattleModelActor *equipActor[4];
-    BattleModelActor *faceActor; /* +0x2C: dataUnitFileLoadFaceMdl's child face actor */
-} UnitEquipInfo;
+    int equipActor[4];
+} UnitWeaponActors;
 
-extern void dataMotAdrSet(BattleModelActor *actor, int motionId);
+extern void dataMotAdrSet(Actor *actor, int motionId);
 
-typedef struct WpnFileInfo {
-    unsigned char unmodeled_00[0xA0];
-    int weaponId; /* +0xA0: dataWpnLRChk */
-} WpnFileInfo;
-
-int dataWpnLRChk(ObjectTask *unit, int weaponId, int slot, WpnFileInfo *fileInfo);
+int dataWpnLRChk(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *fileInfo);
 
 #endif /* SRC_OV01_DATA_UNIT_ORG_GET_H */

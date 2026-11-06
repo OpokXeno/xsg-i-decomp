@@ -7,39 +7,39 @@
 #include "ov01/obj.h"
 #include "obj.h"
 
-extern void *memset(void *destination, int value, unsigned int size);
-extern void *xglTaskInitial(void *manager, int capacity, int flags);
-extern void objWorkInit(void);
+/* A transform arrives once each of its three axes (x, y, z) has reached its target. */
+#define OBJ_AXIS_COUNT 3
 
-static ObjectWork objWork[60];
-static TaskManager taskMan;
 /* objInit clears fifty 0x80-byte slots. ObjectTaskNode models each prefix. */
 typedef union ObjectTaskStorage {
     ObjectTaskNode node;
-    unsigned char bytes[0x80];
+    unsigned char bytes[OBJ_TASK_SLOT_SIZE];
 } ObjectTaskStorage;
-static ObjectTaskStorage taskBuf[50];
+
+static ObjectWork objWork[OBJ_WORK_COUNT];
+static XglTaskScheduler taskMan;
+static ObjectTaskStorage taskBuf[OBJ_TASK_CAPACITY];
 
 const char objRemoveError[24] = "** objRemove: Error\n";
-const char D_00A43810[24] = "** objEntryPure: Error\n";
+const char objEntryPureErrorText[24] = "** objEntryPure: Error\n";
 const char objRemovePureError[32] = "** objRemovePure: Error\n";
-const char D_00A43848[24] = "** objWorkGet: Error\n";
-const char D_00A43860[32] = "** objWorkFree: Error %x\n";
-const char D_00A43880[32] = "** objCmdPush: buff over\n";
-const char D_00A438A0[32] = "** objCmdPop: buff over\n";
-const char D_00A438C0[24] = "** fifoPush error\n";
-const char D_00A438D8[24] = "** fifoPop error\n";
+const char objWorkGetErrorText[24] = "** objWorkGet: Error\n";
+const char objWorkFreeErrorText[32] = "** objWorkFree: Error %x\n";
+const char objCmdPushBuffOverText[32] = "** objCmdPush: buff over\n";
+const char objCmdPopBuffOverText[32] = "** objCmdPop: buff over\n";
+const char objFifoPushErrorText[24] = "** fifoPush error\n";
+const char objFifoPopErrorText[24] = "** fifoPop error\n";
 
 void objInit(void) {
     int index;
     unsigned char *slot;
 
     slot = taskBuf[0].bytes;
-    for (index = 0; index < 50; index++) {
-        memset(slot, 0, 0x80);
-        slot += 0x80;
+    for (index = 0; index < OBJ_TASK_CAPACITY; index++) {
+        memset(slot, 0, OBJ_TASK_SLOT_SIZE);
+        slot += OBJ_TASK_SLOT_SIZE;
     }
-    xglTaskInitial(&taskMan, 50, 0);
+    xglTaskInitial(&taskMan, OBJ_TASK_CAPACITY, 0);
     objWorkInit();
 }
 
@@ -47,21 +47,21 @@ void objExec(void) {
     objExecSub(&taskMan);
 }
 
-void objExecSub(void *manager) {
+void objExecSub(XglTaskScheduler *manager) {
     xglTaskExecute(manager);
 }
 
 void objExec2(void) {
-    TaskManager *manager;
+    XglTaskScheduler *manager;
     ObjectTaskNode *task;
 
     manager = &taskMan;
     task = (ObjectTaskNode *)manager->active_head;
     while (task != 0) {
-        ObjectTask *next;
+        XglTaskPrefix *next;
         ObjectTaskCallback callback;
 
-        next = (ObjectTask *)task->base.task.next;
+        next = task->base.task.next;
         callback = task->exec;
         manager->next_to_visit = next;
         if (callback != 0) {
@@ -71,30 +71,51 @@ void objExec2(void) {
     }
 }
 
-void objEntry(void *argument) {
-    objEntrySub(&taskMan, argument, 0);
+void objEntry(ObjectSchedulerCallback schedulerCallback) {
+    objEntrySub(&taskMan, schedulerCallback, 0);
 }
 
-ObjectTask *objEntry2(void *argument, ObjectTaskCallback callback) {
+ObjectTask *objEntry2(ObjectSchedulerCallback schedulerCallback, ObjectTaskCallback callback) {
     ObjectTask *task;
 
-    task = objEntrySub(&taskMan, argument, 0);
+    task = objEntrySub(&taskMan, schedulerCallback, 0);
     if (task != 0) {
         ((ObjectTaskNode *)task)->exec = callback;
     }
     return task;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/obj", objEntrySub);
+ObjectTask *objEntrySub(XglTaskScheduler *manager, ObjectSchedulerCallback schedulerCallback, int reverse)
+{
+    XglTaskPrefix *entry;
+    XglTaskPrefix *allocated;
+    ObjectWork *work;
 
-void objEntryRev(void *argument) {
-    objEntrySub(&taskMan, argument, 1);
+    if (reverse == 0) {
+        entry = manager ? manager->active_tail : 0;
+        allocated = xglTaskEntryNext(manager, schedulerCallback, entry);
+    } else {
+        entry = manager ? manager->active_head : 0;
+        allocated = xglTaskEntryPrev(manager, schedulerCallback, entry);
+    }
+    work = objWorkGet();
+    if (allocated == 0 || work == 0) {
+        printf(objEntryErrorText);
+        return 0;
+    }
+    ((ObjectTaskNode *)allocated)->exec = 0;
+    ((ObjectTaskNode *)allocated)->base.work = work;
+    return (ObjectTask *)allocated;
 }
 
-ObjectTask *objEntry2Rev(void *argument, ObjectTaskCallback callback) {
+void objEntryRev(ObjectSchedulerCallback schedulerCallback) {
+    objEntrySub(&taskMan, schedulerCallback, 1);
+}
+
+ObjectTask *objEntry2Rev(ObjectSchedulerCallback schedulerCallback, ObjectTaskCallback callback) {
     ObjectTask *task;
 
-    task = objEntrySub(&taskMan, argument, 1);
+    task = objEntrySub(&taskMan, schedulerCallback, 1);
     if (task != 0) {
         ((ObjectTaskNode *)task)->exec = callback;
     }
@@ -113,29 +134,26 @@ void objRemove(ObjectTask *task)
     xglTaskRemove(&task->task);
 }
 
-ObjectTask *objEntryPure(ObjectTaskCallback callback)
+ObjectTask *objEntryPure(ObjectSchedulerCallback callback)
 {
     XglTaskScheduler *scheduler;
     XglTaskPrefix *entry;
     XglTaskPrefix *allocated;
     ObjectTask *task;
 
-    /* TaskManager and XglTaskScheduler expose the same four pointer slots;
-     * this boundary uses the canonical scheduler-prefix API. The object
-     * callback is stored, then later called by objExec2 with its local type. */
-    scheduler = (XglTaskScheduler *)&taskMan;
+    /* The object callback is stored by the scheduler prefix, then later called
+     * by objExec2 with its local type. */
+    scheduler = &taskMan;
     entry = 0;
     if (scheduler != 0) {
         entry = scheduler->active_tail;
     }
-    allocated = xglTaskEntryNext(scheduler,
-                                 (int (*)(XglTaskPrefix *))callback,
-                                 entry);
+    allocated = xglTaskEntryNext(scheduler, callback, entry);
     task = (ObjectTask *)allocated;
     if (task != 0) {
         return task;
     }
-    printf(D_00A43810);
+    printf(objEntryPureErrorText);
     return 0;
 }
 
@@ -152,7 +170,7 @@ void objWorkInit(void)
 {
     int index;
 
-    for (index = 59; index >= 0; index--) {
+    for (index = OBJ_WORK_COUNT - 1; index >= 0; index--) {
         objWork[index].used = 0;
     }
 }
@@ -165,33 +183,32 @@ ObjectWork *objWorkGet(void)
     count = 0;
     slot = objWork;
     do {
-        if (!(slot->used & 1)) {
-            slot->used = 1;
+        if (!(slot->used & OBJ_WORK_IN_USE)) {
+            slot->used = OBJ_WORK_IN_USE;
             return slot;
         }
         count++;
         slot++;
-    } while (count < 60);
-    printf(D_00A43848);
+    } while (count < OBJ_WORK_COUNT);
+    printf(objWorkGetErrorText);
     return 0;
 }
 
-void objWorkFree(void *work) {
-    ObjectWork *slot;
-
-    slot = work;
-    if (slot < objWork || &objWork[60] < slot) {
-        printf(D_00A43860, work);
+void objWorkFree(ObjectWork *work) {
+    if (work < objWork || &objWork[OBJ_WORK_COUNT] < work) {
+        printf(objWorkFreeErrorText, work);
         return;
     }
-    slot->used = 0;
+    work->used = 0;
 }
 
 void objStdInit(ObjectTask *task)
 {
+    ObjectWork *work;
     ObjectWorkTransform *transform;
 
-    transform = &((ObjectWork *)task->work)->transform;
+    work = task->work;
+    transform = &work->transform;
     memset(transform, 0, sizeof(*transform));
     transform->scale.w = 1.0f;
     transform->scale.z = 1.0f;
@@ -210,10 +227,12 @@ void objStdInit(ObjectTask *task)
  */
 int objStdMove(ObjectTask *task)
 {
+    ObjectWork *work;
     ObjectWorkTransform *transform;
     int arrived;
 
-    transform = &((ObjectWork *)task->work)->transform;
+    work = task->work;
+    transform = &work->transform;
     arrived = 0;
 
     {
@@ -282,7 +301,7 @@ int objStdMove(ObjectTask *task)
         }
     }
 
-    return arrived == 3;
+    return arrived == OBJ_AXIS_COUNT;
 }
 
 /*
@@ -295,22 +314,8 @@ int objStdMove(ObjectTask *task)
  */
 void objHatoVec(ObjectTask *task, int steps)
 {
-    typedef struct {
-        Vector4 homogeneousVector;
-        unsigned char unmodeled_10[0x20];
-        Vector4 scale;
-        Vector4 velocity;
-        unsigned char unmodeled_50[0x10];
-        Vector4 target;
-        unsigned char unmodeled_70[0x10];
-    } MotionTransform;
-    typedef struct {
-        int used;
-        unsigned char unmodeled_04[0x8C];
-        MotionTransform transform;
-    } MotionWork;
-    MotionWork *work;
-    MotionTransform *transform;
+    ObjectWork *work;
+    ObjectWorkTransform *transform;
     float deltaX;
     float deltaY;
     float deltaZ;
@@ -352,30 +357,30 @@ void objCmdClear(ObjectTask *task) {
     queue->flags &= ~OBJCMD_QUEUE_PENDING;
 }
 
-void *objCmdPtrGet(ObjectTask *task) {
+ObjectCommandEntry *objCmdPtrGet(ObjectTask *task) {
     ObjectCommandQueue *queue;
 
     queue = task->work;
     return &queue->entries[queue->writeIndex];
 }
 
-void *objCmdTailGet(ObjectTask *task) {
+ObjectCommandEntry *objCmdTailGet(ObjectTask *task) {
     ObjectCommandQueue *queue;
 
     queue = task->work;
     return &queue->entries[queue->readIndex];
 }
 
-void *objCmdPush(ObjectTask *task) {
+ObjectCommandEntry *objCmdPush(ObjectTask *task) {
     ObjectCommandQueue *queue;
     int index;
 
     queue = task->work;
     index = queue->readIndex;
     queue->readIndex = index + 1;
-    if (queue->readIndex >= 5) {
-        queue->readIndex = 4;
-        printf(D_00A43880);
+    if (queue->readIndex >= OBJ_CMD_QUEUE_CAPACITY) {
+        queue->readIndex = OBJ_CMD_QUEUE_CAPACITY - 1;
+        printf(objCmdPushBuffOverText);
         return 0;
     }
     return &queue->entries[index];
@@ -383,7 +388,7 @@ void *objCmdPush(ObjectTask *task) {
 
 #define OBJ_DEBUG_PRINT(args) do { printf args; } while (0)
 
-void *objCmdPop(ObjectTask *task) {
+ObjectCommandEntry *objCmdPop(ObjectTask *task) {
     ObjectCommandQueue *queue;
     int index;
 
@@ -392,7 +397,7 @@ void *objCmdPop(ObjectTask *task) {
     queue->readIndex = index - 1;
     if (queue->readIndex < 0) {
         queue->readIndex = 0;
-        OBJ_DEBUG_PRINT((D_00A438A0, queue));
+        OBJ_DEBUG_PRINT((objCmdPopBuffOverText, queue));
         return 0;
     }
     return &queue->entries[index];
@@ -431,7 +436,7 @@ int fifoPush(Fifo *fifo) {
     count = fifo->count;
     capacity = (fifo->maxIndex - fifo->base) + 1;
     if (count >= capacity) {
-        printf(D_00A438C0);
+        printf(objFifoPushErrorText);
         return -1;
     }
     writeIndex = fifo->writeIndex + 1;
@@ -451,7 +456,7 @@ int fifoPop(Fifo *fifo) {
     count = fifo->count;
     newCount = count - 1;
     if (count <= 0) {
-        printf(D_00A438D8, newCount);
+        printf(objFifoPopErrorText, newCount);
         return -1;
     }
     readIndex = fifo->readIndex + 1;
@@ -474,3 +479,7 @@ int fifoStGet(Fifo *fifo) {
 int fifoNumGet(Fifo *fifo) {
     return fifo->count;
 }
+
+
+
+const char objEntryErrorText[24] = "** objEntry: Error\n";

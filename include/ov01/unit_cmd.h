@@ -3,6 +3,13 @@
 
 #include "ov01/calc.h"
 
+/*
+ * The queued-command record unitCmdSet (src/ov01/unit_cmd.c) copies in and
+ * calc.c's calcTurnStart builds for it (CalcCmdEntry there, the same 0x14
+ * bytes and offsets).
+ */
+typedef struct CmdEntry CmdEntry;
+
 struct CmdEntry {
     int selector;      /* +0x00 */
     int argument;      /* +0x04 */
@@ -16,5 +23,11 @@ struct CmdEntry {
                          * (lw $2, 0x10($7); sw $2, 0xC($29),
                          * unit_cmd/unitCmdTgtSet.s 0x00a03444/0x00a0344c). */
 };
+
+/* Functions and data used by other translation units. */
+void unitCmdSet(BattleUnit *unit, CmdEntry *cmd);
+void unitCmdClear(BattleUnit *unit);
+void unitMotSet(BattleUnit *unit, int motion);
+void unitWpnMotSet(BattleUnit *unit, int weaponIndex, int animGroup, int motion);
 
 #endif /* INCLUDE_OV01_UNIT_CMD_H */

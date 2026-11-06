@@ -4,11 +4,14 @@
 #include "common.h"
 #include "shared.h"
 #include "main/xgl_packet.h"
+#include "ov01/gr_gp_init.h"
 
-typedef unsigned char u8;
-typedef struct Matrix {
-    float elements[16];
-} Matrix;
+/* One stock face slot of the menu (read by menu.c): its screen x and z. */
+typedef struct MenuStockPos {
+    int x;
+    int z;
+} MenuStockPos;
+
 typedef struct FloatVector4 {
     float x;
     float y;
@@ -20,25 +23,6 @@ typedef struct FloatVector3 {
     float y;
     float z;
 } FloatVector3;
-
-/* grGpInit's argument: the VIF1 DIRECT packet grPacketSend transmits, a
- * data buffer and its length. grGpInit points data at the scratchpad
- * (0x70000000). */
-typedef struct GrPacket {
-    void *data;  /* +0x0 */
-    int count;   /* +0x4 */
-} GrPacket;
-
-static int f2Num;
-static GrPacket f2GpSave;
-static int f4Num;
-static GrPacket f4GpSave;
-static int ft4Num;
-static GrPacket ft4GpSave;
-static int ft4STQNum;
-static GrPacket ft4STQGpSave;
-static int sprNum;
-static GrPacket sprGpSave;
 
 /* GIF packet words are written as doubleword descriptors by the openers and
  * as 32-bit lanes by the vertex writers. Both are the same packet storage. */
@@ -102,27 +86,18 @@ typedef union GrGifQuad {
 /* The packet's quadword at index, from a fresh read of packet->data. */
 #define GR_PACKET_QUAD(packet, index) ((GrGifQuad *)(packet)->data + (index))
 
-static inline void grGifOpenRegister(GrPacket *packet, unsigned long long register_id)
-{
-    GrGifOpenTag *tags = packet->data;
-    tags[packet->count].register_id.bits = register_id;
-}
+/* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
+#define VIF_CODE_FLUSH 0x11000000
 
-static inline void grGifAppendRegister(GrPacket *packet,
-                                       unsigned long long register_id,
-                                       unsigned long long control)
-{
-    GrGifOpenTag *tags;
-    int *count;
-    int tag_index;
+/* Offset to the GS window that the 12.4 screen coordinates are biased by. */
+#define GR_GS_WINDOW_OFFSET_X 0x7000
+#define GR_GS_WINDOW_OFFSET_Y 0x7200
 
-    grGifOpenRegister(packet, register_id);
-    count = &packet->count;
-    tags = packet->data;
-    tag_index = *count;
-    tags[tag_index].control.bits = control;
-    *count = tag_index + 1;
-}
+/* The out-of-frustum bit grRotTransPers copies into a vertex's flags. */
+#define GR_VERTEX_OUT_OF_FRUSTUM 0x8000
+
+/* End sentinel of the framebuffer base table fb. */
+#define GR_FB_TABLE_END 0xFFFFF
 
 typedef struct GrFrameBaseTable {
     unsigned short base[3];
@@ -141,13 +116,11 @@ typedef struct GrVramCopyParams {
     unsigned short height;
 } GrVramCopyParams;
 
-extern const GrFrameBaseTable D_00A466E8;
-extern const GrVramCopyParams D_00A466F0;
-extern const char D_00A46708[];
+extern const GrFrameBaseTable grFrameBaseTable;
+extern const GrVramCopyParams grVramCopyParams;
+extern const char grGpInitGrVramCopyFBtoFBErrText[];
 extern int printf(const char *format, ...);
 extern void grVramCopy(GrVramCopyParams *params);
-extern void grGpInit(GrPacket *packet);
-extern void grPacketSend(GrPacket *packet);
 
 typedef struct GrRenderState {
     unsigned char unmodeled_00[0x20];
@@ -155,13 +128,6 @@ typedef struct GrRenderState {
     unsigned short drawing_buffer;
 } GrRenderState;
 extern GrRenderState sRender;
-
-/* Framebuffer base addresses; grFBAdrGet indexes this table. */
-int fb[4] = {0x70, 0xe0, 0x150, 0xfffff};
-
-/* EE scratchpad RAM base. */
-/* VIF FLUSH code (command 0x11 in bits 24..30, no immediate). */
-#define VIF_CODE_FLUSH 0x11000000
 
 extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkAddCode(XglPacket *packet, unsigned int code);
@@ -244,20 +210,97 @@ typedef struct MatrixCommand {
     unsigned int : 32;                 /* +0x0c */
     TransformState *state;             /* +0x10 */
 } MatrixCommand;
+
+/*
+ * grOpenF2/grOpenF4/grOpenFT4/grOpenFT4STQ/grOpenSpr (siblings, not decoded
+ * here) each save the caller's packet into their own GpSave static and zero
+ * their Num static; grPutXxx then advances GpSave.count as it appends
+ * primitives. The quadword at GpSave.data[GpSave.count] is left for the
+ * trailing GIF tag: grCloseXxx patches its low 8 bytes with the final Num
+ * (the accumulated NLOOP) so the tag matches how many primitives were put.
+ */
+typedef struct GrGifTag {
+    long long control;             /* +0x00: NLOOP/EOP/PRE/PRIM/FLG/NREG */
+    unsigned char unmodeled_08[8]; /* +0x08: REGS */
+} GrGifTag;
+
+/* grPutFT4STQ's quad: four corners, one shared RGBA and per-corner S/T. */
+typedef struct GrFT4STQVertices {
+    Vector4 points[4];       /* +0x00 */
+    unsigned char color[4];  /* +0x40: R, G, B, A */
+    float s[4];              /* +0x44 */
+    float t[4];              /* +0x54 */
+} GrFT4STQVertices;
+
+/* grPutF4's quad: four corners and one shared RGBA color. */
+typedef struct GrF4Vertices {
+    Vector4 points[4];      /* +0x00 */
+    unsigned char color[4]; /* +0x40: R, G, B, A */
+} GrF4Vertices;
+
+typedef struct GrSpr {
+    Vector4 vertex[2];      /* +0x00 */
+    unsigned char col[4];   /* +0x20 */
+    short u[2];             /* +0x24 */
+    short v[2];             /* +0x28 */
+} GrSpr;
+
+/* One GS register write of grGsRegListSet's list; register_id -1 ends it. */
+typedef struct GrGsRegListEntry {
+    int register_id;          /* +0x00 */
+    unsigned long long value; /* +0x08 */
+} GrGsRegListEntry;
+
 extern void xglStudioGetCamera(void *camera_out, int camera_index);
-extern void xglMatrixUnit(float matrix[4][4]);
-extern void xglMatrixTrans(Matrix *destination, Matrix *source,
+extern void xglMatrixUnit(Matrix4 matrix);
+extern void xglMatrixTrans(Matrix4 *destination, Matrix4 *source,
                            FloatVector4 *translation);
-extern void xglMatrixScale(Matrix *destination, Matrix *source,
+extern void xglMatrixScale(Matrix4 *destination, Matrix4 *source,
                            FloatVector4 *scale);
-extern void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right);
-extern void xglMatrixStackLoad(Matrix *source);
+extern void xglMatrixMul(Matrix4 *destination, Matrix4 *left, Matrix4 *right);
+extern void xglMatrixStackLoad(Matrix4 *source);
 extern void xglMatrixStackRotY(float angle);
 extern void xglMatrixStackRotX(float angle);
 extern void xglMatrixStackRotZ(float angle);
 extern void xglMatrixStackSave(float matrix[4][4]);
-extern void grRotMatrix(Matrix *destination, Matrix *source,
+extern void grRotMatrix(Matrix4 *destination, Matrix4 *source,
                         FloatVector3 *angles);
+
+static int f2Num;
+static GrPacket f2GpSave;
+static int f4Num;
+static GrPacket f4GpSave;
+static int ft4Num;
+static GrPacket ft4GpSave;
+static int ft4STQNum;
+static GrPacket ft4STQGpSave;
+static int sprNum;
+static GrPacket sprGpSave;
+
+/* Framebuffer base addresses; grFBAdrGet indexes this table. */
+static int fb[4]  = {0x70, 0xe0, 0x150, GR_FB_TABLE_END};
+
+static inline void grGifOpenRegister(GrPacket *packet, unsigned long long register_id)
+{
+    GrGifOpenTag *tags = packet->data;
+    tags[packet->count].register_id.bits = register_id;
+}
+
+static inline void grGifAppendRegister(GrPacket *packet,
+                                       unsigned long long register_id,
+                                       unsigned long long control)
+{
+    GrGifOpenTag *tags;
+    int *count;
+    int tag_index;
+
+    grGifOpenRegister(packet, register_id);
+    count = &packet->count;
+    tags = packet->data;
+    tag_index = *count;
+    tags[tag_index].control.bits = control;
+    *count = tag_index + 1;
+}
 
 void grGpInit(GrPacket *packet)
 {
@@ -274,8 +317,8 @@ int grBBIdxGet(void)
 {
     int index = 0;
 
-    if (fb[0] != 0xFFFFF) {
-        while (fb[index] != 0xFFFFF) {
+    if (fb[0] != GR_FB_TABLE_END) {
+        while (fb[index] != GR_FB_TABLE_END) {
             if (fb[index] != sRender.drawing_buffer &&
                 fb[index] != sRender.current_buffer) {
                 return index;
@@ -291,8 +334,8 @@ int grDBIdxGet(int *drawing_index, int *current_index)
 {
     int index = 0;
 
-    if (fb[0] != 0xFFFFF) {
-        for (; fb[index] != 0xFFFFF; index++) {
+    if (fb[0] != GR_FB_TABLE_END) {
+        for (; fb[index] != GR_FB_TABLE_END; index++) {
             if (sRender.drawing_buffer == fb[index]) {
                 *drawing_index = index;
             }
@@ -307,11 +350,11 @@ int grDBIdxGet(int *drawing_index, int *current_index)
 
 void grVramCopyFBtoFB(int source, int destination)
 {
-    GrFrameBaseTable bases = D_00A466E8;
-    GrVramCopyParams params = D_00A466F0;
+    GrFrameBaseTable bases = grFrameBaseTable;
+    GrVramCopyParams params = grVramCopyParams;
 
     if (source >= 3 || destination >= 3 || source == destination) {
-        printf(D_00A46708, source, destination);
+        printf(grGpInitGrVramCopyFBtoFBErrText, source, destination);
         return;
     }
 
@@ -328,11 +371,11 @@ void grVramCopy(GrVramCopyParams *params)
     int *count;
 
     grGpInit(&packet);
-    grGifOpenRegister(&packet, 14);
+    grGifOpenRegister(&packet, GIF_REG_AD);
     count = &packet.count;
     GR_PACKET_QUAD(&packet, (*count)++)->tag.control.bits = 0x1000000000008004ULL;
 
-    grGifOpenRegister(&packet, 0x50);
+    grGifOpenRegister(&packet, SCE_GS_BITBLTBUF);
     count = &packet.count;
     GR_PACKET_QUAD(&packet, (*count)++)->tag.control.bits =
         params->source_base |
@@ -340,7 +383,7 @@ void grVramCopy(GrVramCopyParams *params)
         (unsigned long long)params->destination_base << 32 |
         (unsigned long long)params->destination_width << 48;
 
-    grGifOpenRegister(&packet, 0x51);
+    grGifOpenRegister(&packet, SCE_GS_TRXPOS);
     count = &packet.count;
     GR_PACKET_QUAD(&packet, (*count)++)->tag.control.bits =
         params->source_x |
@@ -348,12 +391,12 @@ void grVramCopy(GrVramCopyParams *params)
         (unsigned long long)params->destination_x << 32 |
         (unsigned long long)params->destination_y << 48;
 
-    grGifOpenRegister(&packet, 0x52);
+    grGifOpenRegister(&packet, SCE_GS_TRXREG);
     count = &packet.count;
     GR_PACKET_QUAD(&packet, (*count)++)->tag.control.bits =
         params->width | (unsigned long long)params->height << 32;
 
-    grGifOpenRegister(&packet, 0x53);
+    grGifOpenRegister(&packet, SCE_GS_TRXDIR);
     count = &packet.count;
     GR_PACKET_QUAD(&packet, (*count)++)->tag.control.bits = 2;
 
@@ -376,22 +419,9 @@ void grOpenF2(GrPacket *packet)
     *count = tag_index + 1;
 }
 
-/*
- * grOpenF2/grOpenF4/grOpenFT4/grOpenFT4STQ/grOpenSpr (siblings, not decoded
- * here) each save the caller's packet into their own GpSave static and zero
- * their Num static; grPutXxx then advances GpSave.count as it appends
- * primitives. The quadword at GpSave.data[GpSave.count] is left for the
- * trailing GIF tag: grCloseXxx patches its low 8 bytes with the final Num
- * (the accumulated NLOOP) so the tag matches how many primitives were put.
- */
-typedef struct GrGifTag {
-    long long control;             /* +0x00: NLOOP/EOP/PRE/PRIM/FLG/NREG */
-    unsigned char unmodeled_08[8]; /* +0x08: REGS */
-} GrGifTag;
-
 void grCloseF2(void)
 {
-    GrGifTag *tags = (GrGifTag *)f2GpSave.data;
+    GrGifTag *tags = f2GpSave.data;
     tags[f2GpSave.count].control |= f2Num;
 }
 
@@ -413,7 +443,7 @@ void grOpenF4(GrPacket *packet)
 
 void grCloseF4(void)
 {
-    GrGifTag *tags = (GrGifTag *)f4GpSave.data;
+    GrGifTag *tags = f4GpSave.data;
     tags[f4GpSave.count].control |= f4Num;
 }
 
@@ -435,7 +465,7 @@ void grOpenFT4(GrPacket *packet)
 
 void grCloseFT4(void)
 {
-    GrGifTag *tags = (GrGifTag *)ft4GpSave.data;
+    GrGifTag *tags = ft4GpSave.data;
     tags[ft4GpSave.count].control |= ft4Num;
 }
 
@@ -457,7 +487,7 @@ void grOpenFT4STQ(GrPacket *packet)
 
 void grCloseFT4STQ(void)
 {
-    GrGifTag *tags = (GrGifTag *)ft4STQGpSave.data;
+    GrGifTag *tags = ft4STQGpSave.data;
     tags[ft4STQGpSave.count].control |= ft4STQNum;
 }
 
@@ -479,23 +509,9 @@ void grOpenSpr(GrPacket *packet)
 
 void grCloseSpr(void)
 {
-    GrGifTag *tags = (GrGifTag *)sprGpSave.data;
+    GrGifTag *tags = sprGpSave.data;
     tags[sprGpSave.count].control |= sprNum;
 }
-
-/* grPutFT4STQ's quad: four corners, one shared RGBA and per-corner S/T. */
-typedef struct GrFT4STQVertices {
-    Vector4 points[4];       /* +0x00 */
-    unsigned char color[4];  /* +0x40: R, G, B, A */
-    float s[4];              /* +0x44 */
-    float t[4];              /* +0x54 */
-} GrFT4STQVertices;
-
-/* grPutF2's line: two end points and one shared RGBA color. */
-typedef struct GrF2Vertices {
-    Vector4 points[2];      /* +0x00 */
-    unsigned char color[4]; /* +0x20: R, G, B, A */
-} GrF2Vertices;
 
 /* Writes each end point as RGBAQ + XYZ2. Without a matrix the points are
  * already screen coordinates (12.4 fixed point, offset to the GS window). */
@@ -514,9 +530,9 @@ void grPutF2(GrPacket *packet, GrF2Vertices *line, const Matrix4 matrix)
         GR_PACKET_QUAD(packet, (*count)++)->rgba.a = line->color[3];
         if (matrix == 0) {
             GR_PACKET_QUAD(packet, *count)->xyz.x =
-                (int)point->x * 16 + 0x7000;
+                (int)point->x * 16 + GR_GS_WINDOW_OFFSET_X;
             GR_PACKET_QUAD(packet, *count)->xyz.y =
-                (int)point->y * 16 + 0x7200;
+                (int)point->y * 16 + GR_GS_WINDOW_OFFSET_Y;
             GR_PACKET_QUAD(packet, *count)->xyz.z = (int)point->z;
             GR_PACKET_QUAD(packet, (*count)++)->xyz.flags = 0;
         } else {
@@ -526,12 +542,6 @@ void grPutF2(GrPacket *packet, GrF2Vertices *line, const Matrix4 matrix)
     }
     f2Num += 2;
 }
-
-/* grPutF4's quad: four corners and one shared RGBA color. */
-typedef struct GrF4Vertices {
-    Vector4 points[4];      /* +0x00 */
-    unsigned char color[4]; /* +0x40: R, G, B, A */
-} GrF4Vertices;
 
 /* grPutF2's writer for four corners instead of two. */
 void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix)
@@ -549,9 +559,9 @@ void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix)
         GR_PACKET_QUAD(packet, (*count)++)->rgba.a = quad->color[3];
         if (matrix == 0) {
             GR_PACKET_QUAD(packet, *count)->xyz.x =
-                (int)point->x * 16 + 0x7000;
+                (int)point->x * 16 + GR_GS_WINDOW_OFFSET_X;
             GR_PACKET_QUAD(packet, *count)->xyz.y =
-                (int)point->y * 16 + 0x7200;
+                (int)point->y * 16 + GR_GS_WINDOW_OFFSET_Y;
             GR_PACKET_QUAD(packet, *count)->xyz.z = (int)point->z;
             GR_PACKET_QUAD(packet, (*count)++)->xyz.flags = 0;
         } else {
@@ -583,9 +593,9 @@ void grPutFT4(GrPacket *packet, GrFT4STQVertices *quad, const Matrix4 matrix)
         GR_PACKET_QUAD(packet, (*count)++)->rgba.a = quad->color[3];
         if (matrix == 0) {
             GR_PACKET_QUAD(packet, *count)->xyz.x =
-                (int)(point->x * 16.0f + 0x7000);
+                (int)(point->x * 16.0f + GR_GS_WINDOW_OFFSET_X);
             GR_PACKET_QUAD(packet, *count)->xyz.y =
-                (int)(point->y * 16.0f + 0x7200);
+                (int)(point->y * 16.0f + GR_GS_WINDOW_OFFSET_Y);
             GR_PACKET_QUAD(packet, *count)->xyz.z = (int)point->z;
             GR_PACKET_QUAD(packet, (*count)++)->xyz.flags = 0;
         } else {
@@ -623,7 +633,59 @@ void grPutFT4STQ(GrPacket *packet, GrFT4STQVertices *quad,
     ft4STQNum += 4;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/gr_gp_init", grPutSpr);
+void grPutSpr(GrPacket *packet, GrSpr *prim, int flag)
+{
+    Vector4 *v;
+    int *count;
+    int *countSlot;
+    int **countSlotRef;
+    int i;
+    int rgbaIndex;
+    int xyzIndex;
+
+    count = &packet->count;
+    for (i = 0; i < 2; i++) {
+        GR_PACKET_QUAD(packet, packet->count)->rgba.r = prim->u[i] * 16;
+        countSlot = &packet->count;
+        rgbaIndex = *countSlot;
+        GR_PACKET_QUAD(packet, rgbaIndex)->rgba.g = prim->v[i] * 16;
+        rgbaIndex++;
+        *countSlot = rgbaIndex;
+        GR_PACKET_QUAD(packet, rgbaIndex)->rgba.r = prim->col[0];
+        GR_PACKET_QUAD(packet, *countSlot)->rgba.g = prim->col[1];
+        GR_PACKET_QUAD(packet, *countSlot)->rgba.b = prim->col[2];
+        xyzIndex = *countSlot;
+        GR_PACKET_QUAD(packet, xyzIndex)->rgba.a = prim->col[3];
+        xyzIndex++;
+        countSlotRef = &countSlot;
+        *(*countSlotRef) = xyzIndex;
+        v = &prim->vertex[i];
+        if (flag == 0) {
+            int flagsIndex;
+
+            GR_PACKET_QUAD(packet, xyzIndex)->xyz.x = ((int)v->x * 16) + GR_GS_WINDOW_OFFSET_X;
+            GR_PACKET_QUAD(packet, *count)->xyz.y = ((int)v->y * 16) + GR_GS_WINDOW_OFFSET_Y;
+            GR_PACKET_QUAD(packet, *count)->xyz.z = (int)v->z;
+            flagsIndex = *count;
+            GR_PACKET_QUAD(packet, flagsIndex)->xyz.flags = 0;
+            flagsIndex++;
+            *count = flagsIndex;
+        } else {
+            int flagsIndex;
+
+            GR_PACKET_QUAD(packet, xyzIndex)->xyz.x = (int)v->x;
+            GR_PACKET_QUAD(packet, *count)->xyz.y = (int)v->y;
+            GR_PACKET_QUAD(packet, *count)->xyz.z = (int)v->z;
+            flagsIndex = *count;
+            GR_PACKET_QUAD(packet, flagsIndex)->xyz.flags = 0;
+            flagsIndex++;
+            *count = flagsIndex;
+        }
+    }
+
+    sprNum += 2;
+}
+
 
 void grPacketSend(GrPacket *packet)
 {
@@ -638,25 +700,25 @@ void grPacketSend(GrPacket *packet)
     sceVif1PkTerminate(vif1Packet);
 }
 
-Matrix *grWorldMatGet(void)
+Matrix4 *grWorldMatGet(void)
 {
     StudioCamera *camera;
 
     /* Camera zero's view matrix (+0x470) is the current world matrix. */
     xglStudioGetCamera(&camera, 0);
-    return (Matrix *)camera->viewMatrix;
+    return &camera->viewMatrix;
 }
 
-void grCalcMatrix(MatrixCommand *command, Matrix *destination)
+void grCalcMatrix(MatrixCommand *command, Matrix4 *destination)
 {
-    Matrix *world;
-    Matrix local;
+    Matrix4 *world;
+    Matrix4 local;
     FloatVector4 translation;
     TransformState *state;
 
     world = grWorldMatGet();
     state = command->state;
-    xglMatrixUnit((float (*)[4])&local);
+    xglMatrixUnit(local);
 
     translation.x = state->position.x + state->offset.x;
     translation.y = state->position.y + state->offset.y;
@@ -669,7 +731,7 @@ void grCalcMatrix(MatrixCommand *command, Matrix *destination)
     xglMatrixMul(destination, world, &local);
 }
 
-void grRotMatrix(Matrix *destination, Matrix *source, FloatVector3 *angles)
+void grRotMatrix(Matrix4 *destination, Matrix4 *source, FloatVector3 *angles)
 {
     /* The resident matrix stack applies Y, then X, then Z in this wrapper. */
     xglMatrixStackLoad(source);
@@ -724,20 +786,20 @@ float grRotTransPers(GrScreenVertex *vertex, const Matrix4 matrix,
         xglVectorMulAdd(&local, &local, &camera->screenScale,
                         &camera->screenOffset);
     } else {
-        *clipFlags |= 0x8000;
+        *clipFlags |= GR_VERTEX_OUT_OF_FRUSTUM;
     }
 
     vertex->z = (int)local.z;
     vertex->y = (int)(local.y * 16.0f);
     vertex->x = (int)(local.x * 16.0f);
-    vertex->flags = *clipFlags & 0x8000;
+    vertex->flags = *clipFlags & GR_VERTEX_OUT_OF_FRUSTUM;
     return invW;
 }
 
 int grBBCalc(MatrixCommand *command, int *screen_x, int *screen_y)
 {
     Vector4 origin;
-    Matrix matrix;
+    Matrix4 matrix;
     GrScreenVertex vertex;
     int clip_flags = 0;
 
@@ -746,28 +808,22 @@ int grBBCalc(MatrixCommand *command, int *screen_x, int *screen_y)
     origin.x = 0.0f;
     origin.y = 0.0f;
     origin.z = 0.0f;
-    grRotTransPers(&vertex, (const float (*)[4])&matrix, &origin, &clip_flags);
-    if (clip_flags & 0x8000) {
+    grRotTransPers(&vertex, (const float (*)[4])matrix, &origin, &clip_flags);
+    if (clip_flags & GR_VERTEX_OUT_OF_FRUSTUM) {
         return 0;
     }
 
-    *screen_x = (vertex.x - 0x7000) / 16;
-    *screen_y = (vertex.y - 0x7200) / 16;
+    *screen_x = (vertex.x - GR_GS_WINDOW_OFFSET_X) / 16;
+    *screen_y = (vertex.y - GR_GS_WINDOW_OFFSET_Y) / 16;
     return 1;
 }
 
 void grGsRegSet(GrPacket *packet, unsigned long long register_id,
                 unsigned long long value)
 {
-    grGifAppendRegister(packet, 14, 0x1000000000008001ULL);
+    grGifAppendRegister(packet, GIF_REG_AD, 0x1000000000008001ULL);
     grGifAppendRegister(packet, register_id, value);
 }
-
-/* One GS register write of grGsRegListSet's list; register_id -1 ends it. */
-typedef struct GrGsRegListEntry {
-    int register_id;          /* +0x00 */
-    unsigned long long value; /* +0x08 */
-} GrGsRegListEntry;
 
 void grGsRegListSet(GrPacket *packet, GrGsRegListEntry *entries)
 {
@@ -777,7 +833,7 @@ void grGsRegListSet(GrPacket *packet, GrGsRegListEntry *entries)
     int tag_index = packet->count;
     int register_count = 0;
 
-    grGifAppendRegister(packet, 14, 0x1000000000008000ULL);
+    grGifAppendRegister(packet, GIF_REG_AD, 0x1000000000008000ULL);
     while (entries->register_id != -1) {
         grGifOpenRegister(packet, entries->register_id);
         count = &packet->count;
@@ -804,12 +860,16 @@ void GS_REG_SET(GrPacket *packet, long long register_id, long long control)
     *count = tag_index + 1;
 }
 
-const GrFrameBaseTable D_00A466E8 = {{0x0e00, 0x1c00, 0x2a00}};
+const GrFrameBaseTable grFrameBaseTable = {{0x0e00, 0x1c00, 0x2a00}};
 
-const GrVramCopyParams D_00A466F0 = {
+const GrVramCopyParams grVramCopyParams = {
     0, 8, 0, 8,
     0, 0, 0, 0,
     0x0200, 0x01c0,
 };
 
-const char D_00A46708[40] = "** grVramCopyFBtoFB: err %d %d\n";
+const char grGpInitGrVramCopyFBtoFBErrText[40] = "** grVramCopyFBtoFB: err %d %d\n";
+
+
+
+MenuStockPos stockPosTbl[5] = { { .x = 16, .z = 60 }, { .x = 41, .z = 60 }, { .x = 66, .z = 60 }, { .x = 91, .z = 60 }, { .x = -76, .z = 70 } };

@@ -5,23 +5,53 @@
 #include "shared.h"
 #include "ov01/data_unit_org_get.h"
 #include "main/act_1.h"
+#include "quadword.h"
+#include "vu0_macro.h"
 
 extern void MOutputDebugStringWarn(const char *format, ...);
 /* The message body after the ASCII prefix is encoded in EUC-JP. */
-/* JP: MCamReleaseControl: カメラは制御中ではない
- * EN: MCamReleaseControl: The camera is not under control */
-const char D_00A50EF0[48] =
+/* Reads: MCamReleaseControl: The camera is not under control */
+const char camMCamReleaseControlText[48] =
     "MCamReleaseControl: \xA5\xAB\xA5\xE1\xA5\xE9\xA4\xCF\xC0\xA9\xB8\xE6\xC3\xE6\xA4\xC7\xA4\xCF\xA4\xCA\xA4\xA4";
-const char D_00A51000[40] = "MCamGetAtkRange: Invalid ID (%d)";
-const char D_00A51028[40] = "MCamGetDefRange: Invalid ID (%d)";
+const char camMCamGetAtkRangeInvalidIDText[40] = "MCamGetAtkRange: Invalid ID (%d)";
+const char camMCamGetDefRangeInvalidIDText[40] = "MCamGetDefRange: Invalid ID (%d)";
 const char zero_duration_message[40] = "MCamMoveProc_CalcRatio: d == 0 (IP:%d)";
 const char invalid_interpolation_message[40] = "MCamMoveProc_CalcRatio: Invalid IPTYPE";
 
-extern const char D_00A50F98[]; /* "MCamStopMove: Invalid point" */
-extern const char D_00A50FB8[]; /* "MCamIsMoving: Invalid point" */
-extern const char D_00A50FD8[]; /* "MCamGetActorCoord: actor is NULL" */
+extern const char camMCamStopMoveInvalidPointText[]; /* "MCamStopMove: Invalid point" */
+extern const char camMCamIsMovingInvalidPointText[]; /* "MCamIsMoving: Invalid point" */
+extern const char camMCamGetActorCoordActorIsNULLText[]; /* "MCamGetActorCoord: actor is NULL" */
 
 extern void bcopy(const void *source, void *destination, unsigned int count);
+extern Vector4 *MMathCalcOffset(Vector4 *destination, const Vector4 *first, const Vector4 *second);
+extern Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target);
+extern float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second);
+extern Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first,
+                                          const Vector4 *second, float parameter);
+/*
+ * main/m_math.h declares this void; MCamCalcBaseCoord (like
+ * m_ef_create_amp_02.c's MMathCalcDir use) reads the srsAtan2 result MMathCalcDir
+ * leaves in $f0 (it calls srsAtan2 last and returns), so this TU redeclares it
+ * float-returning.
+ */
+/* The definition in src/main/m_math.c returns void (m_math.h:22) while the
+ * original code here reads $f0 after the call. This declaration is an inherited
+ * ABI workaround, also present at src/ov01/m_ef_create_amp_02.c:72; it is not a
+ * claim that the signatures agree. */
+extern float MMathCalcDir(const void *first, const void *second);
+extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
+extern float fmodf(float value, float modulus);
+extern Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Vector4 *second);
+extern Vector4 *MMathCalcDirVector(Vector4 *out, Vector4 *from, Vector4 *to);
+extern Vector4 *MMathCalcAngle(Vector4 *out, const Vector4 *from, const Vector4 *to);
+extern float MMathCalcDist(const Vector4 *first, const Vector4 *second);
+extern float MMathCalcRotNear(float first, float second);
+extern StudioCamera *xglStudioGetCamera2(int camera_id);
+extern void xglCameraInit(StudioCamera *camera);
+extern const char camMCamTakeControlText[]; /* "MCamTakeControl: ..." */
+extern const char camMCamSetInvalidPointText[]; /* "MCamSet: Invalid point" */
+extern const char camMCamMoveFrame1AdjustedTo1Text[]; /* "MCamMove: frame < 1, adjusted to 1" */
+extern const char camMCamMoveInvalidPointPOVPLABANKText[]; /* "MCamMove: Invalid point" */
 /*
  * The interpolation curve MCamMoveProc_CalcRatio applies to a move's ratio
  * (its "Invalid IPTYPE" message names the selector; the cases are its
@@ -33,6 +63,18 @@ typedef enum MCamIpType {
     MCAM_IP_SINE_IN = 2,
     MCAM_IP_SINE_OUT = 3
 } MCamIpType;
+
+/*
+ * The point selector MCamSet, MCamMove, MCamStopMove and MCamIsMoving switch on.
+ * 0 and 1 are the two camera points (coordinate moves, CAM_FLAG_MOVE_COORD and
+ * CAM_FLAG_MOVE_TARGET), 2 the bank and 3 the perspective angle.
+ */
+enum MCamPoint {
+    MCAM_POINT_COORD = 0,
+    MCAM_POINT_TARGET = 1,
+    MCAM_POINT_BANK = 2,
+    MCAM_POINT_PERS = 3
+};
 
 /*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
@@ -127,7 +169,7 @@ enum MCamBaseMode {
 
 /*
  * MCamCalcBaseCoord selects the base coordinate by mode (MCamBaseMode).
- * Size-preserving for master's type: 0xB0 by member arithmetic (fixedCoord
+ * Size-preserving for the type: 0xB0 by member arithmetic (fixedCoord
  * +0x10, ratio +0x6C, coordOffset +0x70..0xA4, perspectiveAngle +0xA4, tail
  * to 0xB0).
  */
@@ -161,7 +203,7 @@ typedef struct MCamPointParams {
  * record at the start and at the target, the other point's coordinate as
  * pivot, the start, end and current coordinates, then the request's path,
  * mode and duration and the elapsed frames (cleared). MCamMoveProc_Coord
- * (still asm) consumes them: it branches three ways on path (0, 1, other:
+ * consumes them: it branches three ways on path (0, 1, other:
  * `beqz`/`beq $2,$3` at 0x00a32a7c..0x00a32a84 on `lw $2,0x1A0($18)`),
  * and first hands mode (`lw $4,0x1A4($18)`, 0x00a32a18), the incremented
  * elapsed (`lw $5,0x1AC($18)`/`addiu $5,$5,0x1`, stored back by
@@ -207,7 +249,7 @@ typedef struct MCamParameterStorage {
     float perspectiveStart;
     unsigned char unmodeled_1F8[0x8];
     MCamCoordMove coordMove[2];
-    /* MCamExec_Control passes &camParams + 0x560 (D_00A5B5E0) to
+    /* MCamExec_Control passes &camParams + 0x560 (camControlParams) to
      * MCamMoveProc_Bank and copies its current (+0x14, `lwc1 $f0,0x574`)
      * to bank. */
     MCamMoveState bankMove;
@@ -215,27 +257,7 @@ typedef struct MCamParameterStorage {
     MCamShakeState shake;
 } MCamParameterStorage;
 
-extern Vector4 *MMathCalcOffset(Vector4 *destination, const Vector4 *first, const Vector4 *second);
-extern Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target);
-extern float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second);
-extern Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first,
-                                          const Vector4 *second, float parameter);
-/*
- * main/m_math.h declares this void; MCamCalcBaseCoord (like
- * m_ef_create_amp_02.c's MMathCalcDir use) reads the srsAtan2 result MMathCalcDir
- * leaves in $f0 (it calls srsAtan2 last and returns), so this TU redeclares it
- * float-returning.
- */
-/* The definition in src/main/m_math.c returns void (m_math.h:22) while the
- * original code here reads $f0 after the call. This declaration is an inherited
- * ABI workaround, also present at src/ov01/m_ef_create_amp_02.c:72; it is not a
- * claim that the signatures agree. */
-extern float MMathCalcDir(const void *first, const void *second);
-extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
-extern float fmodf(float value, float modulus);
-extern Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Vector4 *second);
-
-static void *sysCam;
+static StudioCamera *sysCam;
 /* MCamTakeControl saves the StudioCamera returned by xglStudioGetCamera2. */
 static StudioCamera sysCamBuff;
 
@@ -261,13 +283,23 @@ enum CamFlag {
 };
 #define CAM_SHAKE_BIT 12
 
+/* MCamShake's mode selects the rotation axes the shake offsets (rotation[0..2]). */
+#define CAM_SHAKE_AXIS_X 0x1
+#define CAM_SHAKE_AXIS_Y 0x10
+#define CAM_SHAKE_AXIS_Z 0x100
+
+/* Angle constants: degrees to radians, the 40 degree default perspective, and 2 pi. */
+#define CAM_DEG_TO_RAD 0.017453292f
+#define CAM_DEFAULT_PERSPECTIVE 0.6981317f
+#define CAM_TWO_PI 6.283185f
+
 static enum CamFlag camFlags;
 static MCamParameterStorage camParams;
 
 /* Original local labels are interior views in camParams, not extra storage. */
-#define D_00A5B220 (camParams.actorLength[0])
-#define D_00A5B224 (camParams.actorLength[1])
-#define D_00A5B5F8 (camParams.perspectiveMove)
+#define camActorLengthFirst (camParams.actorLength[0])
+#define camActorLengthSecond (camParams.actorLength[1])
+#define camPerspectiveMove (camParams.perspectiveMove)
 
 void *MCamGetSysCam(void)
 {
@@ -346,10 +378,10 @@ float MCamGetLengthActor(int selector)
 
     switch (selector) {
     case 0:
-        length = D_00A5B220;
+        length = camActorLengthFirst;
         break;
     case 1:
-        length = D_00A5B224;
+        length = camActorLengthSecond;
         break;
     }
     return length;
@@ -383,12 +415,62 @@ void MCamDumpDisabled(short disable)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamTakeControl);
+/*
+ * Saves the studio camera and starts from it: point 0 sits at the camera's
+ * position, point 1 one unit along the direction its rotation gives. The
+ * perspective starts at 40 degrees (0.6981317 radians).
+ */
+int MCamTakeControl(void)
+{
+    StudioCamera *saved;
+    MCamVector direction;
+    float sinY;
+    float cosX;
+    float sinX;
+    float cosY;
+    float cosX2;
+    u64 directionLow;
+    u64 directionHigh;
+
+    if (camFlags & CAM_FLAG_ACTIVE) {
+        MOutputDebugStringWarn(camMCamTakeControlText);
+        return 0;
+    }
+    sysCam = xglStudioGetCamera2(0);
+    saved = &sysCamBuff;
+    bcopy(sysCam, &sysCamBuff, sizeof(sysCamBuff));
+    xglCameraInit(sysCam);
+    sysCam->active = 1;
+    sysCam->state = 1;
+    memset(&camParams, 0, sizeof(camParams));
+    camParams.point[0].mode = MCAM_BASE_FIXED;
+    camParams.point[0].fixedCoord.pair[0] = saved->position.words[0];
+    camParams.point[0].fixedCoord.pair[1] = saved->position.words[1];
+    camParams.point[0].coordOffset.mode = MCAM_OFFSET_NONE;
+    Vu0Sin(sinY, saved->rotation.vector.y);
+    Vu0Cos(cosX, saved->rotation.vector.x);
+    direction.vector.x = -sinY * cosX;
+    Vu0Sin(sinX, saved->rotation.vector.x);
+    direction.vector.y = sinX;
+    Vu0Cos(cosY, saved->rotation.vector.y);
+    Vu0Cos(cosX2, saved->rotation.vector.x);
+    direction.vector.z = -cosY * cosX2;
+    Vu0SefAddVectorXYZ(&direction, &direction, &saved->position);
+    directionLow = direction.pair[0];
+    directionHigh = direction.pair[1];
+    camFlags |= CAM_FLAG_ACTIVE;
+    camParams.perspectiveStart = CAM_DEFAULT_PERSPECTIVE;
+    camParams.point[1].fixedCoord.pair[0] = directionLow;
+    camParams.point[1].fixedCoord.pair[1] = directionHigh;
+    camParams.point[1].coordOffset.mode = MCAM_OFFSET_NONE;
+    camParams.point[1].mode = MCAM_BASE_FIXED;
+    return 1;
+}
 
 int MCamReleaseControl(void)
 {
     if (!(camFlags & CAM_FLAG_ACTIVE)) {
-        MOutputDebugStringWarn(D_00A50EF0);
+        MOutputDebugStringWarn(camMCamReleaseControlText);
         return 0;
     }
 
@@ -397,18 +479,98 @@ int MCamReleaseControl(void)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamStoreParams);
+void MCamStoreParams(void)
+{
+    StudioCamera *camera;
+    MCamParameterStorage *params;
+    float bank;
+    float perspective;
+
+    QuadwordCopyXyzT0(&sysCamBuff.position, &camParams.coord[0]);
+    QuadwordCopyXyzT0(&sysCamBuff.rotation, &camParams.rotation);
+    camera = &sysCamBuff;
+    params = &camParams;
+    bank = params->bank;
+    perspective = params->perspectiveStart;
+    camera->fov = perspective;
+    camera->rotation.vector.z = bank;
+}
 
 int MCamIsActive(void)
 {
     return camFlags & CAM_FLAG_ACTIVE;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamSet);
+/*
+ * MCamSet's point record: the first 0xA0 bytes of a MCamPointParams (the
+ * base block of 0x70 bytes and the coordinate-offset tail of 0x30 bytes),
+ * then the bank word at +0xA0 and the perspective angle word at +0xA4.
+ * Modes 0 and 1 copy the first 0xA0 bytes into camParams.point[0] or [1]
+ * (the rest of each point record is left alone); mode 2 stores the bank,
+ * mode 3 the perspective angle converted from degrees to radians (0.6981317
+ * radians, 40 degrees, when the angle is zero).
+ */
+typedef struct MCamSetBlock {
+    long long v[14];
+} MCamSetBlock;
+typedef struct MCamSetTail {
+    long long v[6];
+} MCamSetTail;
+typedef struct MCamSetPoint {
+    MCamSetBlock base;
+    MCamSetTail tail;
+    float fA0;
+    float fA4;
+    unsigned char pad[8];
+} MCamSetPoint;
+typedef struct MCamSetParamsView {
+    MCamSetBlock p0;
+    MCamSetTail t0;
+    unsigned char pad_a0[0x10];
+    MCamSetBlock p1;
+    MCamSetTail t1;
+    unsigned char pad_150[0xA4];
+    float pers;
+} MCamSetParamsView;
+
+static void MCamExec_SetParams_Base(void);
+
+void MCamSet(unsigned int point, MCamPointParams *params)
+{
+    MCamSetPoint *src = (MCamSetPoint *)params;
+    float f;
+    MCamSetParamsView *view;
+    switch (point) {
+    case MCAM_POINT_COORD:
+        ((MCamSetParamsView *)&camParams)->p0 = src->base;
+        ((MCamSetParamsView *)&camParams)->t0 = src->tail;
+        break;
+    case MCAM_POINT_TARGET:
+        ((MCamSetParamsView *)&camParams)->p1 = src->base;
+        ((MCamSetParamsView *)&camParams)->t1 = src->tail;
+        break;
+    case MCAM_POINT_BANK:
+        camParams.bank = src->fA0;
+        break;
+    case MCAM_POINT_PERS:
+        view = (MCamSetParamsView *)&camParams;
+        if (src->fA4 != 0.0f) {
+            f = src->fA4 * CAM_DEG_TO_RAD;
+        } else {
+            f = CAM_DEFAULT_PERSPECTIVE;
+        }
+        view->pers = f;
+        break;
+    default:
+        MOutputDebugStringWarn(camMCamSetInvalidPointText);
+        return;
+    }
+    MCamExec_SetParams_Base();
+}
 
 /*
  * The caller's move request handed to MCamMove (MCamMove clamps a zero
- * duration to 1). Not size-preserving: master's type ended at 0xBC (mode at
+ * duration to 1). Not size-preserving: the type ends at 0xBC (mode at
  * 0xB4, duration at 0xB8); this one is reshaped (target point record 0xB0, path
  * 0xB0, mode 0xB4, duration 0xB8) and extended by the halfword at 0xBC. MCamMove_Coord copies its leading 0xB0 bytes as the target
  * point record and sets the point's fix flag when fixOnArrival (lh +0xBC)
@@ -424,9 +586,6 @@ typedef struct MCamMoveRequest {
     short fixOnArrival;
 } MCamMoveRequest;
 
-extern const char D_00A50F38[]; /* "MCamMove: frame < 1, adjusted to 1" */
-extern const char D_00A50F60[]; /* "MCamMove: Invalid point" */
-
 static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request);
 static void MCamMove_Bank(MCamMoveRequest *request);
 static void MCamMove_Pers(MCamMoveRequest *request);
@@ -434,24 +593,24 @@ static void MCamMove_Pers(MCamMoveRequest *request);
 void MCamMove(unsigned int point, MCamMoveRequest *request)
 {
     if (request->duration == 0) {
-        MOutputDebugStringWarn(D_00A50F38);
+        MOutputDebugStringWarn(camMCamMoveFrame1AdjustedTo1Text);
         request->duration = 1;
     }
     switch (point) {
-    case 0:
-        MCamMove_Coord(0, request);
+    case MCAM_POINT_COORD:
+        MCamMove_Coord(MCAM_POINT_COORD, request);
         break;
-    case 1:
-        MCamMove_Coord(1, request);
+    case MCAM_POINT_TARGET:
+        MCamMove_Coord(MCAM_POINT_TARGET, request);
         break;
-    case 2:
+    case MCAM_POINT_BANK:
         MCamMove_Bank(request);
         break;
-    case 3:
+    case MCAM_POINT_PERS:
         MCamMove_Pers(request);
         break;
     default:
-        MOutputDebugStringWarn(D_00A50F60);
+        MOutputDebugStringWarn(camMCamMoveInvalidPointPOVPLABANKText);
         break;
     }
 }
@@ -461,20 +620,20 @@ void MCamStopMove(unsigned int point)
     int moveFlag;
 
     switch (point) {
-    case 0:
+    case MCAM_POINT_COORD:
         moveFlag = CAM_FLAG_MOVE_COORD;
         break;
-    case 1:
+    case MCAM_POINT_TARGET:
         moveFlag = CAM_FLAG_MOVE_TARGET;
         break;
-    case 2:
+    case MCAM_POINT_BANK:
         moveFlag = CAM_FLAG_MOVE_BANK;
         break;
-    case 3:
+    case MCAM_POINT_PERS:
         moveFlag = CAM_FLAG_MOVE_PERS;
         break;
     default:
-        MOutputDebugStringWarn(D_00A50F98);
+        MOutputDebugStringWarn(camMCamStopMoveInvalidPointText);
         return;
     }
     camFlags &= ~moveFlag;
@@ -485,20 +644,20 @@ int MCamIsMoving(unsigned int point)
     int moveFlag;
 
     switch (point) {
-    case 0:
+    case MCAM_POINT_COORD:
         moveFlag = CAM_FLAG_MOVE_COORD;
         break;
-    case 1:
+    case MCAM_POINT_TARGET:
         moveFlag = CAM_FLAG_MOVE_TARGET;
         break;
-    case 2:
+    case MCAM_POINT_BANK:
         moveFlag = CAM_FLAG_MOVE_BANK;
         break;
-    case 3:
+    case MCAM_POINT_PERS:
         moveFlag = CAM_FLAG_MOVE_PERS;
         break;
     default:
-        MOutputDebugStringWarn(D_00A50FB8);
+        MOutputDebugStringWarn(camMCamIsMovingInvalidPointText);
         return 0;
     }
     return (camFlags & moveFlag) != 0;
@@ -516,10 +675,10 @@ void MCamShake(unsigned int mode, unsigned int amplitude, unsigned int phaseStep
         return;
     }
 
-    /* 0.017453292f is pi/180 (degrees to radians) and 0.5f halves the result;
+    /* CAM_DEG_TO_RAD is pi/180 (degrees to radians) and 0.5f halves the result;
      * 1.5707964f is pi/2, divided by phaseStep to give the per-frame phase step. */
     shake->mode = mode;
-    shake->amplitude = (float)amplitude * 0.017453292f * 0.5f;
+    shake->amplitude = (float)amplitude * CAM_DEG_TO_RAD * 0.5f;
     shake->decayStep = 0.0f;
     shake->offset = 0.0f;
     shake->phase = 0.0f;
@@ -545,12 +704,12 @@ int MCamIsShaking(void)
     return ((int)camFlags >> CAM_SHAKE_BIT) & 1;
 }
 
-/* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no reference outside m_cam.c. */
+/* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no use outside m_cam.c. */
 static Vector4 *MCamGetActorCoord(Vector4 *coord, Actor *actor, int part)
 {
     __asm__ __volatile__("sq $0,0(%0)" : : "r"(coord) : "memory");
     if (actor == 0) {
-        MOutputDebugStringWarn(D_00A50FD8);
+        MOutputDebugStringWarn(camMCamGetActorCoordActorIsNULLText);
         return coord;
     }
     if (part == 0) {
@@ -560,7 +719,7 @@ static Vector4 *MCamGetActorCoord(Vector4 *coord, Actor *actor, int part)
     } else {
         sefGetNullPosition(coord, actor, part - 1, 0);
     }
-    coord->w = fmodf(actor->rotation.y + 3.1415927f, 6.283185f);
+    coord->w = fmodf(actor->rotation.y + 3.1415927f, CAM_TWO_PI);
     return coord;
 }
 
@@ -637,7 +796,7 @@ static float MCamGetAtkRange(int id)
     UnitInitData *unit = dataUnitInitGet(id);
 
     if (unit == 0) {
-        MOutputDebugStringWarn(D_00A51000, id);
+        MOutputDebugStringWarn(camMCamGetAtkRangeInvalidIDText, id);
         return 0.0f;
     }
     return (float)unit->atkRange / 100.0f;
@@ -648,14 +807,12 @@ static float MCamGetDefRange(int id)
     UnitInitData *unit = dataUnitInitGet(id);
 
     if (unit == 0) {
-        MOutputDebugStringWarn(D_00A51028, id);
+        MOutputDebugStringWarn(camMCamGetDefRangeInvalidIDText, id);
         return 0.0f;
     }
     return (float)unit->defRange / 100.0f;
 }
 
-/* Declared in src/ov01/cmd.h; MCamExec_Control hands it a move's target point. */
-extern void MCamSet(int mode, void *params);
 static int MCamMoveProc_Coord(MCamCoordMove *move);
 static int MCamMoveProc_Bank(MCamMoveState *state);
 static int MCamMoveProc_Pers(MCamMoveState *state);
@@ -716,7 +873,35 @@ static void MCamExec_Control(void)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamExec_SetParams);
+/*
+ * Publishes the frame to the studio camera: eye direction from the two points,
+ * then coordinate, rotation (with the shake offset on the axes shake.mode
+ * selects: bits 0, 4 and 8) and field of view.
+ */
+static void MCamExec_SetParams(void)
+{
+    float rotation[3];
+    int axes;
+
+    MCamExec_SetParams_Base();
+    MMathCalcDirVector(&camParams.eye, &camParams.coord[0], &camParams.coord[1]);
+    QuadwordCopyXyzT0(rotation, &camParams.rotation);
+    if (camFlags & (1 << CAM_SHAKE_BIT)) {
+        axes = camParams.shake.mode;
+        if (axes & CAM_SHAKE_AXIS_X) {
+            rotation[0] += camParams.shake.offset;
+        }
+        if (axes & CAM_SHAKE_AXIS_Y) {
+            rotation[1] += camParams.shake.offset;
+        }
+        if (axes & CAM_SHAKE_AXIS_Z) {
+            rotation[2] += camParams.shake.offset;
+        }
+    }
+    QuadwordCopyXyzT0(&sysCam->position, &camParams.coord[0]);
+    QuadwordCopyXyzT0(&sysCam->rotation, rotation);
+    sysCam->fov = camParams.perspectiveStart;
+}
 
 static void MCamExec_SetParams_Base(void)
 {
@@ -813,7 +998,7 @@ static void MCamMove_Bank(MCamMoveRequest *request)
 
 static void MCamMove_Pers(MCamMoveRequest *request)
 {
-    MCamMoveState *state = &D_00A5B5F8;
+    MCamMoveState *state = &camPerspectiveMove;
     MCamIpType mode;
     int duration;
     float angle;
@@ -822,21 +1007,21 @@ static void MCamMove_Pers(MCamMoveRequest *request)
 
     mode = request->mode;
     duration = request->duration;
-    /* MCamMove_Pers's start value is the float at state - 0x384. */
+    /* The start is the perspective angle the camera currently uses. */
     state->start = camParams.perspectiveStart;
     state->mode = mode;
     angle = request->target.perspectiveAngle;
     state->duration = duration;
     state->elapsed = 0;
     if (angle != 0.0f) {
-        angleRad = angle * 0.017453292f;
+        angleRad = angle * CAM_DEG_TO_RAD;
     } else {
-        angleRad = 0.6981317f;
+        angleRad = CAM_DEFAULT_PERSPECTIVE;
     }
     savedStart = state->start;
     state->end = angleRad;
     state->current = savedStart;
-    camFlags |= 0x800;
+    camFlags |= CAM_FLAG_MOVE_PERS;
 }
 
 
@@ -910,7 +1095,54 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
     return ratio;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_cam", MCamMoveProc_Coord);
+/* One helper: the original shares one add tail between both paths, which gcc's
+ * cross-jumping only produces from a single source line (as MCamCopyVector). */
+static __inline__ void MCamAddDrift(MCamCoordMove *move, Vector4 *coord, Vector4 *drift)
+{
+    Vu0SefAddVectorXYZ(&move->currentCoord, coord, drift);
+}
+
+/*
+ * One frame of a coordinate move. The target may itself be moving: the
+ * difference between its current and its stored end coordinate, scaled by the
+ * eased ratio, is added to the path's point. Path 0 is straight, path 1 an arc
+ * around the pivot's x, y and z.
+ */
+static int MCamMoveProc_Coord(MCamCoordMove *move)
+{
+    Vector4 drift;
+    Vector4 origin;
+    Vector4 coord;
+    Vector4 difference;
+    Vector4 offset;
+    float ratio;
+
+    ratio = MCamMoveProc_CalcRatio(move->mode, ++move->elapsed, move->duration);
+    MCamCalcCoord(&coord, &move->target);
+    Vu0SefSubVectorXYZ(&difference, &coord, &move->endCoord);
+    Vu0SefScaleVectorXYZNI(&drift, &difference, ratio);
+    switch (move->path) {
+    case 0:
+        MMathVectorInterpolation(&coord, &move->startCoord, &move->endCoord, ratio);
+        MCamAddDrift(move, &coord, &drift);
+        break;
+    case 1:
+        QuadwordZero(&origin);
+        QuadwordCopyXyzT0(&origin, &move->pivot);
+        MMathCalcAngle(&coord, &origin, &move->startCoord);
+        coord.w = MMathCalcDist(&origin, &move->startCoord);
+        MMathCalcAngle(&difference, &origin, &move->endCoord);
+        difference.w = MMathCalcDist(&origin, &move->endCoord);
+        QuadwordZero(&offset);
+        offset.x = coord.x + MMathCalcRotNear(coord.x, difference.x) * ratio;
+        offset.y = coord.y + MMathCalcRotNear(coord.y, difference.y) * ratio;
+        offset.w = coord.w + (difference.w - coord.w) * ratio;
+        MMathCalcOffset(&coord, &origin, &offset);
+        MCamAddDrift(move, &coord, &drift);
+        break;
+    }
+    return (unsigned int)move->elapsed < (unsigned int)move->duration;
+}
 
 static int MCamMoveProc_Bank(MCamMoveState *state)
 {
@@ -941,7 +1173,7 @@ static void MCamShakeProc(void)
     if (shake->holdFrames != 0) {
         shake->holdFrames--;
         if (shake->phaseStep != 0.0f) {
-            shake->phase = fmodf(shake->phase + shake->phaseStep, 6.283185f);
+            shake->phase = fmodf(shake->phase + shake->phaseStep, CAM_TWO_PI);
             shake->offset = shake->amplitude * sinf(shake->phase);
         } else {
             /* No phase step: flip the offset to the other side. */
@@ -951,7 +1183,7 @@ static void MCamShakeProc(void)
         shake->decayFrames--;
         shake->amplitude -= shake->decayStep;
         if (shake->phaseStep != 0.0f) {
-            shake->phase = fmodf(shake->phase + shake->phaseStep, 6.283185f);
+            shake->phase = fmodf(shake->phase + shake->phaseStep, CAM_TWO_PI);
             shake->offset = shake->amplitude * sinf(shake->phase);
         } else {
             /* No phase step: flip the offset to the other side. */
@@ -962,3 +1194,19 @@ static void MCamShakeProc(void)
         camFlags &= ~(1 << CAM_SHAKE_BIT);
     }
 }
+
+
+
+const char camMCamTakeControlText[40] = "MCamTakeControl: \264\373\244\313\245\253\245\341\245\351\244\317\300\251\270\346\303\346";
+
+const char camMCamSetInvalidPointText[24] = "MCamSet: Invalid point";
+
+const char camMCamMoveFrame1AdjustedTo1Text[40] = "MCamMove: frame < 1, adjusted to 1";
+
+const char camMCamMoveInvalidPointPOVPLABANKText[56] = "MCamMove: Invalid point\000POV\000\000\000\000\000PLA\000\000\000\000\000BANK\000\000\000\000PERS";
+
+const char camMCamStopMoveInvalidPointText[32] = "MCamStopMove: Invalid point";
+
+const char camMCamIsMovingInvalidPointText[32] = "MCamIsMoving: Invalid point";
+
+const char camMCamGetActorCoordActorIsNULLText[40] = "MCamGetActorCoord: actor is NULL";

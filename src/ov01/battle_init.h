@@ -5,6 +5,67 @@
 #ifndef SRC_OV01_BATTLE_INIT_H
 #define SRC_OV01_BATTLE_INIT_H
 
+/*
+ * Unit command selectors (CmdEntry.selector, queued by unitCmdSet). The
+ * names are the original debug strings of cmdStrTbl in debug_entry_data.h,
+ * which index the same numbers the queue carries (debugCmdPrint prints
+ * cmdStrTbl[cmd] for them); battle_init.c's own uses confirm ATK/ETHER/ITEM/
+ * GUARD/AGWS/END, FADEIN (0x2F) and FADEOUT (0x30) by syoukanFadeIn and
+ * syoukanFadeOut. Owned by the unit-command family: move to
+ * include/ov01/unit_cmd.h when that header is merged.
+ */
+enum UnitCommand {
+    CMD_FREE = 0,
+    CMD_ATK = 1,
+    CMD_ETHER = 2,
+    CMD_ITEM = 3,
+    CMD_GUARD = 4,
+    CMD_AGWS = 5,
+    CMD_MOVE = 6,
+    CMD_STAND = 7,
+    CMD_END = 8,
+    CMD_DMG = 9,
+    CMD_EVA = 10,
+    CMD_DEF = 11,
+    CMD_DEAD = 12,
+    CMD_MOT = 13,
+    CMD_TGTSET = 14,
+    CMD_TURNCHA = 15,
+    CMD_TURNPOS = 16,
+    CMD_MOVECHA = 17,
+    CMD_MOVEPOS = 18,
+    CMD_MOVECHA_NORM = 19,
+    CMD_MOVEPOS_NORM = 20,
+    CMD_MOVECHA_RUN = 21,
+    CMD_MOVEPOS_RUN = 22,
+    CMD_MOVECHA_JUMP = 23,
+    CMD_MOVEPOS_JUMP = 24,
+    CMD_MOVECHA_HOVER = 25,
+    CMD_MOVEPOS_HOVER = 26,
+    CMD_MOVECHA_WARP = 27,
+    CMD_MOVEPOS_WARP = 28,
+    CMD_MOVECHA_JUMP2 = 29,
+    CMD_MOVEPOS_JUMP2 = 30,
+    CMD_MOVECHA_HOVER2 = 31,
+    CMD_MOVEPOS_HOVER2 = 32,
+    CMD_MOVECHA_FLOAT = 33,
+    CMD_MOVEPOS_FLOAT = 34,
+    CMD_MOVECHA_HOVER3 = 35,
+    CMD_MOVEPOS_HOVER3 = 36,
+    CMD_BTST = 37,
+    CMD_BTED = 38,
+    CMD_REC = 39,
+    CMD_WAKE = 40,
+    CMD_STAT = 41,
+    CMD_READWAIT = 42,
+    CMD_UNITCHANGE = 43,
+    CMD_TURNCENTER = 44,
+    CMD_AGWS2 = 45,
+    CMD_ESCAPE = 46,
+    CMD_FADEIN = 47,
+    CMD_FADEOUT = 48
+};
+
 /* from src/math/ov01/w3-00a0f900-curcmdset/private.h (unit math-ov01-w3-00a0f900, function curCmdSet @ 0x00a0f900) */
 typedef struct CursorObject CursorObject;
 
@@ -32,7 +93,7 @@ typedef struct CursorCommand CursorCommand;
  */
 struct CursorObject {
     unsigned char unmodeled_00[0x10];
-    CursorCommandState *state; /* +0x10 (CURSOR_STATE_OFF) */
+    CursorCommandState *state; /* +0x10 */
 };
 
 /*
@@ -61,8 +122,11 @@ typedef union CursorTransform {
 } CursorTransform;
 
 struct CursorCommandState {
-    unsigned int flags; /* +0x00 (STATE_FLAGS_OFF) */
-    unsigned char unmodeled_04[0x78 - 0x04];
+    unsigned int flags; /* +0x00 */
+    unsigned int unmodeled_04; /* +0x04: objEnCurCreate clears it; read nowhere else */
+    unsigned char unmodeled_08[0x70 - 0x08];
+    unsigned int unmodeled_70; /* +0x70: curCmdSet zeroes it */
+    unsigned int unmodeled_74; /* +0x74: curCmdSet zeroes it */
     int selectActive; /* +0x78: objDispEnCur draws the target's name only
                        * while 1 (`lw $16,0x78($2)` at 0x00a105c0) */
     struct BattleUnit *targetUnit; /* +0x7C: the unit curTgtProc last

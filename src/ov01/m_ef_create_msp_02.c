@@ -5,6 +5,7 @@
 #include "ov01/m_ef_create.h"
 #include "ov01/m_ef.h"
 #include "shared.h"
+#include "main/xgl_packet.h"
 
 extern float MMathCalcRotNear(float first, float second);
 static float adjAngle(float first, float second, float bound);
@@ -19,10 +20,9 @@ extern Vector4 *MMathCalcAngle(Vector4 *angles, Vector4 *from, Vector4 *to);
 extern void MMathVectorInterpolation(Vector4 *destination, Vector4 *first,
                                      Vector4 *second, float parameter);
 extern void MMathRotateMatrixYX(Matrix4 matrix, int flags, Vector4 *angles);
-extern void MMathScaleMatrix(Vector4 *destination, const Vector4 *matrix,
-                             const Vector4 *scale);
+extern Vector4 *MMathScaleMatrix(Vector4 *destination, const Vector4 *matrix,
+                                 const Vector4 *scale);
 extern void MMathApplyMatrix(Vector4 *destination, Matrix4 matrix, Vector4 *source);
-extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
 extern float tanf(float value);
 
 /*
@@ -106,7 +106,7 @@ struct MspCreationParameters {
 };
 
 typedef struct MspEffect {
-    unsigned char creationParameters[0x70];                        /* 0x000 */
+    struct MspCreationParameters creationParameters;               /* 0x000 */
     int frame;                                                     /* 0x070 */
     unsigned char alignmentBeforeSpawnPoint[0xc];                  /* 0x074 */
     Vector4 spawnPoint;                                            /* 0x080 */
@@ -120,7 +120,8 @@ typedef struct MspEffect {
     Vector4 turn;                                                  /* 0x100 */
     float spread;                                                  /* 0x110 */
     float angle;                                                   /* 0x114 */
-    unsigned char drawPacket[0x18];                                /* 0x118 */
+    MEfGsPacket drawPacket;                                        /* 0x118 */
+    unsigned char unmodeled_12C[4];                                /* 0x12c */
     /* GS TEX0 of the de_cld01 / de_cld02 cloud textures
      * (MEfCreate_MSP02: sd $2, 0x130($19) / sd $2, 0x138($19)). */
     u64 cloudTexture[2];                                           /* 0x130 */
@@ -154,9 +155,9 @@ extern Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first,
                                    const Vector4 *second, float divisor);
 extern void MGsGPInit(void *packet, void *address, int size);
 extern Msp02ImageParameter *svGetPrmFromName(const char *name, Msp02ImageParameter *output);
-/* MEfCreate_MSP02: lui $4, %hi(D_00A51680) / %hi(D_00A51690) for svGetPrmFromName. */
-extern const char D_00A51680[]; /* "de_cld01" */
-extern const char D_00A51690[]; /* "de_cld02" */
+/* MEfCreate_MSP02: lui $4, %hi(efMsp02DeCld01Text) / %hi(efMsp02DeCld02Text) for svGetPrmFromName. */
+extern const char efMsp02DeCld01Text[]; /* "de_cld01" */
+extern const char efMsp02DeCld02Text[]; /* "de_cld02" */
 
 #define MSP02_FLIGHT_FRAMES 20
 
@@ -168,8 +169,7 @@ static void fnMSP02_PO000(void *self, MspEffect *effect);
 int MEfCreate_MSP02(MspObject *object)
 {
     MspEffect *effect = &object->work;
-    struct MspCreationParameters *parameters =
-        (struct MspCreationParameters *)effect->creationParameters;
+    struct MspCreationParameters *parameters = &effect->creationParameters;
     Msp02ImageParameter parameter;
     Vector4 targetPoint;
     Matrix4 actorMatrix;
@@ -211,10 +211,10 @@ int MEfCreate_MSP02(MspObject *object)
     MMathCalcAngle(&effect->turn, 0, &effect->velocity);
     effect->spread = 0.2f;
     effect->angle = MMathMakeRandom2PI();
-    MGsGPInit(effect->drawPacket, 0, 0);
-    svGetPrmFromName(D_00A51680, &parameter);
+    MGsGPInit(&effect->drawPacket, 0, 0);
+    svGetPrmFromName(efMsp02DeCld01Text, &parameter);
     effect->cloudTexture[0] = parameter.texture;
-    svGetPrmFromName(D_00A51690, &parameter);
+    svGetPrmFromName(efMsp02DeCld02Text, &parameter);
     effect->cloudTexture[1] = parameter.texture;
     memset(effect->active, 0, sizeof(effect->active));
     memset(effect->points, 0, sizeof(effect->points));
@@ -443,7 +443,7 @@ static void fnMSP02_DM000(void *task, MspEffect *effect)
     struct MspCreationParameters *parameters;
 
     if (effect->frame < 20) {
-        parameters = (struct MspCreationParameters *)effect->creationParameters;
+        parameters = &effect->creationParameters;
         /* The draw orientation is the trail turn with a half-turn on Y. */
         __asm__ __volatile__(
             "lq $8, 0(%1)\n"
@@ -459,18 +459,13 @@ static void fnMSP02_DM000(void *task, MspEffect *effect)
                          (const Vector4 *)matrix_destination,
                          &scale);
 
-        {
-            /* Keep the target translation's address in v1, as the original does. */
-            register Vector4 *target asm("$3") = &effect->target;
-
-            __asm__ __volatile__(
-                "lqc2 $vf1, 0(%1)\n"
-                "vmove.w $vf1w, $vf0w\n"
-                "sqc2 $vf1, 48(%0)\n"
-                :
-                : "r"(matrix), "r"(target)
-                : "memory");
-        }
+        __asm__ __volatile__(
+            "lqc2 $vf1, 0(%1)\n"
+            "vmove.w $vf1w, $vf0w\n"
+            "sqc2 $vf1, 48(%0)\n"
+            :
+            : "r"(matrix), "r"(&effect->target)
+            : "memory");
 
         MEfDrawModel((const Vector4 *)matrix,
                      parameters->model_entry,
@@ -478,7 +473,120 @@ static void fnMSP02_DM000(void *task, MspEffect *effect)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_msp_02", fnMSP02_DP000);
+extern void MGsGPTerm(void *packet);
+extern Quadword McEfSTQtbl[];
+static const Quadword coltbl_1_00A516B0[10];
+static const float sztbl_2_00A51750[10];
+static void fnMSP02_DP000(void *task, MspEffect *effect)
+{
+    int i;
+    long regs;
+    int nreg;
+    const float *szp;
+    Vector4 verts[4];
+    MEfGsPacket *pk;
+    MEfGsPacket *gp;
+    MEfGsQword *q;
+    volatile MEfGsQword *a1;
+    volatile MEfGsQword *a2;
+    volatile MEfGsQword *a3;
+    volatile MEfGsQword *a4;
+    volatile MEfGsQword *a5;
+    Quadword color;
+    unsigned long *tex;
+    int j;
+    int n;
+    int off;
+    int lo;
+    int nloop;
+    int texReg;
+
+    pk = &effect->drawPacket;
+    MGsGPInit(pk, 0, 0);
+    q = pk->current;
+    q[0].gif.tag = MEF_GS_SETUP_TAG;
+    q[0].gif.registers = MEF_GS_SETUP_REGS;
+    pk->reg_count = 1;
+    a1 = q + 1;
+    a2 = q + 2;
+    a3 = q + 3;
+    a4 = q + 4;
+    a5 = q + 5;
+    a1->ad.address = SCE_GS_TEST_1;
+    a1->ad.data = MEF_GS_TEST_1_ALPHA_GREATER_ZGEQUAL;
+    a2->ad.address = SCE_GS_TEX1_1;
+    a2->ad.data = MEF_GS_TEX1_1_LINEAR_FILTER;
+    a3->ad.address = SCE_GS_CLAMP_1;
+    a3->ad.data = 5;
+    a4->ad.address = SCE_GS_ZBUF_1;
+    a4->ad.data = MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE;
+    a5->ad.address = SCE_GS_ALPHA_1;
+    a5->ad.data = MEF_GS_ALPHA_1_ADDITIVE;
+    nreg = 5;
+    n = pk->reg_count * nreg + 1;
+    pk->current->nloop |= nreg;
+    pk->current += n;
+    pk->count += n;
+    for (i = 0; i < 10; i++) {
+        if (((short *)effect->active)[i] != 0) {
+            color = coltbl_1_00A516B0[i];
+            szp = &sztbl_2_00A51750[i];
+            lo = i < 6;
+            off = 0x138;
+            if (lo) {
+                off = 0x130;
+            }
+            tex = (unsigned long *)((char *)effect + off);
+            for (j = 0; j < 2; j++) {
+                if (MEfMake4Vertex2(verts, &effect->points[i][j], *szp, effect->twist[i][j]) == 0) {
+                    MEfGsQword *t;
+                    MEfGsQword *g;
+                    unsigned long texVal;
+                    int n1;
+                    int n2;
+
+                    gp = &effect->drawPacket;
+                    texReg = SCE_GS_TEX0_1;
+                    regs = MEF_GS_TEXTURED_STRIP_REGS;
+                    nloop = 3;
+                    t = gp->current;
+                    t[0].gif.tag = MEF_GS_SETUP_TAG;
+                    t[0].gif.registers = MEF_GS_SETUP_REGS;
+                    gp->reg_count = 1;
+                    a1 = t + 1;
+                    texVal = *tex;
+                    a1->ad.address = texReg;
+                    a1->ad.data = texVal;
+                    n1 = gp->reg_count + 1;
+                    gp->current->nloop |= 1;
+                    gp->current += n1;
+                    gp->count += n1;
+                    g = gp->current;
+                    g[0].gif.tag = MEF_GS_TEXTURED_STRIP_TAG;
+                    g[0].gif.registers = regs;
+                    gp->reg_count = nloop;
+                    g[1].whole = McEfSTQtbl[0];
+                    g[2].whole = color;
+                    g[3].whole = *(Quadword *)&verts[0];
+                    g[4].whole = McEfSTQtbl[1];
+                    g[5].whole = color;
+                    g[6].whole = *(Quadword *)&verts[1];
+                    g[7].whole = McEfSTQtbl[2];
+                    g[8].whole = color;
+                    g[9].whole = *(Quadword *)&verts[2];
+                    g[10].whole = McEfSTQtbl[3];
+                    g[11].whole = color;
+                    g[12].whole = *(Quadword *)&verts[3];
+                    n2 = gp->reg_count * 4 + 1;
+                    gp->current->nloop |= 4;
+                    gp->current += n2;
+                    gp->count += n2;
+                }
+            }
+        }
+    }
+    MGsGPTerm(pk);
+}
 
 /* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
  * is defined by src/main/sef.c. */
@@ -511,3 +619,24 @@ static float adjAngle(float first, float second, float bound)
         value = bound;
     return first + value;
 }
+
+
+
+const char efMsp02DeCld01Text[16] = "de_cld01";
+
+const char efMsp02DeCld02Text[16] = "de_cld02";
+
+static const Quadword coltbl_1_00A516B0[10] = {
+    0x28000000800000008000000080,
+    0x30000000800000008000000080,
+    0x30000000800000008000000080,
+    0x30000000800000008000000080,
+    0x30000000800000008000000080,
+    0x28000000800000008000000080,
+    0x28000000800000008000000080,
+    0x20000000800000008000000080,
+    0x18000000800000008000000080,
+    0x10000000800000008000000080
+};
+
+static const float sztbl_2_00A51750[10] = { 0.11999999731779099f, 0.15000000596046448f, 0.18000000715255737f, 0.20000000298023224f, 0.2199999988079071f, 0.23999999463558197f, 0.25999999046325684f, 0.2800000011920929f, 0.30000001192092896f, 0.27000001072883606f };

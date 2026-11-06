@@ -6,27 +6,12 @@
 #define SRC_OV01_M_EF_CREATE_SOLB_H
 
 #include "shared.h"
+#include "ov01/m_ef.h"
 #include "ov01/m_ef_create.h"
 
 /* (effect task, SolbState record) like the other MEf effects' callbacks. */
-typedef void (*SOLBCallback)(void *self, void *work);
-
-/* The neighboring MSP02 constructor establishes the process, model-draw,
- * draw-packet and post-process callback ordering.  SOLB initializes the
- * process, draw-packet and post-process roles; the intervening work word is
- * outside these bounded role views and is intentionally left unresolved.
- */
-typedef struct SOLBProcessSlot {
-    SOLBCallback process_callback;
-} SOLBProcessSlot;
-
-typedef struct SOLBDrawPacketSlot {
-    SOLBCallback draw_packet_callback;
-} SOLBDrawPacketSlot;
-
-typedef struct SOLBPostProcessSlot {
-    SOLBCallback post_process_callback;
-} SOLBPostProcessSlot;
+typedef struct SolbState SolbState;
+typedef void (*SOLBCallback)(void *self, SolbState *state);
 
 /* The SOLB parameter/trail record, at +32 of the effect work object that
  * MEfCreate_SOLB is handed. Recovered from the TU's own bodies:
@@ -65,10 +50,10 @@ typedef struct SolbActorAngle {
     float yaw;
 } SolbActorAngle;
 
-typedef struct SolbState {
+struct SolbState {
     unsigned int : 32;                  /* +0x000 */
     SolbActorAngle *actorAngle;         /* +0x004 */
-    u32 actor;                          /* +0x008 */
+    Actor *actor;                       /* +0x008 */
     u32 coord;                          /* +0x00c */
     Vector4 localOffset;                /* +0x010 */
     short sweepDegrees;                 /* +0x020 */
@@ -96,7 +81,7 @@ typedef struct SolbState {
     short active[SOLB_TRAIL_LENGTH];    /* +0x072 */
     short birth_age[SOLB_TRAIL_LENGTH]; /* +0x0b0: age when the entry was made */
     unsigned short : 16;                /* +0x0ee */
-    HermiteVector trail[SOLB_TRAIL_LENGTH];         /* +0x0f0 */
+    Vector4 trail[SOLB_TRAIL_LENGTH];               /* +0x0f0 */
     short segment;                      /* +0x2e0: current path segment */
     short frame;                        /* +0x2e2: frame inside that segment */
     unsigned int : 32;                  /* +0x2e4 */
@@ -105,7 +90,20 @@ typedef struct SolbState {
     HermiteVector control[SOLB_CONTROL_POINTS];     /* +0x2f0 */
     HermiteVector tangent_at_segment_start;         /* +0x330 */
     HermiteVector tangent_at_segment_end;           /* +0x340 */
-} SolbState;
+    MEfGsPacket packet;                             /* +0x350 */
+};
+
+/* The SOLB effect record: its three callback slots at +4, +12 and +16, and the
+ * state at +32 (the MEfObjRecord pool work). */
+typedef struct SolbObject {
+    unsigned char unmodeled_00[4];
+    SOLBCallback process_callback;
+    unsigned char unmodeled_08[4];
+    SOLBCallback draw_packet_callback;
+    SOLBCallback post_process_callback;
+    unsigned char unmodeled_14[0x0c];
+    SolbState state;
+} SolbObject;
 
 int MEfCreate_SOLB(MEfObjRecord *work);
 

@@ -7,13 +7,10 @@
 
 #include "shared.h"
 #include "main/act_1.h"
+#include "ov01/m_ef.h"
 
-/* Actor origin, raised origin, or an accessory coordinate selector. */
-typedef enum MEfActorPoint {
-    MEF_POINT_ACTOR = -1,
-    MEF_POINT_ACTOR_RAISED = -2,
-    MEF_POINT_ACCESSORY_COUNT = 0x28
-} MEfActorPoint;
+/* Byte size of the fixed effect work buffer MEfCheckWorkSize validates a request against. */
+#define MEF_WORK_BUFFER_SIZE 0x400
 
 extern float MMathMakeRandom2PI(void);
 
@@ -37,7 +34,7 @@ extern MEfCamParams mefCamParams;
 /*
  * mefVertex2CornerTable: OV01 rodata still asm-owned by this TU (the packet's
  * data ownership window 0x00a51265..0x00a51380), referenced by the name the
- * scaffold witness already uses (docs/naming.md, "scaffold-owned data keeps
+ * scaffold witness already uses (docs/naming.md, "C-owned data keeps
  * its splat name") -- not a claim of a recovered original name.
  */
 typedef struct MEfCornerAngles {
@@ -53,8 +50,8 @@ extern int MMathRotTransPersClip(Vector4 *destination, const void *screen, const
  * helpers, still asm-owned in main (config/units/math-correction13-9.json
  * "references"). Declared TU-locally until main's own TU claims them.
  */
-extern void *MMathApplyMatrix(Vector4 *destination, const Vector4 *matrix, const Vector4 *point);
-extern void MMathRotateMatrixYX(Vector4 *destination, const Vector4 *source, const Vector4 *angles);
+extern Vector4 *MMathApplyMatrix(Vector4 *destination, Matrix4 *matrix, const Vector4 *point);
+extern Matrix4 *MMathRotateMatrixYX(Matrix4 *destination, const Matrix4 *source, const Vector4 *angles);
 extern float MMathMakeRandom(void);
 
 /*
@@ -82,22 +79,14 @@ typedef struct MEfWeaponCoord {
     Vector4 local_position;
 } MEfWeaponCoord;
 
-extern Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate);
-
-/*
- * MEfCalcAngle: sibling function of this same TU, still INCLUDE_ASM
- * scaffolding and untouched by this allocation; declared only to call it.
- */
-extern Vector4 *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vector4 *to);
-
 /*
  * MOutputDebugStringWarn: main-owned diagnostic logger (main:0x002eef50,
- * config/tu/main/tu218.json), declared only to call it. D_00A512B0 is this
+ * config/tu/main/tu218.json), declared only to call it. efMEfCheckWorkSizeTheSizeOfHasOverflowedText is this
  * TU's own rodata (data ownership window 0x00a51265..0x00a51380), the
  * "%s has overflowed" format string MEfCheckWorkSize passes.
  */
 extern void MOutputDebugStringWarn(const char *format, ...);
-extern const char D_00A512B0[];
+extern const char efMEfCheckWorkSizeTheSizeOfHasOverflowedText[];
 
 /*
  * nmlModelSetTexture (main:0x0022fe60, src/main/nml_model_set.c),

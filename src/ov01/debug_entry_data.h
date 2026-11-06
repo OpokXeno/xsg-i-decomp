@@ -1,7 +1,11 @@
 /* Local OV01 debug-menu tables recovered from their original pointer words. */
+#define DEBUG_NAME_COUNT 195   /* nameTbl entries; character ids run 0..DEBUG_NAME_COUNT-1 */
+#define DEBUG_CHARA_ID_MAX 0xC2 /* largest character id the STAT/EQUIP/GAIN pages cycle to */
+#define DEBUG_WPN_COUNT 116    /* wpnTbl entries */
+
 static char *err = "(ERR)";
 
-static char *nameTbl[195] = {
+static const char *nameTbl[DEBUG_NAME_COUNT] = {
     "NULL    ",
     "CHAOS   ",
     "KOSMOS  ",
@@ -199,7 +203,7 @@ static char *nameTbl[195] = {
     "SKJ_KOSMOS1",
 };
 
-static char *wpnTbl[116] = {
+static const char *wpnTbl[DEBUG_WPN_COUNT] = {
     "NULL    ",
     "CHA_GR01",
     "CHA_GR02",
@@ -318,7 +322,7 @@ static char *wpnTbl[116] = {
     "HEI     ",
 };
 
-static char *cmdStrTbl[49] = {
+static const char *cmdStrTbl[49] = {
     "FREE",
     "ATK",
     "ETHER",
@@ -382,20 +386,20 @@ static int plIchigeki = 0;
 int specPos[6] = { 0, 9, 12, 15, 18, 21 };
 int etherPos[4] = { 0, 10, 14, 18 };
 int skillPos[3] = { 0, 10, 14 };
-static char D_00A5AA40[0x10];
+static char str_0[0x10];
 static int monsSet; /* retail local anchor at 0x00A5AA50; int get/set callers */
 static int mapNo; /* retail local anchor at 0x00A5AA54; int get/set callers */
 static int cfEncount; /* retail local anchor at 0x00A5AA58; int get/set callers */
 static int cfEvent; /* retail local anchor at 0x00A5AA5C; int get/set callers */
-static int D_00A5AA60;
+static int debugThinkNo;
 
-static const char D_00A50550[8] = "@R%02d";
-static const char D_00A50558[8] = "@R%s";
-static const char D_00A50560[8] = "R%02d";
-static const char D_00A50568[8] = "R%s";
-static const char D_00A50668[40] = "** %d) %s LV=%d HP=%d/%d EP=%d/%d\n";
-static const char D_00A506C0[24] = "** UNIT PARA **\n";
-static const char D_00A506D8[56] = " STR=%3d VIT=%3d EATK=%3d EDEF=%3d HIT=%3d EVA=%3d\n";
-static const char D_00A50710[56] = " AGL=%3d BC =%3d BP = %3d MVTYPE=%1d C_RATE=%3d\n";
-static const char D_00A50748[48] = " WEAK=%04X SPEC=%04X INFO=%04X OBJSTAT=%04X\n";
-static const char D_00A50778[56] = " WCT=%3d/%3d AGLPLUS=%3d ETHERDIS=%04X WPNATKADJ=%3d\n";
+static const char debugEntryRText[8] = "@R%02d";
+static const char debugEntryRText2[8] = "@R%s";
+static const char debugEntryRText3[8] = "R%02d";
+static const char debugEntryRText4[8] = "R%s";
+static const char debugEntryLVHPEPText[40] = "** %d) %s LV=%d HP=%d/%d EP=%d/%d\n";
+static const char debugEntryUNITPARAText[24] = "** UNIT PARA **\n";
+static const char debugEntrySTRVITEATKEDEFHITEVAText[56] = " STR=%3d VIT=%3d EATK=%3d EDEF=%3d HIT=%3d EVA=%3d\n";
+static const char debugEntryAGLBCBPMVTYPECRATEText[56] = " AGL=%3d BC =%3d BP = %3d MVTYPE=%1d C_RATE=%3d\n";
+static const char debugEntryWEAKSPECINFOOBJSTATText[48] = " WEAK=%04X SPEC=%04X INFO=%04X OBJSTAT=%04X\n";
+static const char debugEntryWCTAGLPLUSETHERDISWPNATKADJText[56] = " WCT=%3d/%3d AGLPLUS=%3d ETHERDIS=%04X WPNATKADJ=%3d\n";

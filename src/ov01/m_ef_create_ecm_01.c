@@ -3,30 +3,21 @@
  */
 #include "common.h"
 #include "ov01/m_ef_create.h"
+#include "ov01/m_ef.h"
 #include "shared.h"
-
-typedef unsigned int Quadword __attribute__((mode(TI)));
 
 typedef union ECM01QuadVector {
     unsigned int words[4];
     Quadword quad;
 } ECM01QuadVector;
 
-typedef struct ECM01Packet {
-    void *data;
-    int capacity;
-    void *current;
-    int count;
-    int aux_count;
-} ECM01Packet;
-
 typedef struct ECM01Work {
     unsigned char unmodeled_00[8];
-    unsigned int actor_id;
+    Actor *actor;
     unsigned int actor_part;
     Vector4 creation_offset;
     unsigned char unmodeled_20[4];
-    unsigned int coordinate_actor_id;
+    Actor *coordinate_actor;
     unsigned int coordinate_part;
     unsigned char unmodeled_2C[0x70 - 0x2C];
     int frame;
@@ -43,10 +34,10 @@ typedef struct ECM01Work {
     ECM01QuadVector vector_origin;
     short visibility[31];
     short frame_age[31];
-    ECM01Packet packet;
+    MEfGsPacket packet;
 } ECM01Work;
 
-typedef void ECM01Callback(void *self, void *work);
+typedef void ECM01Callback(void *self, ECM01Work *work);
 
 typedef struct ECM01Object {
     unsigned char unmodeled_00[4];
@@ -58,22 +49,14 @@ typedef struct ECM01Object {
     ECM01Work work;
 } ECM01Object;
 
-extern void MEfGetActorMatrix(Matrix4 destination, unsigned int actor_id,
-                              unsigned int part);
-extern void MEfGetActorCoord(void *destination, unsigned int actor_id,
-                             unsigned int part);
-extern void MMathApplyMatrix(Vector4 *destination, Matrix4 matrix,
-                             Vector4 *point);
 extern Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first,
                                    const Vector4 *second, float scale);
-extern void *MEfCalcAngle(Vector4 *destination, const Vector4 *from,
-                          const Vector4 *to);
 extern float MMathMakeRandom2PI(void);
 extern void MGsGPInit(void *packet, int address, int size);
 
-static void fnECM01_PR000(void *self, void *work);
-static void fnECM01_DP000(void *self, void *work);
-static void fnECM01_PO000(void *self, void *work);
+static void fnECM01_PR000(void *self, ECM01Work *work);
+static void fnECM01_DP000(void *self, ECM01Work *work);
+static void fnECM01_PO000(void *self, ECM01Work *work);
 
 int MEfCreate_ECM01(MEfObjRecord *self)
 {
@@ -85,9 +68,9 @@ int MEfCreate_ECM01(MEfObjRecord *self)
     Quadword initial_dimensions;
 
     work->frame = 0;
-    MEfGetActorMatrix(actor_matrix, work->actor_id, work->actor_part);
-    MMathApplyMatrix(&work->position, actor_matrix, &work->creation_offset);
-    MEfGetActorCoord(&work->actor_coordinates, work->coordinate_actor_id,
+    MEfGetActorMatrix(&actor_matrix, work->actor, work->actor_part);
+    MMathApplyMatrix(&work->position, &actor_matrix, &work->creation_offset);
+    MEfGetActorCoord(&work->actor_coordinates, work->coordinate_actor,
                      work->coordinate_part);
     MMathSubVectorDivS(&work->position_delta, &work->actor_coordinates,
                        &work->position, 30.0f);
@@ -120,33 +103,25 @@ int MEfCreate_ECM01(MEfObjRecord *self)
 #define ECM01_HISTORY_COUNT 31
 #define ECM01_ENDPOINT_MARKER 2
 
-typedef struct ECM01Trail {
-    unsigned char unmodeled_00[0x70];
-    int frame;                         /* +0x70 */
-    unsigned char unmodeled_74[0xF0 - 0x74];
-    short visibility[ECM01_HISTORY_COUNT]; /* +0xF0 */
-    short frame_age[ECM01_HISTORY_COUNT];   /* +0x12E */
-} ECM01Trail;
-
-static void fnECM01_PR000(void *self, void *work)
+static void fnECM01_PR000(void *self, ECM01Work *work)
 {
-    ECM01Trail *trail = (ECM01Trail *)work;
+    ECM01Work *state = work;
     int i;
 
     for (i = ECM01_HISTORY_COUNT - 1; i > 0; i--) {
-        trail->visibility[i] = trail->visibility[i - 1];
-        trail->frame_age[i] = trail->frame_age[i - 1];
+        state->visibility[i] = state->visibility[i - 1];
+        state->frame_age[i] = state->frame_age[i - 1];
     }
 
-    trail->visibility[0] = 0;
-    trail->frame_age[0] = 0;
-    if (trail->frame < ECM01_ACTIVE_FRAMES) {
-        if (trail->frame == 0 || trail->frame == ECM01_ACTIVE_FRAMES - 1) {
-            trail->visibility[0] = ECM01_ENDPOINT_MARKER;
+    state->visibility[0] = 0;
+    state->frame_age[0] = 0;
+    if (state->frame < ECM01_ACTIVE_FRAMES) {
+        if (state->frame == 0 || state->frame == ECM01_ACTIVE_FRAMES - 1) {
+            state->visibility[0] = ECM01_ENDPOINT_MARKER;
         } else {
-            trail->visibility[0] = 1;
+            state->visibility[0] = 1;
         }
-        trail->frame_age[0] = (short)trail->frame;
+        state->frame_age[0] = (short)state->frame;
     }
 }
 
@@ -156,17 +131,12 @@ ACCEPTED_ASM("src/ov01/m_ef_create_ecm_01", fnECM01_DP000);
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* work's layout is unresolved beyond +0x70: the per-frame lifetime counter
- * this function advances, firing sefHitEffect at frame 0x3C and expiring
- * through MEfObjDestroy once it reaches 0x5A. */
-typedef struct ECM01State {
-    unsigned char unmodeled_00[0x70];
-    int frame; /* +0x70 */
-} ECM01State;
-
-static void fnECM01_PO000(void *self, void *work)
+/* The post callback advances the per-frame lifetime counter (work's frame),
+ * firing sefHitEffect at frame 0x3C and expiring through MEfObjDestroy once
+ * it reaches 0x5A. */
+static void fnECM01_PO000(void *self, ECM01Work *work)
 {
-    ECM01State *state = (ECM01State *)work;
+    ECM01Work *state = work;
 
     state->frame++;
     if (state->frame == 0x3C) {

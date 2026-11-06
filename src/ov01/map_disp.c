@@ -5,13 +5,17 @@
 #include "map_disp.h"
 
 static const char *mapPartsName[2] = {"ten", "yuka"};
-static MapMultiplier mapMul;
 static unsigned int mapDispWork[4];
+static MapMultiplier mapMul;
+
+/* mapDispWork per map part: shown, or hidden (its name visibility reads 0 while hidden). */
+#define MAP_DISP_SHOWN 0
+#define MAP_DISP_HIDDEN 1
 
 void mapInit(void) {
-    mapDispWork[1] = 0;
+    mapDispWork[1] = MAP_DISP_SHOWN;
     mapMul.components[0] = 1.0f;
-    mapDispWork[0] = 0;
+    mapDispWork[0] = MAP_DISP_SHOWN;
     mapMul.components[1] = 1.0f;
     mapMul.components[2] = 1.0f;
     mapMul.components[3] = 1.0f;
@@ -27,26 +31,26 @@ MapMultiplier *mapMulGet(void) {
 
 void mapDispOn(int mapId) {
     if (mapId < 2) {
-        mapDispWork[mapId] = 0;
+        mapDispWork[mapId] = MAP_DISP_SHOWN;
     }
 }
 
 void mapDispOff(int mapId) {
     if (mapId < 2) {
-        mapDispWork[mapId] = 1;
+        mapDispWork[mapId] = MAP_DISP_HIDDEN;
     }
 }
 
 void mapDispOnAll(void)
 {
-    mapDispWork[1] = 0;
-    mapDispWork[0] = 0;
+    mapDispWork[1] = MAP_DISP_SHOWN;
+    mapDispWork[0] = MAP_DISP_SHOWN;
 }
 
 void mapDispOffAll(void)
 {
-    mapDispWork[1] = 1;
-    mapDispWork[0] = 1;
+    mapDispWork[1] = MAP_DISP_HIDDEN;
+    mapDispWork[0] = MAP_DISP_HIDDEN;
 }
 
 void mapDisp(int mapNo)
@@ -56,7 +60,7 @@ void mapDisp(int mapNo)
     float matrix[4][4];
     int i;
 
-    if (mapDispWork[0] == 1 && mapDispWork[1] == 1) {
+    if (mapDispWork[0] == MAP_DISP_HIDDEN && mapDispWork[1] == MAP_DISP_HIDDEN) {
         return;
     }
 
@@ -69,7 +73,7 @@ void mapDisp(int mapNo)
     model = (NmlModel *)((char *)mapData + mapData->entryOffset);
 
     for (i = 0; i < 2; i++) {
-        if (mapDispWork[i] == 1) {
+        if (mapDispWork[i] == MAP_DISP_HIDDEN) {
             nmlModelSetNameVisible(model, mapPartsName[i], 0, 3);
         } else {
             nmlModelSetNameVisible(model, mapPartsName[i], 1, 3);

@@ -2,7 +2,7 @@
 #define OV01_M_EF_CREATE_BP_00_H
 
 typedef struct BP00Visibility {
-    unsigned short flag[7];
+    short flag[7];
 } BP00Visibility;
 
 typedef struct BP00Trail {
@@ -11,11 +11,11 @@ typedef struct BP00Trail {
 
 typedef struct BP00Work {
     unsigned char unmodeled_00[8];
-    unsigned int actorId;
+    Actor *actor;
     unsigned int actorPart;
     Vector4 creationOffset;
     unsigned char unmodeled_20[4];
-    unsigned int coordinateActorId;
+    Actor *coordinateActor;
     unsigned char unmodeled_28[0x48];
     int frame;
     int counter;
@@ -26,10 +26,10 @@ typedef struct BP00Work {
     unsigned char unmodeled_E6[10];
     BP00Trail trail[5];
     Vector4 vectorOrigin[5];
-    unsigned char packet[0x14];
+    MEfGsPacket packet;
 } BP00Work;
 
-typedef void BP00Callback(void *self, void *work);
+typedef void BP00Callback(void *self, BP00Work *work);
 
 typedef struct BP00Object {
     unsigned char unmodeled_00[4];

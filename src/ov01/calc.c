@@ -2,65 +2,53 @@
  * OV01 original TU 4: 0x00a10bb8..0x00a191c0 (116 functions)
  */
 #include "common.h"
+#include "ov01/actor.h"
+#include "quadword.h"
 #include "main/xgl_2.h"
 #include "ov01/battle_init.h"
 #include "calc.h"
 
-/* calcCfEncount's own callees; both are still asm in this TU. */
+/* calcCfEncount's own callees: calcPartyStat is defined below in this TU. */
 extern void calcPartyStat(int, int);
 extern void menuTimeSet(int);
 
-/*
- * calcStatGet (this TU, defined below beside calcStatGetNorm) as every
- * caller in this file invokes it: a status/flag lookup keyed by category
- * and bit.
- */
-extern int calcStatGet(ObjectTask *unit, int category, int flag);
+/* actStockGet (src/ov01/battle_init.c): the action-stock record calcBoost uses. */
+extern int *actStockGet(void);
 
 /*
  * The one queued-command word calcTurnStart (this TU) reads
  * through unitCmdPtrGet's return (`lw $3,0x0($2)`), and the two further
  * words calcTurnStart writes through unitCmdSet's second argument
  * (`sw $2,0x0($29)` / `sw $3,0x4($29)` / `sw $0,0x8($29)` at 0x00a12c00,
- * both still asm in src/ov01/unit_cmd.c).
+ * both defined in src/ov01/unit_cmd.c).
  */
-typedef struct CalcCmdEntry CalcCmdEntry;
+#include "ov01/unit_cmd.h"
+typedef CmdEntry CalcCmdEntry;
 
-struct CalcCmdEntry {
-    int selector;      /* +0x00 */
-    int argument;      /* +0x04 */
-    int extra;         /* +0x08: calcTurnStart always sets it to 0 */
-    unsigned char unmodeled_0c[8]; /* +0x0C: unwritten by the one evidenced
-                                     * call; only its total size (the local's
-                                     * stack reservation before unitCmdSet)
-                                     * is evidenced here. */
-};
+extern int calcAp(BattleUnit *unit, int ap);
+extern CalcCmdEntry *unitCmdPtrGet(BattleUnit *unit);
 
-extern int calcAp(ObjectTask *unit, int ap);
-extern CalcCmdEntry *unitCmdPtrGet(ObjectTask *unit);
-extern void unitCmdSet(ObjectTask *unit, CalcCmdEntry *cmd);
-
-/* calcDeadUnitNum: calcSpecChk's own callee, still asm in this TU. */
-extern int calcDeadUnitNum(ObjectTask *unit, int flag);
+/* calcDeadUnitNum: calcSpecChk's own callee, defined below in this TU. */
+extern int calcDeadUnitNum(BattleUnit *unit, int flag);
 
 /* calcBattleChk: calcWctDec's own callee, defined below in this TU. */
-extern int calcBattleChk(ObjectTask *unit);
+extern int calcBattleChk(BattleUnit *unit);
 
 /* calcTrg2PE (this TU, defined below): calcDeadUnitNum's own callee. */
-extern int calcTrg2PE(ObjectTask *unit, int trgFlags);
+extern int calcTrg2PE(BattleUnit *unit, int trgFlags);
 
 /*
  * calcWct/calcStatTurn/rnd: calcTurnEnd's own callees, all defined later
  * in this TU.
  */
-extern int calcWct(ObjectTask *unit);
-extern void calcStatTurn(ObjectTask *unit);
+extern int calcWct(BattleUnit *unit);
+extern void calcStatTurn(BattleUnit *unit);
 extern int rnd(int max);
 
 /*
  * dataWpnGet's return type, as far as calcAttWpnChk reads it: a byte at
  * +0x10 that it tests for zero/nonzero (data_unit_org_get.c, dataWpnGet's
- * own TU, still asm, owns the rest of the layout).
+ * own TU, owns the rest of the layout).
  */
 typedef struct WpnData WpnData;
 
@@ -100,37 +88,131 @@ typedef struct CalcSpline {
     int frame;         /* +0x10 */
 } CalcSpline;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcCopyParaMake);
+/*
+ * The 0x180-byte parameter table calcCopyParaMake fills from a unit's
+ * origin record and calcTotalParaMenuSub hands back. calcCopyParaMake
+ * copies the whole origin into it first, so the offsets below are the
+ * origin's: agwsId is the halfword at +0x38 (`lh $4,0x38($16)`, tested
+ * against 0x10 before any AGWS adjustment), engineId/frameId are +0x56/+0x58.
+ */
+typedef struct CalcParaTable {
+    short maxHp;            /* +0x00 */
+    short maxEp;            /* +0x02 */
+    short val4;             /* +0x04 */
+    short val6;             /* +0x06 */
+    short eatk;             /* +0x08 */
+    short edef;             /* +0x0A */
+    signed char hit;        /* +0x0C */
+    signed char eva;        /* +0x0D */
+    unsigned char valE;     /* +0x0E */
+    unsigned char unmodeled_0f[0x36 - 0x0F];
+    short ep;               /* +0x36 */
+    short agwsId;           /* +0x38 */
+    unsigned char unmodeled_3a[0x56 - 0x3A];
+    short engineId;         /* +0x56 */
+    short frameId;          /* +0x58 */
+    unsigned char unmodeled_5a[0x180 - 0x5A];
+} CalcParaTable;
+
+/*
+ * The part adjustment record dataFrmGet (frame) and dataEngGet (engine)
+ * return; calcCopyParaMake adds its +0x08/+0x0A/+0x0C/+0x0E fields into
+ * the table.
+ */
+typedef struct CalcPartAdj {
+    unsigned char unmodeled_00[8];
+    short a8;               /* +0x08 */
+    short aA;               /* +0x0A */
+    short aC;               /* +0x0C */
+    unsigned char aE;       /* +0x0E */
+} CalcPartAdj;
+
+extern int unitAgwsPilotGet(int charaId);
+extern unsigned char *dataFrmGet(int index);
+extern unsigned char *dataEngGet(int index);
+extern const char calcAGWSParaEPEPMAXText[]; /* "** AGWS para = EP=%d EPMAX=%d\n" */
+extern const char calcAGWSParaEatkEdefHITEVAText[]; /* "** AGWS para = Eatk=%d Edef=%d HIT=%d EVA=%d\n" */
+extern CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table);
+
+void calcCopyParaMake(CalcCharParaData *origin, unsigned char *table)
+{
+    unsigned char buf[0x180];
+    CalcParaTable *t;
+    CalcParaTable *r;
+    CalcPartAdj *frm;
+    CalcPartAdj *eng;
+    int pilot;
+
+    frm = 0;
+    eng = 0;
+    t = (CalcParaTable *) table;
+    *t = *(CalcParaTable *) origin;
+    if (t->agwsId > 0x10) {
+        pilot = unitAgwsPilotGet(t->agwsId);
+        if (t->frameId != 0) {
+            frm = (CalcPartAdj *) dataFrmGet(t->frameId);
+        }
+        if (t->engineId != 0) {
+            eng = (CalcPartAdj *) dataEngGet(t->engineId);
+        }
+        if (pilot != 0) {
+            r = (CalcParaTable *) calcTotalParaMenuSub(pilot, 0, 0, buf);
+            t->eatk = r->eatk;
+            t->edef = r->edef;
+            t->hit = r->hit;
+            t->eva = r->eva;
+            t->ep = r->ep;
+            t->maxEp = r->maxEp;
+            printf(calcAGWSParaEPEPMAXText, t->ep, t->maxEp);
+            printf(calcAGWSParaEatkEdefHITEVAText, t->eatk, t->edef, t->hit, t->eva);
+        }
+        if (frm != 0) {
+            t->maxHp += frm->a8;
+            t->val6 += frm->aA;
+            t->valE += frm->aE;
+            t->edef += frm->aC;
+        }
+        if (eng != 0) {
+            t->val4 += eng->a8;
+        }
+    }
+}
 
 /*
  * calcTotalParaMenuSub/calcSkillEquChkAll's (this TU) own fake unit: a
- * stack-local ObjectTask/CalcActorRecord pair whose `work`/`up` chain
+ * stack-local BattleUnit/Actor pair whose `work`/`up` chain
  * (calcUPGet's own traversal, 0x00a11010..0x00a1101c) is pointed at a
  * temporary CalcUnitParam-compatible record instead of a live battle unit,
  * so the two functions can reuse calcSkillInit/calcWpnAtkGet/calcPhyDefGet/
- * calcMagDefGet/calcSkillEquChk for a unit that has no ObjectTask;
+ * calcMagDefGet/calcSkillEquChk for a unit that has no BattleUnit;
  * calcPara2Org (below) uses the same pair for calcPara2OrgSub.
  * calcTotalParaMenuSub allocates 0x80/0x110 bytes for the pair
  * (`addiu v0,sp,128`, sp+0x190 for the outer's own end), matching the
- * ObjectTask/CalcActorRecord prefixes it actually writes through plus the
+ * BattleUnit/Actor prefixes it actually writes through plus the
  * task-specific payload xglTaskEntryNext callers leave unwritten here.
  */
+/* The scratch record for a fake unit: the head the fake-unit code writes
+ * (flags at +0x00, the CalcUnitParam pointer at +0x84, as in Actor) and the
+ * 0x110-byte extent that keeps the stack frames the original sizes. Fake units
+ * are passed as (Actor *) &record at each use. */
 typedef struct CalcScratchActor {
-    CalcActorRecord actor;      /* +0x00 */
+    u32 flags;                                    /* +0x00 */
+    unsigned char unmodeled_04[0x84 - 0x04];
+    struct CalcUnitParam *up;                     /* +0x84 */
     unsigned char unmodeled_88[0x110 - 0x88];
 } CalcScratchActor;
 
 typedef struct CalcScratchUnit {
-    ObjectTask task;            /* +0x00 */
-    unsigned char unmodeled_14[0x80 - 0x14];
+    BattleUnit unit;            /* +0x00 */
+    unsigned char unmodeled_30[0x80 - 0x30];
 } CalcScratchUnit;
 
 /* unitTblGet (src/ov01/unit_cmd.c): writes the active unit table's base
  * address through its second argument and returns its count. */
-extern int unitTblGet(int type, ObjectTask ***table);
+extern int unitTblGet(int type, BattleUnit ***table);
 
 /* calcPara2OrgSub (this TU, below): writes one unit's HP/EP back. */
-extern void calcPara2OrgSub(ObjectTask *unit);
+extern void calcPara2OrgSub(BattleUnit *unit);
 
 /*
  * Writes every unit's HP/EP back to its persistent origin record, and the
@@ -142,7 +224,7 @@ void calcPara2Org(void)
 {
     CalcScratchUnit fakeUnit;
     CalcScratchActor fakeActor;
-    ObjectTask **table;
+    BattleUnit **table;
     int count;
     int i;
 
@@ -151,26 +233,26 @@ void calcPara2Org(void)
         if (table[i] != 0) {
             calcPara2OrgSub(table[i]);
             if (calcUPGet(table[i])->flags & CALC_UNIT_FLAG_IS_AGWS) {
-                fakeUnit.task.work = &fakeActor;
-                fakeActor.actor.up = calcUPGet(table[i])->linkedUnit;
-                fakeActor.actor.flags = 0;
-                fakeActor.actor.up->currentEp = calcUPGet(table[i])->currentEp;
-                calcPara2OrgSub(&fakeUnit.task);
+                fakeUnit.unit.work = (Actor *) &fakeActor;
+                fakeActor.up = calcUPGet(table[i])->linkedUnit;
+                fakeActor.flags = 0;
+                fakeActor.up->currentEp = calcUPGet(table[i])->currentEp;
+                calcPara2OrgSub(&fakeUnit.unit);
             } else if (calcUPGet(table[i])->linkedUnit != 0) {
-                fakeUnit.task.work = &fakeActor;
-                fakeActor.actor.up = calcUPGet(table[i])->linkedUnit;
-                fakeActor.actor.flags = 0;
-                calcPara2OrgSub(&fakeUnit.task);
+                fakeUnit.unit.work = (Actor *) &fakeActor;
+                fakeActor.up = calcUPGet(table[i])->linkedUnit;
+                fakeActor.flags = 0;
+                calcPara2OrgSub(&fakeUnit.unit);
             }
         }
     }
 }
 
-/* dataUnitOrgGet (src/ov01/data_unit_org_get.c, still asm), this TU's own
+/* dataUnitOrgGet (src/ov01/data_unit_org_get.c), this TU's own
  * private view (see CalcCharParaData, src/ov01/calc.h). */
 extern CalcCharParaData *dataUnitOrgGet(int charaId);
 
-void calcPara2OrgSub(ObjectTask *unit) {
+void calcPara2OrgSub(BattleUnit *unit) {
     CalcUnitParam *param;
     CalcCharParaData *origin;
 
@@ -183,7 +265,7 @@ void calcPara2OrgSub(ObjectTask *unit) {
 /*
  * Gives one hit point in the persistent origin record to every unit that,
  * when its table slot is re-read after the two lookups, is gone or dead
- * (CALC_ACTOR_FLAG_DEAD), or whose origin record is at zero HP. A slot that is already empty at
+ * (ACTOR_FLAG_DEAD), or whose origin record is at zero HP. A slot that is already empty at
  * the first read is skipped: it has no origin record to update.
  *
  * The original keeps the unit table in a register across the loop (`lw
@@ -196,10 +278,10 @@ void calcPara2OrgSub(ObjectTask *unit) {
  */
 void calcDeadReset(void)
 {
-    ObjectTask **table;
-    ObjectTask **units;
-    ObjectTask **refreshed;
-    ObjectTask *unit;
+    BattleUnit **table;
+    BattleUnit **units;
+    BattleUnit **refreshed;
+    BattleUnit *unit;
     CalcCharParaData *origin;
     int count;
     int i;
@@ -215,7 +297,7 @@ void calcDeadReset(void)
                 refreshed = table;
                 units = refreshed;
                 if (refreshed[i] == 0
-                    || (((CalcActorRecord *) refreshed[i]->work)->flags & CALC_ACTOR_FLAG_DEAD)
+                    || (refreshed[i]->work->flags & ACTOR_FLAG_DEAD)
                     || origin->hp == 0) {
                     origin->hp = 1;
                 }
@@ -224,12 +306,56 @@ void calcDeadReset(void)
     }
 }
 
-CalcUnitParam *calcUPGet(ObjectTask *unit)
+CalcUnitParam *calcUPGet(BattleUnit *unit)
 {
-    return ((CalcActorRecord *)unit->work)->up;
+    Actor *actor;
+
+    actor = unit->work;
+    return actor->up;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHpDmg);
+int calcEp(BattleUnit *unit, int delta);
+
+/*
+ * calcHpDmg: applies one hit-table mode to dst (and, for the drain modes
+ * 7-10, gives the same amount back to src). Modes 1/3 subtract from dst,
+ * 2/4 add to it, and each odd/even pair chooses HP (calcHp) or EP
+ * (calcEp). Other modes change nothing and report success.
+ */
+int calcHpDmg(BattleUnit *src, BattleUnit *dst, int packedHit, int amount)
+{
+    unsigned char mode = packedHit;
+    int ret;
+
+    switch (mode) {
+    case 1:
+        ret = calcHp(dst, -amount);
+        break;
+    case 3:
+        ret = calcEp(dst, -amount);
+        break;
+    case 2:
+        ret = calcHp(dst, amount);
+        break;
+    case 4:
+        ret = calcEp(dst, amount);
+        break;
+    case 7:
+    case 8:
+        ret = calcHp(dst, -amount);
+        calcHp(src, amount);
+        break;
+    case 9:
+    case 10:
+        ret = calcEp(dst, -amount);
+        calcEp(src, amount);
+        break;
+    default:
+        ret = 1;
+        break;
+    }
+    return ret;
+}
 
 /*
  * calcTotalParaMenuSub (this TU, defined below, 0x00a11128): calcTotalParaMenu's
@@ -241,24 +367,24 @@ extern CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *def
 /* calcCopyParaMake copies twelve 0x20-byte units into this scratch table;
  * calcTotalParaMenuSub then reads the CalcCharParaData and CalcUnitParam
  * views from the same storage. */
-static unsigned char D_00A57CE8[0x180];
+static unsigned char unitPara_0[0x180];
 
 CalcCharParaData *calcTotalParaMenu(int charaId, int *attack, int *defense)
 {
-    return calcTotalParaMenuSub(charaId, attack, defense, D_00A57CE8);
+    return calcTotalParaMenuSub(charaId, attack, defense, unitPara_0);
 }
 
 /* calcCopyParaMake/calcSkillInit/calcWpnAtkGet/calcPhyDefGet/calcMagDefGet:
- * calcTotalParaMenuSub's own callees, still asm in this TU except
- * calcSkillInit and calcMagDefGet (this TU, below); the latter four each read their argument
+ * calcTotalParaMenuSub's own callees, all defined in this TU below; the
+ * latter four each read their argument
  * through calcUPGet, so calcTotalParaMenuSub hands them its own fake unit
  * above. */
 extern void calcCopyParaMake(CalcCharParaData *origin, unsigned char *table);
 /* calcSkillInit returns int: its exit `addiu $2,$0,0x1` (0x00a11d38). */
-extern int calcSkillInit(ObjectTask *unit);
-extern int calcWpnAtkGet(ObjectTask *unit, int slot);
-extern int calcPhyDefGet(ObjectTask *unit);
-extern int calcMagDefGet(ObjectTask *unit);
+extern int calcSkillInit(BattleUnit *unit);
+extern int calcWpnAtkGet(BattleUnit *unit, int slot);
+extern int calcPhyDefGet(BattleUnit *unit);
+extern int calcMagDefGet(BattleUnit *unit);
 
 CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table)
 {
@@ -269,10 +395,10 @@ CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, u
     int i;
 
     scratch = (CalcCharParaData *) table;
-    fakeUnit.task.work = &fakeActor;
+    fakeUnit.unit.work = (Actor *) &fakeActor;
     calcCopyParaMake(dataUnitOrgGet(charaId), table);
-    fakeActor.actor.up = (CalcUnitParam *) table;
-    calcSkillInit(&fakeUnit.task);
+    fakeActor.up = (CalcUnitParam *) table;
+    calcSkillInit(&fakeUnit.unit);
 
     origin = dataUnitOrgGet(charaId);
     if (scratch->maxHp < origin->hp) {
@@ -283,12 +409,12 @@ CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, u
     }
     if (attack != 0) {
         for (i = 0; i < 3; i++) {
-            attack[i] = calcWpnAtkGet(&fakeUnit.task, i);
+            attack[i] = calcWpnAtkGet(&fakeUnit.unit, i);
         }
     }
     if (defense != 0) {
-        defense[0] = calcPhyDefGet(&fakeUnit.task);
-        defense[1] = calcMagDefGet(&fakeUnit.task);
+        defense[0] = calcPhyDefGet(&fakeUnit.unit);
+        defense[1] = calcMagDefGet(&fakeUnit.unit);
     }
     return scratch;
 }
@@ -309,15 +435,15 @@ typedef struct CalcTakeEpPara {
  * fills the rest of it.
  */
 typedef struct CalcTakeEpArg {
-    ObjectTask task;           /* +0x00: task.work (+0x10) is the record above */
-    unsigned char unmodeled_14[0x80 - 0x14];
+    BattleUnit unit;           /* +0x00: unit.work (+0x10) is the record above */
+    unsigned char unmodeled_30[0x80 - 0x30];
 } CalcTakeEpArg;
 
 /* calcTakeEpGet takes a unit: calcWpnEnableChk (this TU) passes its own
  * unit argument (`daddu $4,$20,$0` at 0x00a16474). */
-extern int calcTakeEpGet(ObjectTask *unit, int tecId);
+extern int calcTakeEpGet(BattleUnit *unit, int tecId);
 
-/* dataEthGet (src/ov01/data_unit_org_get.c, still asm), this TU's own
+/* dataEthGet (src/ov01/data_unit_org_get.c), this TU's own
  * private view (see CalcEtherStatus, src/ov01/calc.h). */
 extern CalcEtherStatus *dataEthGet(int etherId);
 
@@ -325,15 +451,15 @@ int calcTakeEpGetMenu(int charaId, int etherId) {
     CalcTakeEpArg arg;
     CalcTakeEpPara para;
 
-    arg.task.work = &para;
+    arg.unit.work = (Actor *) &para;
     para.totalPara = calcTotalParaMenu(charaId, 0, 0);
-    return calcTakeEpGet(&arg.task, dataEthGet(etherId)->tecId);
+    return calcTakeEpGet(&arg.unit, dataEthGet(etherId)->tecId);
 }
 
 /*
  * dataTecGet's return, as far as calcBp2Tid reads it: a byte at +0x11
  * selecting the BP timeline (data_unit_org_get.c, dataTecGet's own TU,
- * still asm, owns the rest of the layout).
+ * owns the rest of the layout).
  */
 typedef struct TecKindView TecKindView;
 
@@ -341,17 +467,17 @@ struct TecKindView {
     /*
      * +0x00: attribute bits: calcAtkChk's range class, `lbu $3,0x0($2)`/`andi
      * $16,$3,0x3` (0x00a16024..0x00a16028; TEC_ATTR_RANGE, defined beside
-     * calcAtkChk), and calcUseEtherMenu's CALC_TRG_BIT4 (0x00a112f4).
+     * calcAtkChk), and calcUseEtherMenu's CALC_TRG_ALL_PARTY (0x00a112f4).
      */
     u8 attr;
     signed char epCost;     /* +0x01: calcTakeEpGet's base term, `lb $16,0x1($2)` */
     u16 flags;              /* +0x02: bit 0x800 rules out a counter */
-    signed char effectType; /* +0x04: calcStatClr's `lb $4,0x4($18)`, 4 clears statuses */
+    int effectType : 8; /* +0x04: calcStatClr's `lb $4,0x4($18)`, 4 clears statuses */
     /*
      * +0x05: calcStat's `lb $3,0x5($2)`: 1 makes the hit double *damage
      * while the target carries status (0, 0x20), which calcStat then resets.
      */
-    signed char doubleDamageKind;
+    int doubleDamageKind : 8;
     /*
      * +0x06: calcPowLevGet's base term, `lbu $18,0x6($2)` (0x00a13684,
      * unsigned byte load). TecRecord (src/ov01/data_unit_org_get.c) owns
@@ -360,9 +486,15 @@ struct TecKindView {
      */
     u8 powLevBase;
     signed char agility;    /* +0x07: calcPlusAglGet's base term, `lb $18,0x7($2)` */
-    unsigned char unmodeled_08[0x0C - 0x08];
+    /*
+     * +0x08/+0x09/+0x0A: calcStatAtk's status-test bytes, `lbu $3,0x8($2)`,
+     * `lbu $3,0x9($2)`, `lbu $3,0xA($2)` (0x00a14a08..0x00a14a20), tested
+     * against 1 under TEC flags 0x4000, 0x2000 and 0x1000 respectively.
+     */
+    unsigned char statFlagKind[3];
+    unsigned char unmodeled_0b[0x0C - 0x0B];
     signed char statCategory; /* +0x0C: calcStatClr's `lb $3,0xC($18)` */
-    unsigned char unmodeled_0d[0x0E - 0x0D];
+    signed char statRate;     /* +0x0D: calcStatAtk's `lb $18,0xD($16)` */
     u16 statMask;           /* +0x0E: calcStatClr's `lhu $2,0xE($18)` */
     unsigned char unmodeled_10[0x11 - 0x10];
     /*
@@ -370,6 +502,8 @@ struct TecKindView {
      * reads it with `lb $2,0x11($2)` (signed byte load), hence `signed char`.
      */
     signed char kind;
+    /* +0x12: calcCrit's attribute, passed to calcAtrChg. */
+    u16 attribute;
 };
 
 /*
@@ -389,7 +523,7 @@ enum TecFlag {
 extern TecKindView *dataTecGet(int tecId);
 
 /*
- * The battle command tgtFindFirst (this TU, still asm) passes on to
+ * The battle command tgtFindFirst (below) passes on to
  * tgtFindChk, as far as either reads it: tgtFindFirst resolves +0x00
  * through dataTecGet and +0x08 through dataItmGet, takes the target from
  * +0x04, and branches on mode 3 (an item, as in sndConvSpid's mode 3).
@@ -398,13 +532,13 @@ extern TecKindView *dataTecGet(int tecId);
  */
 typedef struct TgtCmd {
     int tecId;          /* +0x00 */
-    ObjectTask *target; /* +0x04 */
+    BattleUnit *target; /* +0x04 */
     int itmId;          /* +0x08: an item's id, or an ether's for mode 2 */
     int mode;           /* +0x0C: 2 = ether, 3 = item */
 } TgtCmd;
 
 /*
- * The hit record calcHitDmg (this TU, still asm) fills and hands to
+ * The hit record calcHitDmg (this TU) fills and hands to
  * calcDmg, which passes it on to calcLinePos; calcLinePos reads only the
  * byte at +0x00 (`lbu $16,0x0($6)`) and goes on when it is 1; calcStatClr
  * records the status category and bits the technique clears.
@@ -425,7 +559,8 @@ typedef struct CalcHitInfo {
      * as the calcHp/calcEp delta for the mode in result's low byte.
      */
     int damage;
-    unsigned char unmodeled_08[0x0C - 0x08];
+    /* +0x08: 1 when calcHitDmg's PL ICHIGEKI path fires (`sw $16,0x8($17)`). */
+    int ichigekiHit;
     int setCategory;   /* +0x0C: calcHitItem's `sw $3,0xC($16)`, 8 = none */
     int setMask;       /* +0x10: calcHitItem's `sw $0,0x10($16)` */
     /*
@@ -442,18 +577,16 @@ typedef struct CalcHitInfo {
 #define TGT_CMD_MODE_ETHER 2
 
 /*
- * calcHitDmg/calcHpDmg (this TU, still asm): calcUseEtherMenu's own
- * callees. calcHitDmg resolves cmd against the user's unit into hit;
- * calcHpDmg applies hit's mode (its +0x00 word, low byte) and amount (+0x04)
- * to the target through calcHp/calcEp.
+ * calcHitDmg (this TU): calcUseEtherMenu's own callee. It resolves
+ * cmd against the user's unit into hit; calcHpDmg (above) applies hit's mode
+ * (its +0x00 word, low byte) and amount (+0x04) to the target.
  */
-extern int calcHitDmg(ObjectTask *user, TgtCmd *cmd, CalcHitInfo *hit);
-extern int calcHpDmg(ObjectTask *user, ObjectTask *target, int result, int damage);
+extern int calcHitDmg(BattleUnit *user, TgtCmd *cmd, CalcHitInfo *hit);
 
 /*
  * Uses ether etherId from the menu: charaId's character casts it on
  * targetCharaId, or on every party member when the technique's attr
- * carries CALC_TRG_BIT4 (`lbu $3,0x0($2)` / `andi $3,$3,0x10`, 0x00a112f4).
+ * carries CALC_TRG_ALL_PARTY (`lbu $3,0x0($2)` / `andi $3,$3,0x10`, 0x00a112f4).
  * Both the user and each target are fake units whose actor points at the
  * character's origin record; the target's maxHp/maxEp and statAltMask are
  * calcTotalParaMenu's recalculated values while calcHitDmg/calcHpDmg run,
@@ -478,14 +611,14 @@ int calcUseEtherMenu(int charaId, int targetCharaId, int etherId)
     int member;
     int i;
 
-    user.task.work = &userActor;
-    userActor.actor.up = (CalcUnitParam *) dataUnitOrgGet(charaId);
-    target.task.work = &targetActor;
+    user.unit.work = (Actor *) &userActor;
+    userActor.up = (CalcUnitParam *) dataUnitOrgGet(charaId);
+    target.unit.work = (Actor *) &targetActor;
     cmd.tecId = dataEthGet(etherId)->tecId;
-    cmd.target = &target.task;
+    cmd.target = &target.unit;
     cmd.itmId = etherId;
     cmd.mode = TGT_CMD_MODE_ETHER;
-    if (dataTecGet(dataEthGet(etherId)->tecId)->attr & CALC_TRG_BIT4) {
+    if (dataTecGet(dataEthGet(etherId)->tecId)->attr & CALC_TRG_ALL_PARTY) {
         targetIds = partyIds;
         count = PartyAllPartyGet(targetIds, 0);
     } else {
@@ -506,9 +639,9 @@ int calcUseEtherMenu(int charaId, int targetCharaId, int etherId)
         for (i = 0; i < 8; i++) {
             origin->statAltMask[i] = total->statAltMask[i];
         }
-        targetActor.actor.up = (CalcUnitParam *) origin;
-        calcHitDmg(&user.task, &cmd, &hit);
-        calcHpDmg(&user.task, &target.task, hit.result, hit.damage);
+        targetActor.up = (CalcUnitParam *) origin;
+        calcHitDmg(&user.unit, &cmd, &hit);
+        calcHpDmg(&user.unit, &target.unit, hit.result, hit.damage);
         origin->maxHp = maxHp;
         origin->maxEp = maxEp;
         for (i = 0; i < 8; i++) {
@@ -519,7 +652,7 @@ int calcUseEtherMenu(int charaId, int targetCharaId, int etherId)
     total = calcTotalParaMenu(charaId, 0, 0);
     maxEp = origin->maxEp;
     origin->maxEp = total->maxEp;
-    calcEp(&user.task, -calcTakeEpGetMenu(charaId, etherId));
+    calcEp(&user.unit, -calcTakeEpGetMenu(charaId, etherId));
     origin->maxEp = maxEp;
     return 1;
 }
@@ -569,13 +702,12 @@ typedef struct ItmTrgView {
 
 extern ItmTrgView *dataItmGet(int itmId);
 
-/* calcUseItem (this TU, still asm): the item effect of itmId used by user
+/* calcUseItem (this TU, below): the item effect of itmId used by user
  * on target; calcUseItemMenu passes no user (`daddu $4,$0,$0`). */
-extern int calcUseItem(ObjectTask *user, ObjectTask *target, int itmId);
 
 /*
  * Uses item itmId from the menu on charaId, or on every party member when
- * the item's trgFlags carry CALC_TRG_BIT4 (`andi $3,$3,0x10`, 0x00a11508).
+ * the item's trgFlags carry CALC_TRG_ALL_PARTY (`andi $3,$3,0x10`, 0x00a11508).
  * Each target's origin record stands in as the unit parameter block of a
  * fake unit, with maxHp/maxEp and statAltMask temporarily replaced by
  * calcTotalParaMenu's recalculated values (`lhu`/`sh` at +0x0/+0x2, the
@@ -601,9 +733,9 @@ int calcUseItemMenu(int charaId, int itmId)
     int member;
     int i;
 
-    fakeUnit.task.work = &fakeActor;
+    fakeUnit.unit.work = (Actor *) &fakeActor;
     item = dataItmGet(itmId);
-    if (item->trgFlags & CALC_TRG_BIT4) {
+    if (item->trgFlags & CALC_TRG_ALL_PARTY) {
         targetIds = partyIds;
         count = PartyAllPartyGet(targetIds, 0);
     } else {
@@ -624,8 +756,8 @@ int calcUseItemMenu(int charaId, int itmId)
         for (i = 0; i < 8; i++) {
             origin->statAltMask[i] = total->statAltMask[i];
         }
-        fakeActor.actor.up = (CalcUnitParam *) origin;
-        calcUseItem(0, &fakeUnit.task, itmId);
+        fakeActor.up = (CalcUnitParam *) origin;
+        calcUseItem(0, &fakeUnit.unit, itmId);
         origin->maxHp = maxHp;
         origin->maxEp = maxEp;
         for (i = 0; i < 8; i++) {
@@ -635,10 +767,289 @@ int calcUseItemMenu(int charaId, int itmId)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcUseItem);
+/*
+ * dataPlChaGet's return (src/ov01/data_unit_org_get.c, this TU's own
+ * bounded view): calcPowLevGet reads a short at +0x9A (`lh $4,0x9A($2)`,
+ * 0x00a1373c) for tecId 0x262/0x263, divides it by 5 and adds it to the
+ * power level. dataPlChaGet's own TU already names the owning record
+ * (data_unit_org_get.h's `PlCharacter`, eight 0xC-byte `PlSpecialSlot`
+ * entries from +0x48), so +0x9A is that same special[6]'s own +0x0A
+ * halfword (0x48 + 6*0xC + 0xA = 0x9A) -- a member of the same 0xC-byte
+ * record CalcSpecSlot views above. CalcSpecSlot names only +0x04 and +0x06
+ * of it and leaves its +0x0A halfword unmodeled (inside unmodeled_08), so
+ * this view is the only place that halfword is named here. Naming it in
+ * `PlSpecialSlot` and reading it as `special[6]` there removes this view
+ * entirely. This TU
+ * cannot include data_unit_org_get.h (that header includes this one), so it
+ * keeps the plain offset here and says what it overlaps.
+ */
+typedef struct CalcPlCharaView {
+    /*
+     * +0x00/+0x0C/+0x10/+0x14: the four running totals calcResultSub (this
+     * TU) adds a battle's share to (`lw`/`sw` at 0x0, 0xC, 0x10, 0x14 of
+     * $18, clamped to 9999999 and 9999), inside PlCharacter's unmodeled_0.
+     */
+    int exp;
+    int expToNext;    /* +0x04: calcLvUp's exp left before the next level */
+    u16 waitOffset;   /* +0x08: calcUseItem's `lhu $3,0x8(...)` target */
+    unsigned char unmodeled_0a[0x0C - 0x0A];
+    int techPoint;
+    int etherPoint;
+    int skillPoint;
+    unsigned char unmodeled_18[0x9A - 0x18];
+    short special6PowLevTerm; /* +0x9A: PlCharacter.special[6]'s own +0x0A */
+} CalcPlCharaView;
+
+extern CalcPlCharaView *dataPlChaGet(int cid);
+
+/*
+ * The item record calcUseItem reads through dataItmGet, as far as it goes:
+ * the per-stat group selector at +0x0A (`lbu $2,0xA($17)`, an index into
+ * the four-entry group table), a target byte at +0x0B that picks the stat
+ * reset, the effect word at +0x0C and a halfword value at +0x0E. The value
+ * is read three ways: as a signed halfword (`lh $6,0xE`, the stat mask), as
+ * an unsigned halfword (`lhu $4,0xE`, the protect bits and the growth
+ * tests) and as its low byte (`lbu $4,0xE`, the amount).
+ */
+typedef struct CalcUseItemRecord {
+    unsigned char unmodeled_00[0x0A];
+    unsigned char power;        /* +0x0A */
+    unsigned char targetSel;    /* +0x0B */
+    u16 effectBits;             /* +0x0C */
+    union {
+        short s;
+        u16 u;
+        unsigned char b;
+    } value;                    /* +0x0E */
+} CalcUseItemRecord;
+
+/*
+ * The effect bits of CalcUseItemRecord.effectBits that calcUseItem tests,
+ * in the order it applies them. The three HP entries all go through
+ * calcDmgItem and calcHp; the names say where in the sequence each sits.
+ */
+enum {
+    ITEM_EFFECT_HP_FIRST = 0x0001,
+    ITEM_EFFECT_EP = 0x0002,
+    ITEM_EFFECT_STATUS_CLEAR = 0x0004,
+    ITEM_EFFECT_HP_SECOND = 0x0008,
+    ITEM_EFFECT_STAT_SET = 0x0010,
+    ITEM_EFFECT_STAT_PROTECT = 0x0020,
+    ITEM_EFFECT_WAIT_OFFSET = 0x0040,
+    ITEM_EFFECT_GROWTH = 0x0080,
+    ITEM_EFFECT_POWER_SWITCH = 0x0100,
+    ITEM_EFFECT_SKILL_POINTS = 0x0200,
+    ITEM_EFFECT_ETHER_POINTS = 0x0400,
+    ITEM_EFFECT_TECH_POINTS = 0x0800,
+    ITEM_EFFECT_PARTY_BYTE = 0x1000,
+    ITEM_EFFECT_HP_THIRD = 0x2000
+};
+
+/* The per-character byte of PartyDataGet's block that ITEM_EFFECT_PARTY_BYTE
+ * adds to, capped at 5 (a stored 6 or more is set back to 5). */
+#define CALC_PARTY_CHARA_BYTE 0x13F
+
+extern void calcStatResetCha(BattleUnit *unit);
+extern void specEscapeProc(void);
+extern int calcDmgItem(BattleUnit *unit, TgtCmd *cmd);
+
+/*
+ * calcUseItem: applies item itmId's effects to target, the way the item's
+ * effect word (+0x0C) selects them, with user as the source for the damage
+ * calcDmgItem computes. Returns the last HP result, 1 when no HP effect ran.
+ */
+int calcUseItem(BattleUnit *user, BattleUnit *target, int itmId)
+{
+    TgtCmd hit;
+    int statGroup[4] = {0, 1, 2, 3};
+    CalcUseItemRecord *item;
+    CalcUnitParam *up;
+    int ret;
+
+    item = (CalcUseItemRecord *) dataItmGet(itmId);
+    up = calcUPGet(target);
+    hit.tecId = 0;
+    hit.target = target;
+    hit.itmId = itmId;
+    ret = 1;
+    if (item->effectBits & ITEM_EFFECT_HP_FIRST) {
+        ret = calcHp(target, calcDmgItem(user, &hit));
+    }
+    if (item->effectBits & ITEM_EFFECT_EP) {
+        calcEp(target, calcDmgItem(user, &hit));
+    }
+    if (item->effectBits & ITEM_EFFECT_STATUS_CLEAR) {
+        if (calcBattleChk(target) == 0) {
+            Actor *actor;
+
+            actor = target->work;
+            actor->flags &= ~0x10;
+        }
+        if (item->targetSel == 0) {
+            calcStatResetCha(target);
+        } else if (item->targetSel == 1) {
+            calcStatReset(target, 0, 0x7FFF, 0);
+        } else if (item->targetSel == 2) {
+            calcStatReset(target, 1, 0x7FFF, 0);
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_HP_SECOND) {
+        ret = calcHp(target, calcDmgItem(user, &hit));
+    }
+    if (item->effectBits & ITEM_EFFECT_STAT_SET) {
+        calcStatSet(target, statGroup[item->power], item->value.s, 0);
+    }
+    if (item->effectBits & ITEM_EFFECT_STAT_PROTECT) {
+        up->statProtect[statGroup[item->power]] |= item->value.u;
+    }
+    if (item->effectBits & ITEM_EFFECT_WAIT_OFFSET) {
+        if (item->value.s & 0x8000) {
+            dataPlChaGet(up->charaId)->waitOffset += item->value.b;
+        } else {
+            dataPlChaGet(up->charaId)->waitOffset -= item->value.b;
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_GROWTH) {
+        if (item->value.s & 0x8000) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->baseAtk;
+            sum = cur + add;
+            up->baseAtk = sum;
+            if ((short) sum >= 0x3E8) {
+                up->baseAtk = 0x3E7;
+            }
+        }
+        if (item->value.s & 0x4000) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->phyDefense;
+            sum = cur + add;
+            up->phyDefense = sum;
+            if ((short) sum >= 0x3E8) {
+                up->phyDefense = 0x3E7;
+            }
+        }
+        if (item->value.s & 0x2000) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->magAttack;
+            sum = cur + add;
+            up->magAttack = sum;
+            if ((short) sum >= 0x3E8) {
+                up->magAttack = 0x3E7;
+            }
+        }
+        if (item->value.s & 0x1000) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->magDefense;
+            sum = cur + add;
+            up->magDefense = sum;
+            if ((short) sum >= 0x3E8) {
+                up->magDefense = 0x3E7;
+            }
+        }
+        if (item->value.s & 0x800) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->maxHp;
+            sum = cur + add;
+            up->maxHp = sum;
+            if ((short) sum >= 0x2710) {
+                up->maxHp = 0x270F;
+            }
+        }
+        if (item->value.s & 0x400) {
+            int add;
+            int sum;
+            unsigned short cur;
+
+            add = item->power;
+            cur = up->maxEp;
+            sum = cur + add;
+            up->maxEp = sum;
+            if ((short) sum >= 0x64) {
+                up->maxEp = 0x63;
+            }
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_SKILL_POINTS) {
+        dataPlChaGet(up->charaId)->skillPoint += item->power;
+        if (dataPlChaGet(up->charaId)->skillPoint >= 0x2710) {
+            dataPlChaGet(up->charaId)->skillPoint = 0x270F;
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_ETHER_POINTS) {
+        dataPlChaGet(up->charaId)->etherPoint += item->power;
+        if (dataPlChaGet(up->charaId)->etherPoint >= 0x2710) {
+            dataPlChaGet(up->charaId)->etherPoint = 0x270F;
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_TECH_POINTS) {
+        dataPlChaGet(up->charaId)->techPoint += item->power;
+        if (dataPlChaGet(up->charaId)->techPoint >= 0x2710) {
+            dataPlChaGet(up->charaId)->techPoint = 0x270F;
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_PARTY_BYTE) {
+        unsigned char *party;
+        int slot;
+
+        party = (unsigned char *) PartyDataGet();
+        slot = up->charaId;
+        slot += CALC_PARTY_CHARA_BYTE;
+        party[slot] += item->power;
+        if (*(unsigned char *) ((int) up->charaId + (int) PartyDataGet() + CALC_PARTY_CHARA_BYTE) >= 6) {
+            *(unsigned char *) ((int) up->charaId + (int) PartyDataGet() + CALC_PARTY_CHARA_BYTE) = 5;
+        }
+    }
+    if (item->effectBits & ITEM_EFFECT_HP_THIRD) {
+        ret = calcHp(target, calcDmgItem(user, &hit));
+    }
+    if (item->effectBits & ITEM_EFFECT_POWER_SWITCH) {
+        switch (item->power) {
+        case 1:
+            ret = calcHp(target, -calcDmgItem(user, &hit));
+            break;
+        case 2:
+            calcBc(target, 1);
+            break;
+        case 3:
+            specEscapeProc();
+            break;
+        case 4:
+            if (*(int *) ((char *) calcUPGet(target) + 0x17C) < 0x19) {
+                *(int *) ((char *) calcUPGet(target) + 0x17C) = 0x19;
+            }
+            break;
+        case 5:
+            if (*(int *) ((char *) calcUPGet(target) + 0x17C) < 0x32) {
+                *(int *) ((char *) calcUPGet(target) + 0x17C) = 0x32;
+            }
+            break;
+        }
+    }
+    return ret;
+}
 
 /* calcSkillInitSub (this TU, defined below): one equipped skill id of unit. */
-extern void calcSkillInitSub(ObjectTask *unit, int skillId);
+extern void calcSkillInitSub(BattleUnit *unit, int skillId);
 extern AccessoryData *dataAccGet(int accessoryId);
 
 /*
@@ -649,7 +1060,7 @@ extern AccessoryData *dataAccGet(int accessoryId);
  * 0x00a11ce0..0x00a11ce4) or from the unit (`lh $2,0x6($2)`/`beqz $2`,
  * 0x00a11d1c..0x00a11d20). Always returns 1 (`addiu $2,$0,0x1`, 0x00a11d38).
  */
-int calcSkillInit(ObjectTask *unit)
+int calcSkillInit(BattleUnit *unit)
 {
     CalcUnitParam *up;
     int i;
@@ -677,7 +1088,7 @@ int calcSkillInit(ObjectTask *unit)
 }
 
 /*
- * dataSklGet's return record (src/ov01/data_unit_org_get.c, still asm), as
+ * dataSklGet's return record (src/ov01/data_unit_org_get.c), as
  * far as calcSkillInitSub and calcSkillSub read it: two halfword bit sets.
  */
 typedef struct SkillData SkillData;
@@ -718,10 +1129,10 @@ enum SkillParam {
     SKILL_PARAM_ATTACK = 0x8000       /* baseAtk, max 999 */
 };
 
-/* calcStatSet (this TU, still asm): calcStatSetChk's own arguments;
+/* calcStatSet (this TU, below): calcStatSetChk's own arguments;
  * calcStatProtectSet is defined later in this TU. */
-extern int calcStatSet(ObjectTask *unit, int category, int flag, int force);
-extern void calcStatProtectSet(ObjectTask *unit, int group, int mask);
+extern void calcStatProtectSet(BattleUnit *unit, int group, int mask);
+extern int calcStatSetChk(BattleUnit *unit, int category, int flag, int force);
 
 /*
  * Applies one equipped skill to the unit: a parameter skill raises the
@@ -730,7 +1141,7 @@ extern void calcStatProtectSet(ObjectTask *unit, int group, int mask);
  * tail-calls calcStatProtectSet or calcStatSet with the category in the low
  * byte of typeFlags (`andi $5,$5,0xFF`).
  */
-void calcSkillInitSub(ObjectTask *unit, int skillId)
+void calcSkillInitSub(BattleUnit *unit, int skillId)
 {
     SkillData *skill;
     CalcUnitParam *up;
@@ -754,13 +1165,13 @@ void calcSkillInitSub(ObjectTask *unit, int skillId)
         }
         if (skill->levelFlags & SKILL_PARAM_HIT) {
             up->hitStat += level;
-            if ((signed char) up->hitStat >= 100) {
+            if (up->hitStat >= 100) {
                 up->hitStat = 99;
             }
         }
         if (skill->levelFlags & SKILL_PARAM_EVADE) {
             up->evadeStat += level;
-            if ((signed char) up->evadeStat >= 100) {
+            if (up->evadeStat >= 100) {
                 up->evadeStat = 99;
             }
         }
@@ -803,7 +1214,7 @@ void calcSkillInitSub(ObjectTask *unit, int skillId)
 
 /* calcSkillSub/AccessoryData.skillId (both this TU, defined below): the
  * per-skill type/level mask test and the accessory's granted skill id. */
-extern int calcSkillSub(ObjectTask *unit, int skillId, int typeMask, int levelMask);
+extern int calcSkillSub(BattleUnit *unit, int skillId, int typeMask, int levelMask);
 extern AccessoryData *dataAccGet(int accessoryId);
 
 /*
@@ -813,7 +1224,7 @@ extern AccessoryData *dataAccGet(int accessoryId);
  * 0x00a12074) or from the unit (`lh $2,0x6($2)`/`beqz $2`, 0x00a120b4..
  * 0x00a120c0); such slots add nothing.
  */
-int calcSkill(ObjectTask *unit, int kind, int mask)
+int calcSkill(BattleUnit *unit, int kind, int mask)
 {
     CalcUnitParam *up;
     int result;
@@ -842,7 +1253,7 @@ int calcSkill(ObjectTask *unit, int kind, int mask)
     return result;
 }
 
-int calcSkillSub(ObjectTask *unit, int skillId, int typeMask, int levelMask) {
+int calcSkillSub(BattleUnit *unit, int skillId, int typeMask, int levelMask) {
     SkillData *skill;
     unsigned short levelFlags;
     int result;
@@ -857,7 +1268,7 @@ int calcSkillSub(ObjectTask *unit, int skillId, int typeMask, int levelMask) {
     return result;
 }
 
-int calcAccEquChk(ObjectTask *unit, int accId)
+int calcAccEquChk(BattleUnit *unit, int accId)
 {
     CalcUnitParam *param;
     int i;
@@ -873,11 +1284,11 @@ int calcAccEquChk(ObjectTask *unit, int accId)
     return 0;
 }
 
-/* dataAccGet (src/ov01/data_unit_org_get.c, still asm), this TU's own
+/* dataAccGet (src/ov01/data_unit_org_get.c), this TU's own
  * private view (see AccessoryData, src/ov01/calc.h). */
 extern AccessoryData *dataAccGet(int accessoryId);
 
-int calcSkillEquChk(ObjectTask *unit, int skillId)
+int calcSkillEquChk(BattleUnit *unit, int skillId)
 {
     CalcUnitParam *param;
     int i;
@@ -910,14 +1321,14 @@ int calcSkillEquChk(ObjectTask *unit, int skillId)
 
 /* calcSkillEquChk: calcSkillEquChkAll's own callee (this TU). Its second
  * call below hands it the same fake unit calcMagDefGet (this TU) takes. */
-extern int calcSkillEquChk(ObjectTask *unit, int skillId);
+extern int calcSkillEquChk(BattleUnit *unit, int skillId);
 
 int calcSkillEquChkAll(int skillId)
 {
     CalcScratchUnit fakeUnit;
     CalcScratchActor fakeActor;
-    ObjectTask **table;
-    ObjectTask *unit;
+    BattleUnit **table;
+    BattleUnit *unit;
     int count;
     int i;
     int found;
@@ -932,9 +1343,9 @@ int calcSkillEquChkAll(int skillId)
                 found = 1;
                 if (calcSkillEquChk(unit, skillId) == 0) {
                     if (calcUPGet(table[i])->flags & CALC_UNIT_FLAG_IS_AGWS) {
-                        fakeUnit.task.work = &fakeActor;
-                        fakeActor.actor.up = calcUPGet(table[i])->linkedUnit;
-                        if (calcSkillEquChk(&fakeUnit.task, skillId) != 0) {
+                        fakeUnit.unit.work = (Actor *) &fakeActor;
+                        fakeActor.up = calcUPGet(table[i])->linkedUnit;
+                        if (calcSkillEquChk(&fakeUnit.unit, skillId) != 0) {
                             return 1;
                         }
                     }
@@ -948,7 +1359,7 @@ int calcSkillEquChkAll(int skillId)
     return found;
 }
 
-int calcAp(ObjectTask *unit, int ap)
+int calcAp(BattleUnit *unit, int ap)
 {
     int current = calcUPGet(unit)->dblActKind;
 
@@ -963,13 +1374,42 @@ int calcAp(ObjectTask *unit, int ap)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHp);
+extern int plMutekiGet(void);
+extern int enMutekiGet(void);
+extern const char calcPLMUTEKIText[]; /* "** PL MUTEKI\n" */
+extern const char calcENMUTEKIText[]; /* "** EN MUTEKI\n" */
 
-int calcEp(ObjectTask *unit, int delta)
+int calcHp(BattleUnit *unit, int delta)
+{
+    int hp;
+    Actor *actor;
+
+    actor = unit->work;
+    if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
+        if (plMutekiGet() != 0) {
+            printf(calcPLMUTEKIText);
+            return 1;
+        }
+    } else if (enMutekiGet() != 0) {
+        printf(calcENMUTEKIText);
+        return 1;
+    }
+    hp = calcUPGet(unit)->currentHp;
+    hp += delta;
+    if (hp < 0) {
+        hp = 0;
+    } else if (calcUPGet(unit)->maxHp < hp) {
+        hp = calcUPGet(unit)->maxHp;
+    }
+    calcUPGet(unit)->currentHp = hp;
+    return hp != 0;
+}
+
+int calcEp(BattleUnit *unit, int delta)
 {
     int ep;
 
-    ep = (short) calcUPGet(unit)->currentEp;
+    ep = calcUPGet(unit)->currentEp;
     ep += delta;
     if (ep < 0)
     {
@@ -984,25 +1424,22 @@ int calcEp(ObjectTask *unit, int delta)
 }
 
 /*
- * calcBc (this TU, defined below) takes a BattleUnit *, the record
- * include/ov01/battle_init.h declares; calcBp's unit is an ObjectTask *,
- * hence the cast at the call (calcBc/calcBoost cast the other way for
- * calcUPGet). calcBc returns int, not void: its asm sets $2 = 1
- * (`addiu $2,$0,0x1`, build/ov01/asm/nonmatchings/ov01/calc/calcBc.s) right
+ * calcBc (this TU, defined below) takes the unit as a BattleUnit *, the
+ * type calcUPGet takes, the same type battle_init.c's extern declares.
+ * calcBc returns int, not void: the original sets
+ * $2 = 1 (`addiu $2,$0,0x1`, asm/nonmatchings/ov01/calc/calcBc.s) right
  * before the epilogue on every path; calcBoost, its only caller, discards
  * the result.
  */
-int calcBc(BattleUnit *unit, int delta);
 
 /*
  * Adds bp to the unit's boost-point gauge while its boost count is below
  * the limit; every 50 points (`slti $4,$3,0x32`, `div $0,$3,$2` with
  * $2 = 0x32) become one boost through calcBc, and a full count empties the
  * gauge. Returns 1 on every path (`addiu $2,$0,0x1` at 0x00a12630), so
- * the extern spelled `void calcBp(ObjectTask *unit, int tid)` while it was
- * asm is now this int definition; calcBp2Tid discards the result.
+ * calcBp2Tid discards the result.
  */
-int calcBp(ObjectTask *unit, int bp)
+int calcBp(BattleUnit *unit, int bp)
 {
     CalcUnitParam *up;
 
@@ -1011,7 +1448,7 @@ int calcBp(ObjectTask *unit, int bp)
         up->bpGauge += bp;
         if (up->bpGauge >= 50) {
             up->bpGauge %= 50;
-            calcBc((BattleUnit *) unit, 1);
+            calcBc(unit, 1);
         }
     }
     if (up->bcValue >= up->bcLimit) {
@@ -1021,16 +1458,16 @@ int calcBp(ObjectTask *unit, int bp)
 }
 
 extern int menuTimeGet(void);
-extern const char D_00A443D8[]; /* "** BP up: EventTimer G (%d)\n" */
+extern const char calcBPUpEventTimerGText[]; /* "** BP up: EventTimer G (%d)\n" */
 
-int calcBp2Tid(ObjectTask *unit, int tecId)
+int calcBp2Tid(BattleUnit *unit, int tecId)
 {
-    BattleActor *actor;
+    Actor *actor;
     int kind;
     int tid;
 
-    actor = (BattleActor *) unit->work;
-    if (actor->flags & CALC_ACTOR_FLAG_ENEMY) {
+    actor = unit->work;
+    if (actor->flags & ACTOR_FLAG_ENEMY) {
         return 0;
     }
 
@@ -1047,7 +1484,7 @@ int calcBp2Tid(ObjectTask *unit, int tecId)
 
     if (menuTimeGet() == 2) {
         tid *= 3;
-        printf(D_00A443D8, tid);
+        printf(calcBPUpEventTimerGText, tid);
     }
 
     calcBp(unit, tid);
@@ -1058,21 +1495,21 @@ int calcBc(BattleUnit *unit, int delta)
 {
     int bc;
 
-    bc = calcUPGet((ObjectTask *) unit)->bcValue;
+    bc = calcUPGet(unit)->bcValue;
     bc += delta;
     if (bc < 0)
     {
         bc = 0;
     }
-    else if (calcUPGet((ObjectTask *) unit)->bcLimit < bc)
+    else if (calcUPGet(unit)->bcLimit < bc)
     {
-        bc = calcUPGet((ObjectTask *) unit)->bcLimit;
+        bc = calcUPGet(unit)->bcLimit;
     }
-    calcUPGet((ObjectTask *) unit)->bcValue = bc;
+    calcUPGet(unit)->bcValue = bc;
     return 1;
 }
 
-int calcCounter(ObjectTask *unit, int tecId)
+int calcCounter(BattleUnit *unit, int tecId)
 {
     int rate;
 
@@ -1087,30 +1524,63 @@ int calcCounter(ObjectTask *unit, int tecId)
     return rnd(100) < rate;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcBoostChk);
+extern BattleUnit *actUnitGet(void);
 
-extern int *actStockGet(void);
-void decoEffCall(BattleUnit *unit, int effectId);
+/*
+ * calcBoostChk: whether unit may take a boost in the category mode selects
+ * (mode 1 is the boost that a battle unit's own bcValue gates).
+ */
+int calcBoostChk(BattleUnit *unit, int mode)
+{
+    if (unit != 0 && !(*(u64 *) unit->work & 0x480) && actUnitGet() != unit
+        && ((CalcActStock *) actStockGet())->slot[mode] == 0 && calcUPGet(unit)->currentHp != 0) {
+        if ((calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) && calcAccEquChk(unit, 0x83) == 0) {
+            return 0;
+        }
+        if (mode == 1 && calcUPGet(unit)->bcValue <= 0) {
+            return 0;
+        }
+        if (calcStatGet(unit, 1, 4) == 0) {
+            goto ok;
+        }
+    }
+    return 0;
+ok:
+    if (mode == 1) {
+        Actor *actor;
+
+        actor = unit->work;
+        if (actor->flags & 0x10) {
+            return 0;
+        }
+        return 1;
+    }
+    return 1;
+}
+
 int sndSysSePlay(int soundId);
 
 int calcBoost(BattleUnit *unit, int mode) {
-    CalcActorRecord *work;
+    Actor *work;
 
     if (mode == 1) {
         calcBc(unit, -1);
     }
-    work = (CalcActorRecord *) ((ObjectTask *) unit)->work;
+    work = unit->work;
     work->flags |= 0x400;
-    ((CalcActStock *) actStockGet())->slot[mode] = (ObjectTask *) unit;
+    ((CalcActStock *) actStockGet())->slot[mode] = unit;
     decoEffCall(unit, 0x64);
     return sndSysSePlay(9);
 }
 
-int calcIdol2Chk(ObjectTask *unit)
+int calcIdol2Chk(BattleUnit *unit)
 {
-    int hp = (short) calcUPGet(unit)->currentHp;
+    int hp = calcUPGet(unit)->currentHp;
 
-    if ((((BattleActor *) unit->work)->flags & CALC_ACTOR_FLAG_ENEMY) == 0) {
+    Actor *actor;
+
+    actor = unit->work;
+    if ((actor->flags & ACTOR_FLAG_ENEMY) == 0) {
         if (hp < calcUPGet(unit)->maxHp / 5) {
             return 1;
         }
@@ -1118,12 +1588,12 @@ int calcIdol2Chk(ObjectTask *unit)
     return 0;
 }
 
-int calcTuigekiChk(ObjectTask *unit)
+int calcTuigekiChk(BattleUnit *unit)
 {
     return calcStatGet(unit, 7, 0x80) != 0;
 }
 
-int calcSpecChk(ObjectTask *unit, int specId)
+int calcSpecChk(BattleUnit *unit, int specId)
 {
     int result;
 
@@ -1143,14 +1613,14 @@ int calcSpecChk(ObjectTask *unit, int specId)
     return result;
 }
 
-extern int calcTgtUnitTbl(ObjectTask *unit, int trgFlags, ObjectTask **table);
+extern int calcTgtUnitTbl(BattleUnit *unit, int trgFlags, BattleUnit **table);
 extern int cfEventGet(void);
 extern int dataItmBoxChk(int itmId);
 
-int calcDItemChk(ObjectTask *unit, int itmId)
+int calcDItemChk(BattleUnit *unit, int itmId)
 {
     if (calcUPGet(unit)->dblActKind >= 6
-        && (dataItmGet(itmId)->trgFlags & CALC_TRG_BIT4) == 0
+        && (dataItmGet(itmId)->trgFlags & CALC_TRG_ALL_PARTY) == 0
         && dataItmBoxChk(itmId) >= 2
         && (dataItmGet(itmId)->useFlags & 1)) {
         return 1;
@@ -1158,11 +1628,12 @@ int calcDItemChk(ObjectTask *unit, int itmId)
     return 0;
 }
 
-void calcTurnStart(ObjectTask *unit)
+void calcTurnStart(BattleUnit *unit)
 {
     int ap = 4;
     int apForSelect;
-    CalcActorRecord *work = (CalcActorRecord *) unit->work;
+    Actor *work = unit->work;
+    Actor *actor;
 
     if (calcStatGet(unit, 2, 0x10) != 0 || calcStatGet(unit, 6, 0x1000) != 0)
     {
@@ -1177,7 +1648,8 @@ void calcTurnStart(ObjectTask *unit)
     apForSelect = ap;
     calcAp(unit, calcStatGet(unit, 7, 0x20) ? apForSelect + 1 : ap);
 
-    if (((CalcActorRecord *) unit->work)->flags & 0x800)
+    actor = unit->work;
+    if (actor->flags & 0x800)
     {
         CalcCmdEntry *cmd = unitCmdPtrGet(unit);
 
@@ -1195,12 +1667,14 @@ void calcTurnStart(ObjectTask *unit)
     }
 }
 
-void calcTurnEnd(ObjectTask *unit)
+void calcTurnEnd(BattleUnit *unit)
 {
     CalcUnitParam *up;
     short wct;
+    Actor *actor;
 
-    ((CalcActorRecord *) unit->work)->flags &= ~0x6418;
+    actor = unit->work;
+    actor->flags &= ~0x6418;
 
     up = calcUPGet(unit);
     calcUPGet(unit)->waitCount = wct = calcWct(unit);
@@ -1211,7 +1685,7 @@ void calcTurnEnd(ObjectTask *unit)
     calcStatTurn(unit);
 }
 
-int calcWct(ObjectTask *unit)
+int calcWct(BattleUnit *unit)
 {
     int base;
     int accum = 0;
@@ -1236,7 +1710,7 @@ int calcWct(ObjectTask *unit)
     return base + accum;
 }
 
-int calcWctDec(ObjectTask *unit)
+int calcWctDec(BattleUnit *unit)
 {
     int wait = calcUPGet(unit)->waitCount;
 
@@ -1255,19 +1729,87 @@ int calcWctDec(ObjectTask *unit)
     return wait;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHitMotChk);
+extern int dataMtdRead(BattleUnit *unit, int n);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHitDmg);
+int calcHitMotChk(BattleUnit *unit)
+{
+    int motion;
+
+    if ((unsigned int) (unitCmdPtrGet(unit)->selector - 1) >= 3) {
+        return 0;
+    }
+    motion = dataMtdRead(unit, 1);
+    switch (motion) {
+    case 0:
+        return 0;
+    case 1:
+        return motion;
+    }
+    return 0;
+}
+
+extern int calcHit(BattleUnit *attacker, TgtCmd *cmd);
+extern int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit);
+extern int plIchigekiGet(void);
+extern int cfEventGet(void);
+extern const char calcDMGEVAText[]; /* "** DMG: EVA \n" */
+extern const char calcPLICHIGEKIText[]; /* "** PL ICHIGEKI\n" */
+
+/*
+ * Resolves cmd against the user into hit: the hit class (calcHit) and, on a
+ * hit, the damage (calcDmg). Both unit flags tested are 0x40 (the enemy
+ * flag of the actor): an enemy user against a target that is not an enemy,
+ * while cfEventGet carries bit 0, zeroes the damage. A user that is not an
+ * enemy and has PL ICHIGEKI active turns a hit class below 2 into a hit of
+ * class 1 whose damage is the target's maxHp. Always returns 1.
+ */
+int calcHitDmg(BattleUnit *user, TgtCmd *cmd, CalcHitInfo *hit)
+{
+    int r;
+    unsigned char mode;
+
+    hit->setCategory = 8;
+    hit->clearCategory = 8;
+    hit->setMask = 0;
+    hit->clearMask = 0;
+    r = calcHit(user, cmd);
+    hit->result = r;
+    if ((unsigned char) r == 0) {
+        hit->damage = 0;
+        printf(calcDMGEVAText);
+    } else {
+        hit->damage = calcDmg(user, cmd, hit);
+    }
+    if (!(*(unsigned *) user->work & ACTOR_FLAG_ENEMY)) {
+        if ((cfEventGet() & 1) && (*(unsigned *) cmd->target->work & ACTOR_FLAG_ENEMY)) {
+            hit->damage = 0;
+            return 1;
+        }
+    }
+    mode = hit->result;
+    if (!(*(unsigned *) user->work & ACTOR_FLAG_ENEMY) && plIchigekiGet() != 0) {
+        if (mode < 2) {
+            CalcUnitParam *up;
+
+            hit->result = 1;
+            up = calcUPGet(cmd->target);
+            hit->ichigekiHit = 1;
+            hit->damage = up->maxHp;
+            printf(calcPLICHIGEKIText);
+        }
+    }
+    return 1;
+}
 
 /* calcHitParaGet (defined below): the attacker's hit rate. */
-int calcHitParaGet(ObjectTask *unit);
+int calcHitParaGet(BattleUnit *unit);
 
 /*
  * The attacker's hit rate (calcHitParaGet) less the target's evadeStat gives
  * margin; the evade is halved when the target carries the statuses tested
  * first, or raised by a quarter when the attacker carries the third one.
  * Early returns: 0 when the target's HP is 0; 1 when its actor carries
- * CALC_ACTOR_FLAG_BIT11; 0 when the technique carries TEC_FLAG_NO_HIT_ROLL.
+ * flag 0x800 (Actor.flags); 0 when the technique carries TEC_FLAG_NO_HIT_ROLL.
  * Then a first roll, rnd(100) - margin (`jal rnd` 0x00a130cc, `subu`
  * 0x00a130d4), compared with 90 (`slti $2,$2,0x5A`, 0x00a130d8): at 90 or
  * more it returns 2 unless the target carries CALC_UNIT_FLAG_NO_HIT_RESULT_2,
@@ -1277,25 +1819,26 @@ int calcHitParaGet(ObjectTask *unit);
  * more it returns 1 unless the target carries CALC_UNIT_FLAG_NO_HIT_RESULT_1
  * or calcBattleChk is 0; otherwise 0.
  */
-int calcHitRate(ObjectTask *unit, TgtCmd *cmd)
+int calcHitRate(BattleUnit *unit, TgtCmd *cmd)
 {
     int hitRate;
     int evade;
     int margin;
+    Actor *targetActor;
 
     hitRate = calcHitParaGet(unit);
-    evade = (signed char) calcUPGet(cmd->target)->evadeStat;
+    evade = calcUPGet(cmd->target)->evadeStat;
     if (calcStatGet(cmd->target, 0, 0x200) != 0 || calcStatGet(cmd->target, 4, 0x100) != 0) {
         evade /= 2;
     } else if (calcStatGet(unit, 2, 0x20) != 0) {
         evade += evade / 4;
     }
 
-    if ((short) calcUPGet(cmd->target)->currentHp == 0) {
+    if (calcUPGet(cmd->target)->currentHp == 0) {
         return 0;
     }
-    /* target->work points to its BattleActor record. */
-    if (((BattleActor *) cmd->target->work)->flags & CALC_ACTOR_FLAG_BIT11) {
+    targetActor = cmd->target->work;
+    if (targetActor->flags & 0x800) {
         return 1;
     }
     if (dataTecGet(cmd->tecId)->flags & TEC_FLAG_NO_HIT_ROLL) {
@@ -1318,10 +1861,10 @@ int calcHitRate(ObjectTask *unit, TgtCmd *cmd)
     return 0;
 }
 
-int calcHitParaGet(ObjectTask *unit) {
+int calcHitParaGet(BattleUnit *unit) {
     int hitRate;
 
-    hitRate = (signed char) calcUPGet(unit)->hitStat;
+    hitRate = calcUPGet(unit)->hitStat;
     if (calcStatGet(unit, 0, 0x400) != 0 || calcStatGet(unit, 4, 0x200) != 0) {
         hitRate /= 2;
     } else if (calcStatGet(unit, 2, 0x40) != 0) {
@@ -1330,7 +1873,68 @@ int calcHitParaGet(ObjectTask *unit) {
     return hitRate;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHit);
+/*
+ * The hit class of a technique against its target, from the technique's
+ * effect type (+0x04). Class 0 rolls for a hit unless the target's unit flags
+ * carry 0x80 (the hit roll is skipped); the roll's result 2 is marked with
+ * 0x200 and result 2 of calcHitRate means a miss. Classes 5 and 6 add the
+ * 0x200 bit on a first-roll hit. Unknown classes print and fall back to 1.
+ */
+extern const char calcJobTypeErrText[]; /* "** jobType err -> %d\n" */
+
+int calcHit(BattleUnit *attacker, TgtCmd *cmd)
+{
+    TecKindView *tec;
+    unsigned short attr;
+    int r;
+    int hr;
+
+    tec = dataTecGet(cmd->tecId);
+    attr = tec->flags;
+    switch (tec->effectType) {
+    case 0:
+        r = 0;
+        if (!(calcUPGet(cmd->target)->flags & 0x80)) {
+            hr = calcHitRate(attacker, cmd);
+            r = (attr & 0x40) ? 3 : 1;
+            if (hr == 1) {
+                r |= 0x200;
+            } else if (hr == 2) {
+                r = 0;
+            }
+        }
+        break;
+    case 1:
+        r = (attr & 0x40) ? 4 : 2;
+        break;
+    case 2:
+        r = 0x802;
+        break;
+    case 3:
+        r = 5;
+        break;
+    case 4:
+        r = 6;
+        break;
+    case 5:
+        r = (attr & 0x40) ? 9 : 7;
+        if (calcHitRate(attacker, cmd) == 1) {
+            r |= 0x200;
+        }
+        break;
+    case 6:
+        r = (attr & 0x40) ? 10 : 8;
+        if (calcHitRate(attacker, cmd) == 1) {
+            r |= 0x200;
+        }
+        break;
+    default:
+        printf(calcJobTypeErrText, cmd->tecId);
+        r = 1;
+        break;
+    }
+    return r;
+}
 
 /*
  * dataAttGet's return (src/ov01/data_unit_org_get.c, still opaque there:
@@ -1342,12 +1946,15 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcHit);
  * side instead).
  */
 typedef struct CalcAttData {
-    short attack; /* +0x00 */
+    short attack;                 /* +0x00 */
+    signed char statCategory;     /* +0x02: calcStatAtk's stat category */
+    signed char statRate;         /* +0x03: calcStatAtk's rate */
+    unsigned short statMask;      /* +0x04: calcStatAtk's stat mask */
 } CalcAttData;
 
 extern CalcAttData *dataAttGet(int attachmentId);
-extern const char D_00A44450[]; /* "** calcWpnAtkGet: Att equip err! %d\n" */
-extern const char D_00A44478[]; /* "** calcWpnAtkGet: wpnAtkAdj=%d\n" */
+extern const char calcWpnAtkGetAttEquipErrText[]; /* "** calcWpnAtkGet: Att equip err! %d\n" */
+extern const char calcWpnAtkGetWpnAtkAdjText[]; /* "** calcWpnAtkGet: wpnAtkAdj=%d\n" */
 
 /*
  * calcWpnAtkGet's attack-boost percentage, the word at +0x17C of the unit's
@@ -1361,9 +1968,9 @@ extern const char D_00A44478[]; /* "** calcWpnAtkGet: wpnAtkAdj=%d\n" */
  */
 #define CALC_PARAM_ATK_BOOST_PCT_OFF 0x17C
 
-int calcWpnAtkGet(ObjectTask *unit, int slot)
+int calcWpnAtkGet(BattleUnit *unit, int slot)
 {
-    BattleActor *actor;
+    Actor *actor;
     short weaponId;
     short attachmentId;
     int atk;
@@ -1383,7 +1990,7 @@ int calcWpnAtkGet(ObjectTask *unit, int slot)
                 }
                 else
                 {
-                    printf(D_00A44450, weaponId);
+                    printf(calcWpnAtkGetAttEquipErrText, weaponId);
                 }
             }
             else
@@ -1398,8 +2005,8 @@ int calcWpnAtkGet(ObjectTask *unit, int slot)
              * discards (`jal calcUPGet`/`daddu $4,$17,$0`, 0x00a13450)
              * right before reading unit->work below. */
             calcUPGet(unit);
-            actor = (BattleActor *) unit->work;
-            if (!(actor->flags & CALC_ACTOR_FLAG_ENEMY))
+            actor = unit->work;
+            if (!(actor->flags & ACTOR_FLAG_ENEMY))
             {
                 if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS))
                 {
@@ -1415,13 +2022,13 @@ int calcWpnAtkGet(ObjectTask *unit, int slot)
             }
 
             atk += atk * (*(int *)((char *)calcUPGet(unit) + CALC_PARAM_ATK_BOOST_PCT_OFF)) / 100;
-            printf(D_00A44478, atk);
+            printf(calcWpnAtkGetWpnAtkAdjText, atk);
         }
     }
     return atk;
 }
 
-int calcPhyDefGet(ObjectTask *unit)
+int calcPhyDefGet(BattleUnit *unit)
 {
     int def;
     int i;
@@ -1450,11 +2057,11 @@ int calcPhyDefGet(ObjectTask *unit)
     return def;
 }
 
-/* dataAccGet (src/ov01/data_unit_org_get.c, still asm), this TU's own
+/* dataAccGet (src/ov01/data_unit_org_get.c), this TU's own
  * private view (see AccessoryData, src/ov01/calc.h). */
 extern AccessoryData *dataAccGet(int accessoryId);
 
-int calcMagDefGet(ObjectTask *unit)
+int calcMagDefGet(BattleUnit *unit)
 {
     int magicDef;
     int i;
@@ -1491,49 +2098,17 @@ typedef struct CalcSpecSlot {
 
 extern CalcSpecSlot *dataSpecDataGet(int charaId, int specialId);
 
-/*
- * dataPlChaGet's return (src/ov01/data_unit_org_get.c, this TU's own
- * bounded view): calcPowLevGet reads a short at +0x9A (`lh $4,0x9A($2)`,
- * 0x00a1373c) for tecId 0x262/0x263, divides it by 5 and adds it to the
- * power level. dataPlChaGet's own TU already names the owning record
- * (data_unit_org_get.h's `PlCharacter`, eight 0xC-byte `PlSpecialSlot`
- * entries from +0x48), so +0x9A is that same special[6]'s own +0x0A
- * halfword (0x48 + 6*0xC + 0xA = 0x9A) -- a member of the same 0xC-byte
- * record CalcSpecSlot views above. CalcSpecSlot names only +0x04 and +0x06
- * of it and leaves its +0x0A halfword unmodeled (inside unmodeled_08), so
- * this view is the only place that halfword is named here. Naming it in
- * `PlSpecialSlot` and reading it as `special[6]` there removes this view
- * entirely. This TU
- * cannot include data_unit_org_get.h (that header includes this one), so it
- * keeps the plain offset here and says what it overlaps.
- */
-typedef struct CalcPlCharaView {
-    /*
-     * +0x00/+0x0C/+0x10/+0x14: the four running totals calcResultSub (this
-     * TU) adds a battle's share to (`lw`/`sw` at 0x0, 0xC, 0x10, 0x14 of
-     * $18, clamped to 9999999 and 9999), inside PlCharacter's unmodeled_0.
-     */
-    int exp;
-    unsigned char unmodeled_04[0x0C - 0x04];
-    int techPoint;
-    int etherPoint;
-    int skillPoint;
-    unsigned char unmodeled_18[0x9A - 0x18];
-    short special6PowLevTerm; /* +0x9A: PlCharacter.special[6]'s own +0x0A */
-} CalcPlCharaView;
 
-extern CalcPlCharaView *dataPlChaGet(int cid);
-
-int calcPowLevGet(ObjectTask *unit, int tecId)
+int calcPowLevGet(BattleUnit *unit, int tecId)
 {
-    BattleActor *actor;
+    Actor *actor;
     CalcSpecSlot *spec;
     int powLev;
 
     powLev = dataTecGet(tecId)->powLevBase;
     if (dataTecGet(tecId)->kind == 2) {
-        actor = (BattleActor *) unit->work;
-        if (!(actor->flags & CALC_ACTOR_FLAG_ENEMY)) {
+        actor = unit->work;
+        if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
             if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
                 /* The same 0xBB..0xC2 charaId exclusion as calcWpnAtkGet
                  * (`slti` against 0xBB at 0x00a136d0, 0xC3 at 0x00a136e8). */
@@ -1555,16 +2130,16 @@ int calcPowLevGet(ObjectTask *unit, int tecId)
     return powLev;
 }
 
-int calcPlusAglGet(ObjectTask *unit, int tecId)
+int calcPlusAglGet(BattleUnit *unit, int tecId)
 {
-    BattleActor *actor;
+    Actor *actor;
     CalcSpecSlot *spec;
     int agl;
 
     agl = dataTecGet(tecId)->agility;
     if (dataTecGet(tecId)->kind == 2) {
-        actor = (BattleActor *) unit->work;
-        if (!(actor->flags & CALC_ACTOR_FLAG_ENEMY)) {
+        actor = unit->work;
+        if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
             if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
                 if (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN ||
                     calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
@@ -1579,19 +2154,336 @@ int calcPlusAglGet(ObjectTask *unit, int tecId)
     return agl;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcDmg);
+/* calcDmg's callees defined below in this TU. */
+typedef struct CalcStatAtkArg CalcStatAtkArg;
+typedef struct CalcStatAtkOut CalcStatAtkOut;
+typedef struct CalcCritArg CalcCritArg;
+/*
+ * calcCrit's damage word, scaled in place when the critical hits. The void *
+ * member is never read here; it is the second view of the same word, and
+ * without it the access in calcCrit compiles to different code (style debt).
+ */
+/*
+ * calcDmg's damage value once its address has been passed out. A read of the
+ * plain variable has alias set 0 after the first `&`, so it would not unify
+ * with the stores before it and the value would leave t0 (`move a3,t0` at the
+ * last printf, 0x00a145ac).
+ */
+typedef int CalcDamage;
+typedef union CalcCritDmg {
+    int value;
+    void *p;
+} CalcCritDmg;
+
+extern int calcStat(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage);
+extern int calcStatAtk(BattleUnit *self, CalcStatAtkArg *arg, CalcStatAtkOut *out, int *val);
+extern int calcStatClr(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *dmg);
+extern int calcCrit(BattleUnit *self, CalcCritArg *arg, unsigned int *out, CalcCritDmg *dmg);
+extern int calcSpec(BattleUnit *self, TgtCmd *arg, int *mode, int *dmg);
+extern int calcLinePos(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage);
+extern int calcBackLineChk(BattleUnit *unit, int selector);
+extern int calcStatProtectGet(BattleUnit *unit, int group, int mask);
+extern int futtobiChk(BattleUnit *unit, TecKindView *tec);
+extern const char calcPhyArmMagArmText[]; /* "** phyArm=%d magArm=%d\n" */
+extern const char calcTGTINFOJTYPECTYPEFCText[]; /* "** TGTINFO=%04X JTYPE=%d CTYPE=%d FC=%X\n" */
+extern const char calcDMG0HitAtrHitFlagDmgText[]; /* "** DMG0:hitAtr=%d hitFlag=%X dmg=%d\n" */
+extern const char calcStatDEATHText[]; /* "** Stat: DEATH\n" */
+extern const char calcStatGRAVText[]; /* "** Stat: GRAV\n" */
+extern const char calcDMG1HitAtrHitFlagDmgText[]; /* "** DMG1:hitAtr=%d hitFlag=%X dmg=%d\n" */
+
+int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
+{
+    TecKindView *tec;
+    int dmg;
+    int phyArm;
+    int magArm;
+    int atk;
+    int def;
+    int magAtk;
+    int magDef;
+    unsigned char mode;
+    short maxPoint;
+    short curPoint;
+    int wpn;
+    int a;
+    int d;
+    int adj;
+    int rate;
+    int statOk;
+    int category;
+    int first;
+
+    tec = dataTecGet(cmd->tecId);
+    atk = calcUPGet(attacker)->baseAtk;
+    def = calcUPGet(cmd->target)->phyDefense;
+    magAtk = calcUPGet(attacker)->magAttack;
+    magDef = calcUPGet(cmd->target)->magDefense;
+    if (calcStatGet(attacker, 0, 0x100) != 0 || calcStatGet(attacker, 4, 0x1000) != 0) {
+        atk -= atk / 4;
+    }
+    if (calcStatGet(cmd->target, 0, 0x80) != 0 || calcStatGet(cmd->target, 4, 0x400) != 0) {
+        def -= def / 4;
+    }
+    if (calcStatGet(attacker, 1, 0x800) != 0) {
+        magAtk -= magAtk / 4;
+    }
+    if (calcStatGet(attacker, 3, 0x20) != 0) {
+        magAtk += magAtk / 4;
+        magDef -= magDef / 4;
+    } else if (calcStatGet(attacker, 3, 0x10) != 0) {
+        magAtk -= magAtk / 4;
+        magDef += magDef / 4;
+    }
+    if (calcStatGet(cmd->target, 7, 0x4000) != 0) {
+        magDef += magDef / 4 * calcDeadUnitNum(cmd->target, 0x40);
+    }
+    if (calcStatGet(cmd->target, 7, 0x2000) != 0) {
+        def += def / 4 * calcDeadUnitNum(cmd->target, 0x40);
+    }
+    if (calcStatGet(attacker, 7, 0x400) != 0) {
+        atk = atk * (14 - calcUPGet(attacker)->currentHp / (calcUPGet(attacker)->maxHp / 10)) / 4;
+    }
+    mode = hit->result;
+    {
+        int v = hit->setMask;
+
+        hit->setMask = v;
+    }
+    switch (tec->effectType) {
+    case 0:
+        phyArm = calcPhyDefGet(cmd->target);
+        magArm = calcMagDefGet(cmd->target);
+        printf(calcPhyArmMagArmText, phyArm, magArm);
+        if (mode == 3) {
+            dmg = calcUPGet(cmd->target)->maxEp * tec->powLevBase / 20;
+        } else {
+            switch (tec->doubleDamageKind) {
+            case 0:
+                wpn = calcWpnAtkGet(attacker, cmd->itmId);
+                if (tec->flags & 0x80) {
+                    a = calcHitParaGet(attacker) + wpn;
+                } else {
+                    a = atk + wpn;
+                }
+                if (calcStatGet(attacker, 2, 0x1000) != 0) {
+                    a += a / 5;
+                } else if (calcStatGet(attacker, 2, 0x400) != 0) {
+                    a += a / 4;
+                } else if (calcStatGet(attacker, 2, 0x200) != 0) {
+                    a -= a / 4;
+                }
+                d = def + phyArm;
+                if (calcStatGet(cmd->target, 2, 0x800) != 0) {
+                    d += d / 5;
+                } else if (calcStatGet(cmd->target, 2, 0x400) != 0) {
+                    d -= d / 4;
+                } else if (calcStatGet(cmd->target, 2, 0x200) != 0) {
+                    d += d / 4;
+                }
+                if (calcStatGet(attacker, 3, 0x400) != 0 && calcBackLineChk(attacker, 1) == 0) {
+                    a += a / 4;
+                }
+                if (calcStatGet(cmd->target, 3, 0x400) != 0 && calcBackLineChk(cmd->target, 1) == 0) {
+                    d += d / 4;
+                }
+                d *= 3;
+                a *= 4;
+                dmg = a * calcPowLevGet(attacker, cmd->tecId) / 20 - d;
+                if (dmg < 0) {
+                    dmg = 0;
+                } else {
+                    dmg += rnd(dmg / 10 + 2);
+                }
+                if (((hit->result >> 8) & 0xFF) == 2) {
+                    rate = (calcAtrChg(attacker, tec->attribute) & 2) ? 20 : 50;
+                    dmg -= dmg * rate / 100;
+                }
+                break;
+            case 1:
+                magAtk *= 5;
+                magArm = (magDef + magArm) * 4;
+                dmg = magAtk * calcPowLevGet(attacker, cmd->tecId) / 20 - magArm;
+                if (dmg < 0) {
+                    dmg = 0;
+                } else {
+                    dmg += rnd(dmg / 10 + 2);
+                }
+                if (calcStatGet(attacker, 3, 0x40) != 0) {
+                    dmg *= 2;
+                }
+                if (!(tec->flags & 0x1000)) {
+                    adj = 0;
+                    if (calcStatGet(cmd->target, 3, 8) != 0) {
+                        adj = -(dmg / 4);
+                    }
+                    if (calcStatGet(cmd->target, 3, 4) != 0) {
+                        adj += dmg / 2;
+                    }
+                    dmg += adj;
+                    if (calcStatGet(cmd->target, 6, 0x800) != 0) {
+                        dmg -= dmg / 4;
+                    }
+                }
+                if (((hit->result >> 8) & 0xFF) == 2) {
+                    dmg -= dmg / 5;
+                }
+                break;
+            default:
+                dmg = 0;
+                break;
+            }
+        }
+        break;
+    case 1:
+        if (mode == 4) {
+            dmg = calcUPGet(cmd->target)->maxEp * tec->powLevBase / 20;
+        } else {
+            dmg = calcUPGet(attacker)->magAttack * calcPowLevGet(attacker, cmd->tecId);
+            if (calcStatGet(cmd->target, 3, 0x80) != 0) {
+                dmg *= 2;
+                calcStatReset(cmd->target, 3, 0x80, 0);
+            }
+            if (!(tec->flags & 0x1000)) {
+                adj = 0;
+                if (calcStatGet(cmd->target, 3, 8) != 0) {
+                    adj = -(dmg / 4);
+                }
+                if (calcStatGet(cmd->target, 3, 4) != 0) {
+                    adj += dmg / 4;
+                }
+                dmg += adj;
+                if (calcStatGet(cmd->target, 6, 0x800) != 0) {
+                    dmg -= dmg / 4;
+                }
+            }
+            if (tec->flags & 0x10) {
+                if (calcUPGet(cmd->target)->flags & 0x1000) {
+                    dmg = 0;
+                }
+            }
+        }
+        break;
+    case 2:
+        dmg = calcUPGet(cmd->target)->maxHp * calcPowLevGet(attacker, cmd->tecId) / 10;
+        break;
+    case 5:
+        if (mode == 7) {
+            maxPoint = calcUPGet(cmd->target)->maxHp;
+            curPoint = calcUPGet(cmd->target)->currentHp;
+        } else {
+            maxPoint = calcUPGet(cmd->target)->maxEp;
+            curPoint = calcUPGet(cmd->target)->currentEp;
+        }
+        if (mode == 9 && calcStatGet(cmd->target, 3, 2) != 0) {
+            dmg = 0;
+        } else {
+            dmg = maxPoint * tec->powLevBase / 20;
+        }
+        if (curPoint < dmg) {
+            dmg = curPoint;
+        }
+        if (((hit->result >> 8) & 0xFF) == 2) {
+            dmg -= dmg / 2;
+        }
+        break;
+    case 6: {
+        if (mode == 8) {
+            dmg = calcUPGet(cmd->target)->currentHp - 1;
+        } else {
+            dmg = calcUPGet(cmd->target)->currentEp - 1;
+        }
+        if (mode == 10 && calcStatGet(cmd->target, 3, 2) != 0) {
+            dmg = 0;
+        }
+        if (((hit->result >> 8) & 0xFF) == 2) {
+            dmg -= dmg / 2;
+        }
+        break;
+    }
+    default:
+        dmg = 0;
+        break;
+    }
+    if (dmg < 0) {
+        dmg = 0;
+    }
+    printf(calcTGTINFOJTYPECTYPEFCText, tec->attr, tec->effectType, tec->doubleDamageKind, tec->flags);
+    printf(calcDMG0HitAtrHitFlagDmgText, (unsigned char) hit->result, (hit->result >> 8) & 0xFF, dmg);
+    calcStat(attacker, cmd, hit, &dmg);
+    statOk = calcStatAtk(attacker, (CalcStatAtkArg *) cmd, (CalcStatAtkOut *) hit, &dmg);
+    calcStatClr(attacker, cmd, hit, &dmg);
+    calcCrit(attacker, (CalcCritArg *) cmd, (unsigned int *) hit, (CalcCritDmg *) &dmg);
+    calcSpec(attacker, cmd, &hit->result, &dmg);
+    calcLinePos(attacker, cmd, hit, &dmg);
+    if (statOk == 0 && tec->effectType == 3) {
+        hit->result &= 0xFF00;
+    }
+    category = hit->setCategory;
+    if (cmd->tecId == 0x23E && (category != 1 || hit->setMask != 0x100)) {
+        hit->setCategory = 1;
+        hit->setMask = 2;
+        category = 1;
+    }
+    first = category;
+    if (category == 1) {
+        if (hit->setMask == 0x100) {
+            calcStatSet(cmd->target, 1, 0x100, 0);
+            *(CalcDamage *) &dmg = calcUPGet(cmd->target)->currentHp;
+            hit->result = category;
+            printf(calcStatDEATHText);
+            category = hit->setCategory;
+        }
+        if (category == first && hit->setMask == 2 && calcStatProtectGet(cmd->target, 1, 2) == 0) {
+            *(CalcDamage *) &dmg = calcUPGet(cmd->target)->currentHp / 4;
+            hit->result = category;
+            printf(calcStatGRAVText);
+        }
+    }
+    category = hit->result & 0xFF;
+    if (category != 1) {
+        hit->ichigekiHit = 0;
+    } else {
+        if (calcStatGet(cmd->target, 7, 2) != 0) {
+            *(CalcDamage *) &dmg /= 2;
+        }
+        if (calcStatGet(attacker, 7, 1) != 0) {
+            *(CalcDamage *) &dmg += *(CalcDamage *) &dmg / 2;
+        }
+        if ((hit->result & 0xFF) == category) {
+            if (futtobiChk(cmd->target, tec) != 0) {
+                hit->ichigekiHit = 2;
+            } else {
+                hit->ichigekiHit = (hit->result >> 8) & 1;
+            }
+        } else {
+            hit->ichigekiHit = 0;
+        }
+    }
+    if (tec->flags & 8) {
+        *(CalcDamage *) &dmg = 9999;
+    }
+    if (*(CalcDamage *) &dmg >= 10000) {
+        *(CalcDamage *) &dmg = 9999;
+    }
+    {
+        int value = *(CalcDamage *) &dmg;
+
+        printf(calcDMG1HitAtrHitFlagDmgText, hit->result & 0xFF, (hit->result >> 8) & 0xFF, value);
+    }
+    return *(CalcDamage *) &dmg;
+}
 
 /*
  * futtobiChk: whether a hit with tec knocks unit back ("futtobi") one
  * row. Only a technique carrying TEC_FLAG_KNOCKBACK, an ordinary charaId outside
- * CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN..END on the CALC_ACTOR_FLAG_ENEMY-clear
+ * CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN..END on the ACTOR_FLAG_ENEMY-clear
  * side without CALC_UNIT_FLAG_IS_AGWS, standing in a front position
  * (posId < 4) whose row behind (posId + 3) no unit of the table occupies.
  */
-int futtobiChk(ObjectTask *unit, TecKindView *tec)
+int futtobiChk(BattleUnit *unit, TecKindView *tec)
 {
-    BattleActor *actor;
-    ObjectTask **table;
+    Actor *actor;
+    BattleUnit **table;
     int count;
     int posId;
     int i;
@@ -1599,8 +2491,8 @@ int futtobiChk(ObjectTask *unit, TecKindView *tec)
     if (!(tec->flags & TEC_FLAG_KNOCKBACK)) {
         return 0;
     }
-    actor = (BattleActor *) unit->work;
-    if ((actor->flags & CALC_ACTOR_FLAG_ENEMY) || (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+    actor = unit->work;
+    if ((actor->flags & ACTOR_FLAG_ENEMY) || (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
         return 0;
     }
     if (calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN &&
@@ -1623,9 +2515,6 @@ int futtobiChk(ObjectTask *unit, TecKindView *tec)
     return 1;
 }
 
-/* calcStatReset (this TU, defined below): calcStat's own callee. */
-extern void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMask);
-
 /*
  * Applies cmd->target's statuses to a hit of mode hit->result & 0xFF and
  * its *damage: a technique with doubleDamageKind 1 doubles the damage
@@ -1633,13 +2522,13 @@ extern void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMa
  * (0, 8) halves mode 2, (1, 0x40) mode 4; (7, 0x40) moves mode 1's damage
  * by 20% per two units of its last decimal digit, down for odd damage, up
  * for even; (3, 2) cancels mode 3. A mode-1 hit also clears
- * CALC_ACTOR_FLAG_BIT4 from a target calcBattleChk refuses, ends statuses
+ * flag 0x10 from a target calcBattleChk refuses, ends statuses
  * (1, 0x2000) and (5, 0x2000), and ends (5, 0x4000) when rnd(100) < 50 (50 of 101 outcomes).
  */
 /* calcRevHit (this TU, defined below): calcStat's own callee. */
 extern int calcRevHit(int hitMode);
 
-int calcStat(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
+int calcStat(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
 {
     TecKindView *tec;
     int mode;
@@ -1673,7 +2562,10 @@ int calcStat(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
     }
     if (mode == 1) {
         if (!calcBattleChk(cmd->target)) {
-            ((CalcActorRecord *) cmd->target->work)->flags &= ~CALC_ACTOR_FLAG_BIT4;
+            Actor *actor;
+
+            actor = cmd->target->work;
+            actor->flags &= ~0x10;
         }
         calcStatReset(cmd->target, 1, 0x2000, 0);
         calcStatReset(cmd->target, 5, 0x2000, 0);
@@ -1684,16 +2576,119 @@ int calcStat(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatAtk);
+extern const char calcStatNoEffectText[]; /* "** Stat: no effect\n" */
+extern const char calcStatAtkAttStatText[]; /* "** calcStatAtk: Att stat\n" */
+extern const char calcStatAtkAttEquipErrText[]; /* "** calcStatAtk: Att equip err!\n" */
+extern const char calcStatAtkWpnStatText[]; /* "** calcStatAtk: Wpn stat\n" */
+extern const char calcStatChkNGText[]; /* "** Stat: Chk NG\n" */
+extern const char calcStatAtkFormat[]; /* "** Stat: Atk (%d%%) %d %04X\n" */
+
+typedef struct CalcStatAtkArg {
+    int tecId;
+    BattleUnit *unit;
+    int slot;
+    int kind;
+} CalcStatAtkArg;
+
+/* calcStatAtk's output: the state byte it tests first, and the stat it sets. */
+typedef struct CalcStatAtkOut {
+    unsigned char state; /* +0x00: 0 or 6 refuse the attack */
+    unsigned char unmodeled_01[0x0C - 0x01];
+    int category;        /* +0x0C */
+    int mask;            /* +0x10 */
+} CalcStatAtkOut;
+
+int calcStatAtk(BattleUnit *self, CalcStatAtkArg *arg, CalcStatAtkOut *out, int *val)
+{
+    TecKindView *tec;
+    TecKindView *wtec;
+    CalcAttData *att;
+    unsigned short flags;
+    int rate;
+    int group;
+    unsigned short mask;
+
+    tec = dataTecGet(arg->tecId);
+    flags = calcUPGet(arg->unit)->flags;
+    if (out->state == 0 || out->state == 6) {
+        return 0;
+    }
+    if (((flags & 0x4000) && tec->statFlagKind[0] == 1) || ((flags & 0x2000) && tec->statFlagKind[1] == 1)
+        || ((flags & 0x1000) && tec->statFlagKind[2] == 1)) {
+        printf(calcStatNoEffectText);
+        return 0;
+    }
+    rate = tec->statRate;
+    group = tec->statCategory;
+    mask = tec->statMask;
+    if (arg->kind == 1 && arg->slot != -1) {
+        if ((*(unsigned *) self->work & ACTOR_FLAG_ENEMY) == 0
+            && (calcUPGet(self)->flags & CALC_UNIT_FLAG_IS_AGWS) == 0
+            && (calcUPGet(self)->charaId < 0xBB || calcUPGet(self)->charaId >= 0xC3)) {
+            if (tec->flags & 0x4000) {
+                short id = calcUPGet(self)->weaponId[arg->slot];
+                if (!(tec->flags & 0x2000)) {
+                    att = dataAttGet(calcUPGet(self)->attachmentId[arg->slot]);
+                    if (att != 0) {
+                        rate = att->statRate;
+                        group = att->statCategory;
+                        mask = att->statMask;
+                        printf(calcStatAtkAttStatText);
+                    } else {
+                        printf(calcStatAtkAttEquipErrText);
+                    }
+                } else {
+                    wtec = dataTecGet(dataWpnGet(id)->tecId);
+                    rate = wtec->statRate;
+                    group = wtec->statCategory;
+                    mask = wtec->statMask;
+                    printf(calcStatAtkWpnStatText);
+                }
+            }
+        } else if (calcAttWpnChk(calcUPGet(self)->weaponId[arg->slot]) != 0) {
+            att = dataAttGet(calcUPGet(self)->attachmentId[arg->slot]);
+            if (att != 0) {
+                rate = att->statRate;
+                group = att->statCategory;
+                mask = att->statMask;
+                printf(calcStatAtkAttStatText);
+            } else {
+                printf(calcStatAtkAttEquipErrText);
+            }
+        }
+    }
+    if (mask == 0) {
+        return 0;
+    }
+    if (calcStatSetChk(arg->unit, group, mask, 0) == 0) {
+        printf(calcStatChkNGText);
+        return 0;
+    }
+    if (calcStatGet(arg->unit, 1, 8) != 0) {
+        rate *= 2;
+        if (rate > 100) {
+            rate = 100;
+        }
+    }
+    if (rnd(99) + 1 <= rate) {
+        out->category = group;
+        out->mask = mask;
+        printf(calcStatAtkFormat, rate, group, mask);
+        return 1;
+    }
+    out->mask = 0;
+    out->category = 8;
+    return 0;
+}
 
 /*
  * A status-clearing technique (effectType 4, `lb $4,0x4($18)`) takes the
- * CALC_ACTOR_FLAG_BIT4 bit off a target calcBattleChk refuses and records
+ * the 0x10 bit off a target calcBattleChk refuses and records
  * the category and bits it clears in the hit record; category 8 records
  * the full mask (`ori $2,$0,0xFFFF`). Any other technique records category 8,
  * no bits, and returns 0.
  */
-int calcStatClr(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit)
+int calcStatClr(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *dmg)
 {
     TecKindView *tec;
     int category;
@@ -1701,7 +2696,10 @@ int calcStatClr(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit)
     tec = dataTecGet(cmd->tecId);
     if (tec->effectType == 4) {
         if (!calcBattleChk(cmd->target)) {
-            ((CalcActorRecord *) cmd->target->work)->flags &= ~CALC_ACTOR_FLAG_BIT4;
+            Actor *actor;
+
+            actor = cmd->target->work;
+            actor->flags &= ~0x10;
         }
         category = tec->statCategory;
         if (category == 8) {
@@ -1718,24 +2716,213 @@ int calcStatClr(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcCrit);
+extern int calcAtrChg(BattleUnit *unit, int attribute);
+extern int calcSlotAChk(BattleUnit *unit, int techId);
+extern const char calcCritNoEffectText[]; /* "** Crit: no effect\n" */
+extern const char calcCritSlotAText[]; /* "** Crit: slot A\n" */
+extern const char calcCritEventTimerRText[]; /* "** Crit: EventTimer R\n" */
+extern const char calcCritOBJCRITText[]; /* "** Crit: OBJ_CRIT\n" */
+extern const char calcCritWeakXText[]; /* "** Crit: weak (%04X) x%f\n" */
+extern const char calcCritMonKindText[]; /* "** Crit: monKind %04X\n" */
+extern const char calcCritAtkFormat[]; /* "** Crit: Atk (%d%%) %d\n" */
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcSpec);
+typedef struct CalcCritArg {
+    int tecId;
+    BattleUnit *unit;
+} CalcCritArg;
+
+int calcCrit(BattleUnit *self, CalcCritArg *arg, unsigned int *out, CalcCritDmg *dmg)
+{
+    int rate;
+    int mul;
+    unsigned short flags;
+    TecKindView *tec;
+    int weak;
+
+    rate = 10;
+    mul = 3;
+    flags = calcUPGet(arg->unit)->flags;
+    tec = dataTecGet(arg->tecId);
+    if ((((int) *out >> 8) & 2) || (*out & 0xFF) != 1 || calcStatGet(arg->unit, 2, 8) != 0) {
+        printf(calcCritNoEffectText);
+        return 0;
+    }
+    if (calcStatGet(self, 7, 0x200) != 0 && calcSlotAChk(self, arg->tecId) != 0) {
+        rate = 50;
+        printf(calcCritSlotAText);
+    }
+    if (menuTimeGet() == 1) {
+        rate = 50;
+        printf(calcCritEventTimerRText);
+    }
+    if (*(unsigned int *) self->work & 0x2000) {
+        rate = 80;
+        printf(calcCritOBJCRITText);
+    }
+    weak = calcUPGet(arg->unit)->conditions & calcAtrChg(self, tec->attribute);
+    if (weak != 0) {
+        rate = 100;
+
+        if (calcUPGet(arg->unit)->conditions & 0x4000) {
+            mul = 4;
+        }
+        if (weak & 0x300) {
+            mul++;
+        }
+        if (weak & 0xE0) {
+            mul++;
+        }
+        if (weak & 0x1F) {
+            mul++;
+        }
+        printf(calcCritWeakXText, weak, (double) ((float) mul * 0.5f));
+    }
+    if (arg->tecId == 0xF && (flags & 0xC00) == 0x400) {
+        rate += 50;
+    }
+    if (((flags & 0x4000) && tec->statFlagKind[0] == 4) || ((flags & 0x2000) && tec->statFlagKind[1] == 4)
+        || ((flags & 0x1000) && tec->statFlagKind[2] == 4)) {
+        rate += 50;
+        printf(calcCritMonKindText, flags);
+    }
+    if (calcStatGet(arg->unit, 4, 0x10) != 0) {
+        rate += 70;
+        calcStatReset(arg->unit, 4, 0x10, 0);
+    }
+    rate += calcSkill(self, 0x4000, 0x8000);
+    if (rate > 100) {
+        rate = 100;
+    }
+    if (rnd(99) + 1 <= rate) {
+        dmg->value = dmg->value * mul / 2;
+        *(unsigned int *) self->work |= 0x2000;
+        *out |= 0x100;
+        printf(calcCritAtkFormat, rate, dmg->value);
+        return 1;
+    }
+    return 0;
+}
+
+extern const char calcSpecEffectInfoText[]; /* "** Spec: effect(info)\n" */
+extern const char calcSpecAtkDefText[]; /* "** Spec: atk=%X def=%X\n" */
+extern const char calcSpecEffectABSBText[]; /* "** Spec: effect(ABSB)\n" */
+extern const char calcSpecErrSPECABSBText[]; /* "** calcSpec err SPEC_ABSB\n" */
+extern const char calcSpecEffectDEFText[]; /* "** Spec: effect(DEF)\n" */
+extern const char calcSpecErrSPECDEFText[]; /* "** calcSpec err SPEC_DEF\n" */
+extern const char calcSpecSkillALLText[]; /* "** Spec: skill(ALL)\n" */
+extern const char calcSpecSkillText[]; /* "** Spec: skill(%X)\n" */
+
+int calcSpec(BattleUnit *self, TgtCmd *arg, int *mode, int *dmg)
+{
+    int kind;
+    int sub;
+    int ret;
+    TecKindView *tec;
+    unsigned short flags;
+    unsigned short up1a;
+    int def;
+    int atk;
+    int pct;
+
+    ret = 0;
+    tec = dataTecGet(arg->tecId);
+    flags = calcUPGet(arg->target)->flags;
+    up1a = calcUPGet(arg->target)->specDef;
+    kind = *mode & 0xFF;
+    sub = (*mode >> 8) & 0xFF;
+    if (flags & 0x200) {
+        *mode = calcRevHit(*mode);
+    }
+    if (kind != 1 && kind != 3) {
+        return 0;
+    }
+    if ((flags & 0x4000) && tec->statFlagKind[0] == 2 || (flags & 0x2000) && tec->statFlagKind[1] == 2
+        || (flags & 0x1000) && tec->statFlagKind[2] == 2) {
+        printf(calcSpecEffectInfoText);
+        *dmg = *dmg / 2;
+    }
+    def = up1a;
+    atk = calcAtrChg(self, tec->attribute) & 0x1F;
+    if (calcStatGet(arg->target, 6, 0x1F) != 0) {
+        def = def | calcStatGet(arg->target, 6, 0x1F) | 0x2100;
+    }
+    if (def & atk) {
+        printf(calcSpecAtkDefText, atk, def);
+        if (def & 0x4000) {
+            printf(calcSpecEffectABSBText);
+            if (!(def & 0x800)) {
+                if (def & 0x400) {
+                    *dmg = *dmg / 4;
+                } else if (def & 0x200) {
+                    *dmg = *dmg / 2;
+                } else if (def & 0x100) {
+                    *dmg = *dmg / 4 * 3;
+                } else {
+                    printf(calcSpecErrSPECABSBText);
+                }
+            }
+            sub |= 0x10;
+            if (kind == 1) {
+                *mode = (*mode & 0xFF00) | 2;
+                goto done;
+            }
+            ret = 1;
+            if (kind == 3) {
+                *mode = (*mode & 0xFF00) | 4;
+            }
+        } else if (def & 0x2000) {
+            printf(calcSpecEffectDEFText);
+            if (def & 0x800) {
+                *dmg = 0;
+            } else if (def & 0x400) {
+                *dmg = *dmg / 4;
+            } else if (def & 0x200) {
+                *dmg = *dmg / 2;
+            } else if (def & 0x100) {
+                *dmg = *dmg / 4 * 3;
+            } else {
+                printf(calcSpecErrSPECDEFText);
+            }
+            sub |= 0x20;
+done:
+            ret = 1;
+        } else {
+            goto done;
+        }
+    }
+    *mode |= sub << 8;
+    pct = calcSkill(arg->target, 0x2000, 0x8000);
+    if (pct != 0) {
+        ret = 1;
+        *dmg = *dmg - *dmg * pct / 100;
+        printf(calcSpecSkillALLText);
+    }
+    pct = calcSkill(arg->target, 0x2000, atk << 8);
+    if (pct != 0) {
+        ret = 1;
+        *dmg = *dmg - *dmg * pct / 100;
+        printf(calcSpecSkillText, atk);
+    }
+    if (*dmg < 0) {
+        *dmg = 0;
+    }
+    return ret;
+}
 
 /* dataPosLineGet (src/ov01/data_unit_org_get.c, this TU's own private view
  * of its PosTblEntry.line member): the position's battle line index. */
 extern short dataPosLineGet(int posId);
 
-extern const char D_00A447A0[]; /* "** LinePos: adjust\n" */
+extern const char calcLinePosAdjustText[]; /* "** LinePos: adjust\n" */
 
 /*
  * A target on battle line 2 (dataPosLineGet of its posId) loses a fifth of
  * the damage when it is hit (result 1), unless it is on side 0x40, carries
  * CalcUnitParam flag 0x40 or is a charaId in 0xBB..0xC2.
  */
-int calcLinePos(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
+int calcLinePos(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
 {
-    BattleActor *actor;
+    Actor *actor;
     int result;
     int hitResult;
     int line;
@@ -1744,15 +2931,15 @@ int calcLinePos(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
     hitResult = hit->result & 0xFF;
     line = dataPosLineGet(calcUPGet(cmd->target)->posId);
     if (hitResult == 1) {
-        actor = (BattleActor *) cmd->target->work;
-        if (!(actor->flags & CALC_ACTOR_FLAG_ENEMY)) {
+        actor = cmd->target->work;
+        if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
             if (!(calcUPGet(cmd->target)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
                 if (calcUPGet(cmd->target)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN ||
                     calcUPGet(cmd->target)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
                     if (line == 2) {
                         *damage -= *damage / 5;
                         result = 1;
-                        printf(D_00A447A0);
+                        printf(calcLinePosAdjustText);
                     }
                 }
             }
@@ -1788,7 +2975,7 @@ int calcRevHit(int hitMode)
     return mode | (side << 8);
 }
 
-int calcAtrChg(ObjectTask *unit, int attribute) {
+int calcAtrChg(BattleUnit *unit, int attribute) {
     int result;
 
     result = attribute;
@@ -1803,12 +2990,12 @@ int calcAtrChg(ObjectTask *unit, int attribute) {
 }
 
 /* calcSlotAChk (below, this TU): unit and the technique id. */
-extern int calcSlotAChk(ObjectTask *unit, int techId);
+extern int calcSlotAChk(BattleUnit *unit, int techId);
 
 /* tecId is `int`, not `short`: with `short` the entry block re-sign-extends
  * it (`sll $5,$5,16`/`sra $18,$5,16` replacing the original's plain
  * `daddu $18,$5,$0`), fndiff on form calcTakeEpGet (2026-10-14). */
-int calcTakeEpGet(ObjectTask *unit, int tecId)
+int calcTakeEpGet(BattleUnit *unit, int tecId)
 {
     int ep;
 
@@ -1829,7 +3016,7 @@ int calcTakeEpGet(ObjectTask *unit, int tecId)
     return (ep < 100) ? ep : 99;
 }
 
-int calcSlotAChk(ObjectTask *unit, int techId)
+int calcSlotAChk(BattleUnit *unit, int techId)
 {
     CalcUnitParam *param;
     int i;
@@ -1856,7 +3043,7 @@ int calcAttWpnChk(int weaponId)
  * Effect bit 0's result 2 is reversed (calcRevHit) on a target carrying
  * CALC_UNIT_FLAG_ITEM_REVERSED and again under status (0, 0x10).
  */
-int calcHitItem(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit)
+int calcHitItem(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit)
 {
     ItmTrgView *item;
     int result;
@@ -1898,7 +3085,7 @@ int calcHitItem(ObjectTask *unit, TgtCmd *cmd, CalcHitInfo *hit)
  * damageHpRate, and negative when CALC_UNIT_FLAG_ITEM_REVERSED on the target
  * flips a recoverHp item.
  */
-int calcDmgItem(ObjectTask *unit, TgtCmd *cmd)
+int calcDmgItem(BattleUnit *unit, TgtCmd *cmd)
 {
     ItmTrgView *item;
     int amount;
@@ -1923,7 +3110,7 @@ int calcDmgItem(ObjectTask *unit, TgtCmd *cmd)
             amount = -amount;
         }
         if (item->useFlags & 2) {
-            if (calcUPGet(cmd->target)->flags & CALC_UNIT_FLAG_BIT12) {
+            if (calcUPGet(cmd->target)->flags & 0x1000) {
                 amount = 0;
             }
         }
@@ -1948,13 +3135,12 @@ int calcDmgItem(ObjectTask *unit, TgtCmd *cmd)
         amount = calcUPGet(cmd->target)->maxHp * power / 20;
     } else if (item->hpToOne) {
         if (item->power == 1) {
-            amount = (short) calcUPGet(cmd->target)->currentHp - 1;
+            amount = calcUPGet(cmd->target)->currentHp - 1;
         }
     }
     return amount;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindFirst);
 
 /*
  * calcAtkChk (this TU, below): unit, target and technique id. Its
@@ -1962,9 +3148,136 @@ INCLUDE_ASM("asm/nonmatchings/ov01/calc", tgtFindFirst);
  * through its own epilogue, which a same-width int return would turn into a
  * sibling call (`j calcAtkChk`). Every narrow width gives the same bytes here.
  */
-extern short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId);
 
-int tgtFindChk(ObjectTask *unit, ObjectTask *target, TgtCmd *cmd)
+/*
+ * Candidate table of tgtFindFirst: tgtNum entries of tgtTbl are filled in
+ * target-search order, and tgtIdx walks them out one at a time through
+ * tgtFindNext. The gap between tgtTbl and tgtIdx (0x00a57e68..0x00a57e88,
+ * 0x20 bytes) is the array's only size evidence.
+ */
+static BattleUnit *tgtTbl[8];
+static int tgtIdx;
+static int tgtNum;
+
+
+extern const char calcReTGTIDText[]; /* "** reTGT! (ID=%d) ->" */
+extern const char calcTgtIDText[]; /* "** tgt ID=" */
+extern const char calcJpText[]; /* "%d " */
+extern const char calcJpText2[]; /* "\n" */
+
+static inline int tgtIsEnemy(BattleUnit *u)
+{
+    Actor *actor;
+
+    actor = u->work;
+    return actor->flags & ACTOR_FLAG_ENEMY;
+}
+
+static inline int tgtIsDead(BattleUnit *u)
+{
+    Actor *actor;
+
+    actor = u->work;
+    return actor->flags & ACTOR_FLAG_DEAD;
+}
+
+BattleUnit *tgtFindFirst(BattleUnit *unit, TgtCmd *cmd)
+{
+    BattleUnit *single;
+    BattleUnit **candidates;
+    int targetFlags;
+    BattleUnit *target;
+    int allTargets;
+    int found;
+    int count;
+    int i;
+    int tblType;
+
+    target = cmd->target;
+    tgtNum = 0;
+    tgtIdx = 0;
+    if (cmd->mode != 3) {
+        targetFlags = *(unsigned char *)dataTecGet(cmd->tecId);
+    } else {
+        targetFlags = ((unsigned char *)dataItmGet(cmd->itmId))[8];
+        if (cmd->tecId != 0) {
+            targetFlags &= 0x7F;
+            targetFlags |= 0x50;
+        }
+    }
+    allTargets = targetFlags & 0x10;
+    if (allTargets == 0) {
+        found = 0;
+        if (tgtFindChk(unit, target, cmd) != 0) {
+            if ((targetFlags & CALC_TRG_EXCLUDE_AGWS) && (calcUPGet(target)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+            } else if (targetFlags & 8) {
+                if (unit == target) {
+                    found = 1;
+                }
+            } else if (targetFlags & 0x20) {
+                if (target == 0 || tgtIsDead(target)) {
+                    found = 1;
+                }
+            } else if (target != 0) {
+                found = tgtIsDead(target) == 0;
+            }
+        }
+        if (found == 1) {
+            tgtTbl[0] = target;
+            tgtNum = found;
+            return tgtTbl[tgtIdx++];
+        }
+        printf(calcReTGTIDText, calcUPGet(target)->charaId);
+    }
+    count = 1;
+    if (targetFlags & 8) {
+        single = unit;
+        candidates = &single;
+    } else {
+        tblType = 2;
+        if ((targetFlags & 0xC0) != 0xC0) {
+            if (targetFlags & 0x80) {
+                tblType = tgtIsEnemy(unit) == 0;
+            } else if (targetFlags & 0x40) {
+                tblType = tgtIsEnemy(unit) != 0;
+            } else {
+                tblType = tgtIsEnemy(unit) == 0;
+            }
+        }
+        count = unitTblGet(tblType, &candidates);
+    }
+    for (i = 0; i < count; i++) {
+        if (candidates[i] != 0 && tgtFindChk(unit, candidates[i], cmd) != 0) {
+            if ((targetFlags & CALC_TRG_EXCLUDE_AGWS) && (calcUPGet(candidates[i])->flags & CALC_UNIT_FLAG_IS_AGWS)) {
+                continue;
+            }
+            if (targetFlags & 0x20) {
+                if (candidates[i] != 0 && !tgtIsDead(candidates[i])) {
+                    continue;
+                }
+            } else {
+                if (candidates[i] == 0 || tgtIsDead(candidates[i])) {
+                    continue;
+                }
+            }
+            tgtTbl[tgtNum++] = candidates[i];
+        }
+    }
+    if (tgtNum == 0) {
+        return 0;
+    }
+    if (allTargets == 0) {
+        tgtNum = 1;
+    }
+    printf(calcTgtIDText);
+    for (i = 0; i < tgtNum; i++) {
+        printf(calcJpText, calcUPGet(tgtTbl[i])->charaId);
+    }
+    printf(calcJpText2);
+    return tgtTbl[tgtIdx++];
+}
+
+int tgtFindChk(BattleUnit *unit, BattleUnit *target, TgtCmd *cmd)
 {
     if (cmd->mode != 3) {
         return calcAtkChk(unit, target, cmd->tecId);
@@ -1972,17 +3285,7 @@ int tgtFindChk(ObjectTask *unit, ObjectTask *target, TgtCmd *cmd)
     return 1;
 }
 
-/*
- * tgtFindFirst's own candidate table (this TU, still asm): tgtNum entries
- * of tgtTbl are filled in target-search order, tgtIdx walks them out one at
- * a time. The gap between tgtTbl and tgtIdx (0x00a57e68..0x00a57e88, 0x20
- * bytes) is this array's only size evidence.
- */
-static ObjectTask *tgtTbl[8];
-static int tgtIdx;
-static int tgtNum;
-
-ObjectTask *tgtFindNext(void)
+BattleUnit *tgtFindNext(void)
 {
     if (tgtIdx >= tgtNum) {
         return 0;
@@ -2002,13 +3305,15 @@ extern int moveTbl[6][5];
  * Whether unit may move to toPosId: enemies and AGWS units always may, a
  * player character only to a position its own row of moveTbl lists.
  */
-int calcMoveChk(ObjectTask *unit, int toPosId)
+int calcMoveChk(BattleUnit *unit, int toPosId)
 {
     int posId;
     int i;
+    Actor *actor;
 
     posId = calcUPGet(unit)->posId;
-    if (!(((CalcActorRecord *) unit->work)->flags & CALC_ACTOR_FLAG_ENEMY)) {
+    actor = unit->work;
+    if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
         if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
             for (i = 0; i < 5; i++) {
                 if (moveTbl[posId - 1][i] != -1 && moveTbl[posId - 1][i] == toPosId) {
@@ -2026,12 +3331,12 @@ enum { TEC_ATTR_RANGE = 0x03 };
 
 /* calcLineChk (this TU, defined below) and calcA2Chk (this TU, still
  * asm): calcAtkChk's per-unit battle-line tests. */
-extern int calcLineChk(ObjectTask *unit);
-extern int calcA2Chk(ObjectTask *unit);
+extern int calcLineChk(BattleUnit *unit);
+extern int calcA2Chk(BattleUnit *unit);
 
-short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId)
+short calcAtkChk(BattleUnit *unit, BattleUnit *target, int tecId)
 {
-    BattleActor *actor;
+    Actor *actor;
     int line;
     int range;
 
@@ -2045,8 +3350,8 @@ short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId)
     if (calcStatGet(target, 1, 0x200)) {
         return 0;
     }
-    actor = (BattleActor *) unit->work;
-    if (!(actor->flags & CALC_ACTOR_FLAG_ENEMY)) {
+    actor = unit->work;
+    if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
         if (line != 0 && line != 1 && range != 2) {
             return 0;
         }
@@ -2068,18 +3373,20 @@ short calcAtkChk(ObjectTask *unit, ObjectTask *target, int tecId)
  * A unit standing at posId 8 passes only when no live unit of its own side
  * stands at a posId in 1..6 (`addiu $3,$3,-0x1`/`sltiu $3,$3,0x6`).
  */
-int calcA2Chk(ObjectTask *unit)
+int calcA2Chk(BattleUnit *unit)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     short posId;
     int side;
     int count;
     int i;
+    Actor *actor;
 
     if (calcUPGet(unit)->posId != 8) {
         return 1;
     }
-    if (((CalcActorRecord *) unit->work)->flags & CALC_ACTOR_FLAG_ENEMY) {
+    actor = unit->work;
+    if (actor->flags & ACTOR_FLAG_ENEMY) {
         side = 1;
     } else {
         side = 0;
@@ -2087,7 +3394,7 @@ int calcA2Chk(ObjectTask *unit)
     i = 0;
     count = unitTblGet(side, &table);
     for (; i < count; i++) {
-        if (table[i] != 0 && !(((CalcActorRecord *) table[i]->work)->flags & CALC_ACTOR_FLAG_DEAD)) {
+        if (table[i] != 0 && !(table[i]->work->flags & ACTOR_FLAG_DEAD)) {
             posId = calcUPGet(table[i])->posId;
             if (posId >= 1 && posId <= 6) {
                 return 0;
@@ -2097,14 +3404,15 @@ int calcA2Chk(ObjectTask *unit)
     return 1;
 }
 
-int calcLineChk(ObjectTask *unit)
+int calcLineChk(BattleUnit *unit)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     short myLine;
     short otherLine;
     int side;
     int count;
     int i;
+    Actor *actor;
 
     myLine = dataPosLineGet(calcUPGet(unit)->posId);
     if (myLine == 0)
@@ -2112,7 +3420,8 @@ int calcLineChk(ObjectTask *unit)
         return 1;
     }
 
-    if (((CalcActorRecord *) unit->work)->flags & CALC_ACTOR_FLAG_ENEMY)
+    actor = unit->work;
+    if (actor->flags & ACTOR_FLAG_ENEMY)
     {
         side = 1;
     }
@@ -2128,7 +3437,10 @@ int calcLineChk(ObjectTask *unit)
         {
             if (table[i] != 0)
             {
-                if ((((CalcActorRecord *) table[i]->work)->flags & 0x80) == 0)
+                Actor *tableActor;
+
+                tableActor = table[i]->work;
+                if ((tableActor->flags & ACTOR_FLAG_DEAD) == 0)
                 {
                     otherLine = dataPosLineGet(calcUPGet(table[i])->posId);
                     if (otherLine != 0 && otherLine < myLine)
@@ -2149,14 +3461,15 @@ int calcLineChk(ObjectTask *unit)
  * selector 1 tests that unit's charaId against 6 (`lh $3,0x38($2)`/
  * `beq $3,$21`, 0x00a16398; which character 6 is, is not established).
  */
-int calcBackLineChk(ObjectTask *unit, int selector)
+int calcBackLineChk(BattleUnit *unit, int selector)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     short myLine;
     short otherLine;
     int side;
     int count;
     int i;
+    Actor *actor;
 
     myLine = dataPosLineGet(calcUPGet(unit)->posId);
     if (myLine == 0)
@@ -2164,7 +3477,8 @@ int calcBackLineChk(ObjectTask *unit, int selector)
         return 1;
     }
 
-    if (((CalcActorRecord *) unit->work)->flags & CALC_ACTOR_FLAG_ENEMY)
+    actor = unit->work;
+    if (actor->flags & ACTOR_FLAG_ENEMY)
     {
         side = 1;
     }
@@ -2180,7 +3494,10 @@ int calcBackLineChk(ObjectTask *unit, int selector)
         {
             if (table[i] != 0)
             {
-                if ((((CalcActorRecord *) table[i]->work)->flags & CALC_ACTOR_FLAG_DEAD) == 0)
+                Actor *tableActor;
+
+                tableActor = table[i]->work;
+                if ((tableActor->flags & ACTOR_FLAG_DEAD) == 0)
                 {
                     otherLine = dataPosLineGet(calcUPGet(table[i])->posId);
                     if (otherLine != 0 && myLine < otherLine)
@@ -2208,7 +3525,7 @@ int calcBackLineChk(ObjectTask *unit, int selector)
     return 1;
 }
 
-int calcWpnEnableChk(ObjectTask *unit, int slot)
+int calcWpnEnableChk(BattleUnit *unit, int slot)
 {
     WpnData *wpn;
     CalcUnitParam *up;
@@ -2236,13 +3553,13 @@ int calcWpnEnableChk(ObjectTask *unit, int slot)
     if (wpn->apCost > up->dblActKind) {
         return 0;
     }
-    if (calcTakeEpGet(unit, wpn->tecId) > (short)up->currentEp) {
+    if (calcTakeEpGet(unit, wpn->tecId) > up->currentEp) {
         return 0;
     }
     return 1;
 }
 
-int calcWpnUse(ObjectTask *unit, int slot)
+int calcWpnUse(BattleUnit *unit, int slot)
 {
     CalcUnitParam *up;
 
@@ -2352,9 +3669,9 @@ int calcFrameEquipOrg(int charaId, int frameId)
 #define CALC_DBL_ACT_KIND 6
 
 /* calcSameWpnChk (this TU, defined below): a weapon slot of unit, or -1. */
-extern int calcSameWpnChk(ObjectTask *unit);
+extern int calcSameWpnChk(BattleUnit *unit);
 
-int calcDblActChk(ObjectTask *unit)
+int calcDblActChk(BattleUnit *unit)
 {
     CalcUnitParam *up;
     int slot;
@@ -2379,7 +3696,7 @@ int calcDblActChk(ObjectTask *unit)
  * slots give -1. Weapon ids 0x5B and 0x70 count as the same weapon, as do
  * 0x5C and 0x71 (the `addiu` pairs compared at 0x00a16984..0x00a16a48).
  */
-int calcSameWpnChk(ObjectTask *unit)
+int calcSameWpnChk(BattleUnit *unit)
 {
     CalcUnitParam *up;
 
@@ -2433,7 +3750,7 @@ int calcSameWpnChk(ObjectTask *unit)
 
 /* calcEtherDisableGet (this TU, defined below): calcEthEnableChk's own
  * callee, the unit's disable bit for ether slot `bit`. */
-extern int calcEtherDisableGet(ObjectTask *unit, int bit);
+extern int calcEtherDisableGet(BattleUnit *unit, int bit);
 
 /*
  * Whether unit can use ether etherId now: its technique must find a
@@ -2442,14 +3759,14 @@ extern int calcEtherDisableGet(ObjectTask *unit, int bit);
  * its absence 0x2C/0x2D, status (7, 1) refuses 0x2E and its absence
  * 0x2F/0x30, and an equipped slot holding etherId must not be disabled.
  */
-int calcEthEnableChk(ObjectTask *unit, int etherId)
+int calcEthEnableChk(BattleUnit *unit, int etherId)
 {
     int i;
 
     if (!calcTgtUnitTbl(unit, dataTecGet(dataEthGet(etherId)->tecId)->attr, 0)) {
         return 0;
     }
-    if ((short) calcUPGet(unit)->currentEp < calcTakeEpGet(unit, dataEthGet(etherId)->tecId)) {
+    if (calcUPGet(unit)->currentEp < calcTakeEpGet(unit, dataEthGet(etherId)->tecId)) {
         return 0;
     }
     if (etherId == 3 && (cfEventGet() & 8)) {
@@ -2469,7 +3786,7 @@ int calcEthEnableChk(ObjectTask *unit, int etherId)
     return 1;
 }
 
-int calcItmEnableChk(ObjectTask *unit, int itmId)
+int calcItmEnableChk(BattleUnit *unit, int itmId)
 {
     if (calcTgtUnitTbl(unit, dataItmGet(itmId)->trgFlags, 0) == 0) {
         return 0;
@@ -2480,9 +3797,9 @@ int calcItmEnableChk(ObjectTask *unit, int itmId)
     return 1;
 }
 
-int calcTgtUnitTbl(ObjectTask *unit, int trgFlags, ObjectTask **table)
+int calcTgtUnitTbl(BattleUnit *unit, int trgFlags, BattleUnit **table)
 {
-    ObjectTask **srcTable;
+    BattleUnit **srcTable;
     int side;
     int total;
     int count;
@@ -2515,14 +3832,14 @@ int calcTgtUnitTbl(ObjectTask *unit, int trgFlags, ObjectTask **table)
                 }
                 if (!(trgFlags & CALC_TRG_DEAD_UNITS))
                 {
-                    if (((CalcActorRecord *) srcTable[i]->work)->flags & CALC_ACTOR_FLAG_DEAD)
+                    if (srcTable[i]->work->flags & ACTOR_FLAG_DEAD)
                     {
                         continue;
                     }
                 }
                 else
                 {
-                    if (!(((CalcActorRecord *) srcTable[i]->work)->flags & CALC_ACTOR_FLAG_DEAD))
+                    if (!(srcTable[i]->work->flags & ACTOR_FLAG_DEAD))
                     {
                         continue;
                     }
@@ -2545,9 +3862,9 @@ int calcTgtUnitTbl(ObjectTask *unit, int trgFlags, ObjectTask **table)
     return count;
 }
 
-int calcDeadUnitNum(ObjectTask *unit, int flag)
+int calcDeadUnitNum(BattleUnit *unit, int flag)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     int count;
     int i;
     int result;
@@ -2560,7 +3877,10 @@ int calcDeadUnitNum(ObjectTask *unit, int flag)
         {
             if (table[i] != 0)
             {
-                if ((((CalcActorRecord *)table[i]->work)->flags & 0x80) != 0)
+                Actor *tableActor;
+
+                tableActor = table[i]->work;
+                if ((tableActor->flags & ACTOR_FLAG_DEAD) != 0)
                 {
                     result++;
                 }
@@ -2571,13 +3891,13 @@ int calcDeadUnitNum(ObjectTask *unit, int flag)
 }
 
 /*
- * 0 for a missing or dead (CALC_ACTOR_FLAG_DEAD) unit or one carrying any
+ * 0 for a missing or dead (ACTOR_FLAG_DEAD) unit or one carrying any
  * of the five statuses tested; otherwise 1.
  */
-int calcBattleChk(ObjectTask *unit)
+int calcBattleChk(BattleUnit *unit)
 {
     if (unit == 0
-        || (((CalcActorRecord *) unit->work)->flags & CALC_ACTOR_FLAG_DEAD)
+        || (unit->work->flags & ACTOR_FLAG_DEAD)
         || calcStatGet(unit, 0, 0x2000)
         || calcStatGet(unit, 1, 0x2000)
         || calcStatGet(unit, 4, 0x2000)
@@ -2591,20 +3911,26 @@ int calcBattleChk(ObjectTask *unit)
 /*
  * Answers a target-selection flag word (cmdAtktbl, calcTgtUnitTbl and
  * calcDeadUnitNum supply it) against the unit's own side bit, bit 0x40 of
- * CalcActorRecord's flags: a selection of 0x40, and any word carrying 0x08,
+ * Actor's flags: a selection of 0x40, and any word carrying 0x08,
  * asks whether the unit is on that side; a selection of 0x80 asks whether it
  * is not; every other selection answers 2.
  */
-int calcTrg2PE(ObjectTask *unit, int trgFlags)
+int calcTrg2PE(BattleUnit *unit, int trgFlags)
 {
     if ((trgFlags & 0xC0) == 0x40 || (trgFlags & 8) != 0) {
-        if ((((CalcActorRecord *)unit->work)->flags & CALC_ACTOR_FLAG_ENEMY) != 0) {
+        Actor *actor;
+
+        actor = unit->work;
+        if ((actor->flags & ACTOR_FLAG_ENEMY) != 0) {
             return 1;
         }
         return 0;
     }
     if ((trgFlags & 0xC0) == 0x80) {
-        if ((((CalcActorRecord *)unit->work)->flags & CALC_ACTOR_FLAG_ENEMY) == 0) {
+        Actor *actor;
+
+        actor = unit->work;
+        if ((actor->flags & ACTOR_FLAG_ENEMY) == 0) {
             return 1;
         }
         return 0;
@@ -2617,7 +3943,7 @@ int calcTrg2PE(ObjectTask *unit, int trgFlags)
  * defined below). */
 extern int calcStatIdx2Bit(int statIdx);
 
-void calcStatTurn(ObjectTask *unit)
+void calcStatTurn(BattleUnit *unit)
 {
     CalcUnitParam *param;
     int category;
@@ -2641,12 +3967,12 @@ void calcStatTurn(ObjectTask *unit)
     }
 }
 
-int calcStatProtectGet(ObjectTask *unit, int group, int mask)
+int calcStatProtectGet(BattleUnit *unit, int group, int mask)
 {
     return calcUPGet(unit)->statProtect[group] & mask;
 }
 
-void calcStatProtectSet(ObjectTask *unit, int group, int mask)
+void calcStatProtectSet(BattleUnit *unit, int group, int mask)
 {
     calcUPGet(unit)->statProtect[group] |= mask;
 }
@@ -2656,9 +3982,9 @@ void calcStatProtectSet(ObjectTask *unit, int group, int mask)
  * answer also includes statAltMask[category] & flag of the same unit
  * (`lhu $3,0xAC($2)` and `lhu $2,0xBC($16)`, OR-ed at 0x00a17234).
  */
-int calcStatGet(ObjectTask *unit, int category, int flag)
+int calcStatGet(BattleUnit *unit, int category, int flag)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     int count;
     int result;
     int i;
@@ -2690,9 +4016,9 @@ int calcStatGet(ObjectTask *unit, int category, int flag)
  * requested mask (`and $6,$3,$17`, 0x00a17300), of the first unit of
  * unitTblGet(0)'s table for which it is nonzero, or 0 when no unit's is.
  */
-int calcStatGetNorm(ObjectTask *unit, int category, int flag)
+int calcStatGetNorm(BattleUnit *unit, int category, int flag)
 {
-    ObjectTask **table;
+    BattleUnit **table;
     int count;
     int result;
     int i;
@@ -2715,23 +4041,24 @@ int calcStatGetNorm(ObjectTask *unit, int category, int flag)
 }
 
 /*
- * Whether status category may be set on unit: with CALC_UNIT_FLAG_BIT12
- * categories 0..3 are refused (`sltiu $3,$16,0x4`) and category 5 too
- * unless CALC_UNIT_FLAG_BIT3 is set; without it categories 4..6 are
- * refused (`addiu $3,$16,-0x4`/`sltiu $3,$3,0x3`). Past that, force
+ * Whether status category may be set on unit: with CalcUnitParam flag 0x1000
+ * (not named: its role is not established) categories 0..3 are refused
+ * (`sltiu $3,$16,0x4`) and category 5 too unless flag 0x8 is set; without
+ * it categories 4..6 are refused (`addiu $3,$16,-0x4`/`sltiu $3,$3,0x3`).
+ * Past that, force
  * accepts outright; otherwise calcStatProtectGet's protection and status
  * 2/0x2000 (which still admits category 7) refuse.
  */
-int calcStatSetChk(ObjectTask *unit, int category, int flag, int force)
+int calcStatSetChk(BattleUnit *unit, int category, int flag, int force)
 {
     u16 flags;
 
     flags = calcUPGet(unit)->flags;
-    if (flags & CALC_UNIT_FLAG_BIT12) {
+    if (flags & 0x1000) {
         if (category >= 0 && category <= 3) {
             return 0;
         }
-        if (!(flags & CALC_UNIT_FLAG_BIT3) && category == 5) {
+        if (!(flags & 0x8) && category == 5) {
             return 0;
         }
     } else if (category >= 4 && category <= 6) {
@@ -2749,12 +4076,134 @@ int calcStatSetChk(ObjectTask *unit, int category, int flag, int force)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcStatSet);
+extern int calcStatDefTurnGet(BattleUnit *unit, int category, int statBit);
+
+int calcStatSet(BattleUnit *unit, int category, int mask, int force)
+{
+    CalcUnitParam *up;
+    int statIdx;
+    int defTurn;
+
+    up = calcUPGet(unit);
+    if (calcStatSetChk(unit, category, mask, force) == 0) {
+        return 0;
+    }
+    if (force == 0) {
+        up->statActiveMask[category] |= mask;
+        statIdx = calcStatBit2Idx(mask);
+        defTurn = calcStatDefTurnGet(unit, category, mask);
+        if (defTurn != 0xFF && calcStatGet(unit, 3, 0x100) != 0) {
+            defTurn *= 2;
+            calcStatReset(unit, 3, 0x100, 0);
+        }
+        up->statTurnCount[category][statIdx] = defTurn;
+    } else {
+        if (category == 2 && (mask & 0x100)) {
+            if (calcStatGet(unit, 2, 0x100) != 0) {
+                mask = (mask & ~0x100) | 0x80;
+            }
+        }
+        up->statAltMask[category] |= mask;
+    }
+    switch (category) {
+    case 0:
+        if (mask & 0x1000) {
+            calcStatReset(unit, 2, 0x100, force);
+            calcStatReset(unit, 2, 0x80, force);
+        }
+        if (mask & 0x400) {
+            calcStatReset(unit, 2, 0x40, force);
+        }
+        if (mask & 0x200) {
+            calcStatReset(unit, 2, 0x20, force);
+        }
+        if (mask & 0x40) {
+            calcStatReset(unit, 2, 0x10, force);
+        }
+        break;
+    case 2:
+        if (mask & 0x100) {
+            calcStatReset(unit, 0, 0x1000, force);
+            calcStatReset(unit, 2, 0x80, force);
+        }
+        if (mask & 0x80) {
+            calcStatReset(unit, 0, 0x1000, force);
+            calcStatReset(unit, 2, 0x100, force);
+        }
+        if (mask & 0x40) {
+            calcStatReset(unit, 0, 0x400, force);
+        }
+        if (mask & 0x20) {
+            calcStatReset(unit, 0, 0x200, force);
+        }
+        if (mask & 0x1000) {
+            calcStatReset(unit, 2, 0x400, force);
+        }
+        if (mask & 0x800) {
+            calcStatReset(unit, 2, 0x200, force);
+        }
+        if (mask & 0x400) {
+            calcStatReset(unit, 2, 0x1000, force);
+            calcStatReset(unit, 2, 0x200, force);
+        }
+        if (mask & 0x200) {
+            calcStatReset(unit, 2, 0x800, force);
+            calcStatReset(unit, 2, 0x400, force);
+        }
+        if (mask & 0x10) {
+            calcStatReset(unit, 0, 0x40, force);
+        }
+        break;
+    case 1:
+        if (mask & 0x10) {
+            calcStatReset(unit, 3, 0x200, force);
+        }
+        break;
+    case 3:
+        if (mask & 0x4000) {
+            calcStatReset(unit, 3, 0x2000, force);
+            calcStatReset(unit, 3, 0x1000, force);
+        }
+        if (mask & 0x2000) {
+            calcStatReset(unit, 3, 0x4000, force);
+            calcStatReset(unit, 3, 0x1000, force);
+        }
+        if (mask & 0x1000) {
+            calcStatReset(unit, 3, 0x4000, force);
+            calcStatReset(unit, 3, 0x2000, force);
+        }
+        if (mask & 0x200) {
+            calcStatReset(unit, 1, 0x10, force);
+        }
+        if (mask & 0x20) {
+            calcStatReset(unit, 3, 0x10, force);
+        }
+        if (mask & 0x10) {
+            calcStatReset(unit, 3, 0x20, force);
+        }
+        if (mask & 0x8) {
+            calcStatReset(unit, 3, 0x4, force);
+        }
+        if (mask & 0x4) {
+            calcStatReset(unit, 3, 0x8, force);
+        }
+        break;
+    case 7:
+        if (mask & 0x2) {
+            calcStatReset(unit, 7, 0x1, force);
+        }
+        if (mask & 0x1) {
+            calcStatReset(unit, 7, 0x2, force);
+        }
+        break;
+    }
+    return 1;
+}
 
 /* calcStatBit2Idx (this TU, defined below): shared with calcStatTurn. */
 extern int calcStatBit2Idx(int statBit);
 
-void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMask)
+void calcStatReset(BattleUnit *unit, int category, int mask, int useAltMask)
 {
     CalcUnitParam *up;
     int idx;
@@ -2769,9 +4218,9 @@ void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMask)
     }
 }
 
-/* turn_1 (still asm data, build/ov01/asm/data/ov01/calc.data.s): an 8x16-byte table of
+/* turn_1: an 8x16-byte table of
  * per-category/per-status-index wait-count-end turn bonuses. */
-extern signed char turn_1[8][16];
+static signed char turn_1[8][16];
 
 /*
  * Base bonus from turn_1[category][statIdx], returned as is unless category
@@ -2783,7 +4232,7 @@ extern signed char turn_1[8][16];
  * quarter of maxHp (0x00a17a5c..0x00a17a74): at most two extra turns, each
  * comparison re-reading calcUPGet(unit) twice rather than caching it.
  */
-int calcStatDefTurnGet(ObjectTask *unit, int category, int statBit)
+int calcStatDefTurnGet(BattleUnit *unit, int category, int statBit)
 {
     int idx;
     int bonus;
@@ -2793,11 +4242,11 @@ int calcStatDefTurnGet(ObjectTask *unit, int category, int statBit)
     bonus = turn_1[category][idx];
     if (category == 7 && (statBit & 3) != 0) {
         up = calcUPGet(unit);
-        if ((short) up->currentHp < (short) calcUPGet(unit)->maxHp / 2) {
+        if (up->currentHp < (short) calcUPGet(unit)->maxHp / 2) {
             bonus++;
         }
         up = calcUPGet(unit);
-        if ((short) up->currentHp < (short) calcUPGet(unit)->maxHp / 4) {
+        if (up->currentHp < (short) calcUPGet(unit)->maxHp / 4) {
             bonus++;
         }
     }
@@ -2829,16 +4278,14 @@ int calcStatIdx2Bit(int statIdx)
     return 1 << statIdx;
 }
 
-void calcStatReset(ObjectTask *unit, int category, int mask, int useAltMask);
-
-void calcStatResetCha(ObjectTask *unit) {
+void calcStatResetCha(BattleUnit *unit) {
     calcStatReset(unit, 0, 0x7FFF, 0);
     calcStatReset(unit, 1, 0x7FFF, 0);
     calcStatReset(unit, 2, 0x7FFF, 0);
     calcStatReset(unit, 3, 0x7FFF, 0);
 }
 
-void calcStatResetAll(ObjectTask *unit) {
+void calcStatResetAll(BattleUnit *unit) {
     calcStatReset(unit, 0, 0x7FFF, 0);
     calcStatReset(unit, 1, 0x7FFF, 0);
     calcStatReset(unit, 2, 0x7FFF, 0);
@@ -2847,8 +4294,6 @@ void calcStatResetAll(ObjectTask *unit) {
     calcStatReset(unit, 5, 0x7FFF, 0);
     calcStatReset(unit, 6, 0x7FFF, 0);
 }
-
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcResult);
 
 /* One battle's four rewards, in calcResultSub's order (+0x0..+0xC of its
  * second argument, +0x4..+0x10 of its fourth). */
@@ -2860,13 +4305,135 @@ typedef struct CalcReward {
 } CalcReward;
 
 /*
- * The per-character result record calcResult (this TU, still asm) fills
- * and hands to calcResultSub, as far as calcResultSub writes it.
+ * The per-character result record calcResult fills and hands to
+ * calcResultSub, as far as calcResultSub writes it.
  */
 typedef struct CalcResultEntry {
     unsigned char unmodeled_00[0x04];
     CalcReward gained; /* +0x04: calcResultSub's `sw $16,0x4($21)`..0x10 */
 } CalcResultEntry;
+
+extern const char calcLvUPIDText[]; /* "Lv UP! (ID=%d) %d\n" */
+extern const char calcAltLvUPIDText[]; /* "Alt Lv UP! (ID=%d) %d\n" */
+
+/* The battle's gain record monsGainPtrGet returns: the rewards, money and
+ * the box items (grp/item pairs, num of them) to hand out. */
+typedef struct CalcMonsGain {
+    int exp;
+    int tp;
+    int ep;
+    int sp;
+    int money;
+    int grp[8];
+    int item[8];
+    int num;
+} CalcMonsGain;
+
+extern CalcMonsGain *monsGainPtrGet(void);
+extern int calcLvUp(int cid, int exp, char *res);
+extern int dataBoxInc(int category, int id);
+extern int dataMoneyBoxInc(int amount);
+void calcResultSub(BattleUnit *unit, CalcReward *total, int memberCount, CalcResultEntry *entry);
+
+int calcResult(int *results)
+{
+    CalcScratchUnit fakeUnit;
+    CalcScratchActor fakeActor;
+    int partyIds[8];
+    int totalGain[24];
+    int resultBuf[15];
+    CalcScratchActor fakeActorPl;
+    CalcScratchUnit fakeUnitPl;
+    BattleUnit **units;
+    int aliveCount;
+    CalcMonsGain *monsGain;
+    int unitCount;
+    int unitIdx;
+    int inBattle;
+    int partyCount;
+    int partyCharaId;
+    int partyIdx;
+    BattleUnit *unit;
+    CalcUnitParam *up;
+    CalcCharParaData *org;
+    short charaId;
+    signed char lvBefore;
+    short hpBefore;
+    short epBefore;
+    monsGain = monsGainPtrGet();
+    unitCount = unitTblGet(0, &units);
+    aliveCount = 0;
+    for (unitIdx = 0; unitIdx < unitCount; unitIdx++) {
+        if ((units[unitIdx] != 0) && (!(units[unitIdx]->work->flags & ACTOR_FLAG_DEAD))) {
+            aliveCount++;
+        }
+    }
+
+    for (unitIdx = 0; unitIdx < monsGain->num; unitIdx++) {
+        dataBoxInc(monsGain->grp[unitIdx], monsGain->item[unitIdx]);
+    }
+
+    dataMoneyBoxInc(monsGain->money);
+    for (unitIdx = 0; unitIdx < unitCount; unitIdx++) {
+        unit = units[unitIdx];
+        if ((unit != 0) && (!(unit->work->flags & ACTOR_FLAG_DEAD))) {
+            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
+                up = calcUPGet(units[unitIdx])->linkedUnit;
+                fakeUnit.unit.work = (Actor *) &fakeActor;
+                fakeActor.up = up;
+                unit = &fakeUnit.unit;
+            } else {
+                up = calcUPGet(units[unitIdx]);
+                unit = units[unitIdx];
+            }
+            charaId = up->charaId;
+            calcResultSub(unit, (CalcReward *) monsGain, aliveCount, (CalcResultEntry *) results);
+            org = dataUnitOrgGet(charaId);
+            lvBefore = ((signed char *) org)[0x14];
+            results[0] = charaId;
+            hpBefore = org->maxHp;
+            epBefore = org->maxEp;
+            if (calcLvUp(charaId, results[1], (char *) results)) {
+                results[5] = ((signed char *) org)[0x14] - lvBefore;
+                results[6] = org->maxHp - hpBefore;
+                results[7] = org->maxEp - epBefore;
+                printf(calcLvUPIDText, charaId, ((signed char *) org)[0x14]);
+            }
+            results += 15;
+        }
+    }
+
+    __builtin_memcpy(totalGain, monsGain, 0x58);
+    totalGain[1] = 0;
+    totalGain[2] = 0;
+    totalGain[3] = 0;
+    totalGain[0] = (totalGain[0] / 4) * 3;
+    partyCount = PartyAllPartyGet(partyIds, 2);
+    for (partyIdx = 0; partyIdx < partyCount; partyIdx++) {
+        partyCharaId = partyIds[partyIdx];
+        inBattle = 0;
+        for (unitIdx = 0; unitIdx < unitCount; unitIdx++) {
+            if (units[unitIdx] != 0) {
+                if ((partyCharaId == calcUPGet(units[unitIdx])->charaId) || ((calcUPGet(units[unitIdx])->flags & CALC_UNIT_FLAG_IS_AGWS) && (partyCharaId == calcUPGet(units[unitIdx])->linkedUnit->charaId))) {
+                    inBattle = 1;
+                    break;
+                }
+            }
+        }
+
+        if (inBattle != 1) {
+            fakeActorPl.up = (CalcUnitParam *) dataUnitOrgGet(partyCharaId);
+            fakeUnitPl.unit.work = (Actor *) &fakeActorPl;
+            memset(resultBuf, 0, 0x3C);
+            calcResultSub(&fakeUnitPl.unit, (CalcReward *) totalGain, aliveCount, (CalcResultEntry *) resultBuf);
+            if (calcLvUp(partyCharaId, resultBuf[1], (char *) resultBuf)) {
+                printf(calcAltLvUPIDText, partyCharaId, ((signed char *) calcUPGet(&fakeUnitPl.unit))[0x14]);
+            }
+        }
+    }
+
+    return aliveCount;
+}
 
 /*
  * calcSkill's mask bits of the reward skills (kind 0x1000) calcResultSub
@@ -2884,7 +4451,7 @@ enum SkillRewardBit {
  * memberCount, then raised by the matching reward skill's percentage) and
  * records the shares in entry.
  */
-void calcResultSub(ObjectTask *unit, CalcReward *total, int memberCount, CalcResultEntry *entry)
+void calcResultSub(BattleUnit *unit, CalcReward *total, int memberCount, CalcResultEntry *entry)
 {
     CalcPlCharaView *pl;
     int gain;
@@ -2937,7 +4504,83 @@ void calcResultSub(ObjectTask *unit, CalcReward *total, int memberCount, CalcRes
     entry->gained.skillPoint = gain;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/calc", calcLvUp);
+extern unsigned char *dataExpTblGet();
+extern void *dataSpecTblGet(int cid);
+extern void *dataParaTblGet(int cid);
+extern short dataSpecLearnGet(int cid, int id);
+extern void dataSpecLearnSet(int cid, int id);
+
+int calcLvUp(int cid, int exp, char *res)
+{
+    CalcPlCharaView *pl;
+    CalcCharParaData *org;
+    int i;
+    unsigned short *spec;
+    char *para;
+    char *base;
+    unsigned short id;
+    short *p;
+    int old;
+    int v;
+    int d;
+    int off;
+    int *cnt;
+    int n;
+    int nv;
+    int table;
+    int expEntry;
+    int expGain;
+
+    pl = dataPlChaGet(cid);
+    org = dataUnitOrgGet(cid);
+    if (org->level >= 99) return 0;
+    if ((pl->expToNext -= exp) > 0) goto ret0;
+    while (org->level < 99) {
+        org->level++;
+        table = (int)dataExpTblGet(cid);
+        expEntry = org->level * 4;
+        expEntry += table;
+        LoadWordUnaligned(expGain, expEntry);
+        pl->expToNext += expGain;
+        spec = (unsigned short *)dataSpecTblGet(cid) + 1;
+        for (i = 0; i < 8; i++, spec += 2) {
+            id = spec[-1];
+            if (id != 0 && dataSpecLearnGet(cid, id) == 0 && spec[0] != 0
+                && org->level >= spec[0]) {
+                dataSpecLearnSet(cid, id);
+                cnt = (int *)(res + 0x38);
+                n = *cnt;
+                ((int *)(res + 0x20))[n] = id;
+                *cnt = n + 1;
+                printf("** Spec Learn: (%d) %d\n", cid, id);
+            }
+        }
+        para = dataParaTblGet(cid);
+        base = (char *) pl + 8;
+        for (i = 0; i < 8; i++) {
+            off = i * 2 + 0x10;
+            nv = *(unsigned short *)(para + off);
+            old = *(short *)(base + off);
+            v = ((nv - old) * 100 / (100 - org->level) + 25) / 50 + old;
+            *(short *)(base + off) = v;
+            d = v - old;
+            switch (i) {
+            case 0: if ((short)(org->statSum[0] += d) >= 1000) org->statSum[0] = 999; break;
+            case 1: if ((short)(org->statSum[1] += d) >= 1000) org->statSum[1] = 999; break;
+            case 2: if ((short)(org->statSum[2] += d) >= 1000) org->statSum[2] = 999; break;
+            case 3: if ((short)(org->statSum[3] += d) >= 1000) org->statSum[3] = 999; break;
+            case 4: if ((signed char)(org->gainSum[0] += d) >= 100) org->gainSum[0] = 99; break;
+            case 5: if ((signed char)(org->gainSum[1] += d) >= 100) org->gainSum[1] = 99; break;
+            case 6: if ((org->maxHp += d) >= 10000) org->maxHp = 9999; break;
+            case 7: if ((org->maxEp += d) >= 100) org->maxEp = 99; break;
+            }
+        }
+        if (pl->expToNext > 0) return 1;
+    }
+    return 1;
+ret0:
+    return 0;
+}
 
 /*
  * entryPhase40 (src/ov01/entry_first_init.c) calls this as a bare statement
@@ -2961,8 +4604,8 @@ int calcCfEncount(int flags)
 
 void calcPartyStat(int side, int mode)
 {
-    ObjectTask **table;
-    ObjectTask *unit;
+    BattleUnit **table;
+    BattleUnit *unit;
     int count;
     int i;
 
@@ -2982,7 +4625,7 @@ void calcPartyStat(int side, int mode)
     }
 }
 
-int calcEtherDisableGet(ObjectTask *unit, int bit)
+int calcEtherDisableGet(BattleUnit *unit, int bit)
 {
     u16 mask;
 
@@ -2990,7 +4633,7 @@ int calcEtherDisableGet(ObjectTask *unit, int bit)
     return calcUPGet(unit)->etherDisableFlags & mask;
 }
 
-void calcEtherDisableSet(ObjectTask *unit, int bit)
+void calcEtherDisableSet(BattleUnit *unit, int bit)
 {
     CalcUnitParam *param;
     u16 mask;
@@ -3005,8 +4648,7 @@ int rnd(int max)
     return xglSRand() % (max + 1);
 }
 
-/* points/count were spelled `int start`/`int end` while calcSpline was asm;
- * the pointer type changes no byte here (two `sw` of the argument). */
+/* The pointer type changes no byte here (two `sw` of the argument). */
 void calcSplineInit(CalcSpline *spline, Vector4 *points, int count, int duration)
 {
     spline->points = points;
@@ -3222,3 +4864,95 @@ void calcNormal(Vector4 *vec)
         vec->z *= scale;
     }
 }
+
+
+
+static signed char turn_1[8][16] = { { 5, 5, 5, -1, 5, -1, 5, -1, -1, -1, -1, -1, 5, 5, 0, 0 }, { 0, 1, -1, -1, -1, -1, -1, 5, 1, 3, -1, -1, -1, -1, 5, 0 }, { -1, 0, 0, -1, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, -1, 0 }, { 0, -1, 5, 5, 5, 5, 3, -1, -1, 5, 5, -1, 5, 5, 5, 0 }, { 5, 5, 5, 0, -1, 5, 5, -1, 5, 5, -1, 5, -1, 5, 0, 0 }, { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, 0 }, { -1, -1, -1, -1, -1, 0, 0, 0, -1, -1, -1, 3, 2, 3, 3, 0 }, { 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+const char calcAGWSParaEPEPMAXText[32] = "** AGWS para = EP=%d EPMAX=%d\n";
+
+const char calcAGWSParaEatkEdefHITEVAText[48] = "** AGWS para = Eatk=%d Edef=%d HIT=%d EVA=%d\n";
+
+const char calcPLMUTEKIText[16] = "** PL MUTEKI\n";
+
+const char calcENMUTEKIText[16] = "** EN MUTEKI\n";
+
+const char calcBPUpEventTimerGText[32] = "** BP up: EventTimer G (%d)\n";
+
+const char calcDMGEVAText[16] = "** DMG: EVA \n";
+
+const char calcPLICHIGEKIText[16] = "** PL ICHIGEKI\n";
+
+const char calcJobTypeErrText[24] = "** jobType err -> %d\n";
+
+const char calcWpnAtkGetAttEquipErrText[40] = "** calcWpnAtkGet: Att equip err! %d\n";
+
+const char calcWpnAtkGetWpnAtkAdjText[32] = "** calcWpnAtkGet: wpnAtkAdj=%d\n";
+
+const char calcPhyArmMagArmText[24] = "** phyArm=%d magArm=%d\n";
+
+const char calcTGTINFOJTYPECTYPEFCText[48] = "** TGTINFO=%04X JTYPE=%d CTYPE=%d FC=%X\n";
+
+const char calcDMG0HitAtrHitFlagDmgText[40] = "** DMG0:hitAtr=%d hitFlag=%X dmg=%d\n";
+
+const char calcStatDEATHText[16] = "** Stat: DEATH\n";
+
+const char calcStatGRAVText[16] = "** Stat: GRAV\n";
+
+const char calcDMG1HitAtrHitFlagDmgText[40] = "** DMG1:hitAtr=%d hitFlag=%X dmg=%d\n";
+
+const char calcStatNoEffectText[24] = "** Stat: no effect\n";
+
+const char calcStatAtkAttStatText[32] = "** calcStatAtk: Att stat\n";
+
+const char calcStatAtkAttEquipErrText[32] = "** calcStatAtk: Att equip err!\n";
+
+const char calcStatAtkWpnStatText[32] = "** calcStatAtk: Wpn stat\n";
+
+const char calcStatChkNGText[24] = "** Stat: Chk NG\n";
+
+const char calcStatAtkFormat[32] = "** Stat: Atk (%d%%) %d %04X\n";
+
+const char calcCritNoEffectText[24] = "** Crit: no effect\n";
+
+const char calcCritSlotAText[24] = "** Crit: slot A\n";
+
+const char calcCritEventTimerRText[24] = "** Crit: EventTimer R\n";
+
+const char calcCritOBJCRITText[24] = "** Crit: OBJ_CRIT\n";
+
+const char calcCritWeakXText[32] = "** Crit: weak (%04X) x%f\n";
+
+const char calcCritMonKindText[24] = "** Crit: monKind %04X\n";
+
+const char calcCritAtkFormat[24] = "** Crit: Atk (%d%%) %d\n";
+
+const char calcSpecEffectInfoText[24] = "** Spec: effect(info)\n";
+
+const char calcSpecAtkDefText[24] = "** Spec: atk=%X def=%X\n";
+
+const char calcSpecEffectABSBText[24] = "** Spec: effect(ABSB)\n";
+
+const char calcSpecErrSPECABSBText[32] = "** calcSpec err SPEC_ABSB\n";
+
+const char calcSpecEffectDEFText[24] = "** Spec: effect(DEF)\n";
+
+const char calcSpecErrSPECDEFText[32] = "** calcSpec err SPEC_DEF\n";
+
+const char calcSpecSkillALLText[24] = "** Spec: skill(ALL)\n";
+
+const char calcSpecSkillText[24] = "** Spec: skill(%X)\n";
+
+const char calcLinePosAdjustText[24] = "** LinePos: adjust\n";
+
+const char calcReTGTIDText[24] = "** reTGT! (ID=%d) ->";
+
+const char calcTgtIDText[16] = "** tgt ID=";
+
+const char calcJpText[8] = "%d ";
+
+const char calcJpText2[8] = "\n";
+
+const char calcLvUPIDText[24] = "Lv UP! (ID=%d) %d\n";
+
+const char calcAltLvUPIDText[24] = "Alt Lv UP! (ID=%d) %d\n";

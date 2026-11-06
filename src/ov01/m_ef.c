@@ -7,14 +7,14 @@
 #include "main/act_2.h"
 
 extern Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle);
-const char D_00A512B0[64] =
+const char efMEfCheckWorkSizeTheSizeOfHasOverflowedText[64] =
     "MEfCheckWorkSize: The size of %s has overflowed [%d > %d]";
 
-const char D_00A512F0[40] =
+const char efMEfGetActorMatrixActorIsNULLText[40] =
     "MEfGetActorMatrix: actor is NULL";
-const char D_00A51318[40] =
+const char efMEfGetActorMatrixInvalidPointText[40] =
     "MEfGetActorMatrix: Invalid point (%d)";
-const char D_00A51340[48] =
+const char efMEfGetActorMatrixPointIsOutOfRangeText[48] =
     "MEfGetActorMatrix: point is out of range (%d)";
 
 const MEfCornerAngles mefVertex2CornerTable = {
@@ -27,8 +27,9 @@ const MEfCornerAngles mefVertex2CornerTable = {
  */
 int MEfCheckWorkSize(const char *name, int size)
 {
-    if (size >= 0x401) {
-        MOutputDebugStringWarn(D_00A512B0, name, size, 0x400);
+    if (size > MEF_WORK_BUFFER_SIZE) {
+        MOutputDebugStringWarn(efMEfCheckWorkSizeTheSizeOfHasOverflowedText, name, size,
+                               MEF_WORK_BUFFER_SIZE);
         return 0;
     }
     return 1;
@@ -77,7 +78,7 @@ Vector4 *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vector4 *
  * rotating a fixed local axis, hence that sibling's un-negated
  * MMathCalcLengthXZ where this one negates it.
  */
-Vector4 *MEfCalcAngleMatrix(Vector4 *out, const Vector4 *matrix)
+Vector4 *MEfCalcAngleMatrix(Vector4 *out, Matrix4 *matrix)
 {
     Vector4 direction;
 
@@ -121,7 +122,7 @@ Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate)
     );
 
     if (actor == 0) {
-        MOutputDebugStringWarn(D_00A512F0);
+        MOutputDebugStringWarn(efMEfGetActorMatrixActorIsNULLText);
     } else if (coordinate == MEF_POINT_ACTOR) {
         MMathRotateMatrixY(destination, destination, actor->rotation.y);
         __asm__ __volatile__(
@@ -146,7 +147,7 @@ Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate)
     } else if (coordinate < MEF_POINT_ACCESSORY_COUNT) {
         joint = ACT_jointGetAccessories((Actor *)actor, coordinate);
         if (joint < 0) {
-            MOutputDebugStringWarn(D_00A51318, coordinate);
+            MOutputDebugStringWarn(efMEfGetActorMatrixInvalidPointText, coordinate);
         } else {
             /* Integer form on purpose: the original adds the joint's byte
                offset to the block address with the offset as the first
@@ -171,7 +172,7 @@ Matrix4 *MEfGetActorMatrix(Matrix4 *destination, Actor *actor, u32 coordinate)
             );
         }
     } else {
-        MOutputDebugStringWarn(D_00A51340, coordinate);
+        MOutputDebugStringWarn(efMEfGetActorMatrixPointIsOutOfRangeText, coordinate);
     }
     return destination;
 }
@@ -217,7 +218,7 @@ int MEfMake4Vertex(Vector4 *dst, const Vector4 *source, float size)
 {
     const MEfCamParams *cam = &mefCamParams;
     int rejected = 0;
-    Vector4 corner[4];
+    Matrix4 corner;
     Vector4 offset;
     Vector4 *vertex;
     int i;
@@ -257,7 +258,7 @@ int MEfMake4Vertex(Vector4 *dst, const Vector4 *source, float size)
         offset.x = (i & 2) ? -size : size;
         offset.y = (i & 1) ? -size : size;
 
-        MMathApplyMatrix(&offset, corner, &offset);
+        MMathApplyMatrix(&offset, &corner, &offset);
         if (MMathRotTransPersClip(vertex, cam->screen, cam->matrix, &offset)) {
             rejected++;
         }
@@ -275,7 +276,7 @@ int MEfMake4Vertex2(Vector4 *dst, const Vector4 *source, float size, float angle
     const MEfCamParams *cam = &mefCamParams;
     int rejected = 0;
     MEfCornerAngles angleTable;
-    Vector4 corner[4];
+    Matrix4 corner;
     Vector4 offset;
     Vector4 *vertex;
     float cosine;
@@ -341,7 +342,7 @@ int MEfMake4Vertex2(Vector4 *dst, const Vector4 *source, float size, float angle
         );
         offset.y = size * sine;
 
-        MMathApplyMatrix(&offset, corner, &offset);
+        MMathApplyMatrix(&offset, &corner, &offset);
         if (MMathRotTransPersClip(vertex, cam->screen, cam->matrix, &offset)) {
             rejected++;
         }
@@ -430,14 +431,14 @@ Vector4 *MEfCalcCircumXZ(Vector4 *out, Vector4 *center, float radius)
 Vector4 *MEfScatterXY(Vector4 *out, const Vector4 *source, const Vector4 *actor, float spread)
 {
     Vector4 angles;
-    Vector4 matrix[4];
+    Matrix4 matrix;
     float cosine;
     float sine;
     float randomAngle;
     float randomLength;
 
     MEfCalcAngle(&angles, actor, source);
-    MMathRotateMatrixYX(matrix, (const Vector4 *)0, &angles);
+    MMathRotateMatrixYX(&matrix, 0, &angles);
 
     /* Put actor at the translation row of the matrix, forcing that row's w
        lane to the architectural VF0.w = 1 rather than keeping actor's own w. */
@@ -482,16 +483,16 @@ Vector4 *MEfScatterXY(Vector4 *out, const Vector4 *source, const Vector4 *actor,
     );
     angles.y = randomLength * sine;
 
-    MMathApplyMatrix(out, matrix, &angles);
+    MMathApplyMatrix(out, &matrix, &angles);
     return out;
 }
 
 Vector4 *MEfCalcWeaponCoord(Vector4 *destination, const MEfWeaponCoord *weapon)
 {
-    Vector4 actor_matrix[4];
+    Matrix4 actor_matrix;
 
-    MEfGetActorMatrix(actor_matrix, weapon->actor, weapon->coordinate);
-    MMathApplyMatrix(destination, actor_matrix, &weapon->local_position);
+    MEfGetActorMatrix(&actor_matrix, weapon->actor, weapon->coordinate);
+    MMathApplyMatrix(destination, &actor_matrix, &weapon->local_position);
     destination->w = 1.0f;
     return destination;
 }

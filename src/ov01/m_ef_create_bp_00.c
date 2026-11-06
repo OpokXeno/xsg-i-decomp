@@ -3,13 +3,13 @@
  */
 #include "common.h"
 #include "ov01/m_ef_create.h"
+#include "ov01/m_ef.h"
 #include "shared.h"
+#include "main/xgl_packet.h"
 #include "m_ef_create_bp_00.h"
+#include "main/m_ef_obj.h"
 
-extern void MEfGetActorMatrix(Matrix4 destination, unsigned int actor, unsigned int part);
-extern void MEfGetActorCoord(Vector4 *destination, unsigned int actor, unsigned int coordinate);
-extern Vector4 *MMathApplyMatrix(Vector4 *destination, const Matrix4 *matrix, const Vector4 *vector);
-extern Vector4 *MMathCalcVectorMatrix(Vector4 *destination, const Matrix4 *matrix);
+extern Vector4 *MMathCalcVectorMatrix(Vector4 *destination, Matrix4 *matrix);
 extern void MGsGPInit(void *packet, void *address, int size);
 extern float MMathMakeRandom2PI(void);
 extern float MMathMakeRandom(void);
@@ -85,10 +85,10 @@ static __inline__ float bp00Sin(float angle)
     return sine;
 }
 
-static void fnBP00_PR000(void *self, void *work);
-static void fnBP00_PR010(void *self, void *work);
-static void fnBP00_DP000(void *self, void *work);
-static void fnBP00_PO000(void *self, void *work);
+static void fnBP00_PR000(void *self, BP00Work *work);
+static void fnBP00_PR010(void *self, BP00Work *work);
+static void fnBP00_DP000(void *self, BP00Work *work);
+static void fnBP00_PO000(void *self, BP00Work *work);
 
 int MEfCreate_BP00(MEfObjRecord *self)
 {
@@ -100,12 +100,10 @@ int MEfCreate_BP00(MEfObjRecord *self)
 
     work->frame = 0;
     work->counter = 0;
-    MEfGetActorMatrix(actorMatrix, work->actorId, work->actorPart);
-    /* GCC 2.96 does not implicitly add const through a pointer to a typedef'd
-       array; the cast changes only the read-only view of the same matrix. */
-    MMathApplyMatrix(&work->position, (const Matrix4 *)&actorMatrix, &work->creationOffset);
+    MEfGetActorMatrix(&actorMatrix, work->actor, work->actorPart);
+    MMathApplyMatrix(&work->position, &actorMatrix, &work->creationOffset);
     work->position.w = 1.0f;
-    MEfGetActorCoord(&work->actorCoordinates, work->coordinateActorId, -1);
+    MEfGetActorCoord(&work->actorCoordinates, work->coordinateActor, MEF_POINT_ACTOR);
     memset(work->visibility, 0, sizeof(work->visibility));
     memset(work->trail, 0, sizeof(work->trail));
     work->visibility[0].flag[0] = 1;
@@ -116,7 +114,7 @@ int MEfCreate_BP00(MEfObjRecord *self)
         :
         : "r"(work->trail[0].point), "r"(&work->position)
         : "$8", "memory");
-    MMathCalcVectorMatrix(&direction, (const Matrix4 *)&actorMatrix);
+    MMathCalcVectorMatrix(&direction, &actorMatrix);
     /* vectorOrigin[0].xyz = direction.xyz * -0.65, the first strand's
        per-frame step back along the actor's facing. */
     __asm__ __volatile__(
@@ -128,7 +126,7 @@ int MEfCreate_BP00(MEfObjRecord *self)
         :
         : "r"(&work->vectorOrigin[0]), "r"(&direction), "f"(-0.65f)
         : "$8", "memory");
-    MGsGPInit(work->packet, 0, 0);
+    MGsGPInit(&work->packet, 0, 0);
 
     object->processCallback = fnBP00_PR000;
     object->drawCallback = fnBP00_DP000;
@@ -136,10 +134,9 @@ int MEfCreate_BP00(MEfObjRecord *self)
     return 1;
 }
 
-static void fnBP00_PR000(void *self, void *data)
+static void fnBP00_PR000(void *self, BP00Work *work)
 {
-    BP00Object *object = (BP00Object *)self;
-    BP00Work *work = (BP00Work *)data;
+    BP00Object *object = self;
     Vector4 origin;
     Vector4 target;
     Vector4 step;
@@ -180,9 +177,8 @@ static void fnBP00_PR000(void *self, void *data)
     }
 }
 
-static void fnBP00_PR010(void *self, void *data)
+static void fnBP00_PR010(void *self, BP00Work *work)
 {
-    BP00Work *work = (BP00Work *)data;
     int strand;
     int point;
 
@@ -205,38 +201,155 @@ static void fnBP00_PR010(void *self, void *data)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/m_ef_create_bp_00", fnBP00_DP000);
+extern void MGsGPTerm(void *packet);
+extern int MMathRotTransPersClip(Vector4 *destination, const StudioCamera *camera,
+                                 Matrix4 *matrix, const Vector4 *point);
+extern MEfObjCamParams mefCamParams;
+static const Quadword coltbl_0_00A51460[2];
+
+#define BP00_STRANDS 5
+#define BP00_POINTS 7
+
+/* GIF tag fields: the register descriptor of a strip (RGBAQ, XYZ2). */
+#define BP00_STRIP_PRIM 0x4A
+#define BP00_STRIP_REGS 0x51
+
+/* Writes the GIF tag that opens the packet's next primitive and returns
+ * the first data quadword after it. */
+static __inline__ MEfGsQword *bp00OpenTag(MEfGsPacket *packet, int pre, int prim, int regCount,
+                                          unsigned long registers)
+{
+    MEfGsQword *qword = packet->current;
+
+    qword->gif.tag = GIF_TAG_EOP | ((unsigned long)pre << 46) | ((unsigned long)prim << 47) |
+                     ((unsigned long)regCount << 60);
+    qword->gif.registers = registers;
+    packet->reg_count = regCount;
+    return qword + 1;
+}
+
+/* Writes one A+D register setting. */
+static __inline__ void bp00SetRegister(MEfGsQword *qword, unsigned char address, unsigned long data)
+{
+    qword->ad.data = data;
+    qword->ad.address = address;
+}
+
+/* Stores NLOOP into the open GIF tag and moves past its data. */
+static __inline__ void bp00CloseTag(MEfGsPacket *packet, int nloop)
+{
+    int size;
+
+    size = packet->reg_count * nloop + 1;
+    packet->current->nloop |= nloop;
+    packet->current += size;
+    packet->count += size;
+}
+
+static __inline__ int bp00Floor(int value)
+{
+    return value < 0 ? 0 : value;
+}
+
+static void fnBP00_DP000(void *self, BP00Work *work)
+{
+    MEfGsPacket *packet = &work->packet;
+    StudioCamera *screen;
+    Matrix4 *view;
+    MEfGsQword vertex[2];
+    MEfGsQword colour;
+    MEfGsQword *setting;
+    MEfGsQword *qword;
+    short visible;
+    int clip;
+    int drawn;
+    int strand;
+    int point;
+    int fade;
+    int red;
+
+    screen = mefCamParams.screen;
+    view = mefCamParams.matrix;
+    MGsGPInit(packet, 0, 0);
+    setting = packet->current;
+    setting[0].gif.tag = MEF_GS_SETUP_TAG;
+    setting[0].gif.registers = MEF_GS_SETUP_REGS;
+    packet->reg_count = 1;
+    qword = &setting[1];
+    bp00SetRegister(qword, SCE_GS_TEST_1, MEF_GS_TEST_1_ALPHA_GREATER_ZGEQUAL);
+    bp00SetRegister(&setting[2], SCE_GS_ZBUF_1, MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE);
+    bp00SetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
+    bp00CloseTag(packet, 3);
+    for (strand = 0; strand < BP00_STRANDS; strand++) {
+        drawn = 0;
+        clip = 0;
+        point = 0;
+        colour.whole = *coltbl_0_00A51460;
+        qword = bp00OpenTag(&work->packet, 1, BP00_STRIP_PRIM, 2, BP00_STRIP_REGS);
+        for (; point < BP00_POINTS; point++) {
+            visible = work->visibility[strand].flag[point];
+            if (visible == 0) {
+                continue;
+            }
+            fade = 48 - point * 24;
+            colour.channel[0] = fade >= 0 ? fade : 0;
+            fade = 96 - point * 20;
+            colour.channel[1] = fade >= 0 ? fade : 0;
+            fade = 255 - 16 * point;
+            colour.channel[2] = fade >= 0 ? fade : 0;
+            if (point == 0) {
+                colour.channel[0] >>= 1;
+                colour.channel[1] >>= 1;
+                colour.channel[2] >>= 1;
+            }
+            if (MMathRotTransPersClip(&vertex[0].vector, screen, view, &work->trail[strand].point[point])) {
+                clip = 1;
+            } else if (clip != 0) {
+                clip--;
+                vertex[0].xyz.adc = MEF_GS_XYZ_ADC;
+            }
+            drawn++;
+            qword[0].whole = colour.whole;
+            qword[1].whole = vertex[0].whole;
+            qword += 2;
+            visible = 0;
+            fade = 0;
+            setting = 0;
+            red = 0;
+        }
+        if (drawn > 0) {
+            bp00CloseTag(packet, drawn);
+        }
+    }
+    MGsGPTerm(packet);
+}
 
 /* MEfObjDestroy is defined by src/main/m_ef_obj.c; sefHitEffect
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* work's layout is unresolved beyond +0x70: the per-frame lifetime counter
- * this function advances, firing sefHitEffect at frame 0x21 and expiring
- * through MEfObjDestroy once it reaches 0x2D. counter, right after it, is
- * only ever incremented here in lockstep with frame; nothing recovered in
- * this TU reads it back, so its specific role (an "age" naming borrowed
- * from the unrelated SolbState.age, src/ov01/m_ef_create_solb.h) is not
- * evidenced here and is left neutral. */
+/* The post callback advances frame (+0x70) and counter (+0x74) once per call,
+ * fires sefHitEffect at BP00_HIT_FRAME and expires through MEfObjDestroy at
+ * BP00_LIFETIME. Nothing else in this TU reads counter, so its role is not
+ * evidenced here and it keeps its neutral name. */
 #define BP00_HIT_FRAME 0x21
 #define BP00_LIFETIME  0x2D
 
-typedef struct BP00State {
-    unsigned char unmodeled_00[0x70];
-    int frame;   /* +0x70 */
-    int counter; /* +0x74 */
-} BP00State;
-
-static void fnBP00_PO000(void *self, void *work)
+static void fnBP00_PO000(void *self, BP00Work *work)
 {
-    BP00State *state = (BP00State *)work;
-
-    state->frame++;
-    state->counter++;
-    if (state->frame == BP00_HIT_FRAME) {
+    work->frame++;
+    work->counter++;
+    if (work->frame == BP00_HIT_FRAME) {
         sefHitEffect();
     }
-    if (state->frame >= BP00_LIFETIME) {
+    if (work->frame >= BP00_LIFETIME) {
         MEfObjDestroy(self);
     }
 }
+
+
+
+static const Quadword coltbl_0_00A51460[2] = {
+    0xff000000ff0000002000000000,
+    0xff0000008000000080000000ff
+};

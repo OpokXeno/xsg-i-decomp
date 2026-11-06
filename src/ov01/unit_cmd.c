@@ -5,12 +5,7 @@
 #include "shared.h"
 #include "unit_cmd.h"
 
-/* The same eight unit pointers have full-record and scheduler-prefix views. */
-typedef union UnitTableStorage {
-    UnitRecord *records[8];
-    ObjectTask *tasks[8];
-} UnitTableStorage;
-static UnitTableStorage unitTbl;
+static BattleUnit *unitTbl[8];
 static int unitPlNum;
 static int unitEnNum;
 
@@ -21,17 +16,17 @@ void unitInit(void)
     unitEnNum = 0;
 }
 
-int unitTblGet(int side, UnitRecord ***table)
+int unitTblGet(int side, BattleUnit ***table)
 {
     if (side == 0) {
-        *table = unitTbl.records;
+        *table = unitTbl;
         return 3;
     }
     if (side == 1) {
-        *table = &unitTbl.records[3];
+        *table = &unitTbl[3];
         return 5;
     }
-    *table = unitTbl.records;
+    *table = unitTbl;
     return 8;
 }
 
@@ -40,7 +35,7 @@ int unitTblGet(int side, UnitRecord ***table)
  * the two side paths meet (daddu $6,$2,$0 at 0x00a00e18); starting the loop
  * index itself in each branch allocates it to $6 directly.
  */
-int unitTblSet(int side, ObjectTask *unit)
+int unitTblSet(int side, BattleUnit *unit)
 {
     int first;
     int end;
@@ -56,8 +51,8 @@ int unitTblSet(int side, ObjectTask *unit)
         return 0;
     }
     for (i = first; i < end; i++) {
-        if (unitTbl.tasks[i] == 0) {
-            unitTbl.tasks[i] = unit;
+        if (unitTbl[i] == 0) {
+            unitTbl[i] = unit;
             if (i < 3) {
                 unitPlNum++;
             } else {
@@ -69,9 +64,9 @@ int unitTblSet(int side, ObjectTask *unit)
     return 0;
 }
 
-int unitTblRemove(ObjectTask *unit)
+int unitTblRemove(BattleUnit *unit)
 {
-    ObjectTask **units = unitTbl.tasks;
+    BattleUnit **units = unitTbl;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -88,9 +83,9 @@ int unitTblRemove(ObjectTask *unit)
     return 0;
 }
 
-int unitTblChg(ObjectTask *oldUnit, ObjectTask *newUnit)
+int unitTblChg(BattleUnit *oldUnit, BattleUnit *newUnit)
 {
-    ObjectTask **units = unitTbl.tasks;
+    BattleUnit **units = unitTbl;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -118,9 +113,9 @@ int unitNumGet(int side)
 
 int unitLiveNumGet(int side)
 {
-    UnitRecord **table;
-    UnitRecord **cur;
-    UnitRecord *unit;
+    BattleUnit **table;
+    BattleUnit **cur;
+    BattleUnit *unit;
     int count;
     int remaining;
     int live;
@@ -134,7 +129,7 @@ int unitLiveNumGet(int side)
             unit = *cur;
             cur++;
             if (unit != 0) {
-                if (!(((Actor *)unit->task.work)->flags & 0x80)) {
+                if (!(unit->work->flags & ACTOR_FLAG_DEAD)) {
                     live++;
                 }
             }
@@ -150,8 +145,8 @@ int unitLiveNumGet(int side)
  */
 int unitLiveNumGet2(int side)
 {
-    UnitRecord **table;
-    UnitRecord *unit;
+    BattleUnit **table;
+    BattleUnit *unit;
     int count;
     int live;
     int i;
@@ -160,9 +155,9 @@ int unitLiveNumGet2(int side)
     count = unitTblGet(side, &table);
     for (i = 0; i < count; i++) {
         unit = table[i];
-        if (unit != 0 && !(((Actor *)unit->task.work)->flags & ACTOR_FLAG_DOWN)) {
-            if (calcStatGet(&unit->task, 0, 0x2000) == 0
-                && calcStatGet(&table[i]->task, 4, 0x2000) == 0) {
+        if (unit != 0 && !(unit->work->flags & ACTOR_FLAG_DEAD)) {
+            if (calcStatGet(unit,0, 0x2000) == 0
+                && calcStatGet(table[i], 4, 0x2000) == 0) {
                 live++;
             }
         }
@@ -170,7 +165,7 @@ int unitLiveNumGet2(int side)
     return live;
 }
 
-int unitCidGet(ObjectTask *unit)
+int unitCidGet(BattleUnit *unit)
 {
     int cid;
 
@@ -185,14 +180,11 @@ int unitCidGet(ObjectTask *unit)
 
 extern int unitAgwsPilotGet(int agwsId);
 extern int printf(const char *format, ...);
-void unitPlFunc(ObjectTask *unit);
+void unitPlFunc(ObjectTask *task);
 
 /* Original OV01 formatting strings, with their full 32-byte slots retained. */
 static const char UnitPlCreateAgwsFormat[32] =
     "unitPlCreate: AGWS (pilot %d)\n";
-#define D_00A438F0 UnitPlCreateAgwsFormat
-#define D_00A43BD8 UnitNoGetFailureFormat
-#define D_00A43BF8 UnitPtrGetFailureFormat
 
 /*
  * unitCreate/unitTblSet/unitLoad are unitPlCreate's own siblings; unitCreate
@@ -201,13 +193,13 @@ static const char UnitPlCreateAgwsFormat[32] =
  * unitTblSet returns int, not void: it leaves 1 or 0 in $2 (addiu $2,$0,0x1
  * at 0x00a00e80, daddu $2,$0,$0 at 0x00a00e98).
  */
-extern ObjectTask *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
-void unitLoad(ObjectTask *unit, int mode);
+extern BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
+void unitLoad(BattleUnit *unit, int mode);
 
-ObjectTask *unitPlCreate(s16 *pl)
+BattleUnit *unitPlCreate(s16 *pl)
 {
-    ObjectTask *unit;
-    ObjectTask *pilotUnit;
+    BattleUnit *unit;
+    BattleUnit *pilotUnit;
     int pilotId;
     s16 pilotPl[2];
 
@@ -226,7 +218,7 @@ ObjectTask *unitPlCreate(s16 *pl)
             pilotUnit = unitCreate(pilotPl, 0, unitPlFunc);
             calcUPGet(unit)->linkedUnit = calcUPGet(pilotUnit);
         }
-        printf(D_00A438F0, pilotId);
+        printf(UnitPlCreateAgwsFormat, pilotId);
     }
     return unit;
 }
@@ -237,11 +229,11 @@ ObjectTask *unitPlCreate(s16 *pl)
  * appears later in the file.
  */
 
-void unitEnFunc(ObjectTask *unit);
+void unitEnFunc(ObjectTask *task);
 
-ObjectTask *unitEnCreate(s16 *pl)
+BattleUnit *unitEnCreate(s16 *pl)
 {
-    ObjectTask *unit;
+    BattleUnit *unit;
 
     unit = unitCreate(pl, 1, unitEnFunc);
     if (unit != 0) {
@@ -293,7 +285,114 @@ int unitAgwsPilotGet(int agwsId)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCreate);
+extern const char unitCmdCreateIDUAPOText[];
+typedef union {
+    float f;
+    int i;
+} UnitFW;
+
+/*
+ * Actor.flags written through a union that also carries a pointer member:
+ * the store is not assumed to leave the ObjectTask.work pointer unchanged,
+ * so the reads of unit->work that follow it reload the pointer (unitCmdDead).
+ */
+typedef union {
+    int i;
+    void *p;
+} ActorFlagsWord;
+extern Actor *ACT_create(int slot, int id);
+extern void ACT_initMotion(Actor *actor);
+extern void objStdInit(ObjectTask *task);
+extern ObjectTask *objEntry(ObjectTaskCallback callback);
+void unitActupdate(Actor *actor);
+void unitActdraw(Actor *actor);
+void unitParaInit(BattleUnit *unit, int charaId, int flag);
+
+BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func)
+{
+    BattleUnit *unit;
+    CalcUnitParam *up;
+    Actor *act;
+    int charaId;
+    int pos;
+    int ang;
+    int i;
+    double zero = 0.0;
+
+    charaId = pl[0];
+    unit = (BattleUnit *)objEntry(func);
+    if (unit == 0) {
+        return 0;
+    }
+    objStdInit((ObjectTask *)unit);
+    unitParaInit(unit, charaId, side);
+    up = calcUPGet(unit);
+    pos = pl[1];
+    ang = 270;
+    if (side != 0) {
+        ang = 90;
+    }
+    if (side != 0) {
+        pos = -pos;
+    }
+    up->posId = pos;
+    *(float *)((char *)up + 0x4C) = ((float)ang / 180.0f) * 3.1415927f;
+    if (side == 0) {
+        *(void **)((char *)up + 0x48) = 0;
+    } else {
+        *(s16 **)((char *)up + 0x48) = pl;
+        ((Actor *)*(int *)((char *)unit + 0x10))->flags |= 0x40;
+        ((Actor *)*(int *)((char *)unit + 0x10))->flags |= 0x20;
+    }
+    unitCmdClear(unit);
+    act = ACT_create(-1, unitCidGet(unit));
+    if (act == 0) {
+        return 0;
+    }
+    ACT_initMotion(act);
+    unit->actor = act;
+    act->position.x = dataPosTblGet(pl[1])->x;
+    act->position.y = dataPosTblGet(pl[1])->y;
+    act->position.z = dataPosTblGet(pl[1])->z;
+    act->rotation.z = zero;
+    act->rotation.x = zero;
+    act->rotation.y = *(float *)((char *)up + 0x4C);
+    if (pos < 0) {
+        act->position.x = -act->position.x;
+    }
+    if (charaId != 0xB0) {
+        *(unsigned char *)((char *)act + 0x90) = 9;   /* shadow_kind */
+        act->flags |= 0x20;
+        *(unsigned char *)((char *)act + 0x91) = 0x3C; /* shadowSize */
+        act->drawEnvFlags |= 0x40;
+    }
+    if (charaId == 0xAB) {
+        act->renderLevel |= 0x80;
+        act->cameraCullDistance = 10.0f;
+    }
+    act->flags |= 0x300;
+    act->renderLevel |= 0x200;
+    ((Actor *)*(int *)((char *)unit + 0x14))->flags |= 8;
+    ((UnitFW *)&act->transparency)->f = zero;
+    ((UnitFW *)&act->posSnapX)->f = 0.1f;
+    act->motionFrame = 0;
+    act->motion = 0;
+    i = 0;
+loop:
+    ((int *)((char *)act + 0x100))[i] = 0;
+    i++;
+    if (i < 5) {
+        goto loop;
+    }
+    act->update = unitActupdate;
+    act->draw = unitActdraw;
+    unit->subActor = 0;
+    for (i = 0; i < 3; i++) {
+        *(int *)((char *)unit + 0x1C + (i & 3) * 4) = 0;
+    }
+    printf(unitCmdCreateIDUAPOText, charaId, unit, act, calcUPGet(unit), unit->work);
+    return unit;
+}
 
 /*
  * Disposes the unit's actors: the optional sub-actor, the three weapon slots
@@ -302,19 +401,19 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCreate);
  * array: the subscript form makes the compiler hoist unit+12 as a loop base
  * (+16 displacement), the original keeps unit itself with +0x1C.
  */
-void unitRemoveActor(UnitRecord *unit)
+void unitRemoveActor(BattleUnit *unit)
 {
     Actor *motionActor;
     Actor *actor;
     int i;
 
-    motionActor = unit->motionActor;
+    motionActor = unit->actor;
     actor = unit->subActor;
     if (actor != 0) {
         ACT_dispose(actor);
     }
     for (i = 0; i < 3; i++) {
-        actor = *(unit->wpnActor + (i & 3));
+        actor = *(unit->weapon + (i & 3));
         if (actor != 0) {
             ACT_dispose(actor);
         }
@@ -322,15 +421,87 @@ void unitRemoveActor(UnitRecord *unit)
     ACT_dispose(motionActor);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitRemove);
+typedef struct UnitRemoveEffects {
+    struct UnitWork *units[8];
+} UnitRemoveEffects;
 
-void unitLoad(ObjectTask *unit, int mode)
+extern const char unitCmdRemoveUAPOText[];
+
+/*
+ * Removes a unit: its actors, then its scheduler object. A plain remove
+ * (mode 1) stops there. Otherwise an enemy unit releases its sound and
+ * effect slots only when no other living unit shares its character id, and
+ * a player unit releases them unconditionally.
+ */
+void unitRemove(BattleUnit *unit, int mode)
+{
+    Actor *actor;
+    short cid;
+    int flag;
+    struct UnitWork *effect;
+    UnitRemoveEffects effects;
+    BattleUnit **table;
+    BattleUnit *other;
+    int count;
+    int i;
+    int n;
+
+    actor = unit->actor;
+    printf(unitCmdRemoveUAPOText, calcUPGet(unit)->charaId, unit, actor,
+           calcUPGet(unit), unit->work);
+    unit->actor->flags |= ACTOR_FLAG_HIDDEN;
+    cid = calcUPGet(unit)->charaId;
+    flag = unit->work->flags & ACTOR_FLAG_ENEMY;
+    effect = calcUPGet(unit)->effectUnit;
+    effects = *(UnitRemoveEffects *)calcUPGet(unit)->statEffUnits;
+    if ((unit->work->flags & ACTOR_FLAG_ENEMY) ||
+        (calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN && calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
+        calcUPGet(unit)->charaId = 0;
+    }
+    unitRemoveActor(unit);
+    objRemove((ObjectTask *)unit);
+    if (mode == 1) {
+        return;
+    }
+    n = 0;
+    if (flag) {
+        count = unitTblGet(2, &table);
+        for (i = 0; i < count; i++) {
+            other = table[i];
+            if (other != 0 && !(other->work->flags & ACTOR_FLAG_DEAD)) {
+                if (calcUPGet(other)->charaId == cid) {
+                    n++;
+                }
+            }
+        }
+        if (n == 0) {
+            sefReleaseID(cid);
+            sndSeRegRemove(cid);
+            if (effect != 0) {
+                sefDeleteEffect2((SchedulerState *)effect);
+            }
+        }
+        for (i = 0; i < 8; i++) {
+            if (effects.units[i] != 0) {
+                sefDeleteEffect2((SchedulerState *)effects.units[i]);
+            }
+        }
+    } else {
+        sefReleaseID(cid);
+        sndSeRegRemove(cid);
+        if (effect != 0) {
+            sefDeleteEffectWait(cid);
+        }
+    }
+}
+
+void unitLoad(BattleUnit *unit, int mode)
 {
     CalcUnitParam *up;
 
     up = calcUPGet(unit);
-    if (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3) {
-        if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY)) {
+    if (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
+        if (!(unit->work->flags & ACTOR_FLAG_ENEMY)) {
             sefSetupPlayer(up->charaId, up->weaponId[0],
                            up->weaponId[1], up->weaponId[2]);
         } else {
@@ -365,7 +536,51 @@ void unitActdraw(Actor *actor)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitParaInit);
+/*
+ * Resets the unit's parameter record: the character id, the wait counters
+ * from calcWct, and the three weapon-slot values taken from each equipped
+ * weapon whose attachment is set. The branch-count limit is 3, and the
+ * branch counter starts at 1 for a stat-gated unit, else at the stored byte.
+ */
+void unitParaInit(BattleUnit *unit, int charaId, int flag)
+{
+    CalcUnitParam *up;
+    short *dst;
+    short *wp;
+    int wct;
+    int i;
+
+    i = 2;
+    dataUnitInitSet(unit, charaId);
+    up = calcUPGet(unit);
+    up->charaId = charaId;
+    dst = up->wpnSlotValue;
+    wp = up->weaponId;
+    wct = calcWct(unit);
+    up->dblActKind = 0;
+    up->waitCount = wct;
+    up->waitCountBase = wct;
+    up->turnBias = 0;
+    do {
+        if (*wp != 0 && dst[-3] != 0 && calcAttWpnChk(*wp) != 0) {
+            *dst = dataWpnGet(*wp)[0x10];
+        }
+        i--;
+        dst++;
+        wp++;
+    } while (i >= 0);
+    up->bpGauge = 0;
+    up->bcLimit = 3;
+    if (flag == 0) {
+        if (calcStatGet(unit, 7, 0x1000) == 0) {
+            up->bcValue = 0;
+            return;
+        }
+        up->bcValue = 1;
+    } else {
+        up->bcValue = up->unmodeled_1e[3];
+    }
+}
 
 /*
  * plTbl's stride (8 bytes per entry, three entries) and its leading short are
@@ -386,7 +601,7 @@ void unitPlInit(short *plTbl)
     } while (count >= 0);
 }
 
-extern const char D_00A43968[];
+extern const char unitCmdUnitEnInitENOverText[];
 
 void unitEnInit(s16 *pl)
 {
@@ -398,7 +613,7 @@ void unitEnInit(s16 *pl)
             break;
         }
         if (count >= 5) {
-            printf(D_00A43968);
+            printf(unitCmdUnitEnInitENOverText);
             break;
         }
         count++;
@@ -407,17 +622,37 @@ void unitEnInit(s16 *pl)
     }
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitClipSet);
-
-void unitPlFunc(ObjectTask *unit)
+/*
+ * Sets the motion actor's clipping bit 0x200 for a unit whose character is
+ * 0xB4 or whose work actor is hidden, and clears it otherwise.
+ */
+void unitClipSet(BattleUnit *unit)
 {
+    Actor *motionActor;
+
+    motionActor = unit->actor;
+    if (calcUPGet(unit)->charaId == 0xB4) {
+        motionActor->drawEnvFlags |= 0x200;
+    } else if (unit->work->flags & ACTOR_FLAG_HIDDEN) {
+        motionActor->drawEnvFlags |= 0x200;
+    } else {
+        motionActor->drawEnvFlags &= ~0x200;
+    }
+}
+
+void unitPlFunc(ObjectTask *task)
+{
+    BattleUnit *unit = (BattleUnit *)task;
+
     unitCmdExec(unit);
     statEffProc(unit);
     unitClipSet(unit);
 }
 
-void unitEnFunc(ObjectTask *unit)
+void unitEnFunc(ObjectTask *task)
 {
+    BattleUnit *unit = (BattleUnit *)task;
+
     unitCmdExec(unit);
     statEffProc(unit);
     unitClipSet(unit);
@@ -428,43 +663,43 @@ void unitEnFunc(ObjectTask *unit)
  * published exact_c; unitCmdClear forwards its own unit argument straight
  * through to it.
  */
-extern void objCmdClear(ObjectTask *unit);
+extern void objCmdClear(ObjectTask *task);
 
 /*
  * unitCmdClear also nulls out its unit's Actor.update callback (declared
  * above), alongside clearing the shared object command queue.
  */
-void unitCmdClear(ObjectTask *unit)
+void unitCmdClear(BattleUnit *unit)
 {
     Actor *actor;
 
-    objCmdClear(unit);
+    objCmdClear((ObjectTask *)unit);
     actor = unit->work;
     actor->update = 0;
 }
 
-void *unitCmdTailGet(ObjectTask *unit)
+void *unitCmdTailGet(BattleUnit *unit)
 {
-    return objCmdTailGet(unit);
+    return objCmdTailGet((ObjectTask *)unit);
 }
 
-void *unitCmdPtrGet(ObjectTask *unit)
+void *unitCmdPtrGet(BattleUnit *unit)
 {
-    return objCmdPtrGet(unit);
+    return objCmdPtrGet((ObjectTask *)unit);
 }
 
-int unitCmdNext(ObjectTask *unit)
+int unitCmdNext(BattleUnit *unit)
 {
-    return objCmdNext(unit);
+    return objCmdNext((ObjectTask *)unit);
 }
 
-void unitCmdSet(ObjectTask *unit, CmdEntry *cmd)
+void unitCmdSet(BattleUnit *unit, CmdEntry *cmd)
 {
     Actor *actor;
     CmdEntry *entry;
 
     actor = unit->work;
-    entry = objCmdPush(unit);
+    entry = objCmdPush((ObjectTask *)unit);
     actor->runFrameCounter = 0;
     actor->moveState = 0;
     *entry = *cmd;
@@ -473,7 +708,7 @@ void unitCmdSet(ObjectTask *unit, CmdEntry *cmd)
     }
 }
 
-void unitCmdExec(ObjectTask *unit)
+void unitCmdExec(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -488,7 +723,7 @@ void unitCmdExec(ObjectTask *unit)
     }
 }
 
-int unitCmdFree(ObjectTask *unit)
+int unitCmdFree(BattleUnit *unit)
 {
     Actor *actor;
 
@@ -497,9 +732,45 @@ int unitCmdFree(ObjectTask *unit)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdAtk);
+/*
+ * Queues the attack once, while the action's move state is still 0: the
+ * request takes the technique and the target from the queued entry and the
+ * work actor, runs the attack, then pays the technique's ep and bp cost, and
+ * the special-ability counter of the attacker's spec record advances.
+ */
+int unitCmdAtk(BattleUnit *unit)
+{
+    UnitActRequest request;
+    Actor *actor;
+    CmdEntry *cmd;
+    BattleUnit *target;
+    unsigned short *spec;
+    int value;
 
-extern const char D_00A43980[];
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    if (actor->moveState == 0) {
+        value = cmd->argument;
+        /* The word is read as an int: a pointer-typed read schedules the argument stores differently. */
+        target = (BattleUnit *)*(int *)&unit->work->targetUnit;
+        request.id = value;
+        request.target = target;
+        value = cmd->itmId;
+        request.mode = 1;
+        request.itmId = value;
+        unitCmdAtkSub(unit, &request);
+        calcEp(unit, -calcTakeEpGet(unit, request.id));
+        calcBp2Tid(unit, request.id);
+        spec = dataSpecDataGet(calcUPGet(unit)->charaId, request.id);
+        if (spec != 0) {
+            spec[4] = spec[4] + 1;
+        }
+        actor->moveState++;
+    }
+    return 0;
+}
+
+extern const char unitCmdJobTypeErrTidText[];
 
 /*
  * The error report is wrapped the way a debug-print macro wraps it, in a
@@ -510,7 +781,7 @@ extern const char D_00A43980[];
  */
 #define UNIT_ERROR_PRINT(args) do { printf args; } while (0)
 
-void unitCmdAtkSub(ObjectTask *unit, UnitActRequest *request)
+void unitCmdAtkSub(BattleUnit *unit, UnitActRequest *request)
 {
     TecJobView *tec;
 
@@ -522,10 +793,134 @@ void unitCmdAtkSub(ObjectTask *unit, UnitActRequest *request)
             return;
         }
     }
-    UNIT_ERROR_PRINT((D_00A43980, tec->jobType, request->id));
+    UNIT_ERROR_PRINT((unitCmdJobTypeErrTidText, tec->jobType, request->id));
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitJobTypeAtk);
+/*
+ * The hit record calcHitDmg fills for one target: hit mode and side in
+ * `result`, then the damage and the status clear/set words, as CalcHitInfo
+ * lays them out in src/ov01/calc.c.
+ */
+typedef struct UnitJtaHit {
+    int result;        /* +0x00: hit mode in the low byte, side above it */
+    int damage;        /* +0x04 */
+    int unk08;         /* +0x08: unmodeled by CalcHitInfo */
+    int setCategory;   /* +0x0C */
+    int setMask;       /* +0x10 */
+    int clearCategory; /* +0x14 */
+    int clearMask;     /* +0x18 */
+} UnitJtaHit;
+
+/* The scenario step scenarioSrcSet stores; stride is ScenarioStep.stride. */
+typedef struct UnitJtaStep {
+    BattleUnit *unit; /* +0x00 */
+    int mode;         /* +0x04: request->mode */
+    int id;           /* +0x08: request->id */
+    int itmId;        /* +0x0C: request->itmId */
+    int stride;       /* +0x10: the number of targets visited */
+} UnitJtaStep;
+
+/* One scenario destination record, appended by scenarioDstSet. */
+typedef struct UnitJtaDst {
+    BattleUnit *unit;      /* +0x00: the target being hit */
+    int kind;              /* +0x04: the animation/effect kind */
+    int damage;            /* +0x08 */
+    int hit;               /* +0x0C: the hit mode/side word */
+    int unk08;             /* +0x10 */
+    unsigned char unmodeled_14[4];
+    int setCategory;       /* +0x18 */
+    int setMask;           /* +0x1C */
+    int clearCategory;     /* +0x20 */
+    int clearMask;         /* +0x24 */
+} UnitJtaDst;
+
+extern int calcHitDmg(BattleUnit *user, UnitActRequest *cmd, UnitJtaHit *hit);
+extern int calcPlusAglGet(BattleUnit *unit, int tecId);
+extern BattleUnit *tgtFindNext(void);
+extern int scenarioSrcSet(UnitJtaStep *source);
+extern int scenarioDstSet(UnitJtaDst *entry);
+
+int unitJobTypeAtk(BattleUnit *unit, UnitActRequest *request, TecJobView *tec)
+{
+    UnitJtaStep step;
+    UnitJtaDst rec;
+    UnitJtaHit out;
+    CalcUnitParam *up;
+    int stride = 0;
+    int kind;
+    int hitKind;
+    int hitMode;
+    int hitSide;
+    int p;
+    int t;
+    BattleUnit *nextTarget;
+
+    t = tec->jobType;
+    for (;;) {
+        if (t != 7) {
+            calcHitDmg(unit, request, &out);
+            hitKind = out.result;
+            hitMode = hitKind & 0xFF;
+            hitSide = (hitKind >> 8) & 0xFF;
+            switch (hitMode) {
+            case 0:
+                kind = 0xA;
+                break;
+            case 1:
+            case 3:
+            case 7:
+            case 8:
+            case 9:
+            case 10:
+                kind = (hitSide & 2) ? 0xB : 9;
+                break;
+            case 2:
+            case 4:
+                kind = (hitSide & 8) ? 0x28 : 0x27;
+                break;
+            case 5:
+            case 6:
+                kind = 0x29;
+                break;
+            default:
+                printf("** Hit Type err JTYPE_ATK -> %d\n", hitMode);
+                return 0;
+            }
+        } else {
+            kind = 0;
+            memset(&out, 0, 0x1C);
+            hitKind = 0xB;
+            out.result = 0xB;
+        }
+        stride += 1;
+        rec.unit = request->target;
+        rec.kind = kind;
+        rec.damage = out.damage;
+        rec.hit = hitKind;
+        rec.unk08 = out.unk08;
+        rec.setCategory = out.setCategory;
+        rec.setMask = out.setMask;
+        rec.clearCategory = out.clearCategory;
+        rec.clearMask = out.clearMask;
+        scenarioDstSet(&rec);
+        *(BattleUnit **)((char *)calcUPGet((BattleUnit *)*(int *)&request->target) + 0x150) = unit;
+        *(int *)((char *)calcUPGet((BattleUnit *)*(int *)&request->target) + 0x154) = request->id;
+        nextTarget = tgtFindNext();
+        request->target = nextTarget;
+        if (nextTarget == 0) {
+            step.unit = unit;
+            step.mode = request->mode;
+            step.id = request->id;
+            step.itmId = request->itmId;
+            step.stride = stride;
+            scenarioSrcSet(&step);
+            up = calcUPGet(unit);
+            p = calcPlusAglGet(unit, request->id);
+            up->turnBias = (short)(up->turnBias + p);
+            return 0;
+        }
+    }
+}
 
 /*
  * unitCmdAtkEnd's own siblings, both defined later in this TU; forward-
@@ -533,10 +928,8 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitJobTypeAtk);
  * definitions' void return), as the existing unitMotSet declaration before
  * unitCmdEva does for that function.
  */
-extern void unitMotSet(ObjectTask *unit, int motion);
-extern void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion);
 
-void unitCmdAtkEnd(ObjectTask *unit)
+void unitCmdAtkEnd(BattleUnit *unit)
 {
     CmdEntry cmd;
 
@@ -546,7 +939,7 @@ void unitCmdAtkEnd(ObjectTask *unit)
         cmd.argument = 0x21;
         cmd.extra = 0;
         unitCmdSet(unit, &cmd);
-        unitWpnMotSet(unit, dataDefWpnGet((UnitRecord *) unit), 0, 0x32);
+        unitWpnMotSet(unit, dataDefWpnGet(unit), 0, 0x32);
         if (calcUPGet(unit)->charaId == 7) {
             unitWpnMotSet(unit, 1, 0, 0x32);
         }
@@ -556,11 +949,11 @@ void unitCmdAtkEnd(ObjectTask *unit)
     unitFaceMotSet(unit, 0x35);
 }
 
-int unitCmdDeadSet(ObjectTask *unit)
+int unitCmdDeadSet(BattleUnit *unit)
 {
     CmdEntry cmd;
 
-    if (unit == 0 || (((Actor *) unit->work)->flags & 0x80)) {
+    if (unit == 0 || (unit->work->flags & ACTOR_FLAG_DEAD)) {
         return 0;
     }
     if (*(short *) &calcUPGet(unit)->currentHp != 0) {
@@ -571,45 +964,208 @@ int unitCmdDeadSet(ObjectTask *unit)
     return 1;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdEther);
+/*
+ * The ether record's halfword at +2 carries the 0x2000 bit that marks a
+ * learnable ether; the technique id sits at +6 (dataEthGet, data_unit_org_get).
+ */
+typedef struct EtherRecord {
+    unsigned char unmodeled_00[2];
+    unsigned short flags;
+    unsigned char unmodeled_04[2];
+    short tecId;
+} EtherRecord;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdItem);
+typedef struct EtherView {
+    unsigned char unmodeled_00[0x8E];
+    short etherId[12];
+} EtherView;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdItemSub);
+extern EtherRecord *dataEthGet(int etherId);
+extern void calcEtherDisableSet(BattleUnit *unit, int bit);
 
-int unitCmdMove(UnitRecord *unit)
+/*
+ * Queues the ether command once, while the action's move state is still 0:
+ * the attack request runs in mode 2, the technique's ep cost is paid, and
+ * the ether slot equipped with the requested ether is disabled.
+ */
+int unitCmdEther(BattleUnit *unit)
+{
+    UnitActRequest request;
+    Actor *actor;
+    CmdEntry *cmd;
+    int i;
+    int value;
+    BattleUnit *target;
+    int itmId;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    if (calcStatGet(unit, 1, 0x1000) != 0) {
+        return unitCmdNext(unit);
+    }
+    if (actor->moveState == 0) {
+        target = (BattleUnit *)*(int *)&((Actor *)*(int *)&unit->work)->targetUnit;
+        value = cmd->argument;
+        request.id = value;
+        request.target = target;
+        itmId = cmd->itmId;
+        request.mode = 2;
+        request.itmId = itmId;
+        unitCmdAtkSub(unit, &request);
+        calcEp(unit, -calcTakeEpGet(unit, request.id));
+        for (i = 0; i < 12; i++) {
+            if (dataEthGet(request.itmId)->flags & 0x2000) {
+                if (((EtherView *)calcUPGet(unit))->etherId[i] == request.itmId) {
+                    calcEtherDisableSet(unit, i);
+                    break;
+                }
+            }
+        }
+        actor->moveState++;
+    }
+    return 0;
+}
+
+/*
+ * Queues the item command once, while the action's move state is still 0:
+ * the queued entry supplies the argument and item id, the work actor
+ * supplies the target unit, and the item sub-routine runs with mode 3.
+ */
+int unitCmdItem(BattleUnit *unit)
+{
+    ItemCmd buf;
+    Actor *actor;
+    CmdEntry *cmd;
+    int value;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    if (actor->moveState == 0) {
+        value = cmd->argument;
+        buf.argument = value;
+        buf.target = (int)unit->work->targetUnit;
+        value = cmd->itmId;
+        buf.itmId = value;
+        buf.mode = 3;
+        unitCmdItemSub(unit, &buf);
+        actor->moveState++;
+    }
+    return 0;
+}
+
+extern int calcHitItem(BattleUnit *unit, ItemCmd *cmd, UnitJtaHit *hit);
+extern int calcDmgItem(BattleUnit *unit, ItemCmd *cmd);
+
+void unitCmdItemSub(BattleUnit *unit, ItemCmd *buf)
+{
+    UnitJtaStep src;
+    UnitJtaDst dst;
+    UnitJtaHit out;
+    int count;
+    int hit;
+    int kind;
+    int damage;
+    int t;
+    int b2;
+    int neg;
+    ItemCmd *cb;
+    int *po;
+
+    count = 0;
+    scenarioBatInit();
+    for (;;) {
+        hit = calcHitItem(unit, buf, &out);
+        t = hit & 0xFF;
+        b2 = (hit >> 8) & 0xFF;
+        switch (t) {
+        case 1:
+        case 3:
+            kind = 9;
+            damage = calcDmgItem(unit, buf);
+            out.unk08 = 0;
+            neg = -damage;
+            damage = (damage < 0) ? neg : damage;
+            break;
+        case 2:
+        case 4:
+            damage = calcDmgItem(unit, buf);
+            kind = (b2 & 8) ? 0x28 : 0x27;
+            break;
+        case 5:
+        case 6:
+            damage = 0;
+            kind = 0x29;
+            break;
+        default:
+            printf("** Hit Type err -> %d\n", t);
+            return;
+        }
+        /*
+         * The destination words are stored through a pointer-typed view:
+         * the original's record is written word by word through void *, and
+         * that alias class is what lets the out reads below schedule ahead
+         * of the stores (the record fill is otherwise reordered differently).
+         */
+        ((void **)&dst)[1] = (void *)kind;
+        ((void **)&dst)[0] = (void *)buf->target;
+        ((void **)&dst)[2] = (void *)damage;
+        ((void **)&dst)[3] = (void *)hit;
+        po = (int *)&out;
+        ((void **)&dst)[4] = (void *)*(int *)((char *)po + 8);
+        ((void **)&dst)[6] = (void *)*(int *)((char *)po + 12);
+        ((void **)&dst)[7] = (void *)*(int *)((char *)po + 16);
+        ((void **)&dst)[8] = (void *)*(int *)((char *)po + 20);
+        ((void **)&dst)[9] = (void *)*(int *)((char *)po + 24);
+        count++;
+        scenarioDstSet(&dst);
+        *(BattleUnit **)((char *)calcUPGet((BattleUnit *)*(int *)&buf->target) + 0x150) = unit;
+        buf->target = (int)tgtFindNext();
+        if (buf->target != 0) {
+            continue;
+        }
+        break;
+    }
+    src.unit = unit;
+    src.mode = buf->mode;
+    src.id = buf->argument;
+    src.itmId = buf->itmId;
+    src.stride = count;
+    scenarioSrcSet(&src);
+}
+
+int unitCmdMove(BattleUnit *unit)
 {
     Actor *actor;
     CalcUnitParam *calcParam;
     int useWarp;
 
-    actor = unit->task.work;
-    unitCmdPtrGet(&unit->task);
-    if (!(*(u32 *)unit->task.work & ACTOR_FLAG_ENEMY)) {
-        calcParam = calcUPGet(&unit->task);
-        useWarp = calcParam->flags & CALC_UNIT_FLAG_AGWS;
+    actor = unit->work;
+    unitCmdPtrGet(unit);
+    if (!(*(u32 *)unit->work & ACTOR_FLAG_ENEMY)) {
+        calcParam = calcUPGet(unit);
+        useWarp = calcParam->flags & CALC_UNIT_FLAG_IS_AGWS;
     } else {
-        calcParam = calcUPGet(&unit->task);
+        calcParam = calcUPGet(unit);
         useWarp = calcParam->moveKindId == 4;
     }
     switch (actor->moveState) {
     case 0:
-        unitCmdDstSet(&unit->task, 3, 1);
+        unitCmdDstSet(unit, 3, 1);
         if (!useWarp) {
             unitCmdDirSet(unit);
         }
-        calcUPGet(&unit->task);
-        unitCmdVASet(&unit->task, 3, 0);
+        calcUPGet(unit);
+        unitCmdVASet(unit, 3, 0);
         actor->movePhase = 0;
         actor->moveState++;
         break;
     case 1:
         if (!useWarp) {
-            if (unitCmdJump(&unit->task, 3, 1, 1) != 0) {
-                unitCmdMoveNext(&unit->task, 1);
+            if (unitCmdJump(unit, 3, 1, 1) != 0) {
+                unitCmdMoveNext(unit, 1);
             }
-        } else if (unitCmdWarp(&unit->task, 3, 1) != 0) {
-            unitCmdMoveNext(&unit->task, 1);
+        } else if (unitCmdWarp(unit, 3, 1) != 0) {
+            unitCmdMoveNext(unit, 1);
         }
         break;
     }
@@ -620,7 +1176,7 @@ int unitCmdMove(UnitRecord *unit)
  * Guard: plays motion 0x1B and marks the unit as guarding
  * (ACTOR_FLAG_GUARD), then stands the unit once the motion ends.
  */
-int unitCmdGuard(ObjectTask *unit)
+int unitCmdGuard(BattleUnit *unit)
 {
     Actor *actor;
 
@@ -630,9 +1186,9 @@ int unitCmdGuard(ObjectTask *unit)
         unitMotSet(unit, 0x1B);
         /* The work slot is loaded again after the call (lw $2,0x10($16) at
          * 0x00a0275c), not read through the cached `actor`. */
-        ((Actor *)unit->work)->flags |= ACTOR_FLAG_GUARD;
+        unit->work->flags |= ACTOR_FLAG_GUARD;
         actor->moveState++;
-    } else if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
+    } else if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
         unitMotStandSet(unit);
         return unitCmdNext(unit);
     }
@@ -645,7 +1201,7 @@ int unitCmdGuard(ObjectTask *unit)
  * set, lw $2,0x50/lh $17,0x38($2) at 0x00a0280c, else baseCharaId,
  * lh $17,0x54($3) at 0x00a02818) and then command 0x2D from the same entry.
  */
-int unitCmdAgws(ObjectTask *unit)
+int unitCmdAgws(BattleUnit *unit)
 {
     CmdEntry entry;
     CmdEntry *cmd;
@@ -656,7 +1212,7 @@ int unitCmdAgws(ObjectTask *unit)
 
     cmd = unitCmdPtrGet(unit);
     param = calcUPGet(unit);
-    if (param->flags & CALC_UNIT_FLAG_AGWS) {
+    if (param->flags & CALC_UNIT_FLAG_IS_AGWS) {
         charaId = param->linkedUnit->charaId;
     } else {
         charaId = param->baseCharaId;
@@ -668,7 +1224,7 @@ int unitCmdAgws(ObjectTask *unit)
     unitCmdSet(unit, &entry);
     entry.selector = 0x2D;
     unitCmdSet(unit, &entry);
-    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
+    if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
         effectId = 0x67;
         soundId = 0x20;
     } else {
@@ -683,9 +1239,119 @@ int unitCmdAgws(ObjectTask *unit)
     return unitCmdNext(unit);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdUnitChange);
+/* Defined in src/ov01/data_unit_org_get.c (still asm there). */
+extern void dataFileInfoInitChg(BattleUnit *unit, s16 charaId);
 
-int unitCmdStand(ObjectTask *unit)
+int unitCmdUnitChange(BattleUnit *unit)
+{
+    Actor *actor;
+    CmdEntry *cmd;
+    CmdEntry sp;
+    u16 hdr[4];
+    CmdEntry list[5];
+    int n;
+    int wflags;
+    void *spA0;
+    BattleUnit *savedTarget;
+    int hiddenFlag;
+    CalcUnitParam *up;
+    BattleUnit *nu;
+    CalcUnitParam *np;
+    int removeMode;
+    int k;
+    int cdSync;
+    signed char savedBcValue;
+    signed char savedBpGauge;
+    s16 cid;
+    s16 ep;
+    CmdEntry *lp;
+    int playerSide;
+    u16 h0;
+    u16 h1;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    switch (actor->moveState) {
+    case 0:
+        actor->moveState = 1;
+        return 0;
+    case 1:
+        if (unitTelOut(unit) != 0) {
+            actor->moveState++;
+        }
+        return 0;
+    case 2:
+        up = calcUPGet(unit);
+        n = 0;
+        wflags = unit->work->flags;
+        h0 = ((u16 *)cmd)[4];
+        lp = list - 1;
+        spA0 = *(void **)((char *)up + 0x48);
+        h1 = ((u16 *)cmd)[2];
+        hiddenFlag = wflags & 8;
+        playerSide = ((wflags >> 6) ^ 1) & 1;
+        hdr[0] = h0;
+        hdr[1] = h1;
+        hdr[2] = 0;
+        hdr[3] = 0;
+        while (unitCmdNext(unit) != 0) {
+            lp++;
+            *lp = *(CmdEntry *)unitCmdPtrGet(unit);
+            n++;
+        }
+        cid = up->charaId;
+        ep = up->currentEp;
+        savedTarget = unit->work->targetUnit;
+        savedBcValue = up->bcValue;
+        savedBpGauge = up->bpGauge;
+        dataFileInfoInitChg(unit, cid);
+        if ((s16)hdr[0] == 6 && (calcStatGet(unit, 7, 2) != 0 || calcStatGet(unit, 7, 1) != 0)) {
+            removeMode = 1;
+        } else {
+            removeMode = 0;
+        }
+        unitRemove(unit, removeMode);
+        if (playerSide) {
+            nu = unitCreate((s16 *)hdr, 0, unitPlFunc);
+        } else {
+            nu = unitCreate((s16 *)hdr, 1, unitEnFunc);
+        }
+        cdSync = dataCdSync();
+        unitLoad(nu, cid);
+        unitTblChg(unit, nu);
+        if (calcUPGet(nu)->flags & CALC_UNIT_FLAG_IS_AGWS) {
+            calcUPGet(nu)->linkedUnit = up;
+            calcUPGet(nu)->currentEp = ep;
+            calcUPGet(nu)->bcValue = savedBcValue;
+            calcUPGet(nu)->bpGauge = savedBpGauge;
+        } else if (!(nu->work->flags & ACTOR_FLAG_ENEMY) && !(calcUPGet(nu)->flags & CALC_UNIT_FLAG_IS_AGWS)
+                   && !(calcUPGet(nu)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN && calcUPGet(nu)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
+            calcUPGet(nu)->linkedUnit = up;
+            calcUPGet(nu)->currentEp = ep;
+            calcUPGet(nu)->bcValue = savedBcValue;
+            calcUPGet(nu)->bpGauge = savedBpGauge;
+        } else if (calcUPGet(nu)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN && calcUPGet(nu)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
+            calcUPGet(nu)->linkedUnit = up;
+            calcUPGet(nu)->bcValue = savedBcValue;
+            calcUPGet(nu)->bpGauge = savedBpGauge;
+        }
+        nu->work->flags |= hiddenFlag;
+        np = calcUPGet(nu);
+        sp.selector = 0x2A;
+        *(void **)((char *)np + 0x48) = spA0;
+        sp.argument = cdSync;
+        unitCmdSet(nu, &sp);
+        for (k = 0; k < n; k++) {
+            sp = list[k];
+            unitCmdSet(nu, &sp);
+        }
+        nu->work->targetUnit = savedTarget;
+        return 1;
+    }
+    return 0;
+}
+
+int unitCmdStand(BattleUnit *unit)
 {
     Actor *actor;
 
@@ -698,7 +1364,7 @@ int unitCmdStand(ObjectTask *unit)
     return unitCmdNext(unit);
 }
 
-int unitCmdEnd(ObjectTask *unit)
+int unitCmdEnd(BattleUnit *unit)
 {
     return unitCmdStand(unit);
 }
@@ -709,7 +1375,7 @@ int unitCmdEnd(ObjectTask *unit)
  * (CalcUnitParam.posId < 4, lh $3,0x44($2) at 0x00a02df8) knocks the unit
  * three positions back and snaps its motion actor onto the new position.
  */
-int unitCmdDmg(ObjectTask *unit)
+int unitCmdDmg(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -743,12 +1409,12 @@ int unitCmdDmg(ObjectTask *unit)
         unitFaceMotSet(unit, face);
         sndSeTransPlay(unit, 2, kind + 1);
         actor->moveState++;
-    } else if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
+    } else if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
         if (kind == 2 && calcUPGet(unit)->posId < 4) {
             param = calcUPGet(unit);
             param->posId += 3;
             pos = dataPosTblGet(param->posId);
-            motionActor = ((UnitRecord *)unit)->motionActor;
+            motionActor = unit->actor;
             motionActor->position.x = pos->x;
             motionActor->position.y = pos->y;
             motionActor->position.z = pos->z;
@@ -769,9 +1435,8 @@ int unitCmdDmg(ObjectTask *unit)
  * call unitCmdEva makes before its own definition appears later in the
  * file.
  */
-extern void unitMotSet(ObjectTask *unit, int motion);
 
-int unitCmdEva(ObjectTask *unit)
+int unitCmdEva(BattleUnit *unit)
 {
     Actor *actor;
     Actor *motionActor;
@@ -781,8 +1446,8 @@ int unitCmdEva(ObjectTask *unit)
         unitMotSet(unit, 0x1A);
         actor->moveState++;
     } else {
-        motionActor = ((UnitRecord *) unit)->motionActor;
-        if (motionActor->moveFlags & 0x1000) {
+        motionActor = unit->actor;
+        if (motionActor->moveFlags & MOVE_FLAG_REACHED) {
             unitMotStandSet(unit);
             return unitCmdNext(unit);
         }
@@ -795,7 +1460,7 @@ int unitCmdEva(ObjectTask *unit)
  * unit is guarding (Actor.flags 0x800, andi at 0x00a02fac), and stands the
  * unit when the last motion ends.
  */
-int unitCmdDef(ObjectTask *unit)
+int unitCmdDef(BattleUnit *unit)
 {
     Actor *actor;
 
@@ -806,7 +1471,7 @@ int unitCmdDef(ObjectTask *unit)
         actor->moveState++;
         break;
     case 1:
-        if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
             if (!(actor->flags & ACTOR_FLAG_GUARD)) {
                 unitMotSet(unit, 0x1C);
             }
@@ -814,7 +1479,7 @@ int unitCmdDef(ObjectTask *unit)
         }
         break;
     default:
-        if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
             unitMotStandSet(unit);
             return unitCmdNext(unit);
         }
@@ -823,9 +1488,95 @@ int unitCmdDef(ObjectTask *unit)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdDead);
+extern void calcTurnEnd(BattleUnit *unit);
+extern int unitDeadSpecChk(BattleUnit *unit);
 
-int unitDeadSpecChk(ObjectTask *unit)
+int unitCmdDead(BattleUnit *unit)
+{
+    Actor *actor;
+    int i;
+    int statKeep2;
+    int statKeep3;
+    int statKeep7;
+
+    actor = unit->work;
+    switch (actor->moveState) {
+    case 0:
+        if (actor->flags & ACTOR_FLAG_ENEMY) {
+            ((ActorFlagsWord *)actor)->i = actor->flags | ACTOR_FLAG_DEAD;
+        }
+        if (unit->work->flags & ACTOR_FLAG_GUARD) {
+            unitMotSet(unit, 0x1C);
+            actor->moveState++;
+        } else {
+            actor->moveState = 2;
+        }
+        break;
+    case 1:
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            actor->moveState++;
+        }
+        break;
+    case 2:
+        unitMotSet(unit, 6);
+        calcTurnEnd(unit);
+        if (unit->work->flags & ACTOR_FLAG_ENEMY) {
+            int se;
+
+            if (calcUPGet(unit)->flags & 0x1000) {
+                se = 0x23;
+            } else {
+                se = (calcUPGet(unit)->flags & 0x2000) ? 0x22 : 0x21;
+            }
+            sndSysSePlay(se);
+        }
+        sndSeTransPlay(unit, 2, 4);
+        actor->moveState++;
+        break;
+    case 3:
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            actor->movePhaseTimer = 0;
+            actor->moveState++;
+        }
+        break;
+    case 4:
+        statKeep2 = calcUPGet(unit)->statActiveMask[2] & 0x4000;
+        statKeep3 = calcUPGet(unit)->statActiveMask[3] & 0x800;
+        statKeep7 = calcUPGet(unit)->statActiveMask[7] & 7;
+        for (i = 0; i < 8; i++) {
+            calcUPGet(unit)->statActiveMask[i] = 0;
+        }
+        calcUPGet(unit)->statActiveMask[2] |= statKeep2;
+        calcUPGet(unit)->statActiveMask[3] |= statKeep3;
+        calcUPGet(unit)->statActiveMask[7] |= statKeep7;
+        if (unit->work->flags & ACTOR_FLAG_ENEMY) {
+            if (unitDeadSpecChk(unit) != 0) {
+                if (unitTelOut(unit) != 0) {
+                    actor->moveState++;
+                }
+            } else {
+                actor->moveState++;
+            }
+        } else {
+            actor->moveState++;
+        }
+        break;
+    case 5:
+        ((ActorFlagsWord *)actor)->i = (actor->flags & 0x61) | 0x80;
+        if (unit->work->flags & ACTOR_FLAG_ENEMY) {
+            unitTblRemove(unit);
+            if (unitDeadSpecChk(unit) != 0) {
+                unitRemove(unit, 0);
+            }
+        } else {
+            actor->moveState++;
+        }
+        break;
+    }
+    return 0;
+}
+
+int unitDeadSpecChk(BattleUnit *unit)
 {
     short charaId;
 
@@ -850,7 +1601,7 @@ int unitDeadSpecChk(ObjectTask *unit)
  * (extra == 0: the motion actor's moveFlags bit 0x1000) or for extra frames
  * of Actor.runFrameCounter (bne $3,$2 at 0x00a033b0).
  */
-int unitCmdMot(ObjectTask *unit)
+int unitCmdMot(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -860,23 +1611,23 @@ int unitCmdMot(ObjectTask *unit)
     if (actor->moveState == 0) {
         unitMotSet(unit, cmd->argument);
         actor->moveState++;
-    } else if (cmd->extra == 0 ? (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) != 0
+    } else if (cmd->extra == 0 ? (unit->actor->moveFlags & MOVE_FLAG_REACHED) != 0
                                : cmd->extra == actor->runFrameCounter) {
         unitMotStandSet(unit);
         return unitCmdNext(unit);
     }
-    unitMtdProc((UnitRecord *)unit);
+    unitMtdProc(unit);
     return 0;
 }
 
-extern const char D_00A43AB8[];
+extern const char unitCmdTgtSetErrText[];
 
-int unitCmdTgtSet(ObjectTask *unit)
+int unitCmdTgtSet(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
     TgtCmd tgtCmd;
-    ObjectTask *target;
+    BattleUnit *target;
 
     actor = unit->work;
     cmd = unitCmdPtrGet(unit);
@@ -884,7 +1635,7 @@ int unitCmdTgtSet(ObjectTask *unit)
         return 0;
     }
     tgtCmd.tecId = cmd->argument;
-    tgtCmd.target = (ObjectTask *) cmd->extra;
+    tgtCmd.target = (BattleUnit *) cmd->extra;
     tgtCmd.itmId = cmd->itmId;
     tgtCmd.mode = cmd->mode;
     target = tgtFindFirst(unit, &tgtCmd);
@@ -892,22 +1643,295 @@ int unitCmdTgtSet(ObjectTask *unit)
         /* The work slot is loaded again here, not read through the cached
          * `actor`: reusing the local trades two callee-saved registers and
          * the OV01.OVL gate no longer matches (tried, unitCmdTgtSet). */
-        ((Actor *) unit->work)->targetUnit = target;
+        unit->work->targetUnit = target;
         return unitCmdNext(unit);
     }
-    printf(D_00A43AB8);
+    printf(unitCmdTgtSetErrText);
     cmdListCansel(unit);
     unitCmdClear(unit);
     return unitCmdNext(unit);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdTurn);
+void unitCmdTurn(BattleUnit *unit)
+{
+    Actor *actor;
+    Actor *w;
+    int *cmd;
+    Vector4 *tgt;
+    struct { BattleUnit **p; } tb;
+    BattleUnit *u;
+    Actor *m;
+    int count;
+    int i;
+    int n;
+    int idx;
+    float f;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdTurnSub);
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    w = unit->work;
+    tgt = (Vector4 *)&w->motionFrame;
+    if (actor->moveState == 0) {
+        if (cmd[0] == 15) {
+            if (unit == w->targetUnit) {
+                unitCmdNext(unit);
+                return;
+            }
+            m = w->targetUnit->actor;
+            idx = 0;
+            tgt->x = m->position.x;
+            tgt->z = m->position.z;
+        } else if (cmd[0] == 16) {
+            idx = cmd[1];
+            tgt->x = dataPosTblGet(idx)->x;
+            tgt->z = dataPosTblGet(idx)->z;
+        } else {
+            n = 0;
+            idx = 0;
+            tgt->x = tgt->z = 0.0f;
+            count = unitTblGet((((int)w->flags >> 6) ^ 1) & 1, &tb.p);
+            for (i = 0; i < count; i++) {
+                u = tb.p[i];
+                if (u != 0) {
+                    n++;
+                    tgt->x += u->actor->position.x;
+                    tgt->z += u->actor->position.z;
+                }
+            }
+            if (n > 0) {
+                f = n;
+                tgt->x = tgt->x / f;
+                tgt->z = tgt->z / f;
+            }
+        }
+        if (idx < 0) {
+            tgt->x = -tgt->x;
+        }
+        actor->movePhaseTimer = 0;
+        actor->moveState++;
+    }
+    if (unitCmdTurnSub(unit, 0) != 0) {
+        unitCmdNext(unit);
+    }
+}
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdTurnSubInit);
+extern void unitSetInterp(BattleUnit *unit);
+extern void unitSetInterpTime(BattleUnit *unit, float time);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveCha);
+int unitCmdTurnSub(BattleUnit *unit, int mode)
+{
+    Actor *actor;
+    Actor *m;
+    CalcUnitParam *param;
+    Vector4 *dst;
+    Vector4 *tgt;
+    float rate;
+    float d;
+    float nd;
+    int done;
+
+    done = 0;
+    rate = 0.0f;
+    actor = unit->work;
+    m = unit->actor;
+    param = calcUPGet(unit);
+    tgt = (Vector4 *)&unit->work->motionFrame;
+    dst = (Vector4 *)((char *)unit->work + 0xB0);
+    if (actor->movePhaseTimer == 0) {
+        if (tgt->x == m->position.x && tgt->z == m->position.z) {
+            dst->y = *(float *)((char *)param + 0x4C);
+        } else {
+            dst->y = atan2f(tgt->x - m->position.x, tgt->z - m->position.z);
+        }
+        if (dst->y < 0.0f) {
+            dst->y += 6.2831855f;
+        }
+        tgt->y = dst->y - m->rotation.y;
+        if (tgt->y == 0.0f) {
+            return 1;
+        }
+        if (mode == 0) {
+            if (calcUPGet(unit)->sizeClass >= 2 &&
+                (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
+                rate = 16.0f;
+            } else {
+                rate = 5.0f;
+            }
+        } else {
+            if (calcUPGet(unit)->sizeClass >= 2 &&
+                (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
+                rate = 10.0f;
+            } else {
+                rate = 5.0f;
+            }
+        }
+        if (tgt->y < 0.0f) {
+            nd = -tgt->y;
+            if (nd > 3.1415927f) {
+                goto wrap;
+            }
+        } else if (tgt->y > 3.1415927f) {
+        wrap:
+            if (tgt->y < 0.0f) {
+                tgt->y = tgt->y + 6.2831855f;
+                dst->y = dst->y + 6.2831855f;
+            } else {
+                tgt->y = tgt->y - 6.2831855f;
+                dst->y = dst->y + 6.2831854820251465;
+            }
+        }
+        tgt->y = tgt->y / rate;
+        if (mode == 0) {
+            if (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
+                unitSetInterp(unit);
+                unitSetInterpTime(unit, rate * 0.033333335f);
+            }
+            d = m->rotation.y - dst->y;
+            if (d < 0.0f) {
+                d = -d;
+                if (d > 0.000001f) {
+                    goto mot;
+                }
+            } else if (d > 0.000001f) {
+            mot:
+                if (calcUPGet(unit)->sizeClass >= 2) {
+                    unitMotSet(unit, 0x17);
+                }
+            }
+        }
+        actor->movePhaseTimer++;
+    } else {
+        if (m->rotation.y != dst->y) {
+            d = m->rotation.y + tgt->y;
+            m->rotation.y = d;
+            if ((tgt->y > 0.0f && dst->y < m->rotation.y) ||
+                (tgt->y < 0.0f && m->rotation.y < dst->y)) {
+                goto snap;
+            }
+            d = m->rotation.y - dst->y;
+            if (d < 0.0f) {
+                d = -d;
+                if (d <= 0.000001f) {
+                    goto snap;
+                }
+            } else if (d <= 0.000001f) {
+            snap:
+                m->rotation.y = dst->y;
+                goto set;
+            }
+        } else {
+        set:
+            done = 1;
+        }
+        if (mode == 0 && done) {
+            unitSetInterpTime(unit, 0.26666668f);
+        }
+    }
+    return done;
+}
+
+/* A vector copied as two doublewords, whose alias set holds int: the store may
+ * overwrite the record's work word, which is read again after it. */
+typedef union UnitTurnVector {
+    int word[4];
+    u64 pair[2];
+} UnitTurnVector;
+
+/* The record's work word, read as a word each time. */
+#define TURN_WORK(unit) ((Actor *)((int *)(unit))[4])
+
+/*
+ * Starts a turn toward cmdTarget; mode 1 turns away: the target is mirrored
+ * through the unit's own position.
+ */
+void unitCmdTurnSubInit(BattleUnit *unit, int mode)
+{
+    Actor *motion = unit->actor;
+    float dx;
+    float dz;
+
+    TURN_WORK(unit)->movePhaseTimer = 0;
+    *(UnitTurnVector *)&TURN_WORK(unit)->motionFrame = *(UnitTurnVector *)&TURN_WORK(unit)->cmdTarget;
+    if (mode == 1) {
+        Actor *work = TURN_WORK(unit);
+
+        dx = ((Vector4 *)&work->motionFrame)->x - motion->position.x;
+        dz = ((Vector4 *)&work->motionFrame)->z - motion->position.z;
+        ((Vector4 *)&work->motionFrame)->x = motion->position.x - dx;
+        ((Vector4 *)&work->motionFrame)->z = motion->position.z - dz;
+    }
+}
+
+extern float unitCmdLenGet(BattleUnit *unit);
+
+/* Prints the unit's move kind when it has no handler (format string in .rodata). */
+extern const char unitCmdMoveChaErrText[];
+
+int unitCmdMoveCha(BattleUnit *unit)
+{
+    Actor *actor;
+    CmdEntry *cmd;
+    float len;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    unitCmdDstSet(unit, 3, 0);
+    len = unitCmdLenGet(unit);
+    actor->movePhase = 0;
+    switch (calcUPGet(unit)->moveKindId) {
+    case 0:
+        if (len <= 255.0f) {
+            unitCmdVASet(unit, 3, 0);
+            cmd->selector = 0x17;
+            unitCmdMoveChaJump(unit);
+        } else {
+            cmd->selector = 0x13;
+            unitCmdMoveChaNorm(unit);
+        }
+        break;
+    case 1:
+        unitCmdVASet(unit, 3, 0);
+        cmd->selector = 0x17;
+        unitCmdMoveChaJump(unit);
+        break;
+    case 3:
+        cmd->selector = 0x19;
+        unitCmdMoveChaHover(unit);
+        break;
+    case 4:
+        cmd->selector = 0x1B;
+        unitCmdMoveChaWarp(unit);
+        break;
+    case 5:
+        cmd->selector = 0x1D;
+        unitCmdMoveChaJump2(unit);
+        break;
+    case 2:
+    case 6:
+        unitCmdVASet(unit, 1, 0);
+        cmd->selector = 0x15;
+        unitCmdMoveChaRun(unit);
+        break;
+    case 7:
+        unitCmdVASet(unit, 9, 0);
+        cmd->selector = 0x1F;
+        unitCmdMoveChaHover2(unit);
+        break;
+    case 8:
+        cmd->selector = 0x21;
+        unitCmdMoveChaFloat(unit);
+        break;
+    case 9:
+        unitCmdVASet(unit, 9, 0);
+        cmd->selector = 0x23;
+        unitCmdMoveChaHover3(unit);
+        break;
+    default:
+        printf(unitCmdMoveChaErrText, calcUPGet(unit)->moveKindId);
+        break;
+    }
+    return 0;
+}
 
 /*
  * calcUPGet(unit)+0x44 (ov01/tu004 calc.c's own unmodeled span) is the same
@@ -922,12 +1946,12 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMoveCha);
 #define CMD_ENTRY_X_OR_IDX_OFF 0x4
 #define CALC_UNIT_PARAM_DEFAULT_YAW_OFF 0x4C
 
-int unitCmdMoveNext(ObjectTask *unit, int mode)
+int unitCmdMoveNext(BattleUnit *unit, int mode)
 {
     Actor *actor;
     void *cmdEntry;
 
-    actor = ((UnitRecord *) unit)->motionActor;
+    actor = unit->actor;
     cmdEntry = unitCmdPtrGet(unit);
     actor->rotation.y = *(float *)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_DEFAULT_YAW_OFF);
     if (mode == 1) {
@@ -935,7 +1959,7 @@ int unitCmdMoveNext(ObjectTask *unit, int mode)
             *(u16 *)((char *)cmdEntry + CMD_ENTRY_X_OR_IDX_OFF);
     } else {
         unitCmdDstSet(unit, 0, 0);
-        unitCmdDirSet((UnitRecord *) unit);
+        unitCmdDirSet(unit);
     }
     if (mode == 1) {
         unitMotStandSet(unit);
@@ -950,8 +1974,7 @@ int unitCmdMoveNext(ObjectTask *unit, int mode)
  * unitCmdDivSet's distance (mov.s $f12,$f0 at 0x00a03eb0,
  * 0x00a044f4 and 0x00a0416c).
  */
-extern float unitCmdLenGet(ObjectTask *unit);
-extern void unitCmdDivSet(UnitRecord *unit, float distance, float step);
+extern void unitCmdDivSet(BattleUnit *unit, float distance, float step);
 
 /*
  * A run up to the target unit followed by a jump onto it: step 0 hands
@@ -960,7 +1983,7 @@ extern void unitCmdDivSet(UnitRecord *unit, float distance, float step);
  * 0x00a03ebc), step 1 waits for the run, step 2 starts the jump and the last
  * step waits for it to land.
  */
-int unitCmdMoveChaNorm(ObjectTask *unit)
+int unitCmdMoveChaNorm(BattleUnit *unit)
 {
     Actor *actor;
     float length;
@@ -969,7 +1992,7 @@ int unitCmdMoveChaNorm(ObjectTask *unit)
     switch (actor->moveState) {
     case 0:
         length = unitCmdLenGet(unit);
-        unitCmdDivSet((UnitRecord *)unit, length, length - 255.0f);
+        unitCmdDivSet(unit, length, length - 255.0f);
         unitCmdVASet(unit, 1, 0);
         unitCmdRun(unit, 1, 2);
         actor->moveState++;
@@ -995,7 +2018,7 @@ int unitCmdMoveChaNorm(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaRun(ObjectTask *unit)
+int unitCmdMoveChaRun(BattleUnit *unit)
 {
     if (unitCmdRun(unit, 1, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1003,7 +2026,7 @@ int unitCmdMoveChaRun(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaJump(ObjectTask *unit)
+int unitCmdMoveChaJump(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 3, 0, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1011,7 +2034,7 @@ int unitCmdMoveChaJump(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaHover(ObjectTask *unit)
+int unitCmdMoveChaHover(BattleUnit *unit)
 {
     if (unitCmdHover(unit, 5, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1019,7 +2042,7 @@ int unitCmdMoveChaHover(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaWarp(ObjectTask *unit)
+int unitCmdMoveChaWarp(BattleUnit *unit)
 {
     if (unitCmdWarp(unit, 7, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1042,7 +2065,7 @@ int unitCmdMoveChaWarp(ObjectTask *unit)
  * cvt.s.w $f13,$f13; div.s $f13,$f0,$f13 at 0x00a040f0..0x00a0410c), while a
  * float literal is loaded ready-made with lui/mtc1.
  */
-int unitCmdMoveChaJump2(ObjectTask *unit)
+int unitCmdMoveChaJump2(BattleUnit *unit)
 {
     Actor *actor;
     float *hopLength;
@@ -1052,11 +2075,11 @@ int unitCmdMoveChaJump2(ObjectTask *unit)
     hops = 3;
     actor = unit->work;
     unitCmdPtrGet(unit);
-    hopLength = &((Actor *)unit->work)->hopLength;
+    hopLength = &unit->work->hopLength;
     if (actor->moveState == 0) {
         length = unitCmdLenGet(unit);
         *hopLength = length / hops;
-        unitCmdDivSet((UnitRecord *)unit, length, *hopLength);
+        unitCmdDivSet(unit, length, *hopLength);
         unitCmdVASet(unit, 3, 0);
         actor->moveState++;
     } else if (actor->moveState > hops) {
@@ -1065,7 +2088,7 @@ int unitCmdMoveChaJump2(ObjectTask *unit)
         actor->movePhase = 0;
         unitCmdDstSet(unit, 3, 0);
         length = unitCmdLenGet(unit);
-        unitCmdDivSet((UnitRecord *)unit, length,
+        unitCmdDivSet(unit, length,
                       actor->moveState == hops ? length : *hopLength);
         unitCmdVASet(unit, 3, 0);
         actor->moveState++;
@@ -1073,7 +2096,7 @@ int unitCmdMoveChaJump2(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaHover2(ObjectTask *unit)
+int unitCmdMoveChaHover2(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 9, 0, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1081,7 +2104,7 @@ int unitCmdMoveChaHover2(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaFloat(ObjectTask *unit)
+int unitCmdMoveChaFloat(BattleUnit *unit)
 {
     if (unitCmdFloat(unit, 0xB, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1089,7 +2112,7 @@ int unitCmdMoveChaFloat(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMoveChaHover3(ObjectTask *unit)
+int unitCmdMoveChaHover3(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 0xD, 0, 0) != 0) {
         unitCmdMoveNext(unit, 0);
@@ -1097,7 +2120,80 @@ int unitCmdMoveChaHover3(ObjectTask *unit)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePos);
+extern void unitCmdDstSet(BattleUnit *unit, int cmdId, int mode);
+extern int unitCmdMovePosNorm(BattleUnit *unit);
+extern int unitCmdMovePosRun(BattleUnit *unit);
+extern int unitCmdMovePosJump(BattleUnit *unit);
+extern int unitCmdMovePosHover(BattleUnit *unit);
+extern int unitCmdMovePosWarp(BattleUnit *unit);
+extern int unitCmdMovePosHover2(BattleUnit *unit);
+extern int unitCmdMovePosFloat(BattleUnit *unit);
+extern int unitCmdMovePosHover3(BattleUnit *unit);
+
+int unitCmdMovePos(BattleUnit *unit)
+{
+    Actor *actor;
+    int *cmd;
+    float len;
+
+    actor = unit->work;
+    cmd = unitCmdPtrGet(unit);
+    unitCmdDstSet(unit, 4, 1);
+    len = unitCmdLenGet(unit);
+    actor->movePhase = 0;
+    switch (calcUPGet(unit)->moveKindId) {
+    case 0:
+        if (!(len <= 255.0f)) {
+            *cmd = 0x14;
+            unitCmdMovePosNorm(unit);
+        } else {
+            goto block_10;
+        }
+        break;
+    case 2:
+        unitCmdVASet(unit, 2, 0);
+        *cmd = 0x16;
+        unitCmdMovePosRun(unit);
+        break;
+    case 3:
+        *cmd = 0x1A;
+        unitCmdMovePosHover(unit);
+        break;
+    case 4:
+        *cmd = 0x1C;
+        unitCmdMovePosWarp(unit);
+        break;
+    case 5:
+        *cmd = 0x1E;
+        unitCmdMovePosJump(unit);
+        break;
+    case 1:
+    case 6:
+    block_10:
+        unitCmdVASet(unit, 4, 0);
+        *cmd = 0x18;
+        unitCmdMovePosJump(unit);
+        break;
+    case 7:
+        unitCmdVASet(unit, 0xA, 0);
+        *cmd = 0x20;
+        unitCmdMovePosHover2(unit);
+        break;
+    case 8:
+        *cmd = 0x22;
+        unitCmdMovePosFloat(unit);
+        break;
+    case 9:
+        unitCmdVASet(unit, 0xA, 0);
+        *cmd = 0x24;
+        unitCmdMovePosHover3(unit);
+        break;
+    default:
+        printf("** unitCmdMovePos: err -> %d\n", calcUPGet(unit)->moveKindId);
+        break;
+    }
+    return 0;
+}
 
 /*
  * Step 0 passes unitCmdDivSet the distance unitCmdLenGet returned (mov.s
@@ -1107,7 +2203,7 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdMovePos);
  * (lw $2,0x4($4); sw $2,0x80($17) at 0x00a044b4/0x00a044e0) and written back
  * before the run's unitCmdDstSet reads it (sw $2,0x4($4) at 0x00a04568).
  */
-int unitCmdMovePosNorm(ObjectTask *unit)
+int unitCmdMovePosNorm(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -1116,8 +2212,8 @@ int unitCmdMovePosNorm(ObjectTask *unit)
     cmd = unitCmdPtrGet(unit);
     switch (actor->moveState) {
     case 0:
-        actor->targetUnit = (ObjectTask *)cmd->argument;
-        unitCmdDivSet((UnitRecord *)unit, unitCmdLenGet(unit), 255.0f);
+        actor->targetUnit = (BattleUnit *)cmd->argument;
+        unitCmdDivSet(unit, unitCmdLenGet(unit), 255.0f);
         unitCmdVASet(unit, 4, 0);
         unitCmdJump(unit, 4, 2, 0);
         actor->moveState++;
@@ -1132,7 +2228,7 @@ int unitCmdMovePosNorm(ObjectTask *unit)
         cmd->argument = (int)actor->targetUnit;
         unitCmdDstSet(unit, 2, 1);
         unitCmdVASet(unit, 2, 0);
-        unitCmdDirSet((UnitRecord *)unit);
+        unitCmdDirSet(unit);
         unitCmdRun(unit, 2, 1);
         actor->moveState++;
         break;
@@ -1145,7 +2241,7 @@ int unitCmdMovePosNorm(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosRun(ObjectTask *unit)
+int unitCmdMovePosRun(BattleUnit *unit)
 {
     if (unitCmdRun(unit, 2, 1) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1153,7 +2249,7 @@ int unitCmdMovePosRun(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosJump(ObjectTask *unit)
+int unitCmdMovePosJump(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 4, 1, 0) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1161,7 +2257,7 @@ int unitCmdMovePosJump(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosHover(ObjectTask *unit)
+int unitCmdMovePosHover(BattleUnit *unit)
 {
     if (unitCmdHover(unit, 6, 1) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1169,7 +2265,7 @@ int unitCmdMovePosHover(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosWarp(ObjectTask *unit)
+int unitCmdMovePosWarp(BattleUnit *unit)
 {
     if (unitCmdWarp(unit, 8, 1) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1177,7 +2273,7 @@ int unitCmdMovePosWarp(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosHover2(ObjectTask *unit)
+int unitCmdMovePosHover2(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 0xA, 1, 0) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1185,7 +2281,7 @@ int unitCmdMovePosHover2(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosFloat(ObjectTask *unit)
+int unitCmdMovePosFloat(BattleUnit *unit)
 {
     if (unitCmdFloat(unit, 0xC, 1) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1193,7 +2289,7 @@ int unitCmdMovePosFloat(ObjectTask *unit)
     return 0;
 }
 
-int unitCmdMovePosHover3(ObjectTask *unit)
+int unitCmdMovePosHover3(BattleUnit *unit)
 {
     if (unitCmdJump(unit, 0xE, 1, 0) != 0) {
         unitCmdMoveNext(unit, 1);
@@ -1206,12 +2302,11 @@ int unitCmdMovePosHover3(ObjectTask *unit)
  * unitCmdDirAdj is the only claimed reader, using its sign to flip which side
  * of the move target the retreat offset below is placed on.
  */
-#define CALC_UNIT_PARAM_UNK44_OFF 0x44
 
-void unitCmdDirAdj(ObjectTask *unit, int cmdId, int flip)
+void unitCmdDirAdj(BattleUnit *unit, int cmdId, int flip)
 {
     Actor *actor = unit->work;
-    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Actor *motionActor = unit->actor;
     Vector4 *target = &actor->cmdTarget.vector;
     float offset = !flip ? -1.0f : 1.0f;
 
@@ -1235,7 +2330,7 @@ void unitCmdDirAdj(ObjectTask *unit, int cmdId, int flip)
  * The calcUPGet call before the curve read has no use of its result
  * (jal calcUPGet at 0x00a04a84, $2 overwritten at 0x00a04a90).
  */
-void unitCmdPosAdj(ObjectTask *unit)
+void unitCmdPosAdj(BattleUnit *unit, int cmdId)
 {
     Actor *actor;
     Actor *motionActor;
@@ -1251,13 +2346,13 @@ void unitCmdPosAdj(ObjectTask *unit)
     UnitVector savedTarget;
 
     actor = unit->work;
-    motionActor = ((UnitRecord *)unit)->motionActor;
+    motionActor = unit->actor;
     target = &actor->cmdTarget;
     frame = motionActor->motionFrame;
     index = 0;
     if (!(actor->flags & ACTOR_FLAG_ENEMY) &&
-        !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
-        (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) &&
+        (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
         table = adjTblPl;
         for (i = 0; table[i].charaId != 0; i++) {
             if (table[i].charaId == calcUPGet(unit)->charaId) {
@@ -1299,24 +2394,412 @@ void unitCmdPosAdj(ObjectTask *unit)
     if (length < offset) {
         offset = length;
     }
-    unitCmdDivSet((UnitRecord *)unit, length, offset);
+    unitCmdDivSet(unit, length, offset);
     motionActor->position.x = target->vector.x;
     motionActor->position.z = target->vector.z;
     *target = savedTarget;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdRun);
+extern int unitCmdTurnSub(BattleUnit *unit, int mode);
+extern void unitCmdTurnSubInit(BattleUnit *unit, int mode);
+extern void unitCmdDirAdj(BattleUnit *unit, int cmdId, int flip);
+extern int unitCmdMoveCalc(BattleUnit *unit, int freeX, int freeY, int freeZ);
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdJump);
+int unitCmdRun(BattleUnit *unit, int cmdId, int flip)
+{
+    Actor *actor;
+    Actor *motionActor;
+    Vector4 *cmdTgt;
+    float *saved;
+    int motionId;
+    int seKind;
+    int turnMode;
+    float stepLimit;
+    float len;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdHover);
+    actor = unit->work;
+    motionActor = unit->actor;
+    cmdTgt = &actor->cmdTarget.vector;
+    saved = (float *)&actor->motion;
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdFloat);
+    switch (actor->movePhase) {
+    case 0:
+        if (cmdId == 1) {
+            motionId = 0xD;
+            seKind = 1;
+            turnMode = 0;
+        } else {
+            motionId = 0x12;
+            seKind = 3;
+            turnMode = 1;
+        }
+        unitMotSet(unit, motionId);
+        saved[0] = cmdTgt->x;
+        saved[1] = cmdTgt->y;
+        saved[2] = cmdTgt->z;
+        sndSeTransPlay(unit, 1, seKind);
+        actor->movePhase++;
+        unitCmdTurnSubInit(unit, turnMode);
+        /* fall through */
+    case 1:
+        unitCmdTurnSub(unit, 1);
+        if (unit->work->runFrameCounter % 3 == 0) {
+            decoEffCall(unit, 0x65);
+        }
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            unitMotSet(unit, (cmdId == 1) ? 0xE : 0x13);
+            stepLimit = 0.8f;
+            if (calcUPGet(unit)->sizeClass != 0) {
+                stepLimit = 1.0f;
+                if (calcUPGet(unit)->sizeClass != 1) {
+                    stepLimit = 1.5f;
+                }
+            }
+            len = unitCmdLenGet(unit);
+            if (len < stepLimit) {
+                stepLimit = len;
+            }
+            unitCmdDivSet(unit, len, stepLimit);
+            motionActor->position.x = cmdTgt->x;
+            motionActor->position.z = cmdTgt->z;
+            cmdTgt->x = saved[0];
+            cmdTgt->y = saved[1];
+            cmdTgt->z = saved[2];
+            unitCmdVASet(unit, cmdId, 0);
+            actor->movePhase++;
+        }
+        break;
+    case 2:
+        unitCmdDirAdj(unit, cmdId, flip);
+        if (unit->work->runFrameCounter % 3 == 0) {
+            decoEffCall(unit, 0x65);
+        }
+        if (unitCmdMoveCalc(unit, 0, 0, 0) != 0) {
+            sndSeTransPlay(unit, 1, ((cmdId ^ 1) == 0) ? 2 : 4);
+            unitMotStandSet(unit);
+            return 1;
+        }
+        break;
+    }
+    return 0;
+}
 
-int unitCmdWarp(ObjectTask *unit, int cmdId, int flag)
+int unitCmdJump(BattleUnit *unit, int cmdId, int flip, int faceFlag)
+{
+    Actor *work = unit->work;
+    Vector4 *cmdTgt = &work->cmdTarget.vector;
+    float *saved = (float *)&work->motion;
+    Actor *motionActor = unit->actor;
+    int mot;
+    int snd;
+    int pre;
+    int dir;
+    float f20;
+    float len;
+
+    switch (work->movePhase) {
+    case 0:
+    case 1:
+        if (work->movePhase == 0) {
+            if (unitMotGet(unit) == 2) {
+                unitMotSet(unit, 1);
+                work->movePhase++;
+                goto _sw_end;
+            }
+            work->movePhase += 2;
+        } else {
+            if ((int)((motionActor->moveElapsed / 0.033333335f) + 0.5f) >= 9) {
+                work->movePhase = work->movePhase + 1;
+            } else {
+                goto _sw_end;
+            }
+        }
+        /* fallthrough */
+    case 2:
+        if (cmdId == 3 || cmdId == 9 || cmdId == 0xD) {
+            mot = 0xD;
+            snd = 1;
+            dir = 0;
+        } else {
+            mot = 0x12;
+            snd = 3;
+            dir = 1;
+        }
+        unitMotSet(unit, mot);
+        work->movePhase++;
+        saved[0] = cmdTgt->x;
+        saved[1] = cmdTgt->y;
+        saved[2] = cmdTgt->z;
+        decoEffCall(unit, 0x65);
+        sndSeTransPlay(unit,1, snd);
+        unitCmdTurnSubInit(unit, dir);
+        /* fallthrough */
+    case 3:
+        unitCmdTurnSub(unit, 1);
+        if (!(unit->actor->moveFlags & MOVE_FLAG_REACHED)) {
+            goto block_62;
+        }
+        if (cmdId == 3 || cmdId == 9 || cmdId == 0xD) {
+            mot = 0xE;
+        } else {
+            mot = 0x13;
+        }
+        unitMotSet(unit, mot);
+        f20 = 1.0f;
+        if (calcUPGet(unit)->sizeClass < 2) {
+            f20 = 0.8f;
+        }
+        len = unitCmdLenGet(unit);
+        if ((unsigned)(cmdId - 0xD) < 2U) {
+            unit->actor->moveStepRate = (1.0f / (len / 10.0f)) * 0.033333335f;
+        }
+        if (len < f20) {
+            f20 = len;
+        }
+        unitCmdDivSet(unit, len, f20);
+        motionActor->position.x = cmdTgt->x;
+        work->movePhase++;
+        motionActor->position.z = cmdTgt->z;
+        goto _sw_end;
+    case 4:
+        cmdTgt->x = saved[0];
+        cmdTgt->y = saved[1];
+        cmdTgt->z = saved[2];
+        f20 = 1.0f;
+        if (calcUPGet(unit)->sizeClass < 2) {
+            f20 = 0.8f;
+        }
+        len = unitCmdLenGet(unit);
+        if (len < f20) {
+            f20 = len;
+        } else {
+            f20 = len - f20;
+        }
+        unitCmdDivSet(unit, len, f20);
+        unitCmdVASet(unit, cmdId, 0);
+        unitCmdMoveCalc(unit, 0, 1, 0);
+        mot = (cmdId == 3 || cmdId == 9) ? 0xF : 0x14;
+        if ((unsigned)(cmdId - 0xD) >= 2U) {
+            unitSetInterp(unit);
+            unitMotSet(unit, mot);
+        }
+        work->movePhase++;
+        goto _sw_end;
+    case 5:
+        if (faceFlag == 0) {
+            unitCmdDirAdj(unit, cmdId, flip);
+        }
+        pre = (motionActor->velocity.y < 0.0f) ? -1 : 1;
+        if (unitCmdMoveCalc(unit, 0, 1, 0) != 0) {
+            if (cmdId == 3 || cmdId == 9) {
+                mot = 0x11;
+                snd = 2;
+            } else {
+                mot = 0x16;
+                snd = 4;
+            }
+            if (cmdId == 0xD) {
+                mot = 0xF;
+                snd = 2;
+            } else if (cmdId == 0xE) {
+                mot = 0x14;
+                snd = 4;
+            }
+            unitMotSet(unit, mot);
+            unit->actor->moveStepRate = 0.033333335f;
+            work->movePhase++;
+            cmdTgt->x = saved[0];
+            cmdTgt->y = saved[1];
+            cmdTgt->z = saved[2];
+            decoEffCall(unit, 0x65);
+            sndSeTransPlay(unit,1, snd);
+        block_62:
+            unitCmdPosAdj(unit, cmdId);
+            break;
+        }
+        if ((unsigned)(cmdId - 3) < 2U) {
+            if (pre != ((motionActor->velocity.y < 0.0f) ? -1 : 1)) {
+                goto motion;
+            }
+        }
+        if ((unsigned)(cmdId - 9) >= 2U) {
+            goto _sw_end;
+        }
+        if ((int)unit->work->posSnapX != (int)(unit->work->posSnapZ * 0.5f)) {
+            goto _sw_end;
+        }
+    motion:
+        mot = (cmdId == 3 || cmdId == 9) ? 0x10 : 0x15;
+        unitSetInterp(unit);
+        unitMotSet(unit, mot);
+        goto _sw_end;
+    default:
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            motionActor->position.x = saved[0];
+            motionActor->position.y = saved[1];
+            motionActor->position.z = saved[2];
+            unitSetInterpTime(unit, 0.26666668f);
+            return 1;
+        }
+        if (faceFlag == 0) {
+            unitCmdDirAdj(unit, cmdId, flip);
+        }
+        unitCmdPosAdj(unit, cmdId);
+        break;
+    }
+_sw_end:
+    return 0;
+}
+
+static unsigned char sSp[24];
+extern int calcSpline(void *spline, float *out, int mode);
+
+int unitCmdHover(BattleUnit *unit, int cmdId, int flip)
+{
+    Actor *work = unit->work;
+    Actor *motionActor = unit->actor;
+    Vector4 *cmdTgt = &work->cmdTarget.vector;
+    int motionId;
+    int seKind;
+    int turnMode;
+
+    switch (work->movePhase) {
+    case 0:
+        if (cmdId == 5) {
+            motionId = 0xD;
+            seKind = 1;
+            turnMode = 0;
+        } else {
+            motionId = 0x12;
+            seKind = 3;
+            turnMode = 1;
+        }
+        unitMotSet(unit, motionId);
+        sndSeTransPlay(unit,1, seKind);
+        decoEffCall(unit, 0x65);
+        work->movePhase++;
+        unitCmdTurnSubInit(unit, turnMode);
+        /* fallthrough */
+    case 1:
+        unitCmdTurnSub(unit, 1);
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            unitMotSet(unit, (cmdId == 5) ? 0xE : 0x13);
+            unitCmdVASet(unit, cmdId, 0);
+            work->movePhase++;
+        }
+        return 0;
+    case 2:
+        unitCmdDirAdj(unit, cmdId, flip);
+        if (calcSpline(sSp, (float *)&motionActor->position, 3) != 0) {
+            work->movePhase++;
+        }
+        if (cmdId == 5) {
+            if (unitMotGet(unit) != 0xF) {
+                unitSetInterp(unit);
+                unitMotSet(unit, 0xF);
+            }
+        } else if (unitMotGet(unit) != 0x14) {
+            unitSetInterp(unit);
+            unitMotSet(unit, 0x14);
+        }
+        return 0;
+    default:
+        if (motionActor->moveFlags & MOVE_FLAG_REACHED) {
+            motionActor->position.x = cmdTgt->x;
+            motionActor->position.z = cmdTgt->z;
+            unitSetInterpTime(unit, 0.26666668f);
+            decoEffCall(unit, 0x65);
+            return 1;
+        }
+        unitCmdDirAdj(unit, cmdId, flip);
+        return 0;
+    }
+}
+
+int unitCmdFloat(BattleUnit *unit, int cmdId, int flip)
+{
+    Actor *work = unit->work;
+    Actor *motionActor = unit->actor;
+    Vector4 *cmdTgt = &work->cmdTarget.vector;
+    int turnMode;
+    int m0;
+    int m3;
+    float y;
+    float yOffset;
+    int floatMotion;
+
+    switch (work->movePhase) {
+    case 0:
+        if (cmdId == 0xB) {
+            m0 = 0xD;
+            turnMode = 0;
+        } else {
+            m0 = 0x12;
+            turnMode = 1;
+        }
+        unitMotSet(unit, m0);
+        work->movePhase++;
+        unitCmdTurnSubInit(unit, turnMode);
+        /* fallthrough */
+    case 1:
+        unitCmdTurnSub(unit, 1);
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            motionActor->position.x += motionActor->floatStepX;
+            motionActor->position.z += motionActor->floatStepZ;
+            if (cmdId == 0xB) {
+                y = motionActor->position.y;
+                yOffset = 1.3f;
+                floatMotion = 0xE;
+                motionActor->position.y = y - yOffset;
+            } else {
+                y = motionActor->position.y;
+                floatMotion = 0x13;
+                yOffset = 0.8f;
+                motionActor->position.y = y - yOffset;
+            }
+            unitMotSet(unit, floatMotion);
+            unit->actor->moveFlags &= ~8;
+            unit->actor->moveStepRate = (1.0f / (unitCmdLenGet(unit) / 10.0f)) * 0.033333335f;
+            unitCmdVASet(unit, cmdId, 0);
+            work->movePhase++;
+        }
+        break;
+    case 2:
+        if (cmdId == 0xB) {
+            unitCmdDirAdj(unit, cmdId, flip);
+        }
+        if (calcSpline(sSp, (float *)&motionActor->position, 3) != 0) {
+            work->movePhase++;
+        }
+        break;
+    case 3:
+        m3 = 0x14;
+        if (cmdId == 0xB) {
+            m3 = 0xF;
+        }
+        unitMotSet(unit, m3);
+        unit->actor->moveStepRate = 0.033333335f;
+        motionActor->position.y = 0.0f;
+        motionActor->position.x += motionActor->floatStepX;
+        work->movePhase++;
+        motionActor->position.z += motionActor->floatStepZ;
+        break;
+    default:
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            motionActor->position.x = cmdTgt->x;
+            motionActor->position.z = cmdTgt->z;
+            unitSetInterpTime(unit, 0.26666668f);
+            return 1;
+        }
+        break;
+    }
+    return 0;
+}
+
+int unitCmdWarp(BattleUnit *unit, int cmdId, int flag)
 {
     Actor *actor = unit->work;
-    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Actor *motionActor = unit->actor;
     Vector4 *target = &actor->cmdTarget.vector;
 
     switch (actor->movePhase) {
@@ -1353,10 +2836,9 @@ int unitCmdWarp(ObjectTask *unit, int cmdId, int flag)
  * mode; ov01/tu001 obj.c owns the record and types both as int, so the float
  * reads below reinterpret the same bytes it does not model as float.
  */
-#define CMD_ENTRY_X_OR_IDX_OFF 0x4
 #define CMD_ENTRY_Z_OFF 0xC
 
-void unitCmdDstSet(ObjectTask *unit, int cmdId, int mode)
+void unitCmdDstSet(BattleUnit *unit, int cmdId, int mode)
 {
     Actor *actor;
     Vector4 *target;
@@ -1368,7 +2850,7 @@ void unitCmdDstSet(ObjectTask *unit, int cmdId, int mode)
     target = &actor->cmdTarget.vector;
 
     if (mode == 0) {
-        ObjectTask *targetUnit = actor->targetUnit;
+        BattleUnit *targetUnit = actor->targetUnit;
 
         idx = *(short *)((char *)calcUPGet(targetUnit) + CALC_UNIT_PARAM_UNK44_OFF);
         target->x = dataPosTblGet(idx)->x;
@@ -1393,12 +2875,12 @@ void unitCmdDstSet(ObjectTask *unit, int cmdId, int mode)
     target->y = 0.0f;
 }
 
-float unitCmdDirSet(UnitRecord *unit)
+float unitCmdDirSet(BattleUnit *unit)
 {
     float zero = 0.0f;
-    Actor *self = unit->task.work;
+    Actor *self = unit->work;
     Vector4 *target = &self->cmdTarget.vector;
-    Actor *motionActor = unit->motionActor;
+    Actor *motionActor = unit->actor;
     float dx = target->x - motionActor->position.x;
 
     if (dx != zero || (target->z - motionActor->position.z) != zero) {
@@ -1415,15 +2897,15 @@ float unitCmdDirSet(UnitRecord *unit)
  * target (cmdTarget x/z, lwc1 0x0/0x8 off the hoisted +0x90 base at
  * 0x00a05b2c).
  */
-float unitCmdLenGet(ObjectTask *unit)
+float unitCmdLenGet(BattleUnit *unit)
 {
     Vector4 *target;
     Actor *motionActor;
     float dx;
     float dz;
 
-    target = &((Actor *)unit->work)->cmdTarget.vector;
-    motionActor = ((UnitRecord *)unit)->motionActor;
+    target = &unit->work->cmdTarget.vector;
+    motionActor = unit->actor;
     dx = target->x - motionActor->position.x;
     if (dx < 0.0f) {
         dx = -dx;
@@ -1435,18 +2917,108 @@ float unitCmdLenGet(ObjectTask *unit)
     return __builtin_sqrtf(dx * dx + dz * dz);
 }
 
-void unitCmdDivSet(UnitRecord *unit, float distance, float step)
+void unitCmdDivSet(BattleUnit *unit, float distance, float step)
 {
-    Actor *self = unit->task.work;
+    Actor *self = unit->work;
     Vector4 *target = &self->cmdTarget.vector;
     float ratio = step / distance;
-    Actor *motionActor = unit->motionActor;
+    Actor *motionActor = unit->actor;
 
     target->x = motionActor->position.x + (target->x - motionActor->position.x) * ratio;
     target->z = motionActor->position.z + (target->z - motionActor->position.z) * ratio;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
+static float cPoint[32];
+extern void calcSplineInit(void *spline, float *points, int count, int duration);
+
+void unitCmdVASet(BattleUnit *unit, int cmdId, int arg2)
+{
+    float q = 0.25f;
+    Actor *act = unit->actor;
+    float *tgt = (float *)(((unsigned char *)unit->work) + 0x90);
+    float *p1 = (float *)(((unsigned char *)unit->work) + 0xD0);
+    float *p2 = (float *)(((unsigned char *)unit->work) + 0xD8);
+    float len = unitCmdLenGet(unit) / 0.4f;
+    int n = (int)len;
+    float *arr;
+
+    unitSetInterpTime(unit, (((float)n) * q) * 0.033333335f);
+    *p1 = len;
+    *p2 = len;
+    if (((unsigned int)(cmdId - 5)) < 2U) {
+        arr = cPoint;
+        arr[0] = act->position.x;
+        arr[1] = act->position.y;
+        arr[2] = act->position.z;
+        arr[4] = act->position.x + ((tgt[0] - act->position.x) * 0.125f);
+        arr[5] = act->position.y + ((tgt[1] - act->position.y) * 0.125f);
+        arr[6] = act->position.z + ((tgt[2] - act->position.z) * 0.125f);
+        arr[8] = act->position.x + ((tgt[0] - act->position.x) * 0.5f);
+        arr[9] = act->position.y + ((tgt[1] - act->position.y) * 0.5f);
+        arr[10] = act->position.z + ((tgt[2] - act->position.z) * 0.5f);
+        arr[12] = act->position.x + (((tgt[0] - act->position.x) * 0.125f) * 7.0f);
+        arr[13] = act->position.y + (((tgt[1] - act->position.y) * 0.125f) * 7.0f);
+        arr[14] = act->position.z + (((tgt[2] - act->position.z) * 0.125f) * 7.0f);
+        arr[16] = tgt[0];
+        arr[17] = tgt[1];
+        arr[18] = tgt[2];
+        calcSplineInit(sSp, arr, 5, n);
+        goto after_switch;
+    }
+    if (cmdId == 11) {
+        tgt[1] = act->position.y;
+        cPoint[0] = act->position.x;
+        cPoint[1] = act->position.y;
+        cPoint[2] = act->position.z;
+        cPoint[4] = act->position.x + ((tgt[0] - act->position.x) * q);
+        cPoint[5] = (act->position.y + ((tgt[1] - act->position.y) * q)) - 0.125f;
+        cPoint[6] = act->position.z + ((tgt[2] - act->position.z) * q);
+        cPoint[8] = act->position.x + ((tgt[0] - act->position.x) * 0.5f);
+        cPoint[9] = (act->position.y + ((tgt[1] - act->position.y) * 0.5f)) - q;
+        cPoint[10] = act->position.z + ((tgt[2] - act->position.z) * 0.5f);
+        cPoint[12] = act->position.x + (((tgt[0] - act->position.x) * q) * 3.0f);
+        cPoint[13] = (act->position.y + (((tgt[1] - act->position.y) * q) * 3.0f)) - 0.125f;
+        cPoint[14] = act->position.z + (((tgt[2] - act->position.z) * q) * 3.0f);
+        cPoint[16] = tgt[0];
+        cPoint[17] = tgt[1];
+        cPoint[18] = tgt[2];
+        calcSplineInit(sSp, cPoint, 5, n);
+    } else if (cmdId == 12) {
+        cPoint[0] = act->position.x;
+        cPoint[1] = act->position.y;
+        cPoint[2] = act->position.z;
+        cPoint[4] = act->position.x + ((tgt[0] - act->position.x) * q);
+        cPoint[5] = (act->position.y + ((tgt[1] - act->position.y) * q)) - 0.125f;
+        cPoint[6] = act->position.z + ((tgt[2] - act->position.z) * q);
+        cPoint[8] = act->position.x + ((tgt[0] - act->position.x) * 0.5f);
+        cPoint[9] = (act->position.y + ((tgt[1] - act->position.y) * 0.5f)) - q;
+        cPoint[10] = act->position.z + ((tgt[2] - act->position.z) * 0.5f);
+        cPoint[12] = act->position.x + (((tgt[0] - act->position.x) * q) * 3.0f);
+        cPoint[13] = (act->position.y + (((tgt[1] - act->position.y) * q) * 3.0f)) - 0.125f;
+        cPoint[14] = act->position.z + (((tgt[2] - act->position.z) * q) * 3.0f);
+        cPoint[16] = tgt[0];
+        cPoint[17] = tgt[1];
+        cPoint[18] = tgt[2];
+        calcSplineInit(sSp, cPoint, 5, n);
+    } else {
+        float az = act->position.z;
+        float ax = act->position.x;
+        float t0 = tgt[0];
+
+        act->velocity.x = (t0 - ax) / len;
+        act->velocity.z = (tgt[2] - az) / len;
+        act->acceleration.x = 0.0f;
+        act->acceleration.z = 0.0f;
+    }
+after_switch:
+    if (((unsigned int)(cmdId - 3)) < 2U) {
+        act->acceleration.y = -0.0204375f;
+        act->velocity.y = (len * 0.0204375f) * 0.5f;
+    } else {
+        *((int *)(&act->acceleration.y)) = 0;
+        *((int *)(&act->velocity.y)) = 0;
+    }
+}
 
 /*
  * One step of a move command toward cmdTarget: each axis adds the motion
@@ -1467,10 +3039,10 @@ INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdVASet);
  * `if (distance < zero) distance = -distance;` gives a branch-likely neg and
  * a ternary without the assignment folds into a compare against -1e-6.
  */
-int unitCmdMoveCalc(ObjectTask *unit, int freeX, int freeY, int freeZ)
+int unitCmdMoveCalc(BattleUnit *unit, int freeX, int freeY, int freeZ)
 {
     Actor *actor = unit->work;
-    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Actor *motionActor = unit->actor;
     int arrived = 0;
     Vector4 *target = &actor->cmdTarget.vector;
     float *steps = &actor->posSnapX;
@@ -1562,14 +3134,14 @@ int unitCmdMoveCalc(ObjectTask *unit, int freeX, int freeY, int freeZ)
  * and its hidden-draw flag (bit 0x8, the one unitDispOn clears); later steps
  * raise transparency by posSnapX until it reaches 1.0 and report 1.
  */
-int unitTelIn(ObjectTask *unit)
+int unitTelIn(BattleUnit *unit)
 {
     Actor *actor = unit->work;
-    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Actor *motionActor = unit->actor;
 
     if (actor->movePhaseTimer == 0) {
         motionActor->transparency = 0.0f;
-        ((UnitRecord *)unit)->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
+        unit->actor->flags &= ~ACTOR_FLAG_HIDDEN;
         actor->movePhaseTimer++;
     } else {
         motionActor->transparency += motionActor->posSnapX;
@@ -1586,10 +3158,10 @@ int unitTelIn(ObjectTask *unit)
  * phase timer; after that transparency falls by posSnapX each step, and at
  * 0.0 the hidden-draw flag is set and the step reports 1.
  */
-int unitTelOut(ObjectTask *unit)
+int unitTelOut(BattleUnit *unit)
 {
     Actor *actor = unit->work;
-    Actor *motionActor = ((UnitRecord *)unit)->motionActor;
+    Actor *motionActor = unit->actor;
 
     if (actor->movePhaseTimer == 0) {
         actor->movePhaseTimer++;
@@ -1597,7 +3169,7 @@ int unitTelOut(ObjectTask *unit)
         motionActor->transparency -= motionActor->posSnapX;
         if (motionActor->transparency <= 0.0f) {
             motionActor->transparency = 0.0f;
-            ((UnitRecord *)unit)->motionActor->flags |= ACTOR_FLAG_HIDDEN;
+            unit->actor->flags |= ACTOR_FLAG_HIDDEN;
             return 1;
         }
     }
@@ -1611,7 +3183,7 @@ int unitTelOut(ObjectTask *unit)
  * other unit, step 2 waits for unitTelIn, and the last step waits for the
  * ready motion to end before putting the weapon away.
  */
-int unitCmdBtst(ObjectTask *unit)
+int unitCmdBtst(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -1625,27 +3197,27 @@ int unitCmdBtst(ObjectTask *unit)
             actor->moveState = 1;
         }
     } else if (actor->moveState == 1) {
-        if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
-            (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        if (!(unit->work->flags & ACTOR_FLAG_ENEMY) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) &&
+            (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
             unitMotSet(unit, 0x23);
             unitWpnMotSet(unit, 0, 0, 0x2F);
         } else {
             unitMotStandSet(unit);
         }
-        unitMtdProc((UnitRecord *)unit);
+        unitMtdProc(unit);
         actor->movePhaseTimer = 0;
         actor->moveState++;
     } else if (actor->moveState == 2) {
-        unitMtdProc((UnitRecord *)unit);
+        unitMtdProc(unit);
         if (unitTelIn(unit) != 0) {
             actor->moveState++;
         }
-    } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-               !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
-               (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
-        unitMtdProc((UnitRecord *)unit);
-        if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
+    } else if (!(unit->work->flags & ACTOR_FLAG_ENEMY) &&
+               !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) &&
+               (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
+        unitMtdProc(unit);
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
             unitMotStandSet(unit);
             unitWpnMotSet(unit, 0, 0, 0xFF);
             return unitCmdNext(unit);
@@ -1663,32 +3235,32 @@ int unitCmdBtst(ObjectTask *unit)
  * unitLoad also skips, then turns the status effects off; the next steps
  * wait for the motion to end and put the weapon away.
  */
-int unitCmdBted(ObjectTask *unit)
+int unitCmdBted(BattleUnit *unit)
 {
     Actor *actor;
 
     actor = unit->work;
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
-        if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
-            (calcUPGet(unit)->charaId < 0xBB || calcUPGet(unit)->charaId >= 0xC3)) {
+        if (!(unit->work->flags & ACTOR_FLAG_ENEMY) &&
+            !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) &&
+            (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN || calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
             unitMotSet(unit, 0x24);
             unitWpnMotSet(unit, 0, 0, 0x30);
             unitFaceMotSet(unit, 0x39);
         }
-        unitMtdProc((UnitRecord *)unit);
+        unitMtdProc(unit);
         statEffOff(unit);
         actor->moveState++;
     } else {
-        unitMtdProc((UnitRecord *)unit);
-        if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
-            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) {
+        unitMtdProc(unit);
+        if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+            if (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) {
                 unitWpnMotSet(unit, 0, 0, 5);
-            } else if (!(((Actor *)unit->work)->flags & ACTOR_FLAG_ENEMY) &&
-                       !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) &&
-                       (calcUPGet(unit)->charaId < 0xBB ||
-                        calcUPGet(unit)->charaId >= 0xC3)) {
+            } else if (!(unit->work->flags & ACTOR_FLAG_ENEMY) &&
+                       !(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) &&
+                       (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN ||
+                        calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)) {
                 unitWpnMotSet(unit, 0, 0, 0xFF);
             }
             return unitCmdNext(unit);
@@ -1697,7 +3269,7 @@ int unitCmdBted(ObjectTask *unit)
     return 0;
 }
 
-void unitMtdProc(UnitRecord *unit)
+void unitMtdProc(BattleUnit *unit)
 {
     int defaultWeapon;
 
@@ -1731,7 +3303,7 @@ typedef struct {
     int flag; /* +0x4 */
 } UnitCmdRecEntry;
 
-void unitCmdRec(ObjectTask *unit)
+void unitCmdRec(BattleUnit *unit)
 {
     Actor *actor;
     UnitCmdRecEntry *cmd;
@@ -1747,7 +3319,7 @@ void unitCmdRec(ObjectTask *unit)
     unitCmdNext(unit);
 }
 
-int unitCmdWake(ObjectTask *unit)
+int unitCmdWake(BattleUnit *unit)
 {
     Actor *actor;
 
@@ -1757,15 +3329,15 @@ int unitCmdWake(ObjectTask *unit)
         unitMotSet(unit, 0x25);
         sndSeTransPlay(unit, 2, 5);
         actor->moveState++;
-    } else if (((UnitRecord *)unit)->motionActor->moveFlags & 0x1000) {
-        actor->flags &= ~ACTOR_FLAG_DOWN;
+    } else if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
+        actor->flags &= ~ACTOR_FLAG_DEAD;
         unitMotStandSet(unit);
         return unitCmdNext(unit);
     }
     return 0;
 }
 
-void unitCmdStat(ObjectTask *unit)
+void unitCmdStat(BattleUnit *unit)
 {
     Actor *actor;
     UnitCmdRecEntry *cmd;
@@ -1781,7 +3353,7 @@ void unitCmdStat(ObjectTask *unit)
     unitCmdNext(unit);
 }
 
-int unitCmdReadWait(ObjectTask *unit)
+int unitCmdReadWait(BattleUnit *unit)
 {
     Actor *actor;
     CmdEntry *cmd;
@@ -1804,14 +3376,14 @@ int unitCmdReadWait(ObjectTask *unit)
  * movz at 0x00a06c14), step 1 stands the unit and clears the teleport timer,
  * then it waits for unitTelIn.
  */
-int unitCmdAgws2(ObjectTask *unit)
+int unitCmdAgws2(BattleUnit *unit)
 {
     Actor *actor;
 
     actor = unit->work;
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
-        decoEffCall(unit, (calcUPGet(unit)->flags & CALC_UNIT_FLAG_AGWS) ? 0x67 : 0x66);
+        decoEffCall(unit, (calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) ? 0x67 : 0x66);
         actor->moveState++;
     } else if (actor->moveState == 1) {
         unitMotStandSet(unit);
@@ -1823,13 +3395,36 @@ int unitCmdAgws2(ObjectTask *unit)
     return 0;
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitCmdEscape);
+int unitCmdEscape(BattleUnit *unit)
+{
+    Actor *actor;
+
+    actor = unit->work;
+    switch (actor->moveState) {
+    case 0:
+        actor->moveState = 1;
+        break;
+    case 1:
+        if (unitTelOut(unit) != 0) {
+            actor->moveState++;
+        }
+        break;
+    case 2:
+        ((ActorFlagsWord *)actor)->i = (actor->flags & 0x61) | 0x80;
+        if (unit->work->flags & ACTOR_FLAG_ENEMY) {
+            unitTblRemove(unit);
+            unitRemove(unit, 0);
+        }
+        break;
+    }
+    return 0;
+}
 
 /*
  * The reverse of unitCmdFadeOut: teleports the unit in, then unblocks the
  * unit's effect record and restarts its status effects.
  */
-int unitCmdFadeIn(ObjectTask *unit)
+int unitCmdFadeIn(BattleUnit *unit)
 {
     Actor *actor;
     CalcUnitParam *param;
@@ -1860,7 +3455,7 @@ int unitCmdFadeIn(ObjectTask *unit)
  * Blocks the unit's effect record and stops its status effects, then
  * teleports the unit out.
  */
-int unitCmdFadeOut(ObjectTask *unit)
+int unitCmdFadeOut(BattleUnit *unit)
 {
     Actor *actor;
     CalcUnitParam *param;
@@ -1891,39 +3486,92 @@ int unitCmdFadeOut(ObjectTask *unit)
  * unitMotSetEx is defined later in this TU, still asm; forward-declared for
  * the tail call unitMotSet makes to it, always with a zero third argument.
  */
-extern void unitMotSetEx(ObjectTask *unit, int motion, int);
+extern void unitMotSetEx(BattleUnit *unit, int motion, int);
 
-void unitMotSet(ObjectTask *unit, int motion)
+void unitMotSet(BattleUnit *unit, int motion)
 {
     unitMotSetEx(unit, motion, 0);
 }
 
-INCLUDE_ASM("asm/nonmatchings/ov01/unit_cmd", unitMotSetEx);
+extern const char unitCmdMotSetMotPackFlagText[];
+extern const char unitCmdIntrText[];
+
+void unitMotSetEx(BattleUnit *unit, int motion, int arg2)
+{
+    Actor *actor;
+    int flags;
+    unsigned int m;
+    UnitWork *eff;
+
+    actor = unit->actor;
+    if (ACT_animGetData(actor, (arg2 << 8) + motion - 1) != 0) {
+        if (actor->moveFlags & 0x80000) {
+            if ((motion != 6) && (motion != 0x1C)) {
+                actor->moveFlags |= 0x1000;
+                return;
+            }
+            actor->moveStepRate = 0.033333335f;
+            actor->moveFlags &= 0xFFF7FFFF;
+        }
+        actor->motionFrame = 0;
+        flags = *(unsigned int *)((char *)unit->work + 0x100) & 1;
+        if (arg2 == 0) {
+            if (((unsigned int)(motion - 1) < 2U) || (motion == 0x1D) || (motion == 0x17) || (motion == 0x20) || (motion == 0xE) || (motion == 0x13)) {
+                flags |= 8;
+            }
+            m = motion - 1;
+            if ((motion == 2) || (unitMotGet(unit) == 2)) {
+                flags |= 1;
+                unitSetInterpTime(unit, 0.26666668f);
+            }
+            if ((unsigned int)(motion - 4) < 2U || motion == 0x1E || motion == 0x1A) {
+                flags |= 0x20000000;
+            }
+            eff = calcUPGet(unit)->effectUnit;
+            if (m < 2U) {
+                if (eff != 0) {
+                    eff->flags &= ~UNIT_WORK_STATUS_BLOCKED;
+                }
+            } else if (eff != 0) {
+                eff->flags |= UNIT_WORK_STATUS_BLOCKED;
+            }
+        }
+        if (calcUPGet(unit)->charaId == 0xB4) {
+            flags |= 0xC0000000;
+        }
+        printf(unitCmdMotSetMotPackFlagText, motion, arg2, flags, unit);
+        if ((flags & 1) != 0) {
+            printf(unitCmdIntrText, actor->interpTime);
+        }
+        actor->moveFlags &= 0xDFFFFFF6;
+        ACT_setMotion2(actor, (arg2 << 8) + motion - 1, flags);
+        actor->motion = motion - 1;
+        *(int *)((char *)unit->work + 0x100) = 0;
+    }
+}
 
 /*
- * unitSetInterp enables interpolation on the actor object owned by a unit.
- * The surrounding Unit layout is not established here; the two scalar
- * offsets below are the members directly demonstrated by this function and
- * its callers.
+ * unitSetInterp enables interpolation on the actor object owned by a unit
+ * (the word at +0x100 of its work actor, the same slot unitMotSetEx clears).
  */
-void unitSetInterp(void *unit)
+void unitSetInterp(BattleUnit *unit)
 {
-    void *object = *(void **)((unsigned char *)unit + 0x10);
+    Actor *object = unit->work;
     *(int *)((unsigned char *)object + 0x100) = 1;
 }
 
-void unitSetInterpTime(ObjectTask *unit, float time)
+void unitSetInterpTime(BattleUnit *unit, float time)
 {
-    ((UnitRecord *)unit)->motionActor->interpTime = time;
+    unit->actor->interpTime = time;
 }
 
-void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
+void unitWpnMotSet(BattleUnit *unit, int weaponIndex, int animGroup, int motion)
 {
     Actor *actor;
     unsigned int dataId;
 
     if (weaponIndex >= 0) {
-        actor = ((UnitRecord *)unit)->wpnActor[weaponIndex & 3];
+        actor = unit->weapon[weaponIndex & 3];
         if (actor != 0) {
             dataId = (animGroup << 8) + motion - 1;
             if (ACT_animGetData(actor, dataId) != 0 || motion == 0xFF) {
@@ -1934,7 +3582,7 @@ void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
 }
 
 /*
- * Plays a motion on the unit's sub-actor (UnitRecord.subActor), when it has
+ * Plays a motion on the unit's sub-actor (BattleUnit.subActor), when it has
  * the animation: ACT_setMotion2's flags are 0 for motions 0x3A and 0x3B
  * (the compiler folds the two tests into the sltiu at 0x00a0722c) and 8
  * otherwise.
@@ -1943,7 +3591,7 @@ void unitWpnMotSet(ObjectTask *unit, int weaponIndex, int animGroup, int motion)
  * `motion - 1` is written in both calls, which keeps it in $18 and the
  * flags in $17 (a named dataId local swaps the two).
  */
-void unitFaceMotSet(ObjectTask *unit, int motion)
+void unitFaceMotSet(BattleUnit *unit, int motion)
 {
     Actor *faceActor;
     unsigned int flags;
@@ -1952,15 +3600,15 @@ void unitFaceMotSet(ObjectTask *unit, int motion)
     if (motion != 0x3A && motion != 0x3B) {
         flags = 8; /* ACT_setMotion2's flag, not ACTOR_FLAG_HIDDEN */
     }
-    faceActor = ((UnitRecord *)unit)->subActor;
+    faceActor = unit->subActor;
     if (faceActor != 0 && ACT_animGetData(faceActor, motion - 1) != 0) {
         ACT_setMotion2(faceActor, motion - 1, flags);
     }
 }
 
-int unitMotGet(ObjectTask *unit)
+int unitMotGet(BattleUnit *unit)
 {
-    return ((UnitRecord *)unit)->motionActor->motion + 1;
+    return unit->actor->motion + 1;
 }
 
 /*
@@ -1970,7 +3618,7 @@ int unitMotGet(ObjectTask *unit)
  * tested only after calcIdol2Chk returned nonzero, and when set gates motion
  * 2 on unitMotGet returning 0x1C or 0x23. This TU is not the only reader of
  * 0x800: calcHitRate (src/ov01/calc.c on the calc branch) tests the same bit
- * of the target's actor flags as CALC_ACTOR_FLAG_BIT11 and calcTurnStart
+ * of the target's actor flags (literal 0x800) and calcTurnStart
  * tests and clears it; what the bit means for them is not evidenced here.
  */
 #define ACTOR_FLAG_STAND_MOTION_1D 0x800u
@@ -1980,14 +3628,14 @@ int unitMotGet(ObjectTask *unit)
  * One condition for motion 2, as the original branches: separate if/else
  * arms for the last test turn its bnel (0x00a07308) into a bne.
  */
-void unitMotStandSet(ObjectTask *unit)
+void unitMotStandSet(BattleUnit *unit)
 {
     int motion;
 
-    if (((Actor *)unit->work)->flags & ACTOR_FLAG_STAND_MOTION_1D) {
+    if (unit->work->flags & ACTOR_FLAG_STAND_MOTION_1D) {
         motion = 0x1D;
     } else if (calcIdol2Chk(unit) != 0
-               && ((((Actor *)unit->work)->flags & ACTOR_FLAG_STAND_MOTION_2_GATED) == 0
+               && ((unit->work->flags & ACTOR_FLAG_STAND_MOTION_2_GATED) == 0
                    || unitMotGet(unit) == 0x1C || unitMotGet(unit) == 0x23)) {
         motion = 2;
     } else {
@@ -1998,9 +3646,9 @@ void unitMotStandSet(ObjectTask *unit)
 
 static const char UnitNoGetFailureFormat[32] = "** unitNoGet: err -> %X\n";
 
-int unitNoGet(ObjectTask *unit)
+int unitNoGet(BattleUnit *unit)
 {
-    ObjectTask **units = unitTbl.tasks;
+    BattleUnit **units = unitTbl;
     int i;
 
     for (i = 0; i < 8; i++) {
@@ -2008,11 +3656,9 @@ int unitNoGet(ObjectTask *unit)
             return i;
         }
     }
-    printf(D_00A43BD8, unit);
+    printf(UnitNoGetFailureFormat, unit);
     return -1;
 }
-
-extern int printf(const char *format, ...);
 
 /* This legacy accessor returns a unit pointer as its 32-bit address. */
 static const char UnitPtrGetFailureFormat[32] = "** unitPtrGet: err -> %d\n";
@@ -2020,26 +3666,26 @@ static const char UnitPtrGetFailureFormat[32] = "** unitPtrGet: err -> %d\n";
 int unitPtrGet(int index)
 {
     if (index < 8) {
-        return (int)unitTbl.tasks[index];
+        return (int)unitTbl[index];
     }
-    printf(D_00A43BF8, index);
+    printf(UnitPtrGetFailureFormat, index);
     return 0;
 }
 
 /*
- * unitDispOn's own sibling, still asm in this TU; this TU's own UnitRecord
+ * unitDispOn's own sibling, still asm in this TU; this TU's own BattleUnit
  * view of unitTblGet's table (already published identically as BattleUnit
  * by src/ov01/battle_init.c and src/ov01/debug_entry.c, both ov01/tu003).
  */
-extern int unitTblGet(int side, UnitRecord ***table);
+extern int unitTblGet(int side, BattleUnit ***table);
 
 void unitDispOn(int side)
 {
-    UnitRecord **table;
+    BattleUnit **table;
     int count;
-    UnitRecord **cur;
+    BattleUnit **cur;
     int remaining;
-    UnitRecord *unit;
+    BattleUnit *unit;
 
     count = unitTblGet(side, &table);
     if (count > 0) {
@@ -2051,7 +3697,7 @@ void unitDispOn(int side)
             if (unit != 0) {
                 /* Clears the motion actor's hidden-draw flag (bit 0x8 of
                  * Actor.flags); no other claimed function here touches it. */
-                unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
+                unit->actor->flags &= ~ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -2060,11 +3706,11 @@ void unitDispOn(int side)
 
 void unitDispOff(int side)
 {
-    UnitRecord **table;
+    BattleUnit **table;
     int count;
-    UnitRecord **cur;
+    BattleUnit **cur;
     int remaining;
-    UnitRecord *unit;
+    BattleUnit *unit;
 
     count = unitTblGet(side, &table);
     if (count > 0) {
@@ -2074,7 +3720,7 @@ void unitDispOff(int side)
             unit = *cur;
             cur++;
             if (unit != 0) {
-                unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
+                unit->actor->flags |= ACTOR_FLAG_HIDDEN;
             }
             remaining--;
         } while (remaining != 0);
@@ -2087,7 +3733,7 @@ void unitDispOff(int side)
  * callee-saved FP register across the second calcUPGet call, as the original
  * does.
  */
-float unitColiGet(ObjectTask *unit, ObjectTask *targetUnit)
+float unitColiGet(BattleUnit *unit, BattleUnit *targetUnit)
 {
     float distance;
 
@@ -2103,7 +3749,7 @@ float unitColiGet(ObjectTask *unit, ObjectTask *targetUnit)
  */
 int unitAgwsChk(int side)
 {
-    UnitRecord **table;
+    BattleUnit **table;
     int count;
     int found;
     int i;
@@ -2111,7 +3757,7 @@ int unitAgwsChk(int side)
     found = 0;
     count = unitTblGet(side, &table);
     for (i = 0; i < count; i++) {
-        if (table[i] != 0 && (calcUPGet(&table[i]->task)->flags & CALC_UNIT_FLAG_AGWS)) {
+        if (table[i] != 0 && (calcUPGet(table[i])->flags & CALC_UNIT_FLAG_IS_AGWS)) {
             found++;
         }
     }
@@ -2120,13 +3766,12 @@ int unitAgwsChk(int side)
 
 /*
  * Counts the units on one side whose CalcUnitParam.charaId equals charaId.
- * unitTblGet is defined at the top of this TU with `UnitRecord ***table`, so
- * the table is a UnitRecord ** here and each entry is cast to ObjectTask *
- * for calcUPGet.
+ * unitTblGet is defined at the top of this TU with `BattleUnit ***table`, so
+ * the table is a BattleUnit ** here and each entry goes to calcUPGet as it is.
  */
 int unitIdChk(int side, int charaId)
 {
-    UnitRecord **table;
+    BattleUnit **table;
     int count;
     int matchCount;
     int i;
@@ -2135,7 +3780,7 @@ int unitIdChk(int side, int charaId)
     count = unitTblGet(side, &table);
     for (i = 0; i < count; i++) {
         if (table[i] != 0) {
-            if (calcUPGet((ObjectTask *)table[i])->charaId == charaId) {
+            if (calcUPGet(table[i])->charaId == charaId) {
                 matchCount++;
             }
         }
@@ -2158,10 +3803,10 @@ void unitDispOffAll(void)
 
 void unitDispOnOff(int flag)
 {
-    UnitRecord **table;
+    BattleUnit **table;
     int index;
     int count;
-    UnitRecord *unit;
+    BattleUnit *unit;
     struct UnitWork *effectUnit;
 
     index = 0;
@@ -2171,22 +3816,919 @@ void unitDispOnOff(int flag)
             unit = table[index];
             if (unit != 0) {
                 if (flag == 0) {
-                    unit->motionActor->flags &= ~ACTOR_FLAG_HIDDEN;
-                    effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
+                    unit->actor->flags &= ~ACTOR_FLAG_HIDDEN;
+                    effectUnit = calcUPGet(unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags &= ~UNIT_WORK_STATUS_BLOCKED;
                     }
-                    statEffOn((ObjectTask *) table[index]);
+                    statEffOn(table[index]);
                 } else {
-                    unit->motionActor->flags |= ACTOR_FLAG_HIDDEN;
-                    effectUnit = calcUPGet((ObjectTask *) unit)->effectUnit;
+                    unit->actor->flags |= ACTOR_FLAG_HIDDEN;
+                    effectUnit = calcUPGet(unit)->effectUnit;
                     if (effectUnit != 0) {
                         effectUnit->flags |= UNIT_WORK_STATUS_BLOCKED;
                     }
-                    statEffOff((ObjectTask *) table[index]);
+                    statEffOff(table[index]);
                 }
             }
             index++;
         } while (index < count);
     }
 }
+
+
+
+static int (*unitCmdTbl[49])(BattleUnit *unit) = {
+    unitCmdFree,
+    unitCmdAtk,
+    unitCmdEther,
+    unitCmdItem,
+    unitCmdGuard,
+    unitCmdAgws,
+    unitCmdMove,
+    unitCmdStand,
+    unitCmdEnd,
+    unitCmdDmg,
+    unitCmdEva,
+    unitCmdDef,
+    unitCmdDead,
+    unitCmdMot,
+    unitCmdTgtSet,
+    (int (*)(BattleUnit *))unitCmdTurn,
+    (int (*)(BattleUnit *))unitCmdTurn,
+    unitCmdMoveCha,
+    unitCmdMovePos,
+    unitCmdMoveChaNorm,
+    unitCmdMovePosNorm,
+    unitCmdMoveChaRun,
+    unitCmdMovePosRun,
+    unitCmdMoveChaJump,
+    unitCmdMovePosJump,
+    unitCmdMoveChaHover,
+    unitCmdMovePosHover,
+    unitCmdMoveChaWarp,
+    unitCmdMovePosWarp,
+    unitCmdMoveChaJump2,
+    unitCmdMovePosJump,
+    unitCmdMoveChaHover2,
+    unitCmdMovePosHover2,
+    unitCmdMoveChaFloat,
+    unitCmdMovePosFloat,
+    unitCmdMoveChaHover3,
+    unitCmdMovePosHover3,
+    unitCmdBtst,
+    unitCmdBted,
+    (int (*)(BattleUnit *))unitCmdRec,
+    unitCmdWake,
+    (int (*)(BattleUnit *))unitCmdStat,
+    unitCmdReadWait,
+    unitCmdUnitChange,
+    (int (*)(BattleUnit *))unitCmdTurn,
+    unitCmdAgws2,
+    unitCmdEscape,
+    unitCmdFadeIn,
+    unitCmdFadeOut
+};
+
+float chaosF1[5] = {
+    -0.02f, -0.05f, 0.0f, 0.18f, 0.49f
+};
+
+float chaosF5[9] = {
+    0.21f, 0.38f, 0.51f, 0.61f, 0.69f, 0.74f, 0.77f, 0.79f,
+    0.8f
+};
+
+float chaosB1[5] = {
+    0.02f, 0.07f, 0.16f, 0.31f, 0.52f
+};
+
+float chaosB5[9] = {
+    0.3f, 0.52f, 0.64f, 0.71f, 0.75f, 0.78f, 0.79f, 0.8f,
+    0.8f
+};
+
+float kosmosF1[5] = {
+    0.0f, 0.03f, 0.09f, 0.21f, 0.44f
+};
+
+float kosmosF5[9] = {
+    0.22f, 0.39f, 0.53f, 0.63f, 0.7f, 0.75f, 0.78f, 0.79f,
+    0.8f
+};
+
+float kosmosB1[5] = {
+    0.01f, 0.06f, 0.16f, 0.34f, 0.57f
+};
+
+float kosmosB5[9] = {
+    0.25f, 0.45f, 0.59f, 0.67f, 0.72f, 0.76f, 0.78f, 0.79f,
+    0.8f
+};
+
+float shionF1[5] = {
+    0.01f, 0.03f, 0.07f, 0.14f, 0.26f
+};
+
+float shionF5[9] = {
+    0.2f, 0.37f, 0.53f, 0.63f, 0.69f, 0.73f, 0.76f, 0.79f,
+    0.8f
+};
+
+float shionB1[5] = {
+    0.03f, 0.1f, 0.2f, 0.32f, 0.45f
+};
+
+float shionB5[9] = {
+    0.21f, 0.35f, 0.47f, 0.57f, 0.65f, 0.71f, 0.75f, 0.78f,
+    0.8f
+};
+
+float ziggyF1[5] = {
+    0.01f, 0.03f, 0.08f, 0.15f, 0.26f
+};
+
+float ziggyF5[9] = {
+    0.18f, 0.34f, 0.5f, 0.6f, 0.67f, 0.72f, 0.75f, 0.78f,
+    0.8f
+};
+
+float ziggyB1[5] = {
+    0.01f, 0.04f, 0.09f, 0.18f, 0.3f
+};
+
+float ziggyB5[9] = {
+    0.17f, 0.33f, 0.48f, 0.6f, 0.7f, 0.76f, 0.79f, 0.8f,
+    0.8f
+};
+
+float momoF1[5] = {
+    0.02f, 0.07f, 0.17f, 0.33f, 0.5f
+};
+
+float momoF5[9] = {
+    0.21f, 0.39f, 0.52f, 0.62f, 0.7f, 0.75f, 0.77f, 0.79f,
+    0.8f
+};
+
+float momoB1[5] = {
+    0.04f, 0.13f, 0.26f, 0.41f, 0.58f
+};
+
+float momoB5[9] = {
+    0.21f, 0.38f, 0.51f, 0.62f, 0.69f, 0.74f, 0.77f, 0.79f,
+    0.8f
+};
+
+float jrF1[5] = {
+    0.01f, 0.06f, 0.13f, 0.24f, 0.56f
+};
+
+float jrF5[9] = {
+    0.26f, 0.44f, 0.56f, 0.64f, 0.69f, 0.73f, 0.76f, 0.78f,
+    0.8f
+};
+
+float jrB1[5] = {
+    0.04f, 0.14f, 0.28f, 0.45f, 0.63f
+};
+
+float jrB5[9] = {
+    0.21f, 0.37f, 0.48f, 0.56f, 0.63f, 0.69f, 0.74f, 0.77f,
+    0.79f
+};
+
+float virgilF1[5] = {
+    -0.08f, -0.05f, 0.08f, 0.27f, 0.52f
+};
+
+float virgilF5[10] = {
+    0.34f, 0.59f, 0.75f, 0.85f, 0.89f, 0.91f, 0.89f, 0.85f,
+    0.82f, 0.82f
+};
+
+float virgilB1[5] = {
+    -0.02f, -0.05f, 0.01f, 0.18f, 0.44f
+};
+
+float virgilB5[10] = {
+    0.32f, 0.52f, 0.63f, 0.69f, 0.74f, 0.77f, 0.79f, 0.8f,
+    0.8f, 0.8f
+};
+
+float vx01F1[37] = {
+    -0.01f, -0.02f, -0.05f, -0.09f, -0.13f, -0.18f, -0.23f, -0.28f,
+    -0.34f, -0.39f, -0.44f, -0.49f, -0.54f, -0.58f, -0.61f, -0.64f,
+    -0.66f, -0.67f, -0.68f, -0.69f, -0.69f, -0.69f, -0.69f, -0.69f,
+    -0.69f, -0.68f, -0.66f, -0.64f, -0.6f, -0.54f, -0.47f, -0.38f,
+    -0.26f, -0.1f, 0.09f, 0.33f, 0.63f
+};
+
+float vx01F5[23] = {
+    0.3f, 0.5f, 0.66f, 0.79f, 0.89f, 0.96f, 1.0f, 1.04f,
+    1.05f, 1.06f, 1.06f, 1.06f, 1.06f, 1.05f, 1.05f, 1.04f,
+    1.03f, 1.02f, 1.01f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float vx01B1[27] = {
+    0.0f, -0.02f, -0.03f, -0.06f, -0.08f, -0.11f, -0.14f, -0.17f,
+    -0.19f, -0.21f, -0.22f, -0.24f, -0.25f, -0.25f, -0.26f, -0.26f,
+    -0.26f, -0.26f, -0.26f, -0.26f, -0.23f, -0.19f, -0.11f, -0.01f,
+    0.18f, 0.39f, 0.66f
+};
+
+float vx01B5[24] = {
+    0.34f, 0.59f, 0.75f, 0.88f, 0.98f, 1.06f, 1.12f, 1.16f,
+    1.19f, 1.21f, 1.22f, 1.22f, 1.22f, 1.22f, 1.21f, 1.19f,
+    1.17f, 1.14f, 1.11f, 1.08f, 1.06f, 1.03f, 1.02f, 1.0f
+};
+
+float vx02F1[13] = {
+    0.01f, 0.01f, 0.03f, 0.04f, 0.07f, 0.1f, 0.14f, 0.19f,
+    0.26f, 0.33f, 0.43f, 0.55f, 0.73f
+};
+
+float vx02F5[32] = {
+    0.17f, 0.5f, 0.79f, 1.03f, 1.24f, 1.4f, 1.54f, 1.64f,
+    1.71f, 1.76f, 1.79f, 1.8f, 1.79f, 1.75f, 1.7f, 1.64f,
+    1.57f, 1.49f, 1.41f, 1.33f, 1.26f, 1.19f, 1.12f, 1.06f,
+    0.99f, 0.93f, 0.88f, 0.84f, 0.81f, 0.79f, 0.78f, 0.79f
+};
+
+float vx02B1[13] = {
+    -0.02f, -0.08f, -0.14f, -0.21f, -0.25f, -0.27f, -0.27f, -0.25f,
+    -0.18f, -0.06f, 0.12f, 0.35f, 0.64f
+};
+
+float vx02B5[32] = {
+    0.17f, 0.46f, 0.71f, 0.92f, 1.08f, 1.22f, 1.31f, 1.39f,
+    1.44f, 1.47f, 1.48f, 1.49f, 1.49f, 1.49f, 1.47f, 1.44f,
+    1.41f, 1.37f, 1.32f, 1.27f, 1.22f, 1.17f, 1.11f, 1.06f,
+    1.01f, 0.96f, 0.92f, 0.88f, 0.85f, 0.83f, 0.81f, 0.8f
+};
+
+float vx03F1[34] = {
+    0.0f, -0.02f, -0.05f, -0.1f, -0.18f, -0.27f, -0.37f, -0.48f,
+    -0.59f, -0.7f, -0.79f, -0.88f, -0.94f, -0.98f, -1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -0.97f, -0.94f,
+    -0.9f, -0.84f, -0.77f, -0.67f, -0.54f, -0.39f, -0.2f, 0.03f,
+    0.3f, 0.63f
+};
+
+float vx03F5[29] = {
+    0.32f, 0.5f, 0.61f, 0.7f, 0.77f, 0.84f, 0.89f, 0.92f,
+    0.95f, 0.97f, 0.99f, 0.99f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float vx03B1[29] = {
+    0.0f, -0.02f, -0.05f, -0.1f, -0.18f, -0.27f, -0.36f, -0.47f,
+    -0.57f, -0.67f, -0.77f, -0.85f, -0.92f, -0.97f, -1.0f, -1.01f,
+    -1.0f, -0.98f, -0.95f, -0.9f, -0.84f, -0.77f, -0.67f, -0.54f,
+    -0.39f, -0.2f, 0.03f, 0.31f, 0.63f
+};
+
+float vx03B5[29] = {
+    0.37f, 0.67f, 0.91f, 1.1f, 1.25f, 1.36f, 1.43f, 1.47f,
+    1.49f, 1.5f, 1.5f, 1.5f, 1.5f, 1.48f, 1.44f, 1.37f,
+    1.29f, 1.21f, 1.13f, 1.06f, 1.02f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float vx06F1[29] = {
+    -0.03f, -0.1f, -0.2f, -0.32f, -0.47f, -0.63f, -0.8f, -0.97f,
+    -1.14f, -1.3f, -1.42f, -1.48f, -1.5f, -1.5f, -1.5f, -1.49f,
+    -1.47f, -1.43f, -1.37f, -1.3f, -1.2f, -1.07f, -0.92f, -0.74f,
+    -0.54f, -0.3f, -0.03f, 0.28f, 0.62f
+};
+
+float vx06F5[29] = {
+    0.36f, 0.64f, 0.85f, 1.02f, 1.04f, 1.24f, 1.32f, 1.4f,
+    1.47f, 1.52f, 1.56f, 1.58f, 1.59f, 1.6f, 1.6f, 1.59f,
+    1.57f, 1.54f, 1.5f, 1.45f, 1.4f, 1.34f, 1.28f, 1.23f,
+    1.17f, 1.12f, 1.08f, 1.04f, 1.01f
+};
+
+float vx06B1[29] = {
+    -0.01f, -0.05f, -0.11f, -0.18f, -0.26f, -0.35f, -0.44f, -0.52f,
+    -0.59f, -0.65f, -0.69f, -0.72f, -0.74f, -0.75f, -0.75f, -0.75f,
+    -0.75f, -0.75f, -0.74f, -0.73f, -0.7f, -0.65f, -0.57f, -0.47f,
+    -0.33f, -0.16f, 0.05f, 0.32f, 0.63f
+};
+
+float vx06B5[29] = {
+    0.36f, 0.65f, 0.88f, 1.05f, 1.17f, 1.26f, 1.32f, 1.35f,
+    1.37f, 1.4f, 1.42f, 1.43f, 1.45f, 1.46f, 1.47f, 1.48f,
+    1.49f, 1.5f, 1.5f, 1.5f, 1.49f, 1.45f, 1.39f, 1.32f,
+    1.25f, 1.18f, 1.11f, 1.05f, 1.01f
+};
+
+float ag04F1[55] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, -0.02f, -0.07f, -0.14f, -0.22f, -0.29f, -0.34f,
+    -0.38f, -0.41f, -0.43f, -0.44f, -0.46f, -0.47f, -0.48f, -0.48f,
+    -0.49f, -0.49f, -0.49f, -0.49f, -0.49f, -0.49f, -0.48f, -0.47f,
+    -0.45f, -0.42f, -0.37f, -0.3f, -0.24f, -0.16f, -0.09f, -0.04f,
+    0.0f, 0.02f, 0.03f, 0.03f, 0.03f, 0.03f, 0.02f, 0.01f,
+    0.0f, 0.0f, 0.02f, 0.08f, 0.2f, 0.39f, 0.65f
+};
+
+float ag04F5[10] = {
+    0.33f, 0.56f, 0.7f, 0.8f, 0.89f, 0.94f, 0.97f, 0.99f,
+    1.0f, 1.0f
+};
+
+float ag04B1[15] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.04f, 0.17f, 0.43f
+};
+
+float ag04B5[44] = {
+    0.36f, 0.64f, 0.84f, 0.96f, 1.0f, 1.02f, 1.07f, 1.14f,
+    1.22f, 1.29f, 1.34f, 1.38f, 1.41f, 1.43f, 1.44f, 1.46f,
+    1.47f, 1.47f, 1.48f, 1.49f, 1.49f, 1.49f, 1.49f, 1.49f,
+    1.49f, 1.49f, 1.48f, 1.46f, 1.44f, 1.41f, 1.39f, 1.35f,
+    1.32f, 1.28f, 1.25f, 1.21f, 1.17f, 1.14f, 1.11f, 1.08f,
+    1.05f, 1.03f, 1.01f, 1.0f
+};
+
+float fema005F1[34] = {
+    -0.01f, -0.04f, -0.1f, -0.17f, -0.26f, -0.36f, -0.47f, -0.59f,
+    -0.72f, -0.85f, -0.97f, -1.1f, -1.22f, -1.33f, -1.43f, -1.52f,
+    -1.6f, -1.65f, -1.69f, -1.7f, -1.7f, -1.7f, -1.7f, -1.68f,
+    -1.61f, -1.5f, -1.36f, -1.17f, -0.95f, -0.7f, -0.41f, -0.1f,
+    0.24f, 0.61f
+};
+
+float fema005F5[34] = {
+    0.37f, 0.7f, 1.0f, 1.21f, 1.4f, 1.57f, 1.7f, 1.8f,
+    1.87f, 1.93f, 1.96f, 1.98f, 2.0f, 2.0f, 2.0f, 2.0f,
+    2.0f, 1.97f, 1.94f, 1.9f, 1.86f, 1.8f, 1.73f, 1.65f,
+    1.57f, 1.5f, 1.4f, 1.33f, 1.25f, 1.18f, 1.12f, 1.07f,
+    1.03f, 1.0f
+};
+
+float fema005B1[34] = {
+    -0.01f, -0.04f, -0.1f, -0.17f, -0.26f, -0.36f, -0.47f, -0.59f,
+    -0.72f, -0.85f, -0.97f, -1.1f, -1.22f, -1.33f, -1.43f, -1.52f,
+    -1.6f, -1.65f, -1.69f, -1.7f, -1.7f, -1.7f, -1.7f, -1.68f,
+    -1.61f, -1.5f, -1.36f, -1.17f, -0.95f, -0.7f, -0.41f, -0.1f,
+    0.24f, 0.61f
+};
+
+float fema005B5[34] = {
+    0.37f, 0.7f, 0.98f, 1.2f, 1.4f, 1.55f, 1.66f, 1.74f,
+    1.79f, 1.8f, 1.8f, 1.79f, 1.78f, 1.76f, 1.73f, 1.7f,
+    1.66f, 1.62f, 1.58f, 1.52f, 1.46f, 1.4f, 1.34f, 1.28f,
+    1.23f, 1.18f, 1.14f, 1.1f, 1.08f, 1.05f, 1.03f, 1.02f,
+    1.01f, 1.0f
+};
+
+float guno001F1[11] = {
+    -0.03f, -0.09f, -0.15f, -0.18f, -0.17f, -0.15f, -0.09f, 0.0f,
+    0.14f, 0.35f, 0.62f
+};
+
+float guno001F5[11] = {
+    0.23f, 0.52f, 0.72f, 0.84f, 0.87f, 0.87f, 0.86f, 0.84f,
+    0.83f, 0.81f, 0.8f
+};
+
+float guno001B1[11] = {
+    -0.02f, -0.06f, -0.12f, -0.16f, -0.18f, -0.18f, -0.17f, -0.11f,
+    0.01f, 0.23f, 0.57f
+};
+
+float guno001B5[11] = {
+    0.24f, 0.6f, 0.85f, 1.0f, 1.08f, 1.1f, 1.08f, 1.02f,
+    0.95f, 0.88f, 0.82f
+};
+
+float guno004B1[5] = {
+    -0.03f, -0.06f, -0.08f, 0.06f, 0.39f
+};
+
+float guno004B5[9] = {
+    0.35f, 0.6f, 0.77f, 0.86f, 0.9f, 0.9f, 0.87f, 0.84f,
+    0.81f
+};
+
+float guno005B1[11] = {
+    -0.01f, -0.04f, -0.08f, -0.11f, -0.12f, -0.12f, -0.1f, -0.04f,
+    0.07f, 0.27f, 0.57f
+};
+
+float guno005B5[11] = {
+    0.41f, 0.66f, 0.8f, 0.88f, 0.94f, 0.98f, 1.01f, 1.02f,
+    1.02f, 1.01f, 1.0f
+};
+
+float guno006B1[11] = {
+    -0.03f, -0.09f, -0.15f, -0.18f, -0.18f, -0.15f, -0.1f, -0.01f,
+    0.14f, 0.35f, 0.64f
+};
+
+float guno006B5[11] = {
+    0.17f, 0.42f, 0.62f, 0.77f, 0.87f, 0.91f, 0.9f, 0.88f,
+    0.85f, 0.83f, 0.81f
+};
+
+float guno010B1[12] = {
+    0.0f, 0.0f, -0.01f, -0.02f, -0.03f, -0.04f, -0.04f, -0.03f,
+    -0.01f, 0.03f, 0.08f, 0.15f
+};
+
+float guno010B5[11] = {
+    0.2f, 0.36f, 0.5f, 0.62f, 0.72f, 0.8f, 0.87f, 0.92f,
+    0.96f, 0.98f, 1.0f
+};
+
+float guno013F1[34] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, -0.04f, -0.16f, -0.3f, -0.44f,
+    -0.55f, -0.63f, -0.68f, -0.7f, -0.65f, -0.53f, -0.32f, -0.06f,
+    0.25f, 0.6f
+};
+
+float guno013F5[29] = {
+    0.36f, 0.64f, 0.84f, 0.96f, 1.0f, 0.99f, 0.95f, 0.9f,
+    0.85f, 0.81f, 0.8f, 0.8f, 0.82f, 0.85f, 0.88f, 0.92f,
+    0.95f, 0.97f, 0.99f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float guno013B1[34] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, -0.04f, -0.16f, -0.3f, -0.44f,
+    -0.55f, -0.63f, -0.68f, -0.7f, -0.65f, -0.53f, -0.32f, -0.06f,
+    0.25f, 0.6f
+};
+
+float guno013B5[29] = {
+    0.36f, 0.64f, 0.84f, 0.96f, 1.0f, 0.99f, 0.95f, 0.9f,
+    0.85f, 0.81f, 0.8f, 0.8f, 0.82f, 0.85f, 0.88f, 0.92f,
+    0.95f, 0.97f, 0.99f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float guno015B1[11] = {
+    0.01f, 0.03f, 0.06f, 0.11f, 0.16f, 0.22f, 0.29f, 0.36f,
+    0.44f, 0.52f, 0.61f
+};
+
+float guno015B5[11] = {
+    0.19f, 0.35f, 0.49f, 0.61f, 0.71f, 0.79f, 0.85f, 0.9f,
+    0.95f, 0.98f, 0.99f
+};
+
+float guno017F1[11] = {
+    -0.03f, -0.09f, -0.15f, -0.18f, -0.17f, -0.15f, -0.09f, 0.0f,
+    0.14f, 0.35f, 0.62f
+};
+
+float guno017F5[11] = {
+    0.23f, 0.52f, 0.72f, 0.84f, 0.87f, 0.87f, 0.86f, 0.84f,
+    0.83f, 0.81f, 0.8f
+};
+
+float guno017B1[11] = {
+    -0.02f, -0.06f, -0.12f, -0.16f, -0.18f, -0.18f, -0.17f, -0.11f,
+    0.01f, 0.23f, 0.57f
+};
+
+float guno017B5[11] = {
+    0.24f, 0.6f, 0.85f, 1.0f, 1.08f, 1.1f, 1.08f, 1.02f,
+    0.95f, 0.88f, 0.82f
+};
+
+float guno018F1[11] = {
+    -0.02f, -0.06f, -0.12f, -0.18f, -0.22f, -0.24f, -0.24f, -0.21f,
+    -0.13f, 0.03f, 0.31f
+};
+
+float guno018F5[11] = {
+    0.76f, 1.2f, 1.41f, 1.45f, 1.43f, 1.38f, 1.31f, 1.23f,
+    1.14f, 1.07f, 1.02f
+};
+
+float guno018B1[11] = {
+    -0.03f, -0.09f, -0.18f, -0.27f, -0.33f, -0.36f, -0.35f, -0.32f,
+    -0.22f, -0.07f, 0.28f
+};
+
+float guno018B5[11] = {
+    0.76f, 1.14f, 1.27f, 1.28f, 1.27f, 1.23f, 1.2f, 1.14f,
+    1.09f, 1.04f, 1.01f
+};
+
+float guno025B1[11] = {
+    0.01f, 0.03f, 0.06f, 0.11f, 0.16f, 0.22f, 0.29f, 0.37f,
+    0.45f, 0.53f, 0.61f
+};
+
+float guno025B5[11] = {
+    0.29f, 0.5f, 0.66f, 0.77f, 0.86f, 0.92f, 0.96f, 0.99f,
+    1.0f, 1.0f, 1.0f
+};
+
+float utma006F1[29] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, -0.04f, -0.14f, -0.27f, -0.42f, -0.56f,
+    -0.66f, -0.69f, -0.7f, -0.69f, -0.69f, -0.66f, -0.62f, -0.55f,
+    -0.44f, -0.3f, -0.11f, 0.13f, 0.43f
+};
+
+float utma006F5[28] = {
+    0.39f, 0.73f, 1.0f, 1.18f, 1.24f, 1.19f, 1.06f, 0.9f,
+    0.77f, 0.72f, 0.73f, 0.76f, 0.79f, 0.8f, 0.8f, 0.8f,
+    0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f,
+    0.8f, 0.8f, 0.8f, 0.8f
+};
+
+float utma006B1[29] = {
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, -0.04f, -0.16f, -0.3f,
+    -0.45f, -0.56f, -0.6f, -0.61f, -0.6f, -0.59f, -0.55f, -0.5f,
+    -0.4f, -0.27f, -0.09f, 0.14f, 0.44f
+};
+
+float utma006B5[28] = {
+    0.37f, 0.68f, 0.92f, 1.07f, 1.12f, 1.09f, 1.0f, 0.9f,
+    0.78f, 0.7f, 0.66f, 0.67f, 0.7f, 0.73f, 0.76f, 0.79f,
+    0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f, 0.8f,
+    0.8f, 0.8f, 0.8f, 0.8f
+};
+
+float utma007B1[5] = {
+    0.03f, 0.08f, 0.16f, 0.28f, 0.44f
+};
+
+float utma007B5[9] = {
+    0.46f, 0.76f, 0.9f, 0.94f, 0.93f, 0.91f, 0.87f, 0.84f,
+    0.81f
+};
+
+float utre002B1[5] = {
+    -0.01f, -0.01f, 0.05f, 0.2f, 0.45f
+};
+
+float utre002B5[5] = {
+    0.36f, 0.62f, 0.75f, 0.79f, 0.8f
+};
+
+float utre003B1[5] = {
+    -0.07f, -0.16f, -0.19f, -0.08f, 0.27f
+};
+
+float utre003B5[9] = {
+    0.52f, 0.82f, 0.94f, 0.96f, 0.95f, 0.92f, 0.88f, 0.84f,
+    0.81f
+};
+
+float utre005B1[5] = {
+    0.0f, 0.02f, 0.07f, 0.16f, 0.33f
+};
+
+float utre005B5[9] = {
+    0.34f, 0.57f, 0.71f, 0.78f, 0.8f, 0.8f, 0.8f, 0.8f,
+    0.8f
+};
+
+float utro001B1[11] = {
+    0.0f, 0.02f, 0.04f, 0.08f, 0.13f, 0.19f, 0.27f, 0.37f,
+    0.48f, 0.62f, 0.85f
+};
+
+float utro001B5[11] = {
+    0.23f, 0.38f, 0.52f, 0.66f, 0.77f, 0.86f, 0.92f, 0.96f,
+    0.98f, 0.99f, 1.0f
+};
+
+float utro002F1[11] = {
+    0.0f, 0.01f, 0.02f, 0.05f, 0.08f, 0.12f, 0.18f, 0.26f,
+    0.35f, 0.46f, 0.66f
+};
+
+float utro002F5[11] = {
+    0.16f, 0.3f, 0.44f, 0.57f, 0.69f, 0.78f, 0.85f, 0.9f,
+    0.95f, 0.98f, 0.99f
+};
+
+float utro002B1[11] = {
+    0.0f, 0.02f, 0.04f, 0.08f, 0.13f, 0.19f, 0.27f, 0.37f,
+    0.48f, 0.62f, 0.85f
+};
+
+float utro002B5[11] = {
+    0.23f, 0.38f, 0.52f, 0.66f, 0.77f, 0.86f, 0.92f, 0.96f,
+    0.98f, 0.99f, 1.0f
+};
+
+float utso006B1[5] = {
+    0.0f, 0.01f, 0.06f, 0.16f, 0.33f
+};
+
+float utso006B5[9] = {
+    0.34f, 0.58f, 0.73f, 0.8f, 0.83f, 0.82f, 0.82f, 0.81f,
+    0.81f
+};
+
+float boss001B1[11] = {
+    0.01f, 0.02f, 0.05f, 0.09f, 0.14f, 0.2f, 0.26f, 0.33f,
+    0.4f, 0.48f, 0.56f
+};
+
+float boss001B5[11] = {
+    0.27f, 0.48f, 0.64f, 0.76f, 0.84f, 0.9f, 0.94f, 0.97f,
+    0.99f, 1.0f, 1.0f
+};
+
+float boss004F1[9] = {
+    -0.02f, -0.06f, -0.09f, -0.09f, -0.07f, 0.0f, 0.15f, 0.37f,
+    0.66f
+};
+
+float boss004F5[14] = {
+    0.24f, 0.42f, 0.55f, 0.66f, 0.74f, 0.81f, 0.87f, 0.91f,
+    0.94f, 0.97f, 0.98f, 0.99f, 1.0f, 1.0f
+};
+
+float boss004B1[11] = {
+    0.0f, -0.01f, -0.02f, -0.03f, -0.02f, 0.01f, 0.06f, 0.15f,
+    0.28f, 0.46f, 0.7f
+};
+
+float boss004B5[14] = {
+    0.28f, 0.48f, 0.61f, 0.7f, 0.79f, 0.85f, 0.9f, 0.94f,
+    0.96f, 0.98f, 0.99f, 1.0f, 1.0f, 1.0f
+};
+
+float boss007B1[11] = {
+    -0.02f, -0.06f, -0.12f, -0.17f, -0.21f, -0.23f, -0.2f, -0.11f,
+    0.07f, 0.31f, 0.63f
+};
+
+float boss007B5[11] = {
+    0.35f, 0.61f, 0.8f, 0.92f, 0.98f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f
+};
+
+float boss012F1[24] = {
+    -0.17f, -0.31f, -0.44f, -0.55f, -0.64f, -0.72f, -0.79f, -0.85f,
+    -0.89f, -0.92f, -0.94f, -0.95f, -0.96f, -0.95f, -0.94f, -0.9f,
+    -0.85f, -0.77f, -0.64f, -0.48f, -0.27f, -0.02f, 0.28f, 0.62f
+};
+
+float boss012F5[29] = {
+    0.23f, 0.37f, 0.49f, 0.59f, 0.67f, 0.74f, 0.79f, 0.83f,
+    0.88f, 0.9f, 0.93f, 0.95f, 0.96f, 0.97f, 0.98f, 0.99f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f
+};
+
+float boss012B1[24] = {
+    -0.01f, -0.02f, -0.05f, -0.08f, -0.11f, -0.15f, -0.2f, -0.24f,
+    -0.28f, -0.31f, -0.35f, -0.37f, -0.39f, -0.39f, -0.39f, -0.37f,
+    -0.33f, -0.28f, -0.2f, -0.09f, 0.04f, 0.19f, 0.39f, 0.65f
+};
+
+float boss012B5[39] = {
+    0.38f, 0.71f, 1.0f, 1.26f, 1.47f, 1.65f, 1.81f, 1.95f,
+    2.07f, 2.18f, 2.27f, 2.33f, 2.38f, 2.41f, 2.42f, 2.42f,
+    2.42f, 2.41f, 2.4f, 2.37f, 2.34f, 2.31f, 2.27f, 2.22f,
+    2.15f, 2.08f, 1.99f, 1.9f, 1.8f, 1.7f, 1.6f, 1.5f,
+    1.4f, 1.31f, 1.22f, 1.15f, 1.09f, 1.04f, 1.01f
+};
+
+float boss013B1[11] = {
+    0.02f, -0.03f, -0.1f, -0.17f, -0.23f, -0.25f, -0.21f, -0.1f,
+    0.08f, 0.32f, 0.63f
+};
+
+float boss013B5[11] = {
+    0.37f, 0.68f, 0.93f, 1.1f, 1.2f, 1.25f, 1.23f, 1.2f,
+    1.14f, 1.09f, 1.05f
+};
+
+float boss014F1[11] = {
+    -0.01f, -0.04f, -0.07f, -0.1f, -0.12f, -0.11f, -0.06f, 0.03f,
+    0.17f, 0.37f, 0.64f
+};
+
+float boss014F5[11] = {
+    0.44f, 0.93f, 1.39f, 1.75f, 1.94f, 2.0f, 2.0f, 1.75f,
+    1.38f, 1.15f, 1.03f
+};
+
+float boss014B1[11] = {
+    -0.01f, -0.05f, -0.1f, -0.15f, -0.2f, -0.24f, -0.25f, -0.18f,
+    0.0f, 0.27f, 0.61f
+};
+
+float boss014B5[11] = {
+    0.43f, 0.9f, 1.34f, 1.7f, 1.94f, 2.0f, 1.89f, 1.69f,
+    1.46f, 1.23f, 1.06f
+};
+
+float boss016F1[25] = {
+    -0.01f, -0.02f, -0.05f, -0.08f, -0.12f, -0.16f, -0.21f, -0.25f,
+    -0.3f, -0.34f, -0.38f, -0.41f, -0.43f, -0.45f, -0.46f, -0.46f,
+    -0.45f, -0.43f, -0.39f, -0.32f, -0.22f, -0.08f, 0.1f, 0.34f,
+    0.64f
+};
+
+float boss016F5[26] = {
+    0.37f, 0.67f, 0.92f, 1.1f, 1.22f, 1.28f, 1.3f, 1.31f,
+    1.3f, 1.27f, 1.24f, 1.19f, 1.15f, 1.1f, 1.06f, 1.02f,
+    1.0f, 0.99f, 0.98f, 0.98f, 0.98f, 0.98f, 0.99f, 0.99f,
+    1.0f, 1.0f
+};
+
+float boss016B1[24] = {
+    0.0f, -0.01f, -0.02f, -0.04f, -0.05f, -0.07f, -0.09f, -0.11f,
+    -0.13f, -0.15f, -0.17f, -0.18f, -0.19f, -0.2f, -0.2f, -0.2f,
+    -0.21f, -0.2f, -0.16f, -0.1f, -0.0f, 0.15f, 0.36f, 0.64f
+};
+
+float boss016B5[27] = {
+    0.39f, 0.76f, 1.08f, 1.34f, 1.5f, 1.56f, 1.56f, 1.53f,
+    1.49f, 1.44f, 1.38f, 1.32f, 1.26f, 1.19f, 1.13f, 1.08f,
+    1.03f, 1.0f, 0.98f, 0.97f, 0.96f, 0.97f, 0.97f, 0.98f,
+    0.99f, 1.0f, 1.0f
+};
+
+float boss017F1[24] = {
+    -0.16f, -0.31f, -0.45f, -0.57f, -0.68f, -0.77f, -0.85f, -0.91f,
+    -0.95f, -0.98f, -0.99f, -0.99f, -0.96f, -0.92f, -0.87f, -0.8f,
+    -0.72f, -0.62f, -0.5f, -0.35f, -0.17f, 0.04f, 0.3f, 0.63f
+};
+
+float boss017F5[24] = {
+    0.33f, 0.6f, 0.81f, 0.95f, 1.04f, 1.1f, 1.13f, 1.15f,
+    1.16f, 1.16f, 1.16f, 1.16f, 1.15f, 1.14f, 1.12f, 1.1f,
+    1.09f, 1.07f, 1.06f, 1.04f, 1.03f, 1.02f, 1.01f, 1.0f
+};
+
+float boss017B1[24] = {
+    -0.01f, -0.04f, -0.08f, -0.13f, -0.19f, -0.26f, -0.33f, -0.4f,
+    -0.46f, -0.52f, -0.58f, -0.62f, -0.64f, -0.65f, -0.64f, -0.61f,
+    -0.55f, -0.47f, -0.37f, -0.23f, -0.08f, 0.1f, 0.33f, 0.63f
+};
+
+float boss017B5[24] = {
+    0.31f, 0.56f, 0.76f, 0.91f, 1.02f, 1.11f, 1.17f, 1.23f,
+    1.26f, 1.28f, 1.3f, 1.3f, 1.29f, 1.28f, 1.26f, 1.23f,
+    1.2f, 1.17f, 1.13f, 1.1f, 1.07f, 1.04f, 1.02f, 1.01f
+};
+
+float boss019F1[54] = {
+    0.01f, 0.03f, 0.07f, 0.12f, 0.17f, 0.22f, 0.26f, 0.3f,
+    0.33f, 0.34f, 0.32f, 0.29f, 0.23f, 0.13f, 0.0f, -0.21f,
+    -0.53f, -0.93f, -1.39f, -1.87f, -2.37f, -2.84f, -3.28f, -3.64f,
+    -3.91f, -4.12f, -4.3f, -4.45f, -4.58f, -4.67f, -4.74f, -4.78f,
+    -4.79f, -4.76f, -4.71f, -4.62f, -4.5f, -4.34f, -4.14f, -3.91f,
+    -3.65f, -3.38f, -3.08f, -2.77f, -2.45f, -2.11f, -1.77f, -1.42f,
+    -1.07f, -0.72f, -0.37f, -0.03f, 0.32f, 0.65f
+};
+
+float boss019F5[29] = {
+    0.23f, 0.44f, 0.66f, 0.86f, 1.0f, 1.1f, 1.18f, 1.24f,
+    1.3f, 1.34f, 1.36f, 1.38f, 1.39f, 1.39f, 1.38f, 1.36f,
+    1.34f, 1.32f, 1.29f, 1.25f, 1.22f, 1.18f, 1.15f, 1.12f,
+    1.08f, 1.06f, 1.03f, 1.02f, 1.0f
+};
+
+float boss019B1[19] = {
+    -0.01f, -0.05f, -0.11f, -0.17f, -0.25f, -0.32f, -0.4f, -0.46f,
+    -0.5f, -0.52f, -0.51f, -0.45f, -0.35f, -0.22f, -0.06f, 0.13f,
+    0.33f, 0.55f, 0.78f
+};
+
+float boss019B5[19] = {
+    0.38f, 0.74f, 1.07f, 1.32f, 1.48f, 1.55f, 1.59f, 1.6f,
+    1.59f, 1.56f, 1.51f, 1.45f, 1.37f, 1.3f, 1.23f, 1.16f,
+    1.09f, 1.04f, 1.01f
+};
+
+float boss020F1[5] = {
+    0.0f, 0.02f, 0.07f, 0.14f, 0.25f
+};
+
+float boss020F5[9] = {
+    0.23f, 0.47f, 0.66f, 0.75f, 0.77f, 0.79f, 0.8f, 0.8f,
+    0.8f
+};
+
+float boss020B1[5] = {
+    0.0f, 0.01f, 0.03f, 0.09f, 0.2f
+};
+
+float boss020B5[9] = {
+    0.17f, 0.39f, 0.61f, 0.73f, 0.76f, 0.79f, 0.8f, 0.8f,
+    0.8f
+};
+
+float boss029F1[19] = {
+    0.01f, 0.01f, 0.01f, 0.02f, 0.02f, 0.03f, 0.03f, 0.04f,
+    0.04f, 0.03f, 0.01f, -0.01f, -0.02f, 0.0f, 0.06f, 0.22f,
+    0.46f, 0.67f, 0.77f
+};
+
+float boss029F5[29] = {
+    0.1f, 0.25f, 0.4f, 0.55f, 0.72f, 0.88f, 1.0f, 1.07f,
+    1.12f, 1.14f, 1.15f, 1.14f, 1.11f, 1.08f, 1.05f, 1.01f,
+    0.97f, 0.94f, 0.92f, 0.91f, 0.9f, 0.91f, 0.92f, 0.93f,
+    0.95f, 0.96f, 0.98f, 0.99f, 1.0f
+};
+
+float boss029B1[19] = {
+    -0.01f, -0.02f, -0.03f, -0.04f, -0.05f, -0.06f, -0.06f, -0.06f,
+    -0.04f, -0.01f, 0.02f, 0.07f, 0.14f, 0.21f, 0.31f, 0.43f,
+    0.57f, 0.73f, 0.89f
+};
+
+float boss029B5[29] = {
+    0.25f, 0.41f, 0.55f, 0.68f, 0.71f, 0.86f, 0.92f, 0.97f,
+    1.01f, 1.04f, 1.06f, 1.07f, 1.07f, 1.07f, 1.07f, 1.07f,
+    1.06f, 1.06f, 1.06f, 1.07f, 1.07f, 1.07f, 1.07f, 1.06f,
+    1.04f, 1.03f, 1.02f, 1.01f, 1.0f
+};
+
+UnitPosAdj adjTblPl[8] = {
+    { 1, chaosF1, chaosF5, chaosB1, chaosB5 },
+    { 2, kosmosF1, kosmosF5, kosmosB1, kosmosB5 },
+    { 3, shionF1, shionF5, shionB1, shionB5 },
+    { 5, ziggyF1, ziggyF5, ziggyB1, ziggyB5 },
+    { 6, momoF1, momoF5, momoB1, momoB5 },
+    { 7, jrF1, jrF5, jrB1, jrB5 },
+    { 10, virgilF1, virgilF5, virgilB1, virgilB5 },
+    { 0, 0, 0, 0, 0 }
+};
+
+UnitPosAdj adjTblEn[42] = {
+    { 17, vx01F1, vx01F5, vx01B1, vx01B5 },
+    { 18, vx02F1, vx02F5, vx02B1, vx02B5 },
+    { 19, vx03F1, vx03F5, vx03B1, vx03B5 },
+    { 22, vx06F1, vx06F5, vx06B1, vx06B5 },
+    { 26, ag04F1, ag04F5, ag04B1, ag04B5 },
+    { 67, fema005F1, fema005F5, fema005B1, fema005B5 },
+    { 34, guno001F1, guno001F5, guno001B1, guno001B5 },
+    { 50, guno001F1, guno001F5, guno001B1, guno001B5 },
+    { 59, guno001F1, guno001F5, guno001B1, guno001B5 },
+    { 37, 0, 0, guno004B1, guno004B5 },
+    { 38, 0, 0, guno005B1, guno005B5 },
+    { 39, 0, 0, guno006B1, guno006B5 },
+    { 43, 0, 0, guno010B1, guno010B5 },
+    { 46, guno013F1, guno013F5, guno013B1, guno013B5 },
+    { 48, 0, 0, guno015B1, guno015B5 },
+    { 50, guno017F1, guno017F5, guno017B1, guno017B5 },
+    { 51, guno018F1, guno018F5, guno018B1, guno018B5 },
+    { 58, 0, 0, guno025B1, guno025B5 },
+    { 82, utma006F1, utma006F5, utma006B1, utma006B5 },
+    { 83, 0, 0, utma007B1, utma007B5 },
+    { 92, 0, 0, utre002B1, utre002B5 },
+    { 93, 0, 0, utre003B1, utre003B5 },
+    { 95, 0, 0, utre005B1, utre005B5 },
+    { 97, 0, 0, utro001B1, utro001B5 },
+    { 98, utro002F1, utro002F5, utro002B1, utro002B5 },
+    { 104, 0, 0, utso006B1, utso006B5 },
+    { 151, 0, 0, boss001B1, boss001B5 },
+    { 154, boss004F1, boss004F5, boss004B1, boss004B5 },
+    { 159, boss004F1, boss004F5, boss004B1, boss004B5 },
+    { 160, boss004F1, boss004F5, boss004B1, boss004B5 },
+    { 161, boss004F1, boss004F5, boss004B1, boss004B5 },
+    { 185, boss004F1, boss004F5, boss004B1, boss004B5 },
+    { 157, 0, 0, boss007B1, boss007B5 },
+    { 162, boss012F1, boss012F5, boss012B1, boss012B5 },
+    { 163, 0, 0, boss013B1, boss013B5 },
+    { 164, boss014F1, boss014F5, boss014B1, boss014B5 },
+    { 166, boss016F1, boss016F5, boss016B1, boss016B5 },
+    { 167, boss017F1, boss017F5, boss017B1, boss017B5 },
+    { 169, boss019F1, boss019F5, boss019B1, boss019B5 },
+    { 170, boss020F1, boss020F5, boss020B1, boss020B5 },
+    { 179, boss029F1, boss029F5, boss029B1, boss029B5 },
+    { 0, 0, 0, 0, 0 }
+};
+
+const char unitCmdCreateIDUAPOText[48] = "** Create (ID=%d) U=%X A=%X P=%X O=%X **\n";
+
+const char unitCmdRemoveUAPOText[40] = "** Remove (%d) U=%X A=%X P=%X O=%X **\n";
+
+const char unitCmdUnitEnInitENOverText[24] = "** unitEnInit: EN over\n";
+
+const char unitCmdJobTypeErrTidText[32] = "** JobType err -> %d tid=%d\n";
+
+const char unitCmdTgtSetErrText[24] = "\n** unitCmdTgtSet: err\n";
+
+const char unitCmdMoveChaErrText[40] = "** unitCmdMoveCha: err -> %d\n";
+
+const char unitCmdMotSetMotPackFlagText[48] = "** MotSet: Mot=%d Pack=%d flag=%X (%X) **\n";
+
+const char unitCmdIntrText[16] = "** Intr=%f\n";
+
+static unsigned char sSp[24];
+
+static float cPoint[32];

@@ -9,158 +9,14 @@
 
 /* calcUPGet's return type comes from its definer, ov01/tu004 calc.c. */
 #include "ov01/calc.h"
+/* BattleUnit (the unit record) lives in the owner header ov01/battle_init.h. */
+#include "ov01/actor.h"
+/* CmdEntry (the queued-command record) and unitCmdSet live in the owner header. */
+#include "ov01/unit_cmd.h"
 
-extern CalcUnitParam *calcUPGet(ObjectTask *unit);
-extern int calcStatGet(ObjectTask *unit, int category, int flag);
 /* Defined in src/ov01/calc.c (ov01/tu004), not declared in its header. */
-extern int calcIdol2Chk(ObjectTask *unit);
+extern int calcIdol2Chk(BattleUnit *unit);
 extern int dataCidGet(int chara_id);
-
-/*
- * Actor.cmdTarget's type: unitCmdPosAdj saves and restores the whole command
- * target with aligned ld/sd pairs (0x00a04aa4..0x00a04ab8,
- * 0x00a04aec..0x00a04af8), where a plain Vector4 (4-byte aligned) copies
- * through ldl/ldr/sdl/sdr. The u64 pair is the alignment spelling of
- * MCamVector (src/ov01/m_cam.c) and GameVector8 (src/main/game.c) and carries
- * no meaning of its own; the components are read through `vector` and the whole is copied as one 8-byte value (unitCmdPosAdj's savedTarget). Its 8-byte
- * alignment rounds the partial Actor view's sizeof from 0x76C to 0x770;
- * no offset moves and nothing in this TU takes sizeof(Actor).
- */
-typedef union UnitVector {
-    Vector4 vector;
-    u64 pair[2];
-} UnitVector;
-
-/*
- * The battle actor object an ObjectTask's own `work` slot (include/shared.h)
- * points at once a unit is loaded; unitActupdate/unitActdraw below are its
- * `update`/`draw` callbacks. The head up to +0x70 is the Actor head main's
- * TU-local headers already spell identically (src/main/chr.h,
- * src/main/near_dir.h, src/main/set_motion.h, where the evidence for each
- * member is recorded); a TU-local header cannot be included from another TU,
- * so it is restated here verbatim. This TU adds the two members its own code
- * touches past that head: unitActdraw reads the float at +0xC0 and
- * unitActupdate advances the word at +0xE0.
- */
-/*
- * unitCmdDirSet/unitCmdDivSet (0x00a05a60, 0x00a05ba8) also read and blend
- * the x/z components of the Vector4 at +0x90 against a move command's target
- * coordinate; y and w of that Vector4 are untouched by any function this TU
- * claims.
- */
-typedef struct Actor {
-    u32 flags;
-    void (*update)(struct Actor *actor);
-    void (*draw)(struct Actor *actor);
-    u32 quadword_alignment_gap;
-    Vector4 position;
-    Vector4 previous_position;
-    Vector4 velocity;
-    Vector4 acceleration;
-    Vector4 rotation;
-    Vector4 scale;
-    int runFrameCounter;   /* +0x70: unitCmdRun tests it modulo 3 to space
-                             * out its footstep decoEffCall. */
-    int moveState;         /* +0x74: unitCmdMove's own move-command step;
-                             * 0 issues the move (unitCmdDstSet/unitCmdVASet
-                             * and, for a jump, unitCmdDirSet) and advances to
-                             * 1, which then waits for unitCmdJump/unitCmdWarp
-                             * to report arrival before calling
-                             * unitCmdMoveNext. */
-    int movePhase;          /* +0x78: reset to 0 by unitCmdMove when a move
-                             * starts; unitCmdJump/unitCmdWarp (still asm)
-                             * advance it through their own per-move-kind
-                             * phases. */
-    int movePhaseTimer;     /* +0x7C: unitCmdWarp zeroes it every time it
-                             * advances movePhase; unitTelIn/unitTelOut use
-                             * it as their own first-step flag (lw 0x7C($5)
-                             * at 0x00a0644c/0x00a064bc). */
-    ObjectTask *targetUnit; /* +0x80: unitCmdDstSet's mode-0 path reads the
-                             * command target's own CalcUnitParam/table
-                             * position through it. */
-    unsigned char unmodeled_84[0x90 - 0x84];
-    UnitVector cmdTarget; /* +0x90: unitCmdDirSet reads x/z against
-                            * motionActor->position to face the pending move
-                            * command; unitCmdDivSet blends x/z toward that
-                            * position by a supplied ratio. y and w are
-                            * untouched by any function this TU claims. */
-    unsigned char unmodeled_a0[0xC0 - 0xA0];
-    /*
-     * +0xC0 opens the kind-specific block that include/main/act_1.h models
-     * as an anonymous union (menu control, Java arguments, enemy
-     * parameters) and ACTOR_ARGS reads as bytes; a battle unit's motion actor
-     * keeps its transparency there. `args` covers the bytes of the block this
-     * view models, up to posSnapX. Accessed as a union member, transparency
-     * may alias any other access: unitTelIn/unitTelOut reload
-     * UnitRecord.motionActor after storing it (lw $4,0x14($4) at 0x00a06460
-     * and 0x00a06500), which a plain float member lets the compiler merge
-     * into the first load.
-     */
-    union {
-        float transparency;   /* +0xC0: unitActdraw draws translucent below 1.0 */
-        unsigned char args[0xD0 - 0xC0];
-    };
-    float posSnapX;        /* +0xD0: unitCmdJump's arrival check rounds it
-                             * and compares against posSnapZ*0.5 rounded. */
-    float hopLength;       /* +0xD4: replaces four bytes of filler
-                             * (unmodeled_d4) in this existing local Actor
-                             * view. unitCmdMoveChaJump2 takes its address
-                             * (`addiu $19,$2,0xD4`, 0x00a040dc), stores the
-                             * command distance divided by 3 (`swc1 $f13,0($19)`,
-                             * 0x00a04114) and reloads it to aim each
-                             * intermediate hop (`lwc1 $f0,0($19)`, 0x00a04170). */
-    float posSnapZ;        /* +0xD8 */
-    unsigned char unmodeled_dc[0xE0 - 0xDC];
-    int motionFrame;      /* +0xE0: unitActupdate advances it before
-                             ACT_updateMotion */
-    unsigned char unmodeled_e4[0xF0 - 0xE4];
-    int motion;            /* +0xF0: unitMotGet returns it plus one */
-    float moveOriginY;     /* +0xF4: unitCmdRun/unitCmdJump save cmdTarget's
-                             * y/z here before a stand/attack phase and
-                             * restore them afterward; the paired x value at
-                             * this same phase reuses the four bytes of
-                             * `motion` above through a cast (see the .c
-                             * file), never through a new field here. */
-    float moveOriginZ;     /* +0xF8 */
-    unsigned char unmodeled_fc[0x6F0 - 0xFC];
-    int moveFlags;          /* +0x6F0: unitCmdRun/unitCmdHover/unitCmdFloat/
-                              * unitCmdJump test bit 0x1000 of it to detect
-                              * that a move command has reached its target. */
-    float moveElapsed;      /* +0x6F4: unitCmdJump reads it as a frame count
-                              * source for its arrival check. */
-    float moveStepRate;      /* +0x6F8: unitCmdFloat/unitCmdJump write a
-                              * per-frame interpolation rate here. */
-    unsigned char unmodeled_6fc[0x714 - 0x6FC];
-    float interpTime;      /* +0x714: unitSetInterpTime's write target */
-    unsigned char unmodeled_718[0x760 - 0x718];
-    float floatStepX;      /* +0x760: unitCmdFloat adds it to its motion
-                             * actor's position.x each step while floating. */
-    unsigned char unmodeled_764[0x768 - 0x764];
-    float floatStepZ;      /* +0x768 */
-} Actor;
-
-/*
- * Partial view of the unit record beyond the published ObjectTask prefix
- * (task+work, ending at +0x14, include/shared.h): unitSetInterpTime and
- * unitMotGet both follow a pointer immediately after that prefix, and
- * unitWpnMotSet reads a 4-entry pointer array starting eight bytes further.
- * Both point at Actor objects: unitWpnMotSet forwards the entry it reads to
- * ACT_animGetData/ACT_setMotion, whose first parameter is already
- * Actor-typed (src/main/act_2.c). No other byte of this wider record is
- * claimed, and the relationship between this pointer and ObjectTask.work is
- * not evidenced here.
- */
-typedef struct UnitRecord UnitRecord;
-
-struct UnitRecord {
-    ObjectTask task;                   /* +0x00..+0x13: the ObjectTask
-                                         * prefix, opaque here */
-    Actor *motionActor;                /* +0x14 */
-    unsigned char unmodeled_018[0x1c - 0x18]; /* +0x18..+0x1b */
-    Actor *wpnActor[4];                /* +0x1c */
-    Actor *subActor;                   /* +0x2c: unitRemoveActor disposes it
-                                         * first when it is set */
-};
 
 /* Defined in src/main/act_1.c on its own Actor spelling of the actor. */
 extern void ACT_dispose(Actor *actor);
@@ -181,51 +37,15 @@ extern void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags);
 
 /* Defined later in this TU; unitCmdAtkEnd, unitCmdDmg and unitCmdBtst call
  * it before its definition with a motion number. */
-extern void unitFaceMotSet(ObjectTask *unit, int motion);
+extern void unitFaceMotSet(BattleUnit *unit, int motion);
+
 
 /*
- * unitLoad and unitActupdate both test this bit of Actor.flags to tell an
- * enemy-controlled unit from a player-controlled one: unitLoad picks
- * sefSetupEnemy over sefSetupPlayer when it is set, and unitActupdate only
- * recomputes the ground-height component of position when it is set.
+ * Bit 0x1000 of the motion actor's moveFlags (Actor.moveFlags, +0x6F0): the
+ * move command has reached its target; the move handlers test it (see the
+ * moveFlags member above).
  */
-#define ACTOR_FLAG_ENEMY 0x40u
-
-/* Bit 0x8 of Actor.flags hides the actor (include/main/act_1.h spells it the same). */
-#define ACTOR_FLAG_HIDDEN 0x8
-
-/* Bit 0x40 of CalcUnitParam.flags, a different record's bit of the same value. */
-#define CALC_UNIT_FLAG_AGWS 0x40
-
-/*
- * unitCmdSet (src/ov01/unit_cmd.c, still asm) sets this bit of Actor.flags
- * when it queues a command whose selector is nonzero (ori 0x2 at
- * 0x00a01d5c); unitCmdFree clears it (and 0x00a01e08).
- */
-#define ACTOR_FLAG_CMD_PENDING 0x2u
-
-/*
- * src/ov01/calc.c restates the same queued-command record (its own
- * CalcCmdEntry) for calcTurnStart's own call into unitCmdSet, defined in
- * this TU; unitCmdDeadSet is this TU's own caller.
- */
-typedef struct CmdEntry CmdEntry;
-
-struct CmdEntry {
-    int selector;      /* +0x00 */
-    int argument;      /* +0x04 */
-    int extra;         /* +0x08 */
-    int itmId;         /* +0x0C: unitCmdTgtSet copies it into the TgtCmd
-                         * (src/ov01/calc.c) itmId it builds for
-                         * tgtFindFirst (lw $3, 0xC($7); sw $3, 0x8($29),
-                         * unit_cmd/unitCmdTgtSet.s 0x00a03434/0x00a0343c). */
-    int mode;          /* +0x10: unitCmdTgtSet's own TgtCmd.mode, the same
-                         * offset tgtFindChk branches on for mode 3
-                         * (lw $2, 0x10($7); sw $2, 0xC($29),
-                         * unit_cmd/unitCmdTgtSet.s 0x00a03444/0x00a0344c). */
-};
-
-extern void unitCmdSet(ObjectTask *unit, CmdEntry *cmd);
+#define MOVE_FLAG_REACHED 0x1000
 
 /*
  * tgtFindFirst's search criteria (src/ov01/calc.c, still asm there, its own
@@ -236,29 +56,44 @@ extern void unitCmdSet(ObjectTask *unit, CmdEntry *cmd);
  */
 typedef struct TgtCmd {
     int tecId;          /* +0x00 */
-    ObjectTask *target; /* +0x04 */
+    BattleUnit *target; /* +0x04 */
     int itmId;          /* +0x08 */
     int mode;           /* +0x0C: 3 = item */
 } TgtCmd;
 
-extern ObjectTask *tgtFindFirst(ObjectTask *unit, TgtCmd *cmd);
+extern BattleUnit *tgtFindFirst(BattleUnit *unit, TgtCmd *cmd);
+
+/*
+ * The item command record unitCmdItem builds on its stack and hands to
+ * unitCmdItemSub: argument and itmId are copied from the queued CmdEntry,
+ * target is the unit the item acts on (the sub-routine walks it with
+ * tgtFindNext), and mode is 3, the item target kind.
+ */
+typedef struct ItemCmd {
+    int argument; /* +0x00 */
+    int target;   /* +0x04 */
+    int itmId;    /* +0x08 */
+    int mode;     /* +0x0C */
+} ItemCmd;
+
+extern void unitCmdItemSub(BattleUnit *unit, ItemCmd *buf);
 
 /* Still asm, src/ov01/battle_init.c; unitCmdTgtSet's only other caller into
  * that TU. */
-extern void cmdListCansel(ObjectTask *unit);
+extern void cmdListCansel(BattleUnit *unit);
 
 /* The three shorts after charaId are CalcUnitParam.weaponId[0..2]. */
 extern void sefSetupPlayer(short charaId, short, short, short);
 extern void sefSetupEnemy(short charaId);
 /* Defined by ov01/tu005 data_unit_org_get.c: returns 0 or 1; charaId is the
  * dataUnitFileGet key. */
-extern int dataUnitFileLoad(ObjectTask *unit, int charaId);
-extern void dataSndSeRegLoad(ObjectTask *unit);
+extern int dataUnitFileLoad(BattleUnit *unit, int charaId);
+extern void dataSndSeRegLoad(BattleUnit *unit);
 
 /* Defined in src/ov01/data_unit_org_get.c, declared there the
  * same way; unitCmdReadWait waits on the first and then calls the second. */
 extern int dataCdSync(void);
-extern void dataUnitFileLoad2Sub(ObjectTask *unit);
+extern void dataUnitFileLoad2Sub(BattleUnit *unit);
 
 extern void ACT_updateMotion(Actor *actor);
 extern float UnduGet(float x, float z);
@@ -267,33 +102,18 @@ extern void nmlModelSetTransparency(float transparency);
 extern void nmlModelSetToumei(int enabled);
 extern void nmlModelSetZwrite(int enabled);
 
-extern void unitCmdExec(ObjectTask *unit);
-extern void statEffProc(ObjectTask *unit);
+extern void unitCmdExec(BattleUnit *unit);
+extern void statEffProc(BattleUnit *unit);
 /* Defined in src/ov01/battle_init.c; unitCmdBted calls it before the
  * declaration further down the .c file. */
-extern void statEffOff(ObjectTask *unit);
+extern void statEffOff(BattleUnit *unit);
 /* Defined in src/ov01/battle_init.c; unitCmdFadeIn calls it before the
  * declaration further down the .c file. */
-extern void statEffOn(ObjectTask *unit);
+extern void statEffOn(BattleUnit *unit);
 
-/*
- * The per-unit status-effect record CalcUnitParam.effectUnit points at
- * (include/ov01/calc.h declares it incomplete). Its owner,
- * include/ov01/battle_init.h, cannot be included here (its transWepIn/
- * transWepOut take BattleUnit *, this TU's UnitRecord *), so the one member
- * this TU touches is restated at the owner's offset: unitCmdFadeOut sets and
- * unitCmdFadeIn clears UNIT_WORK_STATUS_BLOCKED in it (lw/ori/sw 0xA8C($3)
- * at 0x00a06e7c, lw/and/sw 0xA8C($4) at 0x00a06dd4); unitDispOnOff does
- * both.
- */
-struct UnitWork {
-    unsigned char unmodeled_00[0xA8C];
-    unsigned int flags; /* +0xA8C */
-};
-
-/* UnitWork.flags bit that suppresses status-effect ticks for the unit. */
+/* UnitWork.flags (include/ov01/battle_init.h) bit that suppresses status-effect ticks for the unit. */
 #define UNIT_WORK_STATUS_BLOCKED 0x100u
-extern void unitClipSet(ObjectTask *unit);
+extern void unitClipSet(BattleUnit *unit);
 
 /*
  * obj.c (src/ov01/obj.c, ov01/tu001) owns the unit's ObjectCommandQueue and
@@ -307,38 +127,36 @@ extern void *objCmdPtrGet(ObjectTask *task);
 extern int objCmdNext(ObjectTask *task);
 extern void *objCmdPush(ObjectTask *task);
 
-extern int unitCmdStand(ObjectTask *unit);
+extern int unitCmdStand(BattleUnit *unit);
 
-/* fdlibm atan2f, already declared identically in src/main/get.h. */
-extern float atan2f(float y, float x);
 
 /*
  * unitCmdMove's own siblings, still asm in this TU; forward-declared for the
  * calls unitCmdMove makes before their definitions appear later in the file.
  */
-extern float unitCmdDirSet(UnitRecord *unit);
-extern void unitCmdDstSet(ObjectTask *unit, int, int);
-extern void unitCmdVASet(ObjectTask *unit, int, int);
-extern int unitCmdJump(ObjectTask *unit, int, int, int);
-extern int unitCmdHover(ObjectTask *unit, int, int);
-extern int unitCmdFloat(ObjectTask *unit, int, int);
-extern int unitCmdWarp(ObjectTask *unit, int, int);
-extern int unitCmdMoveNext(ObjectTask *unit, int);
+extern float unitCmdDirSet(BattleUnit *unit);
+extern void unitCmdDstSet(BattleUnit *unit, int, int);
+extern void unitCmdVASet(BattleUnit *unit, int, int);
+extern int unitCmdJump(BattleUnit *unit, int, int, int);
+extern int unitCmdHover(BattleUnit *unit, int, int);
+extern int unitCmdFloat(BattleUnit *unit, int, int);
+extern int unitCmdWarp(BattleUnit *unit, int, int);
+extern int unitCmdMoveNext(BattleUnit *unit, int);
 
 /*
  * unitCmdMoveChaRun/unitCmdMovePosRun's own sibling, still asm in this TU;
  * forward-declared for the calls they make to it before its definition
  * appears later in the file.
  */
-extern int unitCmdRun(ObjectTask *unit, int, int);
+extern int unitCmdRun(BattleUnit *unit, int, int);
 
 /*
  * unitCmdWarp's own siblings, defined later in this TU; forward-declared for
  * the calls it makes before their definitions appear in the file.
  */
-extern int unitTelIn(ObjectTask *unit);
-extern int unitTelOut(ObjectTask *unit);
-extern void unitMotStandSet(ObjectTask *unit);
+extern int unitTelIn(BattleUnit *unit);
+extern int unitTelOut(BattleUnit *unit);
+extern void unitMotStandSet(BattleUnit *unit);
 
 /* Defined in a different translation unit (src/ov01/data_unit_org_get.c),
  * still asm there; unitCmdDstSet is the only claimed caller, reading the x/z
@@ -347,19 +165,15 @@ extern Vector4 *dataPosTblGet(int index);
 
 /* unitCmdDstSet's own sibling, still asm in this TU; forward-declared for the
  * call it makes before its own definition appears later in the file. */
-extern float unitColiGet(ObjectTask *unit, ObjectTask *targetUnit);
+extern float unitColiGet(BattleUnit *unit, BattleUnit *targetUnit);
 
 /*
- * dataMtdRead/dataDefWpnGet/transWepIn/transWepOut are defined in
- * src/ov01/battle_init.c (ov01/tu003), which declares and calls them on its
- * own BattleUnit *, the same record this TU's UnitRecord restates (both
- * TU-local headers spell the shared Actor head identically); unitMtdProc is
- * this TU's own caller, on its own UnitRecord * spelling of that record.
+ * dataMtdRead/dataDefWpnGet are defined in src/ov01/battle_init.c (ov01/tu003)
+ * on its own BattleUnit *; unitMtdProc is this TU's own caller.
+ * transWepIn/transWepOut are declared by include/ov01/battle_init.h.
  */
-extern int dataMtdRead(UnitRecord *unit, int trigger);
-extern int dataDefWpnGet(UnitRecord *unit);
-extern void transWepIn(UnitRecord *unit, int slot);
-extern void transWepOut(UnitRecord *unit, int slot);
+extern int dataMtdRead(BattleUnit *unit, int trigger);
+extern int dataDefWpnGet(BattleUnit *unit);
 
 /*
  * The 0x10-byte action request unitCmdAtk builds on its stack and hands to
@@ -367,9 +181,43 @@ extern void transWepOut(UnitRecord *unit, int slot);
  * technique id dataTecGet resolves.
  */
 typedef struct UnitActRequest {
-    int id;              /* +0x00: technique id */
-    unsigned char unmodeled_04[0x0C];
+    int id;              /* +0x00: technique id, copied from CmdEntry.argument */
+    BattleUnit *target;  /* +0x04: the work actor's target unit */
+    int itmId;           /* +0x08: copied from CmdEntry.itmId */
+    int mode;            /* +0x0C: 1 = attack request */
 } UnitActRequest;
+
+/* Defined in src/ov01/calc.c (ov01/tu004). */
+extern int calcEp(BattleUnit *unit, int delta);
+extern int calcBp2Tid(BattleUnit *unit, int tecId);
+extern int calcTakeEpGet(BattleUnit *unit, int tecId);
+
+/* Defined in src/ov01/data_unit_org_get.c (ov01/tu005); the TU-local view
+ * here only needs the pointer, whose bytes unitCmdAtk reads as unsigned
+ * shorts. */
+extern void *dataSpecDataGet(int cid, int specialId);
+
+extern void unitCmdAtkSub(BattleUnit *unit, UnitActRequest *request);
+
+/* Defined in src/main/sef.c, src/ov01/snd.c and src/ov01/obj.c. */
+extern void sefReleaseID(int effectId);
+extern void sefDeleteEffect2(SchedulerState *scheduler);
+extern void sefDeleteEffectWait(int characterId);
+extern int sndSeRegRemove(int id);
+extern void objRemove(ObjectTask *task);
+
+
+
+/* Defined in src/ov01/data_unit_org_get.c (ov01/tu005), still asm there. */
+extern void dataUnitInitSet(BattleUnit *unit, int charaId);
+
+/* Defined in src/ov01/calc.c (ov01/tu004). */
+extern int calcWct(BattleUnit *unit);
+extern int calcAttWpnChk(int weaponId);
+
+/* Defined in src/ov01/data_unit_org_get.c (ov01/tu005) as a WpnRecord
+ * pointer; this TU reads only the byte at its +0x10. */
+extern unsigned char *dataWpnGet(int index);
 
 /*
  * dataTecGet's record (src/ov01/data_unit_org_get.c, opaque there) as far as
@@ -383,37 +231,25 @@ typedef struct TecJobView {
 
 extern void scenarioBatInit(void);
 extern TecJobView *dataTecGet(int tecId);
-extern void unitJobTypeAtk(ObjectTask *unit, UnitActRequest *request, TecJobView *tec);
+extern int unitJobTypeAtk(BattleUnit *unit, UnitActRequest *request, TecJobView *tec);
 
 /*
  * unitCmdExec dispatches the queued command's selector through this table of
  * command handlers (lui/lw %lo(unitCmdTbl) indexed by selector << 2, jalr,
  * 0x00a01dc8..0x00a01dd4); a zero return advances Actor.runFrameCounter.
  */
-extern int (*unitCmdTbl[])(ObjectTask *unit);
+static int (*unitCmdTbl[49])(BattleUnit *unit);
 
 /* Defined in src/ov01/debug_entry.c, still asm there; it reads its second
  * argument as the command selector (daddu $22,$5 at 0x00a2e530). */
-extern void debugCmdPrint(ObjectTask *unit, int selector);
+extern void debugCmdPrint(BattleUnit *unit, int selector);
 
 /* Defined in src/ov01/snd.c; unitCmdWake passes its own unit
  * as the first argument (daddu $4,$16,$0 at 0x00a06a54). */
-extern void sndSeTransPlay(ObjectTask *unit, int, int);
+extern void sndSeTransPlay(BattleUnit *unit, int, int);
 
 /* Defined later in this TU; unitCmdMot calls it before its definition. */
-extern void unitMtdProc(UnitRecord *unit);
-
-/*
- * Actor.flags bit unitLiveNumGet skips as not alive and unitCmdDeadSet
- * refuses to set again; unitCmdWake clears it (and -0x81, 0x00a06a94).
- */
-#define ACTOR_FLAG_DOWN 0x80u
-
-/*
- * Actor.flags bit unitCmdGuard sets (ori 0x800 at 0x00a02764) and
- * unitCmdDef tests to skip its follow-up motion 0x1C (andi at 0x00a02fac).
- */
-#define ACTOR_FLAG_GUARD 0x800u
+extern void unitMtdProc(BattleUnit *unit);
 
 /*
  * One row of unitCmdPosAdj's root-motion tables (adjTblPl at 0x00a3d050,
@@ -434,14 +270,13 @@ typedef struct UnitPosAdj {
 extern UnitPosAdj adjTblPl[];
 extern UnitPosAdj adjTblEn[];
 
-extern int unitMotGet(ObjectTask *unit);
+extern int unitMotGet(BattleUnit *unit);
 
 /* Defined in src/ov01/calc.c (ov01/tu004), still asm there; it resets every
  * status category of its unit (daddu $16,$4 then calcStatReset(unit, n, ...)). */
-extern void calcStatResetAll(ObjectTask *unit);
+extern void calcStatResetAll(BattleUnit *unit);
 
 /* Defined in src/ov01/battle_init.c (ov01/tu003), still asm there. */
-extern void decoEffCall(ObjectTask *unit, int effectId);
 
 /* Defined in src/ov01/snd.c (ov01/tu013), declared the same way by
  * src/ov01/battle_init.c and src/ov01/menu.c. */
