@@ -275,8 +275,8 @@ enum {
 #define SHOP_INFO_SHOWN_Y 386
 #define SHOP_INFO_HIDDEN_Y 480
 
-/* A.G.W.S. unit ids of the VX series; lower ids are the Hyams AG series. */
-#define SHOP_AGWS_VX_FIRST_ID 23
+/* A.G.W.S. model ids from here up are the Hyams AG series; lower ids are the Vector VX series. */
+#define SHOP_AGWS_HYAMS_FIRST_ID 23
 
 /* A.G.W.S. unit ids run from the first up to (not including) the end id. */
 #define SHOP_AGWS_UNIT_FIRST 0x11
@@ -1510,7 +1510,7 @@ static void MenuShopInfo(TskObject *task, void *data)
         if (MenuShopWork->itemId == 0) {
             eMessageCpy(work->message, menuShopBlankText);
         } else if ((MenuShopWork->itemId >> 16) == ITEM_KIND_AGWS) {
-            if (MenuShopWork->modelId >= SHOP_AGWS_VX_FIRST_ID)
+            if (MenuShopWork->modelId >= SHOP_AGWS_HYAMS_FIRST_ID)
                 eMessageCpy(work->message, tab112.p[0]);
             else
                 eMessageCpy(work->message, tab112.p[1]);
@@ -4596,7 +4596,7 @@ void MenuShopMain(int shopType)
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-/* MenuShopModelMain copies all four coordinates to the camera at +0xD0. */
+/* MenuShopModelMain sets the model camera's position to this vector. */
 const DoublewordAlignedVector4 menuShopModelCameraVector = { -2.0f, 1.8f, 8.5f, 1.0f };
 
 /* MenuShopInfo copies this pair and chooses the AG or VX maker prompt. */

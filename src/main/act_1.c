@@ -4,6 +4,7 @@
 #include "main/act_2.h"
 #include "main/exm_2.h"
 #include "main/game_init_camera.h"
+#include "main/rsrc.h"
 #include "main/xgl_studio.h"
 #include "quadword.h"
 
@@ -20,15 +21,9 @@ extern ActInfoPad PadData;
 extern void *memset(void *destination, int value, unsigned int count);
 
 /*
- * RSRC_alloc is defined in src/main/rsrc.c and has no shared declaration, so
- * its prototype is declared here from the ACT_allocBlock call site: the block
- * count is shifted left by 6 (64 bytes per block) into the size argument, and
- * the tag is passed through unchanged.
+ * ACT_draw calls the static ACT_info below through this alias of its
+ * address; a direct call changes the linked image's symbol table.
  */
-extern void *RSRC_alloc(MatrixHeap *heap, int size, int tag);
-
-extern void RSRC_inactiveSource(MatrixHeap *heap, Actor *actor);
-
 extern void ACT_info_00306090(void);
 extern void LOOK_target_doit(void);
 
@@ -37,22 +32,21 @@ extern void ACT_updateMotionPause(Actor *actor);
 extern void UnduParamInit(void *param);
 extern void EXM_InitMovedHair(Actor *actor);
 extern void DB_params(const char *params);
-static MatrixHeap *actMatrixHeap = 0;
+static RsrcManager *actMatrixHeap = 0;
 
-static MatrixHeap matrixHeap;
+static RsrcManager matrixHeap;
 
 static ActMatrixArena actMatrix;
 
 #define ACT_MATRIX_SIZE 64 /* one 4x4 float joint matrix */
 #define ACT_MATRIX_HEAP_BOUND 0xC0000
 #define ACT_MATRIX_HEAP_MAX 64
-#define ACT_MATRIX_HEAP_STORE_SIZE 0x400
 #define ACTOR_PIXEL_ALPHA_DEFAULT 117
 #define ACTOR_BODY_RADIUS_DEFAULT 0.35f
 #define ANIM_SLOT_FLAG_PAUSED 0x80000
 #define ACT_INFO_PAGE_COUNT 3
 
-static unsigned char matrixHeapBlock[ACT_MATRIX_HEAP_STORE_SIZE];
+static RsrcItem matrixHeapBlock[ACT_MATRIX_HEAP_MAX];
 
 static ActInfoState actInfo;
 
@@ -144,27 +138,19 @@ void *ACT_allocBlock(int tag, int blockCount)
 
 /*
  * Sets up the shared actor matrix heap that ACT_allocMatrix and ACT_allocBlock
- * use through actMatrixHeap, and clears its item store.
- *
- * Field roles, as used by RSRC_check, RSRC_alloc and RSRC_info:
- * - heap_origin (+0x00): base subtracted from the cursor; fixed after init.
- * - heap_cursor (+0x04): bump cursor advanced per allocated item.
- * - heap_bound (+0x08): byte bound the cursor is checked against (0xC0000).
- * - heap_store (+0x0c): item storage indexed by RSRC_alloc and RSRC_getDirtyItem.
- * - heap_count (+0x10): number of allocated items.
- * - heap_max (+0x12): item limit (64).
- * Fields past offset 0x14 are not named.
+ * use through actMatrixHeap: a resource arena over actMatrix with its own
+ * table of ACT_MATRIX_HEAP_MAX items, which it clears.
  */
 void ACT_matrixInit(void)
 {
     matrixHeap.heap_bound = ACT_MATRIX_HEAP_BOUND;
-    matrixHeap.heap_max = ACT_MATRIX_HEAP_MAX;
-    matrixHeap.heap_count = 0;
+    matrixHeap.item_capacity = ACT_MATRIX_HEAP_MAX;
+    matrixHeap.item_count = 0;
     actMatrixHeap = &matrixHeap;
     matrixHeap.heap_origin = actMatrix.bytes;
-    matrixHeap.heap_store = matrixHeapBlock;
+    matrixHeap.items = matrixHeapBlock;
     matrixHeap.heap_cursor = actMatrix.bytes;
-    memset(matrixHeapBlock, 0, ACT_MATRIX_HEAP_STORE_SIZE);
+    memset(matrixHeapBlock, 0, sizeof(matrixHeapBlock));
 }
 
 /*
@@ -339,7 +325,7 @@ void ACT_dispose2(Actor *self, int quick)
     void **resource;
     int count;
 
-    RSRC_inactiveSource(actMatrixHeap, self);
+    RSRC_inactiveSource(actMatrixHeap, (int)self);
     parent = self->parent;
     if (parent != 0) {
         ACT_resetParent(self, parent);

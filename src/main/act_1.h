@@ -7,17 +7,9 @@
 
 #include "shared.h"
 #include "main/act_1.h"
+#include "main/rsrc.h"
 
 #define ACTOR_LINKED_BLOCK_END_OFFSET 0x8f8
-
-typedef struct MatrixHeap {
-    void *heap_origin;
-    void *heap_cursor;
-    unsigned int heap_bound;
-    void *heap_store;
-    unsigned short heap_count;
-    unsigned short heap_max;
-} MatrixHeap;
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -66,10 +58,10 @@ typedef struct ActInfoState {
     int page;
 } ActInfoState;
 
-extern MatrixHeap matrixHeap;
+extern RsrcManager matrixHeap;
 extern ActMatrixArena actMatrix;
-extern unsigned char matrixHeapBlock[];
-extern MatrixHeap *actMatrixHeap;
+extern RsrcItem matrixHeapBlock[];
+extern RsrcManager *actMatrixHeap;
 extern Actor actor[ACTOR_COUNT];
 
 #endif /* SRC_MAIN_ACT_1_H */

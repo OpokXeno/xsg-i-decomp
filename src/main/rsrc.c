@@ -1,16 +1,7 @@
 #include "common.h"
 #include "shared.h"
+#include "main/rsrc.h"
 
-/*
- * The arena is one contiguous block carved out of the caller's memory:
- * general heap allocations grow upward from `memory`, the fixed-size
- * item table (item_capacity RsrcItem slots) sits directly below the
- * manager, and the manager struct itself occupies the last
- * sizeof(RsrcManager) bytes of the block. `items` is therefore reached
- * by walking back item_capacity RsrcItem slots from `manager`, and
- * `heap_bound` is the byte offset where the item table begins, i.e. the
- * heap's usable limit.
- */
 /* RsrcItem.kind: a named file entry, or an anonymous allocation keyed by id. */
 #define RSRC_KIND_FILE 1
 #define RSRC_KIND_ALLOC 2
@@ -24,30 +15,6 @@
 #define RSRC_INFO_SHOW_PATH_MASK 0xf
 #define RSRC_INFO_PATH_WIDTH 22
 
-typedef union RsrcKey {
-    u32 value;
-    char *name;
-} RsrcKey;
-
-typedef struct RsrcItem {
-    u32 size;
-    u8 kind;
-    u8 item_id;
-    u16 flags;
-    char *data;
-    RsrcKey key;
-} RsrcItem;
-
-typedef struct RsrcManager {
-    char *heap_origin;
-    char *heap_cursor;
-    u32 heap_bound;
-    RsrcItem *items;
-    u16 item_count;
-    u16 item_capacity;
-    u8 unmodeled_14[12];
-} RsrcManager;
-
 extern char EWDefaultResourcePath[];
 extern const char rsrcBlankText[];
 extern const char rsrcDirtyMarkText[];
@@ -55,20 +22,16 @@ extern const char dimColorTag[];
 extern const char spaceText[];
 extern const char grayColorTag[];
 
-extern void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name);
-
 extern u32 strlen(const char *s);
 extern int strncmp(const char *a, const char *b, u32 n);
 extern char *strcat(char *destination, const char *source);
 extern void *memcpy(void *destination, const void *source, u32 size);
 extern char *DB_pathGetShortPath(char *destination, const char *path, int size);
-extern RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size);
 extern char *strcpy(char *destination, const char *source);
 extern int sceOpen(const char *path, int flags, ...);
 extern int sceLseek(int fd, int offset, int whence);
 extern int sceRead(int fd, void *buffer, int size);
 extern int sceClose(int fd);
-extern void *RSRC_searchFile(RsrcManager *manager, char *name);
 
 /* These cursors begin at the sentinel used before a resource table is found. */
 static int infoIndex;
