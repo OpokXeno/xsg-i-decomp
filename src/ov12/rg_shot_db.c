@@ -56,6 +56,7 @@ extern const char shotDbBeamTypeKeyword[];
 extern const char shotDbFireTypeKeyword[];
 extern const char shotDbUnknownKeywordFormat[];
 
+/* Empty; called when the shot database is created or cleared. */
 static void _EntryTemporariesShotDB(RgSimpleDB *database) {
 
 }
@@ -65,6 +66,7 @@ static void _WrapperDestruct(void *database)
     DisposeRgSimpleDB(database);
 }
 
+/* Returns the shot database singleton, creating and registering it on first use. */
 RgSimpleDB *InstanceOfRgShotDB(void)
 {
     RgSimpleDB *shot_database;
@@ -79,6 +81,7 @@ RgSimpleDB *InstanceOfRgShotDB(void)
     return shot_database;
 }
 
+/* Returns the essence registered under name, or 0 when there is none. */
 RgShotEssence *RgShotDBGetEssence(RgSimpleDB *database, const char *name)
 {
     int dataID;
@@ -145,6 +148,7 @@ static int _ReadCommon(RgReadText *pReader, RgShotEssence *shotEssence,
     return 1;
 }
 
+/* Allocates and reads a normal shot essence; stops at the first token that is not one of its keys. */
 static RgNormalShotEssence *_ReadNormal(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -204,6 +208,7 @@ static int _ReadHomingMain(RgReadText *pReader, RgHomingShotEssence *essence,
     return 1;
 }
 
+/* Allocates and reads a homing shot essence; stops at the first token that is not one of its keys. */
 static RgHomingShotEssence *_ReadHoming(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -230,6 +235,7 @@ static RgHomingShotEssence *_ReadHoming(RgReadText *pReader)
     return pEss;
 }
 
+/* Allocates and reads a grenade essence; stops at the first token that is not one of its keys. */
 static RgGrenadeEssence *_ReadGrenade(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -269,6 +275,7 @@ static RgGrenadeEssence *_ReadGrenade(RgReadText *pReader)
     return grenade;
 }
 
+/* Allocates and reads a beam essence; stops at the first token that is not one of its keys. */
 static RgBeamEssence *_ReadBeam(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -300,6 +307,7 @@ static RgBeamEssence *_ReadBeam(RgReadText *pReader)
     return pEss;
 }
 
+/* Allocates and reads a fire essence; stops at the first token that is not one of its keys. */
 static RgFireEssence *_ReadFire(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -339,6 +347,7 @@ static RgFireEssence *_ReadFire(RgReadText *pReader)
     return essence;
 }
 
+/* Reads the shot database text file pszDataBase and registers each essence it contains in pDB. */
 void RgShotDBRead(RgSimpleDB *pDB, const char *pszDataBase)
 {
     char szToken[0x100];
@@ -385,6 +394,7 @@ void RgShotDBRead(RgSimpleDB *pDB, const char *pszDataBase)
     }
 }
 
+/* Removes all entries from database. */
 void RgShotDBClear(RgSimpleDB *database)
 {
     if (database == 0) {

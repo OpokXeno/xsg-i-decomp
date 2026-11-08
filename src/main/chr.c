@@ -14,14 +14,12 @@
 } while (0)
 
 /*
- * The state byte at Actor+0xa40, past this TU's recovered head above:
- * growing the struct there would move data_header and every field after it
- * that other accepted functions in this file already read at their current
- * offsets, so this one narrowly evidenced access stays a byte view, exactly
- * as ACTOR_SLOT_NUMBER_OFFSET above does for +0x80. Only
- * Java_xeno_Chr_setTranslate__ reads or writes it here: it tests bit 0 and,
- * when set, stores the literal 2 back (lbu/andi/sb at
- * 0x002feb9c-0x002febb0).
+ * The state byte at Actor+0xa40, past the recovered head of the struct:
+ * growing the struct there would move data_header and every field after it,
+ * which other functions read at their current offsets, so this access stays
+ * a byte view, as ACTOR_SLOT_NUMBER_OFFSET does for +0x80. Only
+ * Java_xeno_Chr_setTranslate__ uses it: it tests bit 0 and, when set,
+ * stores the literal 2 back.
  */
 #define ACTOR_TRANSLATE_STATE_OFFSET 0xa40
 
@@ -279,18 +277,16 @@ extern float chrRotYStepDegToRad;
 extern struct ChrDropShadowEntry DropShadowDefineTable[10];
 
 /*
- * CHR_moveXZ is local to this file in the original (glabel ..., local); it
- * stays asm here but needs a prototype for the trampolines below to call.
- * Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
+ * CHR_moveXZ is local to this file. The move trampolines below call it with
+ * a mode. Overload -> mode: IFFZ 0, FFFZ 1, I,Object,Z 2, Object,F,Z 3.
  */
 static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
                        u32 *failure_result);
 
 /*
- * CHR_rotX/CHR_rotY/CHR_rotZ are local to this file in the original (glabel
- * ..., local); they stay asm here but need a prototype for the trampolines
- * below to call. Overload -> mode: FFZ 1, IFZ 0, I,Object,Z 2, Object,F,Z 3
- * (same as CHR_sclX).
+ * CHR_rotX/CHR_rotY/CHR_rotZ are local to this file. The rotation trampolines
+ * below call them with a mode. Overload -> mode: FFZ 1, IFZ 0, I,Object,Z 2,
+ * Object,F,Z 3 (same as CHR_sclX).
  */
 static void CHR_rotX(int mode, JThread *thread, void *call_block,
                      u32 *failure_result);
@@ -302,9 +298,8 @@ static void CHR_rotZ(int mode, JThread *thread, void *call_block,
                      u32 *failure_result);
 
 /*
- * CHR_motion is local to this file in the original (glabel ..., local); it
- * stays asm here but needs a prototype for the trampolines below to call.
- * Overload -> mode: IIIIIFZ 1, IIFZ 0.
+ * CHR_motion is local to this file. The mtn trampolines below call it with a
+ * mode. Overload -> mode: IIIIIFZ 1, IIFZ 0.
  */
 static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
                        u32 *failure_result);
@@ -369,17 +364,16 @@ float chrRotZStepDegToRad = 3.1415927410125732f;
 
 const char chrIdKey[3] = "id";
 
+/*
+ * Stores GameLoopState[1] directly into the object's peer field. Unlike the
+ * other Chr natives, it does not follow the peer pointer's target.
+ */
 void Java_xeno_Chr_getPlayer__(JThread *thread, ChrScaleCall *arguments)
 {
     ChrFieldValue *field_value;
     JavaField *peer_field;
     SceneObject object;
 
-    /*
-     * Unlike every other Chr native here, this one does not chase through
-     * the peer pointer's target: it stores GameLoopState's own +0x4 word
-     * directly into the Java object's `peer` field (0x002fcd28..0x002fcd34).
-     */
     object = arguments->object;
     peer_field = lookupClassField(classJava_xeno_Chr,
                                   loadConstString(chr_peer_string, -1), 0);
@@ -387,6 +381,11 @@ void Java_xeno_Chr_getPlayer__(JThread *thread, ChrScaleCall *arguments)
     field_value->bits = GameLoopState[1];
 }
 
+/*
+ * Sets up the player and its companion actor when the player model resource
+ * is loaded, otherwise reuses the stored peer. The player becomes
+ * GameLoopState[1].
+ */
 void Java_xeno_Chr_setPlayer__(JThread *thread, ChrScaleCall *arguments)
 {
     JavaField *field;
@@ -434,6 +433,10 @@ void Java_xeno_Chr_setPlayer__(JThread *thread, ChrScaleCall *arguments)
     GameLoopState[1] = (u32)player;
 }
 
+/*
+ * Queues a move of the Chr's actor in X and Z, or toward another Chr, using
+ * the argument layout of the given mode. Waits on the thread when wait is set.
+ */
 static void CHR_moveXZ(int mode, JThread *thread, ChrMoveCall *arguments,
                        u32 *failure_result)
 {
@@ -549,6 +552,7 @@ void Java_xeno_Chr_move__Ljava_lang_Object_FZ(JThread *thread,
     CHR_moveXZ(3, thread, arguments, failure_result);
 }
 
+/* Starts a spline move of the Chr's actor over frames; waits when wait is set. */
 void Java_xeno_Chr_move__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *arguments,
                                              u32 *failure_result)
 {
@@ -601,6 +605,7 @@ void Java_xeno_Chr_move__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *ar
     }
 }
 
+/* Starts a spline rotation of the Chr's actor on all rotation axes; waits when wait is set. */
 void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *arguments,
                                                u32 *failure_result)
 {
@@ -653,6 +658,10 @@ void Java_xeno_Chr_rotate__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *
     }
 }
 
+/*
+ * Sets the X-axis rotation of the Chr's actor for the given mode. Waits on
+ * the thread when wait is set.
+ */
 static void CHR_rotX(int mode, JThread *thread, void *call_block,
                      u32 *failure_result)
 {
@@ -748,6 +757,10 @@ static void CHR_rotX(int mode, JThread *thread, void *call_block,
     }
 }
 
+/*
+ * Sets the Y-axis rotation of the Chr's actor for the given mode. Waits on
+ * the thread when wait is set.
+ */
 static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
                      u32 *failure_result)
 {
@@ -845,6 +858,10 @@ static void CHR_rotY(int mode, JThread *thread, ChrRotCall *arguments,
     }
 }
 
+/*
+ * Sets the Z-axis rotation of the Chr's actor for the given mode. Waits on
+ * the thread when wait is set.
+ */
 static void CHR_rotZ(int mode, JThread *thread, void *call_block,
                      u32 *failure_result)
 {
@@ -1018,6 +1035,10 @@ void Java_xeno_Chr_rotZ__Ljava_lang_Object_FZ(JThread *thread,
     CHR_rotZ(3, thread, arguments, failure_result);
 }
 
+/*
+ * Selects the actor's update handler for the start mode. Mode 1 also binds
+ * the named script method to the Chr's thread.
+ */
 void Java_xeno_Chr_start__ILjava_lang_Object_(JThread *thread,
                                                ChrStartCall *arguments,
                                                u32 *failure_result)
@@ -1052,6 +1073,7 @@ void Java_xeno_Chr_start__ILjava_lang_Object_(JThread *thread,
         peer->update = ACT_updateSequence;
         state->state_flags = 0;
         return;
+    /* Mode 1 runs a script method on the Chr's thread. */
     case 1: {
         DispatchTable *class_ref = ((ObjectHeader *)object)->classPointer;
         ChrStartString *method_name = arguments->method_name;
@@ -1104,6 +1126,10 @@ void Java_xeno_Chr_start__ILjava_lang_Object_(JThread *thread,
     }
 }
 
+/*
+ * Stops the Chr: clears the 0x10 flag of its thread and copies the actor's
+ * position and rotation into the translate and rotate fields.
+ */
 void Java_xeno_Chr_stop__(JThread *thread, ChrObjectCall *arguments,
                           u32 *failure_result)
 {
@@ -1144,6 +1170,11 @@ void Java_xeno_Chr_stop__(JThread *thread, ChrObjectCall *arguments,
     *(float *)(object + field->offset) = peer->rotation.z;
 }
 
+/*
+ * Queues a motion on the Chr's actor. Mode 0 passes the motion, flags, speed
+ * and wait; mode 1 also passes the loop range and blend. Waits on the thread
+ * when wait is set.
+ */
 static void CHR_motion(int mode, JThread *thread, ChrMotionCall *arguments,
                        u32 *failure_result)
 {
@@ -1293,6 +1324,10 @@ void Java_xeno_Chr_setRotate__(JThread *thread, ChrObjectCall *arguments)
     rotation->z = *(float *)(object + field->offset) / 180.0f * 3.1415927f;
 }
 
+/*
+ * Copies the Chr's translate fields into the actor's position and sets status
+ * bit 0x1000.
+ */
 void Java_xeno_Chr_setTranslate__(JThread *thread, ChrObjectCall *arguments)
 {
     JavaField *field;
@@ -1444,6 +1479,7 @@ void Java_xeno_Chr_setHand__I(JThread *thread, ChrScaleCall *arguments)
     ACT_setHand(peer, arguments->first.integer);
 }
 
+/* Copies count bytes from src to dst. */
 static void copyArgs(u8 *dst, u8 *src, int count)
 {
     u8 byte;
@@ -1462,6 +1498,10 @@ static void copyArgs(u8 *dst, u8 *src, int count)
     }
 }
 
+/*
+ * Copies size bytes of value into the actor's argument area at offset. Sizes
+ * outside 1 to 4 write nothing.
+ */
 void Java_xeno_Chr_setArgs__III(JThread *thread, ChrArgsWordCall *arguments)
 {
     JavaField *peer_field;
@@ -1483,6 +1523,10 @@ void Java_xeno_Chr_setArgs__III(JThread *thread, ChrArgsWordCall *arguments)
     }
 }
 
+/*
+ * Reads size bytes (1 to 4) from the actor's argument area at offset into
+ * *result. Other sizes leave *result unchanged.
+ */
 void Java_xeno_Chr_getArgs__II(JThread *thread, ChrArgsReadCall *arguments,
                                int *result)
 {
@@ -1505,6 +1549,10 @@ void Java_xeno_Chr_getArgs__II(JThread *thread, ChrArgsReadCall *arguments,
     }
 }
 
+/*
+ * Stores the source call's second and first integers as two words at offset
+ * in the actor's argument area.
+ */
 void Java_xeno_Chr_setArgs__ILjava_lang_Object_I(JThread *thread,
                                                  ChrArgsObjectCall *arguments)
 {
@@ -1564,6 +1612,7 @@ void Java_xeno_Chr_getState__(JThread *thread, ChrObjectCall *arguments,
     *failure_result = actSequence[slot].state.state_flags;
 }
 
+/* Resolves the peer field descriptor and discards it; no motion root is written. */
 void Java_xeno_Chr_mtnGetRoot__ILxeno_util_Vector4f_(JThread *thread,
                                                      ChrMotionRootCall *arguments,
                                                      ChrResultValue *result)
@@ -1610,6 +1659,7 @@ void Java_xeno_Chr_getScale__(JThread *thread, ChrObjectCall *arguments,
     result->vector = &scale;
 }
 
+/* Starts a spline scale of the Chr's actor on all scale axes; waits when wait is set. */
 void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *arguments,
                                               u32 *failure_result)
 {
@@ -1659,6 +1709,11 @@ void Java_xeno_Chr_scale__Lxeno_util_Spline_IZ(JThread *thread, ChrSplineCall *a
     }
 }
 
+/*
+ * Sets the X scale of the Chr's actor for the given mode. The goal is offset
+ * by the actor's current scale when the algorithm flag bit is set. Waits on
+ * the thread when wait is set.
+ */
 static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
                      u32 *failure_result)
 {
@@ -1684,8 +1739,7 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     /*
      * `peer` and `algorithm` are fields of the Java class xeno.Chr, so their
      * position inside the object is the offset the JVM hands back at run time
-     * and not a layout this file can name. The original loads it the same way:
-     * lw v1,0x10(v0); addu v1,s3,v1; lw s2,0x0(v1) at 0x002ff5b0.
+     * and not a layout this file can name.
      */
     peer = *(Actor **)(object + peer_field->offset);
     algorithm_field = lookupClassField(
@@ -1701,6 +1755,7 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
     sequence->state_flags |= CHR_CHANNEL_SCALE_X;
     scale = &entry->scale_channel.scale;
 
+    /* Mode 0 runs for a frame count; mode 1 scales at a rate per second. */
     switch (mode) {
     case 0:
         scale->duration[0] = arguments->first.integer;
@@ -1719,9 +1774,8 @@ static void CHR_sclX(int mode, JThread *thread, ChrScaleCall *arguments,
         peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
-         * character (0x002f96e0): a blocking sclX only suspends the
-         * character's own thread, or a thread carrying flag 0x40. The original
-         * compares the two registers (beq v1,s4 at 0x002ff6c0).
+         * character: a blocking sclX only suspends the character's own thread,
+         * or a thread carrying flag 0x40.
          */
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
@@ -1773,8 +1827,7 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
     /*
      * `peer` and `algorithm` are fields of the Java class xeno.Chr, so their
      * position inside the object is the offset the JVM hands back at run time
-     * and not a layout this file can name. The original loads it the same way:
-     * lw v1,0x10(v0); addu v1,s3,v1; lw s2,0x0(v1) at 0x002ff5b0.
+     * and not a layout this file can name.
      */
     peer = *(Actor **)(object + peer_field->offset);
     algorithm_field = lookupClassField(
@@ -1808,9 +1861,8 @@ static void CHR_sclY(int mode, JThread *thread, ChrScaleCall *arguments,
         peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
-         * character (0x002f96e0): a blocking sclY only suspends the
-         * character's own thread, or a thread carrying flag 0x40. The original
-         * compares the two registers (beq v1,s4 at 0x002ff6c0).
+         * character: a blocking sclY only suspends the character's own thread,
+         * or a thread carrying flag 0x40.
          */
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
@@ -1862,8 +1914,7 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
     /*
      * `peer` and `algorithm` are fields of the Java class xeno.Chr, so their
      * position inside the object is the offset the JVM hands back at run time
-     * and not a layout this file can name. The original loads it the same way:
-     * lw v1,0x10(v0); addu v1,s3,v1; lw s2,0x0(v1) at 0x002ff5b0.
+     * and not a layout this file can name.
      */
     peer = *(Actor **)(object + peer_field->offset);
     algorithm_field = lookupClassField(
@@ -1897,9 +1948,8 @@ static void CHR_sclZ(int mode, JThread *thread, ChrScaleCall *arguments,
         peer->flags |= CHR_ACTOR_BUSY;
         /*
          * `wait` is 1 here, and kind 1 is the thread getPeer_Chr creates for a
-         * character (0x002f96e0): a blocking sclZ only suspends the
-         * character's own thread, or a thread carrying flag 0x40. The original
-         * compares the two registers (beq v1,s4 at 0x002ff6c0).
+         * character: a blocking sclZ only suspends the character's own thread,
+         * or a thread carrying flag 0x40.
          */
         if (thread->kind != wait && (thread->flags & 0x40) == 0)
             return;
@@ -2010,8 +2060,7 @@ void Java_xeno_Chr_setEdgeFall__I(JThread *thread, ChrIntCall *arguments)
     field_value = (void *)(arguments->object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->value == 0) {
-        /* Also clears every other status_flags bit: andi v0,v0,8 at
-         * 0x002ffe48, not a mask of ~8. */
+        /* Also clears every other status_flags bit: the mask is 8, not ~8. */
         peer->status_flags &= CHR_STATUS_EDGE_FALL;
     } else {
         peer->status_flags |= CHR_STATUS_EDGE_FALL;
@@ -2033,6 +2082,11 @@ void Java_xeno_Chr_setShadow__II(JThread *thread, ChrShadowCall *arguments)
     peer->shadowSize = arguments->size;
 }
 
+/*
+ * Selects an unused DropShadowDefineTable entry (key 0xFFFF0000), tags it with
+ * the actor's inUseId and copies the shadow byte tokens into it up to the -1
+ * terminator. Hits DEBUG_BREAK() when no entry is selected.
+ */
 void Java_xeno_Chr_setShadow__aB(JThread *thread,
                                  struct ChrShadowBytesCall *arguments)
 {
@@ -2111,14 +2165,17 @@ void Java_xeno_Chr_setElevatorMode__I(JThread *thread, ChrIntCall *arguments)
     field_value = (void *)(arguments->object + peer_field->offset);
     peer = field_value->actor;
     if (arguments->value == 0) {
-        /* Also clears every other status_flags bit: andi v0,v0,0x20 at
-         * 0x003000f8, not a mask of ~0x20. */
+        /* Also clears every other status_flags bit: the mask is 0x20, not ~0x20. */
         peer->status_flags &= CHR_STATUS_ELEVATOR;
     } else {
         peer->status_flags |= CHR_STATUS_ELEVATOR;
     }
 }
 
+/*
+ * Links the Chr's actor to the other Chr's actor: as a relation when the joint
+ * has CHR_JOINT_RELATION set, otherwise as a parent.
+ */
 void Java_xeno_Chr_setParent__Lxeno_Chr_III(JThread *thread,
                                             ChrParentCall *arguments)
 {
@@ -2168,6 +2225,10 @@ void Java_xeno_Chr_setMotionFlags__IZ(JThread *thread,
     }
 }
 
+/*
+ * Sets the actor's draw filter for the selector and clears its point light
+ * flag. result receives the word for the selector.
+ */
 void Java_xeno_Chr_setFilter__I(JThread *thread, ChrIntCall *arguments,
                                 ChrResultValue *result)
 {
@@ -2278,6 +2339,10 @@ void Java_xeno_Chr_setSortOffset__F(JThread *thread, ChrScaleCall *arguments)
     peer->sortOffset = arguments->first.floating;
 }
 
+/*
+ * Sets the point light colour at the index and enables the point light.
+ * Indices outside 0 to 2 do nothing.
+ */
 void Java_xeno_Chr_setPointLightCol__IFFF(
     JThread *thread, struct ChrPointLightCall *arguments)
 {
@@ -2307,6 +2372,10 @@ void Java_xeno_Chr_setPointLightCol__IFFF(
     }
 }
 
+/*
+ * Sets the point light position at the index and enables the point light.
+ * Indices outside 0 to 2 do nothing.
+ */
 void Java_xeno_Chr_setPointLightPos__IFFF(
     JThread *thread, struct ChrPointLightCall *arguments)
 {
@@ -2338,6 +2407,7 @@ void Java_xeno_Chr_setPointLightPos__IFFF(
     }
 }
 
+/* Clears the point light colours and the point light draw flag. */
 void Java_xeno_Chr_setPointLightReset__(JThread *thread, ChrObjectCall *arguments)
 {
     ChrFieldValue *field_value;
@@ -2389,6 +2459,10 @@ void Java_xeno_Chr_touchto__Ljava_lang_String_(JThread *thread,
     peer->touch_message = arguments->message->value->message_id;
 }
 
+/*
+ * Finds the first child actor of kind 1 when the value is 0x1000000. The
+ * result word is cleared to 0 first.
+ */
 void Java_xeno_Chr_childGetPeer__II(JThread *thread, ChrIntCall *arguments,
                                     ChrResultValue *result)
 {
@@ -2416,6 +2490,10 @@ void Java_xeno_Chr_childGetPeer__II(JThread *thread, ChrIntCall *arguments,
     }
 }
 
+/*
+ * Attaches the other Chr's actor as this Chr's peer and clears its sequence
+ * state. Does nothing for a null peer.
+ */
 void Java_xeno_Chr_setPeer__Ljava_lang_Object_(JThread *thread,
                                                ChrWeaponCall *arguments)
 {
@@ -2522,6 +2600,10 @@ void Java_xeno_Chr_look_unit__Ljava_lang_Object_(JThread *thread,
     peer->look_target = target;
 }
 
+/*
+ * Sets the look mode to default and clears the look target, eye control and
+ * look vectors. The look and eye speeds become 1.
+ */
 void Java_xeno_Chr_look_default__(JThread *thread, ChrObjectCall *arguments)
 {
     ChrFieldValue *field_value;
@@ -2768,6 +2850,10 @@ void Java_xeno_Chr_pixelAlphaPartsReset__(JThread *thread, ChrScaleCall *argumen
     peer->drawEnv.partAlphaCount = 0;
 }
 
+/*
+ * Sets the motion-no-update state: 1 sets the actor flag, 2 sets the draw
+ * flag, and 0 clears both.
+ */
 void Java_xeno_Chr_setMotNoUpdate__I(JThread *thread, ChrIntCall *arguments)
 {
     ChrFieldValue *field_value;
@@ -2796,6 +2882,7 @@ void Java_xeno_Chr_setMotNoUpdate__I(JThread *thread, ChrIntCall *arguments)
     }
 }
 
+/* Attaches the other Chr's actor to this Chr as the right-hand weapon. */
 void Java_xeno_Chr_setWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *arguments)
 {
     JavaField *peer_field;
@@ -2812,6 +2899,7 @@ void Java_xeno_Chr_setWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *argume
     ACT_setArms(peer, other_peer, CHR_ARMS_WEAPON_R, 2);
 }
 
+/* Detaches the other Chr's actor from this Chr's right-hand weapon. */
 void Java_xeno_Chr_resetWeaponR__Lxeno_Chr_(JThread *thread, ChrWeaponCall *arguments)
 {
     JavaField *peer_field;

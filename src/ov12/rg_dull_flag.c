@@ -41,6 +41,7 @@ void RgDullFlagResetFlag(RgDullFlag *pDull)
     pDull->time = 0.0f;
 }
 
+/* Returns 1 while the flag time is positive, else 0. */
 int RgDullFlagGet(RgDullFlag *pDull)
 {
     if (pDull == 0) {
@@ -52,6 +53,7 @@ int RgDullFlagGet(RgDullFlag *pDull)
     return 1;
 }
 
+/* Counts the flag time down by fTime, clamped at zero. */
 void RgDullFlagPassTime(RgDullFlag *pDull, float fTime)
 {
     if (pDull == 0) {

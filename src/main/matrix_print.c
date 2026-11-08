@@ -11,6 +11,7 @@ void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation);
 
 const char matrixPrintMatrixRowFormat[] = "\t%8.3f %8.3f %8.3f %8.3f\n";
 
+/* Prints the four rows of a 4x4 matrix with printf. Returns the result of the last printf call. */
 int MATRIX_print(const float matrix[4][4])
 {
     int result;
@@ -51,6 +52,7 @@ void MATRIX_identity(float destination[4][4])
     destination[0][1] = zero;
 }
 
+/* Sets destination to the identity matrix with every [i][3] entry set to 1. */
 void MATRIX_identity4s(float destination[4][4])
 {
     float zero = 0.0f;
@@ -74,6 +76,7 @@ void MATRIX_identity4s(float destination[4][4])
     destination[0][1] = zero;
 }
 
+/* Writes the 3x3 part of src scaled by each row's fourth entry, zeroes the fourth column and copies the last row. */
 void MATRIX_convert4(f32 (*dst)[4], f32 (*src)[4]) {
     f32 zero = 0.0f;
     dst[0][0] = src[0][3] * src[0][0];
@@ -94,6 +97,7 @@ void MATRIX_convert4(f32 (*dst)[4], f32 (*src)[4]) {
     dst[3][3] = src[3][3];
 }
 
+/* Copies source, storing in each row's fourth entry the length of the row's first three entries. */
 void MATRIX_convert4s(Matrix4 destination, const Matrix4 source)
 {
     destination[0][0] = source[0][0];
@@ -117,6 +121,10 @@ void MATRIX_convert4s(Matrix4 destination, const Matrix4 source)
     destination[3][3] = source[3][3];
 }
 
+/*
+ * Scales the rows of matrix by their w entries on VU0, multiplies them by other,
+ * and stores the product in destination. matrix is overwritten with the scaled rows.
+ */
 void MATRIX_convert4MulMatrix(Matrix4 destination, Matrix4 matrix, Matrix4 other)
 {
     __asm__ __volatile__(
@@ -164,6 +172,7 @@ void MATRIX_convert4MulMatrix(Matrix4 destination, Matrix4 matrix, Matrix4 other
     );
 }
 
+/* Variant of MATRIX_convert4MulMatrix that uses the operands in the other order on VU0. */
 void MATRIX_convert4MulMatrixRev(Matrix4 destination, Matrix4 matrix, Matrix4 other)
 {
     __asm__ __volatile__(
@@ -207,6 +216,10 @@ void MATRIX_convert4MulMatrixRev(Matrix4 destination, Matrix4 matrix, Matrix4 ot
     );
 }
 
+/*
+ * Multiplies the first three columns of source by the 3x3 part of rotation and keeps
+ * row 3 as the translation. The fourth column becomes (0, 0, 0, 1).
+ */
 static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation)
 {
     int column;
@@ -242,6 +255,10 @@ static void MATRIX_mul3x4(Matrix4 destination, Matrix4 source, Matrix4 rotation)
     destination[0][3] = zero;
 }
 
+/*
+ * Like MATRIX_mul3x4, but scales each column's xyz by the source's fourth entry
+ * of that column first. The fourth column is copied from source, with [3][3] set to 1.
+ */
 void MATRIX_mul4sx3(Matrix4 destination, Matrix4 source, Matrix4 rotation)
 {
     float (*scaleRows)[4] = source;
@@ -317,6 +334,7 @@ void MATRIX_transpose3(Matrix4 matrix)
     matrix[1][2] = upper12;
 }
 
+/* Builds the rotation matrix for angle about the axis (axisX, axisY, axisZ), which is normalized first. */
 void MATRIX_rotate4(Matrix4 rotation, float angle, float axisX, float axisY, float axisZ)
 {
     float sine = xglSin(angle);
@@ -412,6 +430,7 @@ void MATRIX_translate4(Matrix4 matrix, float x, float y, float z)
     matrix[3][3] = matrix[0][3] * x + matrix[1][3] * y + matrix[2][3] * z + matrix[3][3];
 }
 
+/* Scales columns 0, 1 and 2 of matrix by x, y and z. */
 void MATRIX_scale4(Matrix4 matrix, float x, float y, float z)
 {
     matrix[0][0] *= x;
@@ -428,6 +447,7 @@ void MATRIX_scale4(Matrix4 matrix, float x, float y, float z)
     matrix[3][2] *= z;
 }
 
+/* Adds a translation by (x, y, z) to the translation row, scaling each row by its fourth entry first. */
 void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z)
 {
     float rowScale0 = matrix[0][3];
@@ -439,6 +459,7 @@ void MATRIX_translate4s(Matrix4 matrix, float x, float y, float z)
     matrix[3][2] = matrix[0][2] * rowScale0 * x + matrix[1][2] * rowScale1 * y + matrix[2][2] * rowScale2 * z + matrix[3][2];
 }
 
+/* Scales the fourth-column entries of rows 0 to 2 by x, y and z. */
 void MATRIX_scale4s(Matrix4 matrix, float x, float y, float z)
 {
     matrix[0][3] *= x;
@@ -446,6 +467,7 @@ void MATRIX_scale4s(Matrix4 matrix, float x, float y, float z)
     matrix[2][3] *= z;
 }
 
+/* Converts the rotation part of matrix to a quaternion stored as x, y, z, w. */
 void MATRIX_toQuat4(const float matrix[16], float quaternion[4])
 {
     float components[4];
@@ -489,6 +511,10 @@ void MATRIX_toQuat4(const float matrix[16], float quaternion[4])
     quaternion[3] = components[3];
 }
 
+/*
+ * Converts a quaternion to axis-angle. The axis (quaternion xyz divided by the sine of
+ * the half angle) goes to axisAngle[0..2], and -2 times the half angle to axisAngle[3].
+ */
 void QUAT_toAxis(const float quaternion[4], float axisAngle[4])
 {
     extern unsigned long long acos(double value);
@@ -528,6 +554,7 @@ static inline void quaternionCrossProducts(float x, float y, float z, float w,
     *wz = w * (z + z);
 }
 
+/* Builds the rotation matrix of the quaternion (x, y, z, w) in matrix; the fourth row and column become (0, 0, 0, 1). */
 void QUAT_toMatrix4(const float quaternion[4], Matrix4 matrix)
 {
     float x = quaternion[0];
@@ -567,6 +594,10 @@ void QUAT_toMatrix4(const float quaternion[4], Matrix4 matrix)
     matrix[0][3] = zero;
 }
 
+/*
+ * Interpolates two Vector4 quaternions into destination. second is negated when the
+ * dot product is negative. Spherical weights are used when the inputs are not close.
+ */
 void QUAT_interpS(float firstWeight, float secondWeight,
                   Vector4 *destination, const Vector4 *first,
                   const Vector4 *second)
@@ -615,6 +646,7 @@ void QUAT_interpS(float firstWeight, float secondWeight,
     destination->w = firstWeight * first->w + secondWeight * adjusted.w;
 }
 
+/* Linearly interpolates two quaternions into destination; second is negated when the dot product is negative. */
 void QUAT_interpL(float destination[4], const float first[4], const float second[4],
                   float first_weight, float second_weight)
 {
@@ -643,6 +675,7 @@ void QUAT_interpL(float destination[4], const float first[4], const float second
     destination[3] = first_weight * first[3] + second_weight * adjusted[3];
 }
 
+/* Loads the identity into the current VU0 matrix (vf27 to vf30). */
 void CUR_MATRIX_Unit(void)
 {
     __asm__ __volatile__(
@@ -656,6 +689,7 @@ void CUR_MATRIX_Unit(void)
     );
 }
 
+/* Loads the identity into the current VU0 matrix, with the w entries set to 1. */
 void CUR_MATRIX_Unit4s(void)
 {
     __asm__ __volatile__(
@@ -682,6 +716,7 @@ void CUR_MATRIX_Get(Matrix4 matrix)
     Vu0GetCurrentMatrix(matrix);
 }
 
+/* Stores the translation (vf30) of the current VU0 matrix into translation, with w set to 1. */
 void CUR_MATRIX_GetT(Vector4 *translation)
 {
     __asm__ __volatile__(
@@ -720,6 +755,7 @@ void CUR_MATRIX_SetR(Matrix4 rotation)
     );
 }
 
+/* Multiplies the current VU0 matrix by local, which holds a 4x3 matrix, and stores the product as the current matrix. */
 void CUR_MATRIX_4s3(Matrix4 local)
 {
     __asm__ __volatile__(
@@ -753,6 +789,7 @@ void CUR_MATRIX_4s3(Matrix4 local)
     );
 }
 
+/* Translates the current VU0 matrix by the displacement (x, y, z). */
 void CUR_MATRIX_Txyz4s(const Vector4 *displacement)
 {
     __asm__ __volatile__(
@@ -770,6 +807,7 @@ void CUR_MATRIX_Txyz4s(const Vector4 *displacement)
     );
 }
 
+/* Rotates the current VU0 matrix about the X axis by the angle at angle. */
 void CUR_MATRIX_Rx4s(const int *angle)
 {
     int bits = *angle;
@@ -792,6 +830,7 @@ void CUR_MATRIX_Rx4s(const int *angle)
     );
 }
 
+/* Rotates the current VU0 matrix about the Y axis by the angle at angle. */
 void CUR_MATRIX_Ry4s(const int *angle)
 {
     int bits = *angle;
@@ -814,6 +853,7 @@ void CUR_MATRIX_Ry4s(const int *angle)
     );
 }
 
+/* Rotates the current VU0 matrix about the Z axis by the angle at angle. */
 void CUR_MATRIX_Rz4s(const int *angle)
 {
     int bits = *angle;
@@ -836,6 +876,7 @@ void CUR_MATRIX_Rz4s(const int *angle)
     );
 }
 
+/* Applies three rotations to the current VU0 matrix, with the angles taken from angles[0] to angles[2]. */
 void CUR_MATRIX_Rzyx4s(const int *angles)
 {
     int bits;
@@ -894,6 +935,7 @@ void CUR_MATRIX_Rzyx4s(const int *angles)
     );
 }
 
+/* Scales the w component of the first three VU0 matrix rows by scale.x, scale.y and scale.z. */
 void CUR_MATRIX_Sxyz4s(const Vector4 *scale)
 {
     __asm__ __volatile__(

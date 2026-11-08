@@ -22,9 +22,8 @@ typedef struct EdgeVertex {
 } EdgeVertex;
 
 /*
- * The clear-environment block at 0x004a9080: yNewRenderInit writes the four
- * colour words at +0x20..+0x2c, the rest of the 0x60-byte block is untouched
- * here.
+ * The clear-environment block: yNewRenderInit writes the four colour words
+ * at +0x20..+0x2c, the rest of the 0x60-byte block is untouched here.
  */
 typedef struct CardClearEnv {
     u8 unmodeled_00[0x20];
@@ -35,7 +34,7 @@ typedef struct CardClearEnv {
     u8 unmodeled_30[0x30];
 } CardClearEnv;
 
-/* One entry of the model table at 0x00a56bf0: two words, the transform at +0x10. */
+/* One entry of the model table: two words, the transform at +0x10. */
 typedef struct ModelRecord {
     u32 state;
     u32 mode;
@@ -104,6 +103,7 @@ void CalcVertOutVecEdge(EdgeVertex *vertices, int vertexCount, const unsigned sh
     }
 }
 
+/* Resets the clear colour, the render state, the lighting, the camera and the model table. */
 void yNewRenderInit(void)
 {
     StudioLight *light;
@@ -146,6 +146,7 @@ void yNewRenderInit(void)
     }
 }
 
+/* Runs the card game: loads its effect bank, runs the main loop until it returns, then unloads the banks. */
 void CardGameRoot(void)
 {
     xglRenderClearFrame();

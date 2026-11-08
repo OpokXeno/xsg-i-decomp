@@ -41,6 +41,10 @@ const char yosikawaTestCursorControl[8] = "\013\033\034";
 
 static void (*funclist[YOSIKAWA_TEST_COUNT])(void) = { HairTest, WindTest, ColliTest };
 
+/*
+ * Debug menu loop: draws the test list, moves the cursor with the shoulder buttons, and runs the
+ * selected test when Circle is pressed. Returns after that test or when the exit combo is held.
+ */
 void YosikawaTest(void)
 {
     int selection;
@@ -65,6 +69,7 @@ void YosikawaTest(void)
             csr = selection;
         }
 
+        /* Wrap a negative cursor into the test range. */
         loop_cursor = selection;
         if (selection < 0) {
             do {
@@ -75,6 +80,7 @@ void YosikawaTest(void)
             selection = wrapped_selection;
         }
 
+        /* Wrap a cursor past the last test back to the first. */
         {
             int function_count = YOSIKAWA_TEST_COUNT;
 

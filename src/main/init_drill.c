@@ -265,9 +265,9 @@ typedef struct DrillItemUnit {
     unsigned char unmodeled_1a6[0x15a];
 } DrillItemUnit;
 
-/* Partial view of MapUnitRecord (include/main/exm_2.h); kept: switching it changes
- * init_drill.raw .text (measured with tucheck; the size/matrixRef gap names and the
- * DrillContainerInfo cast on +0x1a0 were tried). */
+/* Partial view of MapUnitRecord (include/main/exm_2.h). Kept as is: the other layouts
+ * tried (size/matrixRef gap names, a DrillContainerInfo cast on +0x1a0) change the
+ * generated init_drill .text. */
 typedef struct MapUnitRecordDrillView {
     u32 flags;
     void *update;
@@ -338,7 +338,7 @@ extern DrillItemBox ItemBoxTbl[];
 extern Actor actor[DRILL_ACTOR_COUNT];
 extern DrillEnemyWork enepc[DRILL_ENEMY_WORK_COUNT];
 
-/* These unchanged data records are supplied by the original scaffolding. */
+/* Data records defined outside this file. */
 extern const char initDrillDebugFormat[];
 
 extern const char rareItemPlacedFormat[];
@@ -400,6 +400,10 @@ DrillContainerDef container[31] = { { .type = 1, .unmodeled_01 = { 0, 0, 0, 0, 0
 
 static int *pDrillFlag;
 
+/*
+ * Initializes the drill: resets its phase and timers, rebuilds the containers when
+ * requested, and creates its three effects.
+ */
 void InitDrill(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -445,6 +449,10 @@ void InitDrill(Drill *drill)
     DrillResetFlag(drill);
 }
 
+/*
+ * Places count containers. A container whose random id cannot be placed is retried
+ * with one of the first four ids.
+ */
 void SetContainer(int count)
 {
     printf(setContainerFormat);
@@ -471,6 +479,11 @@ void SetContainer(int count)
     }
 }
 
+/*
+ * Creates a container unit for unit_id and gives it an item: a rare item when the
+ * rare roll succeeds and one is still unplaced, otherwise an item chosen by weight
+ * from the container's item box. Returns the unit, or 0 when no position is found.
+ */
 int CreateContainer(int identifier, int unit_id)
 {
     MapUnitRecordDrillView *unit;
@@ -529,6 +542,7 @@ int CreateContainer(int identifier, int unit_id)
     return (int)unit;
 }
 
+/* Clears the update hook and serial of the container units and of the hidden units. */
 void DrillClearContainer(void)
 {
     int i;
@@ -547,6 +561,7 @@ void DrillClearContainer(void)
     }
 }
 
+/* Sets the container's type, model, size and update hook from its serial's table entry. */
 void SetContainerParam(MapUnitRecordDrillView *unit)
 {
     DrillContainerInfo *info = &unit->info;
@@ -572,6 +587,7 @@ void SetContainerParam(MapUnitRecordDrillView *unit)
     }
 }
 
+/* Creates a special item unit that holds value, and hides the container. */
 void SetContainerItem(MapUnitRecordDrillView *container, int value)
 {
     DrillItemUnit *item;
@@ -588,6 +604,11 @@ void SetContainerItem(MapUnitRecordDrillView *container, int value)
     }
 }
 
+/*
+ * Picks a random position for the container that does not overlap other units,
+ * stacking it on top of a unit when needed. Returns 1 when a free spot is found,
+ * otherwise 0.
+ */
 int CalcPosContainer(MapUnitRecordDrillView *unit)
 {
     DrillContainerInfo *info = &unit->info;
@@ -640,6 +661,10 @@ int CalcPosContainer(MapUnitRecordDrillView *unit)
     return 0;
 }
 
+/*
+ * Per-frame update of the drill: runs the handler of its current phase, draws the
+ * timer, copies its position into the part matrices and handles the game's requests.
+ */
 void MAP_updateUnitDrill(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -675,6 +700,7 @@ void MAP_updateUnitDrill(Drill *drill)
         break;
     }
 
+    /* Draws the timer while the drill is active: elapsed time when counting up, otherwise time left. */
     if (drill->phase != DRILL_PHASE_POWER_OFF) {
         memset(text, 0, sizeof(text));
         flags = save->flags;
@@ -716,6 +742,7 @@ void MAP_updateUnitDrill(Drill *drill)
         }
     }
 
+    /* Copies the drill position into its matrix and into the part matrices. */
     matrix = drill->matrix;
     matrix->m[3][0] = drill->position.x;
     matrix->m[3][1] = drill->position.y;
@@ -735,6 +762,7 @@ void MAP_updateUnitDrill(Drill *drill)
         *copy = *matrix;
     }
 
+    /* Handles the game's requests: clear the containers, reset the run, or end the run. */
     if (save->clearRequest != 0) {
         DrillClearContainer();
         save->clearRequest = 0;
@@ -753,6 +781,7 @@ void MAP_updateUnitDrill(Drill *drill)
     }
 }
 
+/* Parks the drill at its home position and resets the run state. A set hit flag starts a new run. */
 void DrillPowerOffFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -793,6 +822,10 @@ void DrillPowerOffFunc(Drill *drill)
     effect->display =0;
 }
 
+/*
+ * Waits for input: the pad moves the camera and cycles its presets, square starts
+ * the Z move and cross requests a stop when enough time is left.
+ */
 void DrillStandbyFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -842,6 +875,7 @@ void DrillStandbyFunc(Drill *drill)
     }
 }
 
+/* Moves the drill back along Z while square is held, up to the Z limit, then stops it. */
 void DrillZMoveFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -879,6 +913,7 @@ void DrillZMoveFunc(Drill *drill)
     effect->position.z = drill->position.z + 0.5f;
 }
 
+/* Lets the camera be adjusted while the drill is stopped on Z. Square starts the X move. */
 void DrillZStopFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -913,6 +948,10 @@ void DrillZStopFunc(Drill *drill)
     effect->display =0;
 }
 
+/*
+ * Moves the drill along X while square is held or it is left of -1.9. Otherwise,
+ * and at the far X limit, it starts the crash.
+ */
 void DrillXMoveFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -981,6 +1020,10 @@ void DrillXMoveFunc(Drill *drill)
     effect->position.z = drill->position.z;
 }
 
+/*
+ * Spins the drill after a crash, then bounces it down until the bounce count is
+ * reached. The camera is then restored and the drill returns.
+ */
 void DrillCrashFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -1029,6 +1072,10 @@ void DrillCrashFunc(Drill *drill)
     }
 }
 
+/*
+ * Returns the drill to its home position: spins down after a crash, then rises,
+ * slides back along X and returns along Z.
+ */
 void DrillReturnFunc(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -1130,6 +1177,10 @@ void DrillReturnFunc(Drill *drill)
     }
 }
 
+/*
+ * Clears the camera shake, applies the pad's pitch and yaw input within their limits,
+ * and recalculates the camera position.
+ */
 void DrillCameraControlFunc(Drill *drill, DrillCamera *camera)
 {
     DrillSave *save;
@@ -1185,6 +1236,7 @@ void DrillCameraControlFunc(Drill *drill, DrillCamera *camera)
     DrillCalcCameraPos(camera);
 }
 
+/* Computes the camera position from its yaw and pitch angles. */
 void DrillCalcCameraPos(DrillCamera *camera)
 {
     DrillCameraAngles *angles = &camera->angles;
@@ -1192,8 +1244,8 @@ void DrillCalcCameraPos(DrillCamera *camera)
 
     /*
      * 0.7f alone folds to 0x3f333333 under this compiler; the original
-     * .lit4 constant at 0x004d7fe8 is 0x3f333334, so the literal is
-     * spelled with the extra digit that rounds to that exact bit pattern.
+     * constant is 0x3f333334, so the literal is spelled with the extra
+     * digit that rounds to that exact bit pattern.
      */
     camera->angles.positionX = 0.70000005f;
     camera->angles.positionY = 0.5f;
@@ -1206,6 +1258,7 @@ void DrillCalcCameraPos(DrillCamera *camera)
     camera->angles.positionX -= 1.2f;
 }
 
+/* Resets the camera angles to the preset selected by cameraPreset, then recalculates its position. */
 void DrillResetCameraPos(Drill *drill, DrillCamera *camera)
 {
     camera->state = 0;
@@ -1231,6 +1284,10 @@ void DrillResetCameraPos(Drill *drill, DrillCamera *camera)
     }
 }
 
+/*
+ * Clears the placed rare-item bits and the item event flags, then removes the item
+ * units whose drill reset value is in range.
+ */
 void DrillResetFlag(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -1254,6 +1311,10 @@ void DrillResetFlag(Drill *drill)
     }
 }
 
+/*
+ * Checks the drill's tip against the containers. A hit container is marked and gets
+ * the effect of its group; when no container is hit, the enemies are checked.
+ */
 void DrillHitCheck(Drill *drill)
 {
     DrillSave *save = &drill->save;
@@ -1278,6 +1339,10 @@ void DrillHitCheck(Drill *drill)
     }
 }
 
+/*
+ * Returns the index of the first active container unit, other than slot and not yet
+ * hit, that overlaps the sphere at position, or -1.
+ */
 int HitCheckContainerPosSize(Vector4 *position, int slot, float radius)
 {
     DrillMapUnitHitProbe probe;
@@ -1310,6 +1375,10 @@ int HitCheckContainerPosSize(Vector4 *position, int slot, float radius)
     return -1;
 }
 
+/*
+ * Finds the first visible enemy below position that is within reach of it, hides it,
+ * freezes it and calls its broken method. Returns its index, or -1.
+ */
 int HitCheckEnemy(Vector4 *position, float radius)
 {
     DrillEnemyWork *work;

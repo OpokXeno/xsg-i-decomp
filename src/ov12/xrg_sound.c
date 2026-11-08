@@ -43,7 +43,7 @@ static const char soundMiniBattleBankName[8] = "MINIBAT";
 #define XRG_SOUND_BANK_BUFFER_SIZE 0x400000
 #define XRG_SOUND_SEQUENCE_BUFFER_SIZE 0x200000
 
-/* The effect bank this game's sounds live in, and its bits in an effect id. */
+/* The effect bank the game's sound effects come from, and the effect id bit that selects it. */
 #define XRG_SOUND_EFFECT_BANK 2
 #define XRG_SOUND_EFFECT_ID_BANK 0x20000
 
@@ -52,7 +52,7 @@ static const char soundMiniBattleBankName[8] = "MINIBAT";
 #define XRG_SOUND_BGM_VOLUME 127
 #define XRG_SOUND_BGM_FADE_TIME 100
 
-/* Gain scale (128 is full) and the pan and volume an object starts with. */
+/* Gain scale (128 is full), and the centred value (0x40) that a sound's volume and pan start at. */
 #define XRG_SOUND_GAIN_MAX 128
 #define XRG_SOUND_VOLUME_MAX 127
 #define XRG_SOUND_CENTER 0x40
@@ -63,8 +63,7 @@ static const char soundMiniBattleBankName[8] = "MINIBAT";
 static int s_eLoadedSeq = XRG_SOUND_NO_SEQUENCE;
 static int s_bNowPlaying = 0;
 
-/* The sequence names "BATTLE1", "BATTLE2", "BATTLE3" and "Umnmode" are
- * scaffold-owned rodata. */
+/* Sequence names, defined at the end of this file. */
 extern const char soundBattle1SequenceName[];
 extern const char soundBattle2SequenceName[];
 extern const char soundBattle3SequenceName[];
@@ -72,6 +71,10 @@ extern const char soundUmnModeSequenceName[];
 
 extern void xglSoundLoadEffect(const char *bank_name, void *buffer, int mode);
 
+/*
+ * Reads the sequence's wave bank (.SWD) and sequence (.SMD) into buffer and sends them
+ * to the sound driver. useAlternatePath selects the alternate directory.
+ */
 static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternatePath)
 {
     int readResult;
@@ -124,6 +127,7 @@ static int _LoadSequence(const char *sequenceName, void *buffer, int useAlternat
     return readResult;
 }
 
+/* Loads the mini battle effect bank through a temporary data-heap buffer and clears the sequence state. */
 void InitXrgSoundSystem(void)
 {
     void *scratch = RgHeapAlloc(InstanceOfRgHeapData(), XRG_SOUND_BANK_BUFFER_SIZE, soundSourcePath, 0x66);
@@ -134,12 +138,14 @@ void InitXrgSoundSystem(void)
     s_bNowPlaying = 0;
 }
 
+/* Unloads the effect bank and the sequence data. */
 void DisposeXrgSoundSystem(void)
 {
     xglSoundLoadEffect(0, 0, XRG_SOUND_EFFECT_BANK);
     _LoadSequence(0, 0, 0);
 }
 
+/* Loads the sequence for an XRG_SEQ_* id, unless it is already loaded; stops the BGM channel first. */
 void _LoadSeq(int sequence)
 {
     void *buffer;
@@ -171,6 +177,7 @@ void _LoadSeq(int sequence)
     RgHeapFree(InstanceOfRgHeapData(), buffer, soundSourcePath, 0x9D);
 }
 
+/* Loads the sequence and starts it on the BGM channel unless it is already playing. */
 void XrgSoundSystemPlayBGM(int sequence)
 {
     _LoadSeq(sequence);
@@ -184,6 +191,7 @@ void XrgSoundSystemPlayJingle(void)
 {
 }
 
+/* Fades out the BGM channel when a sequence is loaded. */
 void XrgSoundSystemStopSequence(void)
 {
     if (s_eLoadedSeq != XRG_SOUND_NO_SEQUENCE) {
@@ -193,10 +201,8 @@ void XrgSoundSystemStopSequence(void)
 }
 
 /*
- * Forgets the loaded sequence. The body never reads sequenceId, but the one
- * caller (rg_main.c _DisposeBattleDatas) loads a literal 0 into $a0 before
- * its tail call (daddu $4,$0,$0 at 0x00a01100), so the original prototype
- * took the argument.
+ * Forgets the loaded sequence. The body never reads sequenceId; the one caller
+ * (rg_main.c _DisposeBattleDatas) passes 0, and the original prototype takes the argument.
  */
 void XrgSoundSystemDisposeSequence(int sequenceId)
 {
@@ -267,6 +273,7 @@ void DisposeXrgSound(XrgSound *sound)
     }
 }
 
+/* Plays a sound effect id in the effect bank, with gain scaled by the sound's volume and its pan. */
 static void _ring(XrgSound *sound, int soundId, int gain)
 {
     if (sound != 0) {
@@ -285,6 +292,7 @@ static void _stop(XrgSound *sound, int soundId)
     }
 }
 
+/* Sets the sound's volume from 0.0 to 1.0, clamped to that range. */
 void XrgSoundSetVolume(XrgSound *sound, float volume)
 {
     if (sound != 0) {
@@ -299,6 +307,10 @@ void XrgSoundSetVolume(XrgSound *sound, float volume)
     }
 }
 
+/*
+ * Plays the effect chosen by the sound's kind and records the timer. A nonzero forceRestart
+ * restarts an effect that is already playing.
+ */
 void XrgSoundRingMoving(XrgSound *sound, int forceRestart, float timer)
 {
     int soundEffectId = 0;
@@ -391,6 +403,7 @@ void XrgSoundRingStop(XrgSound *sound, int soundId)
     }
 }
 
+/* Counts the sound's timer down by dt and stops its effect when it runs out. A timer of 1e8 never runs out. */
 void XrgSoundPassTime(XrgSound *sound, float dt)
 {
     if (sound != 0) {

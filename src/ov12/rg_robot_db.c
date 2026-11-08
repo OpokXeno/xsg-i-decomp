@@ -25,6 +25,7 @@ static void _WrapperDestruct(void *database)
     DisposeRgSimpleDB(database);
 }
 
+/* Returns the robot database singleton, creating and clearing it on first use. */
 RgSimpleDB *InstanceOfRgRobotDB(void)
 {
     RgSimpleDB *database;
@@ -49,6 +50,7 @@ void RgRobotDBClear(RgSimpleDB *database)
     RgSimpleDBClear(database);
 }
 
+/* Returns the spec stored under name, or 0 when the database has no such entry. */
 void *RgRobotDBGet(RgSimpleDB *database, const char *name)
 {
     int dataID;
@@ -63,6 +65,7 @@ void *RgRobotDBGet(RgSimpleDB *database, const char *name)
     return 0;
 }
 
+/* Returns the spec of the character with charID, looked up through its name. Raises an error when the ID has no name. */
 void *RgRobotDBGetByID(RgSimpleDB *database, int charID)
 {
     const char *name;
@@ -85,6 +88,7 @@ const char robotDbCharacterDefinedTwiceFormat[] = "character '%s' is defined mor
 const char robotDbCharacterNameUnusableFormat[] = "character name '%s' cannot be used";
 const char robotDbDumpNameFormat[] = "NAME [%s] -------\n";
 
+/* Returns a shared default robot spec, reset to its initial values on each call. */
 RgRobotSpec *RgRobotDBGetDefault(void)
 {
     static RgRobotSpec inSpec;
@@ -93,6 +97,7 @@ RgRobotSpec *RgRobotDBGetDefault(void)
     return &inSpec;
 }
 
+/* Reads every "character" paragraph from pReader, allocating a spec for each and adding it to the database. */
 void RgRobotDBRead(RgSimpleDB *database, RgReadText *pReader)
 {
     char szToken[0x80];
@@ -123,6 +128,7 @@ void RgRobotDBRead(RgSimpleDB *database, RgReadText *pReader)
     }
 }
 
+/* Logs each entry's name followed by its robot spec. */
 void RgRobotDBDump(RgSimpleDB *database)
 {
     unsigned int count;

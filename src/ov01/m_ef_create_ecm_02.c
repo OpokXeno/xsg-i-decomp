@@ -16,7 +16,7 @@ typedef struct ECM02InitState {
     short frame;
     unsigned char unmodeled_72[0x0E];
     Vector4 copied_vector;
-    MEfGsQword color; /* one quadword: fnECM02_DP000 reads it with a single lq (0xA3851C); MEfCreate_ECM02 bytes unchanged (gate) */
+    MEfGsQword color; /* One quadword: fnECM02_DP000 reads it with a single load. */
     short visible[21];
     unsigned char unmodeled_ca[2];
     float radius[21];
@@ -42,6 +42,10 @@ static void fnECM02_PO000(void *self, ECM02InitState *work);
 extern void MGsGPInit(MEfGsPacket *packet, void *address, int size);
 extern float MMathMakeRandom2PI(void);
 
+/*
+ * Initializes an ECM02 effect: sets a random colour (three channels summing to at most
+ * 128, alpha 255), a random starting angle for the head, and installs the callbacks.
+ */
 int MEfCreate_ECM02(MEfObjRecord *self)
 {
     ECM02Effect *effect = (ECM02Effect *)self;
@@ -87,6 +91,10 @@ int MEfCreate_ECM02(MEfObjRecord *self)
     return 1;
 }
 
+/*
+ * Computes one trail point from radius and angle: the local offset is rotated about Y
+ * by angle and added to the vector at effect offset 0x80.
+ */
 static void makeCoord(void *destination, float radius, float angle, void *effect)
 {
     unsigned char *base = (unsigned char *)effect;
@@ -109,14 +117,14 @@ static void makeCoord(void *destination, float radius, float angle, void *effect
     MMathAddRotateVectorY(destination, angle, (Vector4 *)(base + 0x80), &local);
 }
 
-/*
- * work's layout beyond +0x70 pairs a per-frame lifetime counter with three
- * parallel 21-entry trails (visible flag, radius, angle) for the head this
- * function advances: index 0 is the value fnECM02_PR000 updates each frame,
- * indices 1..20 its trailing history, oldest last.
- */
+/* Frame at which the trail stops extending; fnECM02_PO000 fires sefHitEffect here. */
 #define ECM02_HIT_FRAME 0x23
 
+/*
+ * Process callback: shifts the trail history (visible flag, radius, angle) one entry
+ * older, then, while the frame is below ECM02_HIT_FRAME, sets the head (entry 0) to
+ * visible and advances its radius and angle. Entries 1..20 are the older history.
+ */
 static void fnECM02_PR000(void *self, ECM02InitState *work)
 {
     ECM02InitState *state = work;
@@ -178,6 +186,10 @@ static inline void ecm02CloseTag(MEfGsPacket *packet, int nloop)
     packet->count += size;
 }
 
+/*
+ * Draw callback: writes the GS setup packet, then one strip per side along the trail.
+ * Hidden entries are skipped, and the colour fades over the last ten entries.
+ */
 static void fnECM02_DP000(void *self, ECM02InitState *work)
 {
     ECM02InitState *state = work;
@@ -208,6 +220,7 @@ static void fnECM02_DP000(void *self, ECM02InitState *work)
     ecm02SetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
     ecm02CloseTag(packet, 3);
 
+    /* Two strips, one per side: the outer point is offset by the side's width. */
     for (side = -1; side < 2; side += 2) {
         clip = 0;
         drawn = 0;
@@ -258,13 +271,13 @@ static void fnECM02_DP000(void *self, ECM02InitState *work)
 
 extern void sefHitEffect(void);
 
-/*
- * work's layout beyond +0x70 is unresolved: the same per-frame lifetime
- * counter fnECM02_PR000 advances, expiring through MEfObjDestroy once it
- * reaches 0x37.
- */
+/* Frame at which fnECM02_PO000 destroys the effect. */
 #define ECM02_LIFETIME 0x37
 
+/*
+ * Post callback: advances the frame counter, fires sefHitEffect at ECM02_HIT_FRAME
+ * and destroys the effect from ECM02_LIFETIME on.
+ */
 static void fnECM02_PO000(void *self, ECM02InitState *work)
 {
     ECM02InitState *state = work;

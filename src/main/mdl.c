@@ -10,6 +10,7 @@
 #define MDL_MAX_PARTS 128
 #define MDL_VISIBLE_WORDS 4
 
+/* Sets or clears the visibility of every part in `group` (byte-swapped) and returns how many parts matched. */
 int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
 {
     MdlResource *resource = (MdlResource *)model->entry;
@@ -42,6 +43,10 @@ int MDL_setGroupVisible(MdlHandle *model, int group, int visible)
     return count;
 }
 
+/*
+ * Sets or clears the visibility of every part whose name words match `name` under the
+ * masks in name[2] and name[3] (byte-swapped).  Returns how many parts matched.
+ */
 int MDL_setNameVisible(MdlHandle *model, const int *name, int visible)
 {
     MdlResource *resource = (MdlResource *)model->entry;
@@ -100,6 +105,10 @@ void MDL_setVisible(MdlHandle *model, int partIndex, int visible)
     }
 }
 
+/*
+ * Initializes `model` for `resource`: copies three of its data words (in permuted
+ * order), points the model at it and makes all parts visible.
+ */
 void MDL_create(MdlHandle *model, const MdlResource *resource)
 {
     int wordIndex;
@@ -116,6 +125,7 @@ void MDL_create(MdlHandle *model, const MdlResource *resource)
     }
 }
 
+/* Passes each part's visibility flag, for up to MDL_MAX_PARTS parts, to nmlModelSetPartsVisible. */
 void MDL_partsSetVisible(MdlHandle *model)
 {
     MdlResource *resource = (MdlResource *)model->entry;
@@ -145,6 +155,7 @@ void MDL_partsSetVisible(MdlHandle *model)
     }
 }
 
+/* Draws the model: sets its texture and placement, applies the part visibility, then draws the entry. */
 void MDL_draw(MdlHandle *model, Matrix4 *place)
 {
     int entry = model->entry;

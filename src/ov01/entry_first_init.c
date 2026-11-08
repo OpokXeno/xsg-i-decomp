@@ -25,9 +25,8 @@
 #define ENC_COLOR_FADE_MIN 0x80
 #define ENC_COLOR_FADE_STEP 4
 
-/* plUnitTblGet's own PlUnitEntry (src/ov01/battle_init.c): this TU reads
- * only partyId (+0x00), the slot-occupied flag entryPhase25's own search
- * and status-display match both test (`lh $x,0x0($y)`). */
+/* The PlUnitEntry that plUnitTblGet returns (src/ov01/battle_init.c). This TU
+ * reads only partyId (+0x00), the slot-occupied flag. */
 typedef struct EntryPlUnit {
     short partyId;              /* +0x00 */
     unsigned char unmodeled_02[6];
@@ -64,9 +63,8 @@ void entryFirstInit(void) {
     mapNoSet(1);
 }
 
-/* Battle main loop: the sequencer pointer and its work area, pause flag, pad
- * record and GameLoopState flag word this TU reads (scaffold data, declared
- * here by their accurate types). */
+/* Declared here by their types: the battle loop's data (pause flag, sequencer
+ * work area, pad record and GameLoopState flag word) and its message strings. */
 extern const char entryFirstInitBattleStartText[];
 extern const char entryFirstInitPAUSEText[];
 extern const char entryFirstInitBattleEndText[];
@@ -119,6 +117,10 @@ extern PadPrefix PadData;
 /* GameLoopState flag bit that leaves the game loop (GAME_FLAG_EXIT). */
 #define BATTLE_LOOP_EXIT_BIT 0x10000000u
 
+/*
+ * Runs the battle main loop until the sequencer returns 0. Holding the abort
+ * buttons with START leaves the loop early.
+ */
 void battleProc(void) {
     XglClock clock;
     int mask;
@@ -178,6 +180,10 @@ extern void ACT_init(void);
 extern void ACT_initSequence(void);
 extern void xglSoundEffectStopBank(int bank);
 
+/*
+ * Tears the battle down: restores the render and camera state, releases the battle
+ * objects, and stops sound effects 1 to 14 and bank 0.
+ */
 void battleProcEnd(void) {
     int i;
 
@@ -225,8 +231,8 @@ extern int unitLiveNumGet2(int side);
 extern int unitTblGet(int side, BattleUnit ***table);
 
 /*
- * selectPL's own charaId cutoff (`lh $3,0x38($2)`/`slti $3,$3,0x8`): the
- * comparison itself only proves calcUPGet(unit)->charaId < 8.
+ * selectPL's charaId cutoff. The comparison only proves
+ * calcUPGet(unit)->charaId < 8.
  */
 #define SELECT_PL_CHARA_ID_LIMIT 8
 
@@ -234,6 +240,10 @@ extern int unitTblGet(int side, BattleUnit ***table);
  * unitTblGet(0, ...) returns the player side's three records (unit_cmd.c's
  * unitTbl), so `count` is bounded by
  * 3 and `picked` never needs more slots than that.
+ */
+/*
+ * Returns excludeUnit when it is in battle and qualifies. Otherwise picks one of the
+ * live player-side units that qualify at random, or returns 0 when none does.
  */
 BattleUnit *selectPL(BattleUnit *excludeUnit)
 {
@@ -279,7 +289,7 @@ BattleUnit *selectPL(BattleUnit *excludeUnit)
 
 extern int mapNoGet(void);
 
-/* lastBossBtlChk (0x00a22a60): map 0x34 is the game's final-boss battle map. */
+/* Map 0x34 is the final-boss battle map. */
 #define MAP_NO_LAST_BOSS 0x34
 
 int lastBossBtlChk(void) {
@@ -327,6 +337,10 @@ static int battleDispMode;
 static Vector4 sIntPararel2_0 = { 0.0f, 0.0f, 0.0f, 1.0f };
 static Vector4 sIntAmbient_1 = { 0.5f, 0.5f, 0.5f, 1.0f };
 
+/*
+ * First step of a battle: resets the battle systems, sets up the studio, lights and
+ * camera, logs the map and encounter values, and advances to entryPhase10.
+ */
 int entryPhase00(void) {
     StudioLight *light;
     int cfEncount;
@@ -448,18 +462,16 @@ static BattleUnit *pCvUnit;
 static int unitIdx;
 
 /*
- * This TU's own call site sets up only the event-record argument, unlike
- * src/ov01/battle_init.c's accepted call, which declares camEventExec void
- * and passes a second (BattleUnit *) argument: each TU forward-declares the
- * function as its own call site uses it.
+ * This TU's call passes only the event record. src/ov01/battle_init.c declares
+ * camEventExec void and passes a second (BattleUnit *) argument, so each TU
+ * declares the function as its own call site uses it.
  */
 extern int camEventExec(EntryCamEvent *event);
 
 /*
- * This TU's own call site passes mapNoGet()'s result as mapInit's argument
- * (`daddu $4,$2,$0` before `jal mapInit`), unlike src/ov01/map_disp.c's
- * accepted definition, which declares mapInit void and ignores it: each TU
- * forward-declares the function as its own call site uses it.
+ * This TU passes mapNoGet()'s result to mapInit. src/ov01/map_disp.c declares
+ * mapInit void and ignores the argument, so each TU declares the function as its
+ * own call site uses it.
  */
 extern void mapInit(int mapNo);
 extern void camInit(void);
@@ -477,6 +489,10 @@ int entryPhase16(void)
     return 1;
 }
 
+/*
+ * Ends the map load: initializes the map and camera, plays the entry camera event,
+ * then moves to entryPhase25. While data is still loading, the fade is held.
+ */
 int entryPhase20(void)
 {
     if (dataCdSync() <= loadNum) {
@@ -501,6 +517,10 @@ extern void menuStatDispCreate(void);
 extern int entryPhase30(void);
 extern int entryPhase26(void);
 
+/*
+ * Creates the next occupied party unit. Creating the last one also sets up the
+ * status display. Moves to entryPhase30 when no party slots are left.
+ */
 int entryPhase25(void)
 {
     EntryPlUnit *entries;
@@ -601,6 +621,10 @@ extern BattleUnit *unitEnCreate(short *pl);
 extern int entryPhase40(void);
 extern int entryPhase36(void);
 
+/*
+ * Creates the next enemy unit of the monster set. Moves to entryPhase40 when the
+ * list is done: five units, or an entry with no charaId.
+ */
 int entryPhase35(void)
 {
     ThinkMonsEntry *entries;
@@ -648,6 +672,10 @@ int entryPhase40(void) {
 extern void encountEffDisp(void);
 int entryPhase50(void);
 
+/*
+ * Waits until loading is done and no enemy actor is hidden, then starts the
+ * encounter effect and moves to entryPhase50.
+ */
 int entryPhase45(void)
 {
     BattleUnit **table;
@@ -689,9 +717,8 @@ done:
 }
 
 /*
- * This call site reads battleMain's return register even though
- * src/ov01/battle_init.c's own accepted definition declares it void; each TU
- * forward-declares the function as its own call site uses it.
+ * This TU reads battleMain's return value, although src/ov01/battle_init.c declares
+ * it void, so each TU declares the function as its own call site uses it.
  */
 extern int battleMain(void);
 extern int battleRetCodeGet(void);
@@ -699,6 +726,11 @@ extern BattleUnit *lastUnitGet(void);
 extern void GameDefocusSet(int first, int second, int third);
 int entryPhase51(void);
 
+/*
+ * Runs the battle until battleMain returns 0, then moves to entryPhase51. A return
+ * code of 1 picks a unit for a sound and starts the music transition, unless this
+ * is the last boss battle.
+ */
 int entryPhase50(void)
 {
     BattleUnit *unit;
@@ -752,6 +784,10 @@ int entryPhase60(void) {
     return 1;
 }
 
+/*
+ * Once the fade-out ends, moves to the result screen (entryPhase80) for return codes
+ * 1 or 3 when cfEvent bit 4 is clear, otherwise to entryPhase100. Then ends the battle.
+ */
 int entryPhase70(void) {
     if (fadeEndChk() != 0) {
         int retCode = battleRetCodeGet();
@@ -833,9 +869,9 @@ int entryPhase100(void) {
 }
 
 /*
- * The local effect-request block sefCreateEffect reads (evidenced only by
- * this call and by src/ov01/battle_init.c's DecoEffParams, which shares the
- * same 0x24-byte size and +0x14 subId offset): only subId is set here.
+ * The effect-request block that sefCreateEffect reads. src/ov01/battle_init.c's
+ * DecoEffParams has the same 0x24-byte size and +0x14 subId offset. Only subId is
+ * set here.
  */
 typedef struct EncounterEffectRequest {
     unsigned char unmodeled_00[0x14];
@@ -845,6 +881,7 @@ typedef struct EncounterEffectRequest {
 
 extern void sefCreateEffect(EncounterEffectRequest *params);
 
+/* Creates one encounter effect for each set bit of cfEncount. */
 void encountEffDisp(void) {
     EncounterEffectRequest params;
 
@@ -882,6 +919,10 @@ extern void ACT_draw(void);
 extern void GameDrawShadow(void);
 extern void SeisanDisp(void);
 
+/*
+ * Draws the battle for the current display mode: the battle view for mode 1, the
+ * result view for mode 2, and nothing for mode 0.
+ */
 int battleDisp(void)
 {
     switch (battleDispMode) {
@@ -965,6 +1006,10 @@ int fadeEndChk(void)
     return fadeFlag;
 }
 
+/*
+ * Counts the delay down, then raises life by speed. Once life passes FADE_LIFE_FULL,
+ * sets the end flag and removes the task.
+ */
 void fadeInObj(ObjectTask *task) {
     FadeObjTask *self = (FadeObjTask *)task;
 
@@ -981,6 +1026,10 @@ void fadeInObj(ObjectTask *task) {
 
 
 
+/*
+ * Counts the delay down, then lowers life by speed. At zero it draws the fade once
+ * more, sets the end flag and removes the task.
+ */
 void fadeOutObj(FadeObjTask *self)
 {
     if (self->delay != 0) {
@@ -990,9 +1039,8 @@ void fadeOutObj(FadeObjTask *self)
 
     self->life -= self->speed;
     if (self->life == 0) {
-        /* The original stores 0 into life here a second time (a separate
-         * `sw` right after the subtraction's own store), even though it is
-         * already 0 on this path. */
+        /* A second store of 0 to life is kept from the original, though life
+         * is already 0 on this path. */
         self->life = 0;
         fadeObjDraw(self);
         fadeFlag = 1;
@@ -1155,18 +1203,23 @@ extern void xglMatrixTrans(Matrix4 destination, Matrix4 source,
 extern void xglMatrixScale(Matrix4 destination, Matrix4 source,
                            Vector4 *scale);
 /*
- * grRotMatrix only reads angles->x/y/z (Y/X/Z Euler angles); the stack slot
- * this call site builds also carries a fourth word (the original .s stores
- * 1.0f at rotation+0xC, matching this TU's other two vectors' own unused .w
- * stores), so the argument stays a full Vector4 to keep that store, even
- * though grRotMatrix itself never reads angles->w.
+ * grRotMatrix only reads angles->x/y/z (Y/X/Z Euler angles). The stack slot this
+ * call site builds also carries a fourth word: the original stores 1.0f at
+ * rotation+0xC, as it does for the unused .w of this TU's other two vectors. The
+ * argument therefore stays a full Vector4 to keep that store, even though
+ * grRotMatrix never reads angles->w.
  */
 extern void grRotMatrix(Matrix4 destination, Matrix4 source,
                         Vector4 *angles);
 
-/* theta (original ELF symbol, src/ov01/entry_first_init.c's own .bss). */
+/* Declared again here: the original keeps theta's definition at this position. */
 static float theta;
 
+/*
+ * Builds the encounter effect grid: the lattice positions and distance classes, then
+ * one effect object per grid cell with its corner indices and colour. Queues the
+ * effect task at the end.
+ */
 void encEffObjInit(void)
 {
     EncGridPt (*grid)[ENC_GRID_POINTS];
@@ -1195,6 +1248,7 @@ void encEffObjInit(void)
     thetaInc = 0.032724924f;
     encEffCmd = 0;
 
+    /* Lattice point positions, each shifted by an offset from its row and column. */
     for (i = 0; i < ENC_GRID_POINTS; i++) {
         for (j = 0; j < ENC_GRID_POINTS; j++) {
             g = &grid[j][i];
@@ -1235,6 +1289,7 @@ void encEffObjInit(void)
         }
     }
 
+    /* Distance class of each lattice point, used as the corner index. */
     for (i = 0; i < 33; i++) {
         for (j = 0; j < ENC_GRID_POINTS; j++) {
             if (!((j < i) || (j > (ENC_GRID_CELLS - i)))) {
@@ -1247,6 +1302,7 @@ void encEffObjInit(void)
         }
     }
 
+    /* One effect object per grid cell, with corners taken from the cell's lattice points. */
     for (i = 0; i < ENC_GRID_CELLS; i++) {
         for (j = 0; j < ENC_GRID_CELLS; j++) {
             for (l = 0; l < 4; l++) {
@@ -1296,6 +1352,11 @@ void encEffObjInit(void)
     task->delay = 0;
 }
 
+/*
+ * Per-frame update of the encounter effect. encEffCmd selects whether theta grows,
+ * shrinks (then the task waits out its delay and removes itself), and whether the
+ * colours fade up or down. Each object's corners are projected to the screen.
+ */
 void encEffObj(ObjectTask *task)
 {
     FadeObjTask *self = (FadeObjTask *)task;
@@ -1337,9 +1398,11 @@ void encEffObj(ObjectTask *task)
     if (encEffCmd != 0) {
         self->speed += 0x10;
     }
+    /* Transform matrix of each grid point for this frame. */
     for (i = 0; i < ENC_GRID_POINTS; i++) {
         effCalcMatrix(task, mats[i], i);
     }
+    /* Project each object's corners to the screen and fade its colour. */
     for (objIndex = 0; objIndex < encObjCnt; objIndex++, obj++) {
         cornerZ = &obj->prim.vtx[0].z;
         objVec = obj->v;
@@ -1372,6 +1435,7 @@ void encEffObj(ObjectTask *task)
     }
 }
 
+/* Builds the transform of grid point index: a Z rotation of theta * index / 8. */
 void effCalcMatrix(ObjectTask *task, Matrix4 matrix, int index) {
     Vector4 rotation;
     Vector4 translation;
@@ -1444,10 +1508,8 @@ void encEffObjDraw(EncEffDrawArg *arg)
  * Sends two GIF-tagged UV/RGBAQ/XYZ2 vertex pairs (regs 0x513), UV 0..
  * (0x1FF0, 0x1BF0), textured from grFBAdrGet(drawingIndex) through TEX0,
  * offset by +16 then -16 in 12.4 fixed point (one pixel) on both axes.
- * gp is the original's callee-saved packet pointer (`daddu $17,$29,$0` in
- * grGpInit's delay slot, every later data/count read goes through $17), and
- * depth its Z, loaded into $18 at entry (`lui/ori $18` in the first calls'
- * delay slots).
+ * gp keeps the packet pointer live for every data and count access, as in the
+ * original. depth is the Z of all four vertices.
  */
 void encEffAppend(void)
 {

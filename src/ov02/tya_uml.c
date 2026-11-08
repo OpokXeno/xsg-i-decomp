@@ -133,8 +133,8 @@ static int TestEnv_6[28];
 extern int xglFlagsGet(int bit_offset, int bit_count);
 extern const char tyaUmlDbHeaderPath[24];
 /* Font control streams: the index-bar header, the highlighted and the normal
- * entry colour, the two-byte entry labels (through idx.7) and the suffix
- * template msg.8, whose bytes 2 and 3 take the high and low suffix byte. */
+ * entry colour, the two-byte entry labels (through idx_7) and the suffix
+ * template msg_8, whose bytes 2 and 3 take the high and low suffix byte. */
 extern const char tyaUmlIndexBarHeaderText[16];
 extern const char tyaUmlIndexHighlightText[8];
 extern const char tyaUmlIndexNormalText[8];
@@ -149,17 +149,24 @@ static s16 base_tbl[0x140];
 
 static s16 *tbl;
 
+/* Font callback: stores the current column, relative to the line, as a boundary in marks[]. */
 static void mark(TyaUmlParser *parser, TyaUmlDispLine *line)
 {
     line->marks[line->markCount] = line->baseColumn + (parser->column - (line->column - parser->lineStartColumn));
     line->markCount++;
 }
 
+/* Font callback: stores the current column, relative to the line, as the line's tail column. */
 static void tail(TyaUmlParser *parser, TyaUmlDispLine *line)
 {
     line->tailColumn = line->baseColumn + (parser->column - (line->column - parser->lineStartColumn));
 }
 
+/*
+ * Loads the text resource named by parameter->resource_id into the buffer: the
+ * header, the text with its @-codes turned into font operations, and the
+ * decoded images of the texture table. Returns 0.
+ */
 static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
 {
     TyaUmlJpegRequest request;
@@ -215,6 +222,7 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
     bold = 0;
     shake = 0;
 
+    /* Copy the text, turning @-codes into font callbacks and effect packets. */
     for (;;) {
         if (*cursor == 0) {
             break;
@@ -284,6 +292,7 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
         }
     }
 
+    /* End the text with a tail() callback. */
     out[0] = OV02_FONT_OP_CALLBACK;
     out[1] = (u32)tail >> 16;
     out[2] = (u32)tail >> 8;
@@ -295,6 +304,7 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
     out[8] = 0;
     out = (u8 *)(((u32)out + 24) & -16);
 
+    /* Decode each image of the texture table that has data. */
     table = (TyaUmlTableEntry *)(file + 32);
     for (i = 0; i < TYA_UML_IMAGE_COUNT; i++) {
         if (table[i].dataOffset != 0) {
@@ -328,27 +338,29 @@ static int tyaUmlDispLoad(TyaUmlDispParam *parameter)
     return 0;
 }
 
-/* Font control stream consumed by xglFontPrint; individual opcodes remain
- * unmodeled, but all 24 original bytes and the call-site type are known. */
+/* Font control stream drawn by xglFontPrint in tyaUmlDispType3. Its opcodes are not decoded. */
 static const char tyaUmlType3FontText[24] = {
     0x0D, 0x00, 0x15, 0x02, 0x01, 0x0C, 0x0C, 0x80,
     0x80, 0x80, 0x15, 0x02, 0x02, 0x04, 0x19, 0x03,
     0x15, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
-/* Original 24-byte database path owner at the immediately following address. */
+/* Path of db_fileno.txt, which dbfileno_load parses into base_tbl. */
 const char db_fileno_path[24] = "data\\umn\\db_fileno.txt";
 
 /*
- * texture_trans's VIF direct-data scratch packet (GCC names it TestEnv.1);
- * only element 8 (the width/height quadword texture_trans writes before
- * each transfer) is touched here, so the remaining template bytes are
- * supplied by the reference image, not generated here.
+ * Scratch packet of texture_trans's VIF direct data. Only element 8, the
+ * width/height quadword written before each transfer, is set in code; the
+ * other elements keep their initial values.
  */
 static u64 TestEnv_1_00A108B0[12] = {
     0, 0x5100000500000000ULL, 0x1000000000000004ULL, 14,
     0x0208380000000000ULL, 0x50, 0, 0x51, 0, 0x52, 0, 0x53,
 };
 
+/*
+ * Adds one texture to the VIF packet: the texture's size goes into the scratch
+ * packet, which is sent as direct data, followed by a reference to its pixels.
+ */
 static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
 {
     long long dimensions;
@@ -368,6 +380,11 @@ static void texture_trans(XglPacket **packet, TyaUmlImage *texture)
     sceVif1PkOpenDirectHLCode(*packet, 0);
 }
 
+/*
+ * Font callback that adds the render rectangle to the packet: the first image
+ * tiled over it, or only the rectangle and colour when there is no first image,
+ * then the other image tiles that overlap it.
+ */
 static void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument)
 {
     XglPacket **packet = &cursor->packet;
@@ -387,6 +404,7 @@ static void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument)
                     ((u64)rect_top << 32) | ((u64)rect_bottom << 48);
     sceVif1PkAddDirectDataN(*packet, TestEnv_2, 7);
 
+    /* First image: tiled across the render rectangle. */
     if (first->environment != 0) {
         texture_trans(packet, first);
         TestEnv_4[4] = work[4];
@@ -434,6 +452,7 @@ static void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument)
         sceVif1PkAddDirectDataN(*packet, TestEnv_5, 4);
     }
 
+    /* Remaining image tiles that overlap the render rectangle. */
     for (i = 1; i < TYA_UML_IMAGE_COUNT; i++) {
         TyaUmlImage *tile = &image[i];
         int dx;
@@ -466,6 +485,7 @@ static void tyaUmlDispType3Sub0(FontDrawCursor *cursor, void *argument)
     xglFontReloadTexture(cursor, 1);
 }
 
+/* Font callback that sends the frame size, minus one in each axis, as direct data. */
 static void tyaUmlDispType3Sub1(FontDrawCursor *cursor, void *argument)
 {
     u64 packed_dimensions;
@@ -483,6 +503,10 @@ static void tyaUmlDispType3Sub1(FontDrawCursor *cursor, void *argument)
     sceVif1PkAddDirectDataN(cursor->packet, command_words, 2);
 }
 
+/*
+ * Draws the type 3 text: an extension callback, the font stream, the header
+ * text at the render position, then a second extension callback.
+ */
 static void tyaUmlDispType3(TyaUmlDispParam *parameter)
 {
     int render_x = parameter->render_x - OV02_GS_ORIGIN_X;
@@ -502,6 +526,11 @@ static void tyaUmlDispType3(TyaUmlDispParam *parameter)
                         tyaUmlDispType3Sub1, parameter);
 }
 
+/*
+ * Draws the display. A negative resource_id clears the buffers and draws only
+ * the type 3 text; another resource is loaded first. Returns -1 for a null
+ * parameter and 0 otherwise.
+ */
 int tyaUmlDispMain(TyaUmlDispParam *parameter)
 {
     if (parameter == 0)
@@ -539,6 +568,11 @@ static u8 *find_text(TyaUmlTextRecord *record, int id)
     }
 }
 
+/*
+ * Looks target_id up in the filtered table tbl. Returns its table value and
+ * stores its 1-based position in *file_index, or returns -1 with *file_index set
+ * to -1 when it is not there.
+ */
 static int get_fileno(int target_id, int *file_index)
 {
     s16 *entry = tbl;
@@ -561,6 +595,10 @@ static int get_fileno(int target_id, int *file_index)
     return -1;
 }
 
+/*
+ * Returns the group of target_id in base_tbl, counted as the number of
+ * separators before its entry, or -1 when it is not there.
+ */
 static int get_indexno(int target_id)
 {
     s16 *entry = base_tbl;
@@ -641,6 +679,11 @@ done:
     *destination = TYA_UML_TABLE_END;
 }
 
+/*
+ * Builds the filtered table tbl from base_tbl. Entries whose text is unlocked
+ * get their text copied into the buffer; locked entries become
+ * TYA_UML_TABLE_LOCKED. Sets database->foundCount and lastEntry.
+ */
 static void dbheader_load(TyaUmlDatabase *database)
 {
     int size;
@@ -739,6 +782,10 @@ static void disp_index(TyaUmlDatabase *database, int suffix)
     }
 }
 
+/*
+ * Runs one frame of the database screen: open, header load, list, text view and
+ * close. Returns -1 for a null database, 1 for an unknown state and 0 otherwise.
+ */
 int tyaUmlDatabaseMain(TyaUmlDatabase *database)
 {
     ECursolMainData *cursorB;
@@ -755,6 +802,7 @@ int tyaUmlDatabaseMain(TyaUmlDatabase *database)
     cursorB = database->cursorB;
 
     switch (database->state) {
+    /* Open the window and place its two cursors, then load the header. */
     case TYA_UML_DB_INIT:
         database->listCursor = 0;
         database->indexCursor = 0;
@@ -787,6 +835,7 @@ int tyaUmlDatabaseMain(TyaUmlDatabase *database)
         dbheader_load(database);
         database->state = TYA_UML_DB_LIST;
         /* fall through */
+    /* List: move the cursor, open the selected text on Circle, close on Cross. */
     case TYA_UML_DB_LIST:
         {
             s16 origCursor;
@@ -892,6 +941,7 @@ int tyaUmlDatabaseMain(TyaUmlDatabase *database)
             disp_index(database, 0);
             break;
         }
+    /* Text view: scroll with Up and Down, return to the list on Cross. */
     case TYA_UML_DB_VIEW_TEXT:
         {
             s16 max;
@@ -919,6 +969,7 @@ int tyaUmlDatabaseMain(TyaUmlDatabase *database)
                 eCursolMain(cursorB);
             return 0;
         }
+    /* Close: redraw the window and index bar, one close state per frame. */
     case TYA_UML_DB_CLOSE:
     case TYA_UML_DB_CLOSE_2:
     case TYA_UML_DB_CLOSE_3:
@@ -933,6 +984,7 @@ int tyaUmlDatabaseMain(TyaUmlDatabase *database)
     return 0;
 }
 
+/* Sets a display parameter to no resource, full-screen render and clip rectangles, and the default colour. */
 int tyaUmlDispParamReset(TyaUmlDispParam *parameter, int mode)
 {
     parameter->resource_id = -1;
@@ -951,6 +1003,7 @@ int tyaUmlDispParamReset(TyaUmlDispParam *parameter, int mode)
 
 TyaUmlImage image[8] = {{0}};
 
+/* Uses work_buffer for the loads and clears the image slots. */
 void tyaUmlDispInit2(u8 *work_buffer)
 {
     int i;

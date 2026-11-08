@@ -342,15 +342,10 @@ char kosmosEffectName[8] = "kosmos";
 
 char chaosEffectName[8] = "chaos";
 
-/*
- * The original srs prefix is retained; its historical expansion is not
- * established by the available evidence. The mode word is local to this TU.
- */
+/* Directory prefix that srsMakeFileName appends after the host and USB roots. */
 static char srsViewPath[SRS_PATH_LENGTH] = {0};
 
-/*
- * 0x30C-byte table of 195 pointer-sized slots (config/symbols/main.txt).
- */
+/* 0x30C-byte table of 195 pointer-sized slots. */
 char *_loadComboData[SRS_COMBO_DATA_COUNT] = {
     defaultEffectName, chaosEffectName, kosmosEffectName, shionEffectName, shitanEffectName,
     ziggyEffectName, momoEffectName, jrEffectName, ceciliaEffectName, sefCatherinName,
@@ -674,9 +669,12 @@ static WeaponTblEntry _weaponTbl[SRS_WEAPON_ROWS] = {
 SrsMemRes _srsMemRes = {0};
 
 /* 0xC800-byte effect-name table. */
-/* 0xC800-byte table (config/symbols/main.txt) */
 char _loadEsdData[SRS_ESD_TABLE_SIZE] = {0};
 
+/*
+ * Returns the offset, in effect numbers, between an effect number and the
+ * number whose .esd entry it shares (0 when it has no shared entry).
+ */
 int srsGetEffect2Idx(int effectNo)
 {
     int idx;
@@ -699,6 +697,7 @@ int srsGetEffect2Idx(int effectNo)
     return idx;
 }
 
+/* Returns the .esd name entry for an effect number, or 0 when it is out of range. */
 char *srsGetEsdData(int index)
 {
     int idx;
@@ -726,6 +725,11 @@ char *sefGetEffectName(int effectNo)
     return _loadEsdData + effectNo * SRS_ESD_ENTRY_SIZE;
 }
 
+/*
+ * Classifies an effect number: stores its character number and SrsResourceType
+ * in *charNo and *effectType. Returns the name data to load for the effect,
+ * or 0 when there is none.
+ */
 char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
 {
     int i;
@@ -777,6 +781,7 @@ char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
         *effectType = SRS_RES_BATTLE_IMAGE;
         return 0;
     }
+    /* Per _srsChrEfTbl row: the first and fourth ranges give the character's combo data, the second and third a battle image of that character. */
     for (i = 0; i < SRS_CHR_EF_ROWS; i++) {
         if (effectNo >= _srsChrEfTbl[i].comboMin && effectNo <= _srsChrEfTbl[i].comboMax) {
             *charNo = _srsChrEfTbl[i].charNo;
@@ -801,6 +806,7 @@ char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
     }
     entry = _srsChrEfTbl2;
     rangeMax = &entry->effectMax;
+    /* Character-owned ranges from _srsChrEfTbl2. */
     for (i = 0; i < SRS_CHR_EF2_ROWS; i++, rangeMax += 3) {
         if (effectNo >= rangeMax[-1] && effectNo <= *rangeMax) {
             *charNo = rangeMax[-2];
@@ -819,6 +825,7 @@ char *srsAnalyzeEftNo(int effectNo, int *charNo, int *effectType)
     return 0;
 }
 
+/* Returns the boss wait effect number for a boss effect number, or 0 when it has no row. */
 short srsGetBossWaitEftNo(int effectNo)
 {
     int i;
@@ -848,6 +855,10 @@ void srsSetViewPath(char *path)
     strcpy(srsViewPath, path);
 }
 
+/*
+ * Builds the path of fileName into buffer for the current load mode (CD, host
+ * or USB). Returns 0 when fileName is null.
+ */
 static int srsMakeFileName(char *buffer, const char *fileName)
 {
     if (fileName == 0) {
@@ -881,6 +892,7 @@ void srsChangeSeparator(char *path)
     }
 }
 
+/* Returns the size of a file in the current load mode, or -1 when it cannot be found. */
 static int srsGetFileLen(const char *name)
 {
     char path[SRS_PATH_LENGTH];
@@ -910,6 +922,10 @@ static int srsGetFileLen(const char *name)
     return size;
 }
 
+/*
+ * Loads a file into buffer using the current load mode and returns its size,
+ * or -1 on failure. In CD mode, mode is passed to xglCdReadFile.
+ */
 static int fileLoad(void *buffer, const char *name, int mode)
 {
     char path[SRS_PATH_LENGTH];
@@ -968,6 +984,7 @@ char **srsGetComboData(int index)
     return (_loadComboData[index] != 0) ? &_loadComboData[index] : 0;
 }
 
+/* Returns the "esd/NAME.esd" path for an effect number, or 0 when it has no name. */
 char *srsGetEffectName(int effectNo)
 {
     static char msg[SRS_NAME_LENGTH];
@@ -985,6 +1002,10 @@ char *srsGetEffectName(int effectNo)
     return msg;
 }
 
+/*
+ * Returns the _weaponTbl row whose weapon effect IDs include effectNo (effects
+ * 2900..2998 are looked up 100 lower), or -1 when no row matches.
+ */
 int srsGetWeaponEffectIdx(int effectNo)
 {
     int i;
@@ -1079,6 +1100,7 @@ static char *srsGetComboName(int index)
     return msg;
 }
 
+/* Returns the SrsResourceType category for an effect number. */
 int srsGetEffectType(int effectNo)
 {
     int effectType;
@@ -1115,6 +1137,7 @@ int srsLeaveCdRead(void)
     return _nRead;
 }
 
+/* xglCdReadFile completion callback: tracks pending reads and maps the data when none remain. */
 void srsCdReadCallback(int code)
 {
     switch (code) {
@@ -1168,6 +1191,7 @@ void sresInitMemoryRes(void)
     memset(&_srsMemRes, 0, sizeof(_srsMemRes));
 }
 
+/* Loads the common effect image (esp/default.esp) and the effect-name table (seffect.esp) once. */
 void sresLoadCommonMemory(void)
 {
     SrsMemRes *memRes;
@@ -1191,6 +1215,7 @@ void sresLoadCommonMemory(void)
     }
 }
 
+/* Loads the CF common image (esp/cf_def.esp) once and registers it with the image mapper. */
 void sresLoadCfMemory(void)
 {
     SrsMemRes *memRes;
@@ -1210,6 +1235,7 @@ void sresLoadCfMemory(void)
     }
 }
 
+/* Frees the weapon or combo image of one reloader slot and removes its image mapper. */
 void sresFreeReloaderMemoryNo(int no)
 {
     if (no < SRS_CHARACTER_SLOTS) {
@@ -1229,6 +1255,7 @@ void sresFreeReloaderMemoryNo(int no)
     }
 }
 
+/* Frees the reloadable battle, combo, weapon and effect images; the CF image only when freeCf is set. */
 void sresFreeReloaderMemory(int freeCf)
 {
     int i;
@@ -1279,6 +1306,7 @@ void sresFreeReloaderMemory(int freeCf)
     }
 }
 
+/* Frees all reloadable images and then the common image. */
 void sresFreeMemoryRes(void)
 {
     SrsMemRes *memRes;
@@ -1292,6 +1320,7 @@ void sresFreeMemoryRes(void)
     }
 }
 
+/* Registers every loaded image whose mapping is still pending with the image mapper. */
 void sresDataMapping(void)
 {
     void *chunk[8];
@@ -1364,6 +1393,10 @@ void sresDataMapping(void)
     }
 }
 
+/*
+ * Reloads the battle images for the characters and enemies in battlePrm. Each
+ * requested slot clears its reload flag and loads its image into the slot's buffer.
+ */
 void sresLoadBattleData(SrsBattlePrm *battlePrm)
 {
     int i;
@@ -1371,6 +1404,7 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
     char *name;
     int effectNo;
 
+    /* Free the previous battle's effect and CF images. */
     for (i = 0; i < SRS_EFFECT_SLOTS; i++) {
         if (_srsMemRes.effectData[i] != 0) {
             smFree(_srsMemRes.effectData[i]);
@@ -1382,6 +1416,7 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
         smFree(_srsMemRes.cfImage);
         _srsMemRes.cfImage = 0;
     }
+    /* Character slots: weapon effects for numbers 17..32, combo data below the boss range. */
     for (i = 0; i < SRS_CHARACTER_SLOTS; i++) {
         if (battlePrm->charNo[i] > 0 && battlePrm->charReload[i] != 0) {
             battlePrm->charReload[i] = 0;
@@ -1425,6 +1460,7 @@ void sresLoadBattleData(SrsBattlePrm *battlePrm)
             }
         }
     }
+    /* Enemy slots: combo data for numbers outside the weapon range. */
     for (i = 0; i < SRS_COMBO_SLOTS; i++) {
         if (battlePrm->enemyNo[i] > 0 && battlePrm->enemyReload[i] != 0) {
             battlePrm->enemyReload[i] = 0;
@@ -1447,6 +1483,11 @@ int srsFileLoad(void *buffer, const char *name, int mode)
     return fileLoad(buffer, name, mode);
 }
 
+/*
+ * Loads the CF effect for effectNo into a free effect slot and maps it. Returns
+ * the file size, SRS_RES_CF_IMAGE for CF-image effects, 0 when the effect is
+ * already loaded, or -1 on failure.
+ */
 int srsFileLoadCf(int cfId, int effectNo)
 {
     int charNo;
@@ -1499,6 +1540,10 @@ int srsFileLoadCf(int cfId, int effectNo)
     return -1;
 }
 
+/*
+ * Copies size bytes of data into a free effect slot for effectNo and maps it.
+ * Return values follow srsFileLoadCf.
+ */
 int srsMemoryLoadCf(void *data, int effectNo, int size)
 {
     int charNo;

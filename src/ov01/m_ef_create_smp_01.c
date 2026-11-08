@@ -26,7 +26,7 @@ static void fnSMP01_PO000(Smp01Object *object, Smp01Work *work);
  * target and reset the smoke trails. */
 int MEfCreate_SMP01(MEfObjRecord *self)
 {
-    /* This constructor interprets its own variant of the pooled work. */
+    /* The pooled record is viewed as this effect's own object type. */
     Smp01Object *object = (Smp01Object *)self;
     Smp01Work *work = &object->work;
     Smp01ImageParameter parameter;
@@ -124,6 +124,10 @@ static void updateSmoke(Smp01Work *work)
 
 static void fnSMP01_PR010(Smp01Object *object, Smp01Work *work);
 
+/*
+ * Moves the effect along its first leg: advances the phase and the position, updates the
+ * smoke from phase 4, and switches to fnSMP01_PR010 at phase 5.
+ */
 static void fnSMP01_PR000(Smp01Object *object, Smp01Work *work)
 {
     Vector4 offset;
@@ -186,6 +190,10 @@ static void fnSMP01_PR000(Smp01Object *object, Smp01Work *work)
     }
 }
 
+/*
+ * Moves the effect toward the target position while the model is drawn, turns its angle z,
+ * and updates the smoke on every call.
+ */
 static void fnSMP01_PR010(Smp01Object *object, Smp01Work *work)
 {
     (void)object;
@@ -216,6 +224,7 @@ static void fnSMP01_PR010(Smp01Object *object, Smp01Work *work)
 
 extern Vector4 *MMathRotateMatrixYXZ(Vector4 *out, const Vector4 *matrix, const Vector4 *angles);
 extern Vector4 *MMathScaleMatrix(Vector4 *out, const Vector4 *matrix, const Vector4 *scale);
+/* Draws the model at its position and angles while the frame limit has not been reached. */
 static void fnSMP01_DM000(Smp01Object *self, Smp01Work *work)
 {
     static const Vector4 scale = { 0.038f, 0.038f, 0.15f, 1.0f };
@@ -237,6 +246,10 @@ extern Quadword McEfSTQtbl[];
 static const Quadword coltbl_1_00A514B0[10];
 static const float sztbl_2_00A51550[10];
 
+/*
+ * Builds the GS packet for the smoke: a setup block, then one textured strip of four
+ * vertices for each active point of each trail.
+ */
 static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work)
 {
     int i;
@@ -268,6 +281,7 @@ static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work)
     q[0].gif.tag = MEF_GS_SETUP_TAG;
     q[0].gif.registers = MEF_GS_SETUP_REGS;
     pk->reg_count = 1;
+    /* Write the GS state: test, texture filter, clamp, depth and additive alpha. */
     a1 = q + 1;
     a2 = q + 2;
     a3 = q + 3;
@@ -288,6 +302,7 @@ static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work)
     pk->current->nloop |= nreg;
     pk->current += n;
     pk->count += n;
+    /* Emit the textured strip of each active smoke trail. */
     for (i = 0; i < SMP01_SMOKE_TRAILS; i++) {
         base = (unsigned char *)&work->sourceActor;
         if (((short *)(base + 256))[i] != 0) {
@@ -322,6 +337,7 @@ static void fnSMP01_DP000(Smp01Object *self, Smp01Work *work)
                     gp->current->nloop |= 1;
                     gp->current += n1;
                     gp->count += n1;
+                    /* Strip tag, then four ST, colour and vertex quadwords. */
                     g = gp->current;
                     g[0].gif.tag = MEF_GS_TEXTURED_STRIP_TAG;
                     g[0].gif.registers = regs;
@@ -357,6 +373,10 @@ extern void sefHitEffect(void);
 #define SMP01_HIT_FRAME 15
 #define SMP01_LIFETIME  25
 
+/*
+ * Advances the frame counter once per call. It fires sefHitEffect at SMP01_HIT_FRAME and
+ * destroys the object from SMP01_LIFETIME on.
+ */
 static void fnSMP01_PO000(Smp01Object *object, Smp01Work *work)
 {
     work->frame++;

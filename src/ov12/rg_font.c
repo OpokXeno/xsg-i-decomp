@@ -24,6 +24,7 @@ const char fontAssertPaintNotNil[] = "pPaint != NIL";
 
 const char fontAssertStringNotNil[] = "pszStr != NIL";
 
+/* Creates a font over a glyph table and its picture, with the default color. */
 RgFont *CreateRgFont(RgFontGlyph *glyph_table, int glyph_count,
                      RgBxxPic *picture)
 {
@@ -73,6 +74,10 @@ void RgFontSetDefaultColor(RgFont *pFont)
     pFont->color.a = RG_FONT_DEFAULT_ALPHA;
 }
 
+/*
+ * Draws the glyph of character at (x, y) when draw is set, except for spaces, and
+ * returns its advance. Returns 0 for a character the font does not have.
+ */
 int RgFontPut(XrgPaint2D *paint, RgFont *font, signed char character, int x,
               int y, int draw)
 {
@@ -125,6 +130,10 @@ int RgFontPut(XrgPaint2D *paint, RgFont *font, signed char character, int x,
     return 0;
 }
 
+/*
+ * Draws text starting at (x, y). With right_align set, the text is measured first
+ * and placed so that it ends at x. Returns the x position after the last character.
+ */
 int RgFontStr(XrgPaint2D *paint, RgFont *font, const char *text, int x, int y,
               int right_align)
 {

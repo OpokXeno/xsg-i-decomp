@@ -105,6 +105,7 @@ void JNI_initSystem(xheap_block *heap, int size)
     xheap_init(0, heap, size);
 }
 
+/* Loads every native Java class into its classJava_* handle. */
 void JNI_loadNativeClass(void)
 {
     loadStaticClass(&classJava_xeno_vm_System, xenoVmSystemClassName);
@@ -142,6 +143,7 @@ void JNI_popFrame(void)
     xheap_current_clear();
 }
 
+/* Returns non-zero when object is an instance of target_class. */
 int JNI_isInstanceOf(SceneObject object, JavaClass *target_class)
 {
     int result = 0;
@@ -153,6 +155,11 @@ int JNI_isInstanceOf(SceneObject object, JavaClass *target_class)
     return result;
 }
 
+/*
+ * Reads or writes one class DB slot. A class_id at or above
+ * VM_CLASS_DB_READ reads the slot; a negative class_id claims the first
+ * empty slot and returns 0 when none is free. Returns the slot value.
+ */
 int JNI_loadClassDB(int class_id, int value)
 {
     int slot;
@@ -178,22 +185,16 @@ int JNI_loadClassDB(int class_id, int value)
     return value;
 }
 
+/*
+ * Runs method on the thread unless the thread is still busy. A stale call
+ * is reset first, and a call already in progress is waited for.
+ */
 void JNI_callMethod(SceneVm *vm, JavaMethod *method, SceneObject *arguments,
                     int *output)
 {
     JThread *thread = vm;
     u32 flags = thread->flags;
 
-    /*
-     * The three flag tests below are proven only by their effect on this
-     * function's own control flow, not by any other reader of these bits:
-     * bit 5 (0x20) marks a stale call this function resets before
-     * dispatching a new one; bit 2 (0x4) means a call is already running
-     * on the thread, so this function waits for it (JTHREAD_waitFor) and
-     * gives up if it is still running afterwards; bits 0 and 2 together
-     * (0x5) are the same "still busy" check taken again just before the
-     * call would run.
-     */
     if (flags & JTHREAD_FLAG_STALE_CALL) {
         thread->frame_depth = 0;
         thread->stack_offset = 0;
@@ -219,6 +220,7 @@ void JNI_catchException(void)
     }
 }
 
+/* Allocates a thread with its frame array and VM stack, and appends it to the thread list. */
 JThread *JNI_createThread(int kind, int stack_words, int frame_words)
 {
     JThread *thread;
@@ -264,6 +266,10 @@ void JNI_initThread(SceneVm *vm)
     thread->stack_offset = 0;
 }
 
+/*
+ * Advances the buffer past a class file constant pool. A non-zero bound
+ * caps the number of entries read. Returns the tag of the last entry.
+ */
 static int skipConstantPool(DataBuffer *buffer, int bound)
 {
     unsigned int pool_count;
@@ -309,6 +315,11 @@ static int skipConstantPool(DataBuffer *buffer, int bound)
     return tag;
 }
 
+/*
+ * Reads the class name from a class file. target 0 returns the name;
+ * target 1 returns it only when it equals name; target 2 returns it only
+ * when the superclass name equals name. Returns 0 otherwise.
+ */
 static const char *checkClass(void *buffer, const char *name, int target)
 {
     DataBuffer *data = buffer;
@@ -347,6 +358,7 @@ static const char *checkClass(void *buffer, const char *name, int target)
         }
     }
 
+    /* Class name lookup (targets 0 and 1). */
     if (target != 2) {
         if (target == 0)
             return class_name;
@@ -355,6 +367,7 @@ static const char *checkClass(void *buffer, const char *name, int target)
         return class_name;
     }
 
+    /* Superclass name lookup (target 2). */
     if (super_class != 0) {
         DataBuffer_setPos(data, class_start);
         skipConstantPool(data, super_class);
@@ -374,6 +387,7 @@ static const char *checkClass(void *buffer, const char *name, int target)
     return 0;
 }
 
+/* Returns the position after the first delimiter in name, or 0 if there is none. */
 static const char *getStrIndex(const char *name, int delimiter)
 {
     char value;
@@ -385,6 +399,11 @@ static const char *getStrIndex(const char *name, int delimiter)
     return 0;
 }
 
+/*
+ * Searches the classes of class_id for the first name in the ':'-separated
+ * list names that checkClass accepts for target. *skip_count receives the
+ * number of names passed over before the match.
+ */
 const char *JNI_searchClasses(int class_id, const char *names, int target, int *skip_count)
 {
     PdbClassGroup *group;
@@ -439,6 +458,7 @@ const char *JNI_searchClasses(int class_id, const char *names, int target, int *
     return result;
 }
 
+/* Loads every class found in the entries of class_id as a static class. */
 void JNI_loadClassLibrary(int class_id)
 {
     DataBuffer buffer;

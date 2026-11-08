@@ -53,6 +53,7 @@ void SsdSetVoiceAdsr2(int voice, int adsr)
     sceSdSetParam(core | (voice * 2) | SD_VP_ADSR2, adsr);
 }
 
+/* Sets the attack rate and mode in the voice's ADSR1 word, keeping its low byte. */
 void SsdSetVoiceARAttr(int voice, int rate, int mode)
 {
     int entry;
@@ -71,6 +72,7 @@ void SsdSetVoiceARAttr(int voice, int rate, int mode)
     sceSdSetParam(entry, adsr);
 }
 
+/* Sets the decay rate in the voice's ADSR1 word, keeping its other bits. */
 void SsdSetVoiceDR(int voice, int rate)
 {
     int entry;
@@ -89,6 +91,7 @@ void SsdSetVoiceDR(int voice, int rate)
     sceSdSetParam(entry, adsr);
 }
 
+/* Sets the sustain level in the voice's ADSR1 word. */
 void SsdSetVoiceSL(int voice, int level)
 {
     int entry;
@@ -107,6 +110,7 @@ void SsdSetVoiceSL(int voice, int level)
     sceSdSetParam(entry, adsr);
 }
 
+/* Sets the sustain rate and mode in the voice's ADSR2 word. */
 void SsdSetVoiceSRAttr(int voice, int rate, int mode)
 {
     int entry;
@@ -125,6 +129,7 @@ void SsdSetVoiceSRAttr(int voice, int rate, int mode)
     sceSdSetParam(entry, adsr);
 }
 
+/* Sets the release rate and mode in the voice's ADSR2 word. */
 void SsdSetVoiceRRAttr(int voice, int rate, int mode)
 {
     int entry;
@@ -179,6 +184,7 @@ void SsdGetVoiceEnvelope(int voice, unsigned short *envelope)
     *envelope = sceSdGetParam(core | (voice * 2) | SD_VP_ENVX);
 }
 
+/* Sets the left and right master volume on both cores; core is not used. */
 void SsdSetMasterVolume(int core, int left, int right)
 {
     sceSdSetParam(SD_P_MVOLL | SD_CORE_0, left);
@@ -187,6 +193,7 @@ void SsdSetMasterVolume(int core, int left, int right)
     sceSdSetParam(SD_P_MVOLR | SD_CORE_1, right);
 }
 
+/* Does nothing. */
 void SsdSetStreamVolume(int core, int left, int right)
 {
 }
@@ -196,6 +203,7 @@ void SsdSetReverb(int core, int enabled)
     sceSdSetCoreAttr(core | SD_C_EFFECT_ENABLE, enabled);
 }
 
+/* Does nothing. */
 void SsdSetReverbModeType(int core, int type)
 {
 }
@@ -210,10 +218,12 @@ void SsdSetReverbModeDepth(int core, int left, int right)
     sceSdSetEffectAttr(core, &attr);
 }
 
+/* Does nothing. */
 void SsdSetReverbModeDelayTime(int core, int delay)
 {
 }
 
+/* Does nothing. */
 void SsdSetReverbModeFeedback(int core, int feedback)
 {
 }

@@ -34,6 +34,7 @@ static MEfObjCtor func_0[MEF_TYPE_COUNT] = {
 
 static short ntbl_1[MEF_TYPE_COUNT] = { 1, 2, 1, 1, 1, 1, 1, 1, 4, 6, 1, 1, 6, 1 };
 
+/* Creates the objects of an effect type, destroying any whose constructor fails. Returns 0 for an invalid type or when allocation fails. */
 int MEfCreate(MEfCreateParam *param)
 {
     int i;

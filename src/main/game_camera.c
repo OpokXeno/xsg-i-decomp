@@ -1,7 +1,6 @@
 #include "common.h"
 #include "shared.h"
 
-/* The camera record copied by value as doubleword pairs. */
 #include "main/maptbl.h"
 #include "main/game_camera.h"
 #include "main/nml_model_set.h"
@@ -11,7 +10,7 @@
 
 #define MoveHokanStateFlag (GameLoopState.camera_flags)
 
-/* UnduCheck: height returned (and probe limit) when no floor is found. */
+/* Probe limit for the Undu floor queries (UnduParamCameraView.limit). */
 #define UNDU_PROBE_LIMIT 1000.0f
 
 /* Player ground attribute (UnduParam.attribute) that selects a camera index:
@@ -36,7 +35,7 @@
 #define CAMERA_PEDESTAL_LOOK_AT_TARGET 1
 #define CAMERA_PEDESTAL_ROTATION_FIXED 2
 
-/* Most floor triangles CameraType0 walks following the line of sight. */
+/* Maximum number of floor triangles CameraType0 steps through along the line of sight. */
 #define CAMERA_EDGE_WALK_MAX 0x100
 
 /* Frames GameCamera waits at start (CameraScratchpad.initial_wait). */
@@ -161,8 +160,7 @@ struct CameraScratchpad {
 };
 
 /* Interpolation state of the camera pair (position, look-at): the per-frame
- * step, the frames still to run and the yaw being blended, bss at
- * main:0x004dcad0. */
+ * step, the frames still to run and the yaw being blended. */
 typedef struct HokanState {
     float position_step;      /* +0x00 */
     float look_at_step;       /* +0x04 */
@@ -192,11 +190,10 @@ struct LayoutHeader {
     const struct CameraFloorTriangle *triangles; /* +0x0c */
 };
 
-/* Query block of UnduCheck (still original bytes in src/main/Undulate.c): the
- * ground probe each camera point owns. Only the members the camera update
- * touches are named. */
-/* Partial view of UnduParam; the full type cannot be included in this TU, which
- * defines its own struct LayoutHeader body. */
+/* Partial view of UnduParam, the query block of UnduCheck used for the camera
+ * ground probes. Only the members the camera update touches are named. The
+ * full type cannot be included here, because this TU defines its own
+ * struct LayoutHeader. */
 typedef struct UnduParamCameraView {
     int query_flags;                      /* +0x00 */
     int query_cursor;                     /* +0x04 */
@@ -237,16 +234,13 @@ typedef s32 M2C_UNK;
 
 extern const float cameraYawHalfTurn;
 
-/* GameLoopState (main VA 0x00338680) is a 0x2a030-byte global (see
- * src/main/game.c); MoveHokan reads only the flag byte at +193 (main VA
- * 0x00338741, config/objects/main.objects.json alias MoveHokanStateFlag).
- * Declared here as the byte array the original size evidences, not as a
- * standalone one-byte extern: at -G8 an object at or under the G threshold is
- * addressed through $gp, and the original's own two-instruction
- * lui/lbu absolute address for this byte proves this access is NOT
- * gp-relative. This TU-local view is
- * independent of the other partial views other TUs give the same symbol
- * (GameLoopFlagsPrefix, GameLoopStateAddressView, ...; */
+/* GameLoopState is a 0x2a030-byte global (see src/main/game.c). MoveHokan
+ * reads only its flag byte at +193 (MoveHokanStateFlag). It is declared as a
+ * byte array of the original size, not as a one-byte extern: at -G8 a small
+ * object would be addressed through $gp, but the original reaches this byte
+ * with an absolute lui/lbu address. This TU's view is independent of the
+ * other partial views of the same symbol (GameLoopFlagsPrefix,
+ * GameLoopStateAddressView, ...). */
 extern GameLoopCameraView GameLoopState;
 extern CameraDefocusLayer GameDefocusParam[16];
 extern const float nearestCenterInitialDistance;
@@ -291,6 +285,8 @@ static UnduParamCameraView CamPlayer;
 
 static Vector4 CamPlyPosOld;
 
+/* Returns rise / run. When run is within 0.001 of zero, returns rise * 100 for
+ * run >= 0 and rise * -100 for run <= 0 instead of dividing. */
 static __inline__ float FloorSlope(float rise, float run)
 {
     if (run >= 0.0f && run < 0.001f) {
@@ -302,6 +298,11 @@ static __inline__ float FloorSlope(float rise, float run)
     return rise / run;
 }
 
+/*
+ * Resets the game camera: default parameters for every CF camera definition,
+ * a cleared interpolation state and offset, camera type 1 with the snap flag,
+ * and camera id 0.
+ */
 void GameCameraReset(void)
 {
     StudioCamera *camera;
@@ -352,6 +353,7 @@ void GameCameraReset(void)
     GameCameraChangeID(0, 0, 0);
 }
 
+/* Saves the studio camera, the camera 0 angles and the camera callback. */
 void GameCameraStateSave(void)
 {
     StudioCamera *camera;
@@ -362,6 +364,10 @@ void GameCameraStateSave(void)
     GameLoopState.saved_camera_callback = GameLoopState.camera_callback;
 }
 
+/*
+ * Restores the state saved by GameCameraStateSave, clears the interpolation
+ * countdowns, and makes studio camera 0 the only active camera.
+ */
 void GameCameraStateRestore(void)
 {
     StudioCamera *camera;
@@ -386,6 +392,10 @@ void GameCameraStateRestore(void)
     xglStudioGetCamera2(0)->active = 1;
 }
 
+/*
+ * Switches the camera's floor header to the one for id. When that header
+ * does not exist, the default camera id is used instead.
+ */
 void GameCameraChangeID(int id, int unused1, int unused2)
 {
     LayoutHeader *header;
@@ -407,20 +417,12 @@ void GameCameraChangeID(int id, int unused1, int unused2)
     }
 }
 
-/* MoveHokan (main:0x00246c60, 348 bytes): five-argument EE ABI. `unused` (a0)
- * is never read; `target` (a1) is the point being approached; `current` (a2)
- * is the vector advanced in place; `step` (f12) is the per-frame countdown
- * decrement; `remaining` (a3) is the caller's countdown, zeroed and used as
- * the interpolation weight. When the countdown is already zero or
- * MoveHokanStateFlag's high bit is set, snap `current` to `target` and clear
- * the countdown. Otherwise compute `current - target` on COP2 (vf20/vf21,
- * vsub.xyzw) into a stack temp, take the XYZ distance through the hardware
- * sqrt idiom, decrement the countdown by `step`, force it to zero once the
- * distance undershoots `step`, exceeds 100 units or goes negative, then
- * either snap-copy (countdown hit zero) or interpolate XYZ through
- * xglVectorScaleAddXYZ using the stored difference and the remaining W lane
- * untouched. The two inline statements are the quadword snap-copy and the
- * COP2 vector subtract (config/tu/contracts/main-tu120-move-hokan.asm_contract.json). */
+/*
+ * Moves current toward target by one step. Snaps to target when *remaining
+ * is zero or the snap flag is set, or when *remaining (counted down by step)
+ * runs out or the distance is outside [step, CAMERA_HOKAN_MAX_DISTANCE].
+ * Otherwise current interpolates toward target. unused is not read.
+ */
 static void MoveHokan(void *unused, const Vector4 *target, Vector4 *current,
                       float step, float *remaining)
 {
@@ -451,6 +453,7 @@ static void MoveHokan(void *unused, const Vector4 *target, Vector4 *current,
     }
 }
 
+/* Writes the point the camera looks at: the source position plus the camera offset, raised by the centre height. */
 static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
 {
     float vertical_offset;
@@ -466,6 +469,10 @@ static void GetCenter(Vector4 *center, const struct CameraCenterSource *source)
     center->w = 1.0f;
 }
 
+/*
+ * Writes to destination the camera position at distance angles[3] from
+ * position, rotated by yaw angles[1] and pitch angles[0].
+ */
 static void GetCameraPos(float *destination, const float *position,
                          const float *angles)
 {
@@ -486,6 +493,7 @@ static void GetCameraPos(float *destination, const float *position,
     destination[2] = scratchpad->matrix[3][2];
 }
 
+/* Writes the centroid of the floor triangle whose centre is nearest point (in x and z). */
 static void GetNearestCenter(Vector4 *center, const LayoutHeader *header,
                              const Vector4 *point)
 {
@@ -539,6 +547,11 @@ static void GetNearestCenter(Vector4 *center, const LayoutHeader *header,
     center->z = (first->z + second->z + third->z) * oneThirdCentroid;
 }
 
+/*
+ * Probes the ground under the look-at point (CamLookAtPos). When no floor is
+ * found, the probe moves to the nearest floor triangle's centroid and is then
+ * swept toward the look-at point.
+ */
 static void CalcLookAt(struct CameraScratchpad *scratchpad)
 {
     float requestedLookAtHeight;
@@ -596,6 +609,11 @@ static void CalcLookAt(struct CameraScratchpad *scratchpad)
     }
 }
 
+/*
+ * Probes the ground under the camera position and sets the position height to
+ * the floor when the floor is below it (always in floor-follow mode). When no
+ * floor is found, the probe starts from the look-at point instead.
+ */
 static void CalcCameraPos(struct CameraScratchpad *scratchpad)
 {
     float height;
@@ -633,6 +651,11 @@ static void CalcCameraPos(struct CameraScratchpad *scratchpad)
     }
 }
 
+/*
+ * Camera mode 0: places the view at the look-at point. The floor under the
+ * goal is used when present; otherwise the camera walks the floor triangles
+ * along the line of sight and pulls in to the floor edge it crosses.
+ */
 static void CameraType0(void)
 {
     struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
@@ -667,6 +690,7 @@ static void CameraType0(void)
               HokanNow.look_at_step, &HokanNow.look_at_remaining);
     GetCameraPos(&scratchpad->look_at_delta.x, &scratchpad->view->look_at.x,
                  scratchpad->definition->angles.values);
+    /* Probe the floor under the look-at goal. */
     UnduParamInit(&ground);
     ground.exclude = CAMERA_PROBE_EXCLUDE;
     ground.header = UnduDataGetHeader(0x100, GameLoopState.camera_id);
@@ -686,6 +710,7 @@ static void CameraType0(void)
         edge_probe.header = UnduDataGetHeader(0x100, GameLoopState.camera_id);
         edge_probe.limit = UNDU_PROBE_LIMIT;
         UnduCheck(&scratchpad->look_at, 0, &edge_probe);
+        /* No floor under the goal: walk the floor triangles along the line of sight. */
         if (edge_probe.query_cursor != 0) {
             triangle = (const struct CameraFloorTriangle *)edge_probe.query_cursor;
             goal_x = scratchpad->look_at_delta.x;
@@ -810,6 +835,10 @@ static void CameraType0(void)
     QuadwordCopy(&scratchpad->view->focus, &scratchpad->look_at);
 }
 
+/*
+ * Computes the look-at point and the camera position for camera type 1,
+ * applying the lock-position overrides, and moves both toward their targets.
+ */
 static void CameraType1Core(void)
 {
     struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
@@ -849,6 +878,11 @@ static void CameraType1Core(void)
     }
 }
 
+/*
+ * Camera mode 1: runs CameraType1Core and sets the view rotation from the
+ * look direction. The yaw is taken from the blended previous or current yaw
+ * (HokanNow) when the direct value would cross the half-turn.
+ */
 static void CameraType1(void)
 {
     struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
@@ -927,6 +961,11 @@ static void CameraType1(void)
     QuadwordCopy(&scratchpad->view->focus, &scratchpad->look_at);
 }
 
+/*
+ * Camera mode 4 (pedestal): places the view at the definition's offset.
+ * pedestal[3] selects a fixed look-at, the target as look-at, or a fixed
+ * rotation.
+ */
 static void CameraType4(void)
 {
     struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
@@ -971,6 +1010,10 @@ static void CameraType4(void)
     }
 }
 
+/*
+ * Fills the defocus layers (GameDefocusParam 4 to 7) from the definition's
+ * three defocus entries, with depths projected from the look-at point.
+ */
 static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
 {
     StudioCamera *camera;
@@ -1027,6 +1070,11 @@ static void GameCameraDefocus(struct CameraScratchpad *scratchpad)
     GameDefocusCheck();
 }
 
+/*
+ * Per-frame game camera update. Picks the camera definition from the ground
+ * under the player, applies the offset, runs the view routine for the current
+ * mode, then sets the defocus layers and fog. Does nothing without a map.
+ */
 void GameCamera(void)
 {
     struct CameraScratchpad *scratchpad = (void *)SCRATCHPAD_BASE;
@@ -1116,6 +1164,7 @@ void GameCamera(void)
     if (HokanNow.look_at_remaining == 0.0f) {
         HokanNow.look_at_step = scratchpad->definition->interpolation[1];
     }
+    /* A mode change restarts the interpolation. */
     if (GameLoopState.camera_flags & GAME_CAMERA_FLAG_MODE_CHANGED) {
         previous =&CfCameraDefine[scratchpad->previous_index];
         if ((scratchpad->previous_mode == GAME_CAMERA_MODE_PEDESTAL &&(previous->pedestal_interpolation & 1))
@@ -1187,6 +1236,7 @@ void GameCamera(void)
             t_1 = count;
         }
         if (distance == CAMERA_NO_FACING) {
+            /* No facing: shrink the offset toward zero after second_mode frames. */
             if (scratchpad->definition->parameters.offset.second_mode < count) {
                 scratchpad->translation[0] = -CfCameraOfsNow[0];
                 scratchpad->translation[1] = -CfCameraOfsNow[1];
@@ -1196,6 +1246,7 @@ void GameCamera(void)
                                      (Vector4 *)CfCameraOfsNow);
             }
         } else if (scratchpad->definition->parameters.offset.first_mode < count) {
+            /* Facing target: move the offset toward the definition offset rotated by the facing. */
             scratchpad->translation[0] = scratchpad->definition->offset[0];
             scratchpad->translation[1] = scratchpad->definition->offset[1];
             scratchpad->translation[2] = scratchpad->definition->offset[2];
@@ -1214,6 +1265,7 @@ void GameCamera(void)
         CfCameraOfsNow[1] = 0.0f;
         CfCameraOfsNow[2] = 0.0f;
     }
+    /* Modes 0 and 2 use CameraType0, 1 and 3 CameraType1, 4 CameraType4. */
     switch (GameLoopState.camera_mode) {
     default:
     case 0:

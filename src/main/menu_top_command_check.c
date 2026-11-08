@@ -159,6 +159,7 @@ static inline int MenuTopStateGet(void)
     return MenuWork.state;
 }
 
+/* Packs a current and a maximum value into one status word. */
 static inline MenuStatusValuePair MenuStatusEncodeValue(short current, short maximum)
 {
     MenuStatusValuePair value;
@@ -168,20 +169,25 @@ static inline MenuStatusValuePair MenuStatusEncodeValue(short current, short max
     return value;
 }
 
-/* Index 3 addresses the halfword at +0x3c, the first word after the three
- * attack slots (the first technique record), as the original does. */
+/* Index 3 reads past the three attack slots: the halfword at +0x3c, the first
+ * halfword of the first technique record. */
 static inline unsigned short MenuPointaGuardWord(MenuPointaTask *task)
 {
     PartyDataPrefix *party = PartyDataGet();
     return party->attack_slots[task->index].party_id;
 }
 
+/* Returns nonzero when the top-level command is not locked. */
 int MenuTopCommandCheck(int commandId)
 {
     unsigned int commandBit = 1 << (commandId - 1);
     return (commandBit & ~MenuTopCommandLock) != 0;
 }
 
+/*
+ * Creates one status window per party member on the first call, then slides
+ * the windows in or out for the current top-menu state.
+ */
 void TopStatusWinMain(void)
 {
     MenuTopStatusWin *status = TopStatusWin;
@@ -234,6 +240,7 @@ void TopStatusWinMain(void)
     }
     case MENU_TOP_TASK_RUN:
         slideTarget = MENU_TOP_STATUS_X_SHOWN;
+        /* The windows stay shown only during enter and select. */
         switch (MenuWork.state) {
         case MENU_TOP_STATE_ENTER:
         case MENU_TOP_STATE_SELECT:
@@ -250,6 +257,10 @@ void TopStatusWinMain(void)
     }
 }
 
+/*
+ * Sets up the info bar on the first call, then slides it in during enter and
+ * select with the help text of the highlighted command.
+ */
 void TopInfoMain(void)
 {
     MenuTopInfo *info = TopInfo;
@@ -298,6 +309,10 @@ void TopInfoMain(void)
     }
 }
 
+/*
+ * Sets up the command window on the first call, then slides it in during
+ * enter and select and keeps its cursor on the top-menu cursor.
+ */
 void TopMenuWinMain(void)
 {
     MenuTopMenuWin *menu = TopMenuWin;
@@ -350,6 +365,10 @@ void TopMenuWinMain(void)
     }
 }
 
+/*
+ * Sets up the party face panels and the play time and money readouts on the
+ * first call, then slides and draws them.
+ */
 void TopFaceExWinMain(void)
 {
     MenuTopFaceEx *face = TopFaceExWin;
@@ -418,6 +437,7 @@ void TopFaceExWinMain(void)
             face->sprite[j].y = face->ribbon[0].y;
             eSpriteMain(&face->sprite[j]);
         }
+        /* Play time and money readouts. */
         face->time = *PartyTimeUpDate();
         PartyTimeDispChange(&face->time);
         face->number[0].x = face->ribbon[1].x + 0x4A;
@@ -435,6 +455,10 @@ void TopFaceExWinMain(void)
     }
 }
 
+/*
+ * Top menu state machine: sets up the windows and command locks on the first
+ * call, runs command selection with its countdowns, then updates the windows.
+ */
 void TopMenu(void)
 {
     int modelIndex;
@@ -461,6 +485,9 @@ void TopMenu(void)
         window[4] = 0;
         TopFaceExWin = (void *)workEnd;
         workEnd[0] = 0;
+        /*
+         * Build the command lock mask from the scenario, the AGWS roster and the UMN friend flag.
+         */
         if ((MenuScenarioNo - MENU_TOP_LOCK_SCENARIO_FIRST) < MENU_TOP_LOCK_SCENARIO_COUNT) {
             MenuTopCommandLock = MENU_TOP_LOCK_SCENARIO_MASK;
         } else {
@@ -509,6 +536,7 @@ void TopMenu(void)
         break;
     case MENU_TOP_STATE_LEAVE:
         MenuWork.state = MENU_TOP_STATE_LEAVING;
+        /* The formation command builds the three party models before it leaves. */
         if (MenuWork.topCursor == MENU_TOP_FORMATION_CURSOR) {
             MenuModelMemorySet(12);
             MenuModelMenuMotionLoad();
@@ -537,6 +565,7 @@ void TopMenu(void)
         break;
     }
 
+    /* Update the four windows for this frame. */
     TopStatusWinMain();
     TopInfoMain();
     TopMenuWinMain();
@@ -547,6 +576,10 @@ void TopMenu(void)
     }
 }
 
+/*
+ * Task that animates the formation model while command 0 is active and draws
+ * its wireframe grid; it removes itself when command 12 is set.
+ */
 static void tskMenuTai(MenuTaiTask *task)
 {
     Vector4 targetRotation;
@@ -652,6 +685,7 @@ static void tskMenuTai(MenuTaiTask *task)
         nmlModelEntry(MenuTairetuModelLexAddr);
         nmlModelFlush();
 
+        /* Lay out the 24 grid points, 2 x 4 x 3, in model space. */
         for (i = 0; i < 2; i++) {
             for (j = 0; j < 4; j++) {
                 for (k = 0; k < 3; k++) {
@@ -664,6 +698,7 @@ static void tskMenuTai(MenuTaiTask *task)
             }
         }
         xglRotTransPersN(projected, &task->model->place, grid, 24, 2);
+        /* Emit the wireframe segments between the projected points. */
         point = lines;
         for (i = 0, tint = 64; i < 2; i++) {
             shade = tint - 128;
@@ -732,6 +767,10 @@ static void tskMenuTai(MenuTaiTask *task)
     }
 }
 
+/*
+ * Task that places the formation pointer on its party slot and draws it while
+ * command 0 is active. Slot 3 has no formation position, so its pointer stays off.
+ */
 static void tskMenuTaiPointa(MenuPointaTask *task)
 {
     MenuFormationPositions positions;
@@ -782,6 +821,7 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
         }
         if (currentCommand == 0) {
             if (task->initialized == 0) {
+                /* Place the pointer on its slot's formation position. */
                 if (task->index != 3) {
                     PartyDataPrefix *party = PartyDataGet();
 
@@ -854,6 +894,11 @@ static void tskMenuTaiPointa(MenuPointaTask *task)
     }
 }
 
+/*
+ * Sets up the background camera, places the formation and pointer models in
+ * the storage at allocationStart, creates their tasks, and returns the first
+ * address after that storage.
+ */
 unsigned char *MenuBackModelSet(unsigned char *allocationStart)
 {
     StudioCamera *camera = xglStudioGetCamera2(2);
@@ -881,6 +926,7 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
         allocationStart = (unsigned char *)(*modelBaseSlot + 16);
     }
 
+    /* One pointer task per slot 0 to 3. */
     pointaIndex = 0;
     do {
         int (*pointaCallback)(XglTaskPrefix *) =
@@ -899,6 +945,7 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
         }
     } while (++pointaIndex < 4);
 
+    /* One formation task per party slot, stopping at the first empty slot. */
     modelIndex = 0;
     do {
         PartyDataPrefix *party = PartyDataGet();
@@ -928,6 +975,11 @@ unsigned char *MenuBackModelSet(unsigned char *allocationStart)
     return allocationStart;
 }
 
+/*
+ * Status panel callback: on open it sets the labels, shades and bands; when
+ * ready it draws the name, the stat numbers and the portrait for the panel's
+ * character. A chrNo of -2 marks a guest panel without stats.
+ */
 void MenuStatusDisp(WindowDX *window, void *arg)
 {
     MenuStatusPanel *work = arg;
@@ -986,6 +1038,7 @@ void MenuStatusDisp(WindowDX *window, void *arg)
                 work->tag[tag].color = window->style + 2;
             }
         }
+        /* Background shade colours. */
         work->shadeRgba[3][2] = 128;
         work->shadeRgba[2][2] = 128;
         work->shadeRgba[1][2] = 128;
@@ -1141,6 +1194,7 @@ void MenuStatusDisp(WindowDX *window, void *arg)
         work->name.text = MenuCharNameGet(chrNo);
         eMessageDraw(&work->name);
 
+        /* Stat labels and numbers; the chrNo -2 panel has none. */
         if (showStats) {
             if (work->chrNo >= 0) {
                 work->label[0].x = left + 138;
@@ -1257,8 +1311,7 @@ void MenuStatusDisp(WindowDX *window, void *arg)
         eNumberMain(&work->number[2]);
 
         if (showStats) {
-            /* Guest panels keep the party column here; the original still
-             * tests chrNo (the lb survives) with both arms equal. */
+            /* Both arms give the same x. */
             if (work->chrNo < 0) {
                 work->label[3].x = left + 138;
             } else {
@@ -1321,6 +1374,7 @@ void MenuStatusDisp(WindowDX *window, void *arg)
             eNumberMain(&work->number[5]);
         }
 
+        /* Gradient bands and fills for the name, header and stats. */
         work->nameShade.vertex[0].x = work->nameShade.vertex[1].x = left + 3;
         work->nameShade.vertex[0].y = work->nameShade.vertex[2].y = nameY;
         work->nameShade.vertex[2].x = work->nameShade.vertex[3].x = (float)left + 148.5f - 3.0f;
@@ -1410,6 +1464,7 @@ void MenuStatusDisp(WindowDX *window, void *arg)
             endPrintExtFunc(work->statsFill.vertex[0].color, END_PRINT_CMD_RIBBON,&work->statsFill);
         }
 
+        /* The portrait is drawn last. */
         work->face.x = left + 16;
         work->face.color = window->style + 15;
         work->face.y = nameY;
@@ -1422,7 +1477,11 @@ void MenuStatusDisp(WindowDX *window, void *arg)
     }
 }
 
-/* WindowDX discards this callback's return value. */
+/*
+ * Info bar callback: on open it resets the text state; when ready it draws the
+ * frame and the help text, with a scroll mark for multi-line text.
+ * WindowDX discards this callback's return value.
+ */
 int MenuInfoWindow(WindowDX *window, void *arg)
 {
     MenuTopInfoPanel *panel = arg;
@@ -1557,7 +1616,12 @@ int MenuInfoWindow(WindowDX *window, void *arg)
     }
 }
 
-/* WindowDX discards this callback's return value. */
+/*
+ * Command window callback: on open it resets the marker and the row messages;
+ * when ready it draws the command rows (dimmed when locked) or, for the
+ * single-line layouts, the text under its heading.
+ * WindowDX discards this callback's return value.
+ */
 int MenuSelectWindow(WindowDX *window, void *arg)
 {
     MenuTopMenuPanel *panel = arg;
@@ -1581,6 +1645,7 @@ int MenuSelectWindow(WindowDX *window, void *arg)
         break;
     }
     case WINDOWDX_STATE_READY:
+        /* Rows 0 and 2 draw the command list; rows 1 and 3 draw one text line with a heading. */
         switch (panel->rows) {
         case 0:
         case 2:

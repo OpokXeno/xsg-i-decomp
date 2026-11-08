@@ -24,16 +24,14 @@
 #define CHASE_LOST_DISTANCE 0.01f
 #define LAST_PLAYER_REACHED_DISTANCE 0.01f
 
-/* Distance thresholds and retreat speeds used by the two look-back paths.
- * The original has no named objects for them: cc1 emits each use as an
- * anonymous .lit4 literal (0x004D8034..0x004D8040). */
+/* Reset distances and speeds of the escape and route-chase moves. */
 #define ESCAPE_RESET_DISTANCE 0.012f
 
 #define ESCAPE_SPEED 0.06666667f
 #define ROUTE_CHASE_RESET_DISTANCE 0.012f
 #define ROUTE_CHASE_SPEED 0.06666667f
 
-/* Distance thresholds and retreat speeds used by the two look-back paths. */
+/* Route look-back distances and turn angles. */
 #define ROUTE_NEAR_LOOKBACK_DISTANCE 0.01f
 
 #define ROUTE_HALF_TURN_RADIANS 3.1415927f
@@ -45,7 +43,7 @@
 
 DoublewordVector4 EnemyTarget ={ .vector = { .x = 0.0f, .y = 0.0f, .z = 0.0f, .w = 0.0f } };
 
-/* Per-actor work records are cleared before use. */
+/* Per-actor work records, indexed by Actor.number. */
 EnemyWorkEntry enepc[16] = {{0}};
 
 /* JP: 目撃
@@ -94,6 +92,7 @@ u16 MostNearActor = 0;
  * remains unknown; no numeric, floating-point or pointer interpretation is claimed. */
 u32 MostNear = 0;
 
+/* Returns the index of the effect code that matches the attribute's masked bits, or -1. */
 int Get_EffectCode(int attr)
 {
     int effect[GROUND_EFFECT_COUNT] = {
@@ -114,6 +113,10 @@ int Get_EffectCode(int attr)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char finalInitMethodName[11] = "Final_init";
 
+/*
+ * Initializes an enemy actor from its preset or placement parameters: builds its
+ * route and homing targets and sets its spline, motion and undulation.
+ */
 void Enemy_Init(Actor *self)
 {
     EnemyParams *params = &self->enemy;
@@ -122,6 +125,7 @@ void Enemy_Init(Actor *self)
     short j;
     unsigned char kind;
 
+    /* Loads the work record from the preset table, or from the placement data when there is no preset. */
     if (params->preset_index == -1) {
         work->initial_motion_id = 30;
         work->locator_start_frame = 5;
@@ -161,6 +165,7 @@ void Enemy_Init(Actor *self)
     work->wall_attribute = params->wall_attribute;
     work->event_type = params->event_type;
     self->target_angle = self->rotation.y;
+    /* Expands the route values into route points. */
     if (work->route_point_count == 0) {
         work->route_point_count = params->route_value_count / 3;
         for (i = 0; i < work->route_point_count; i++) {
@@ -172,6 +177,7 @@ void Enemy_Init(Actor *self)
             dest[0] = params->route_values[i * 3 + 2];
         }
     }
+    /* Back-and-forth routes append the inner points in reverse order. */
     if (work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_B ||
         work->pause_kind == ENEMY_MOVE_ROUTE_BACK_AND_FORTH_A) {
         for (i = 0; i < work->route_point_count - 2; i++) {
@@ -203,6 +209,7 @@ void Enemy_Init(Actor *self)
             }
         }
     }
+    /* Route moves follow the route; every other kind uses a random spline. */
     kind = work->pause_kind;
     if (kind != ENEMY_MOVE_ROUTE_B && kind != ENEMY_MOVE_ROUTE_A &&
         kind != ENEMY_MOVE_ROUTE_THEN_ESCAPE && kind != ENEMY_MOVE_ROUTE_THEN_ROUTE_CHASE)
@@ -239,6 +246,10 @@ void Enemy_Init(Actor *self)
     self->status_flags |= 0x1000;
 }
 
+/*
+ * Handles an explosion hit: updates the target angle and, once the hit limit is
+ * reached, switches to the stiff or chase action.
+ */
 void Enemy_Damage_Explosion(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -265,6 +276,10 @@ void Enemy_Damage_Explosion(Actor *actor)
     }
 }
 
+/*
+ * Counts an electric hit. Once the hit limit is reached, clears the spline
+ * parameter, searches for a homing target and switches to the threat action.
+ */
 void Enemy_Damage_Electric(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -282,6 +297,10 @@ void Enemy_Damage_Electric(Actor *actor)
     }
 }
 
+/*
+ * Counts a seal hit. Once the hit limit is reached, clears the spline parameter,
+ * searches for a homing target and switches to the pause action.
+ */
 void Enemy_Damage_Seal(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -299,6 +318,10 @@ void Enemy_Damage_Seal(Actor *actor)
     }
 }
 
+/*
+ * Counts down the stiff timer. When it runs out, ends the stiff state and returns
+ * to the threat action; until then the animation speed is held at zero.
+ */
 void Enemy_Stiff(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -319,6 +342,10 @@ void Enemy_Stiff(Actor *actor)
     }
 }
 
+/*
+ * Counts a sighting. Once the hit limit is reached, switches to the chase action.
+ * Turns the actor toward the player unless its inUseId is 0x2201.
+ */
 void Enemy_Found(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -334,6 +361,10 @@ void Enemy_Found(Actor *actor)
     }
 }
 
+/*
+ * Runs the tentacle's attack range. Inside the locator frames it draws the range
+ * circle, checks the map and starts an encounter when the player is within it.
+ */
 void Enemy_Tentacle(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
@@ -384,6 +415,10 @@ void Enemy_Tentacle(Actor *self)
         Enemy_ActionReady(self, 1);
 }
 
+/*
+ * Chases the escape target at run or walk speed, checking the way to it. Ends the
+ * chase when the player is out of range or lost, or when the frame limit is spent.
+ */
 void Enemy_Chase(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
@@ -406,6 +441,7 @@ void Enemy_Chase(Actor *self)
         Set_Motion(self, Get_DefaultMotion(self, ENEMY_DEFAULT_MOTION_WALK), MOTION_BLEND_DEFAULT);
     }
 
+    /* Finds how far the enemy can move toward the player, and any wall crossing on the way. */
     start = self->position;
     Check_Undu(&self->position, &work->escape_target.position, work->map_index,
                &hit, 1, 0, 0);
@@ -450,6 +486,7 @@ void Enemy_Chase(Actor *self)
         }
     }
 
+    /* Out of range, lost or out of frames: back to the threat action. Otherwise keep following. */
     if (distance >= params->chase_distance || work->move_result == ENEMY_MOVE_RESULT_TERRITORY_B ||
         (work->chase_frame++ >=
              (work->chase_frame_limit < 0 ? -work->chase_frame_limit : work->chase_frame_limit) &&
@@ -475,6 +512,10 @@ void Enemy_Chase(Actor *self)
     }
 }
 
+/*
+ * Advances a route enemy along its spline: checks the pause and threat marks at
+ * each route point, moves it, turns it at blocked walls and sets its walk or run motion.
+ */
 void Enemy_Route(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
@@ -508,6 +549,7 @@ void Enemy_Route(Actor *self)
         self->flags &= 0x7fffffff;
     }
 
+    /* At each route point, the pause and threat marks can switch the action. */
     if ((work->spline_parameter % 128) == 0 &&
         (self->flags & ACTOR_FLAG_HOMING) == 0) {
         for (i = 0; i < 2; i++) {
@@ -550,6 +592,7 @@ void Enemy_Route(Actor *self)
         }
     }
 
+    /* Reads the current spline point. While alerted, the parameter also advances. */
     if (work->state_flags & ENEMY_STATE_FLAG_ALERT_RAISE) {
         GetBSplineLoop(work->spline_parameter, work->spline_point_count, 128,
                        work->spline_points, &point);
@@ -581,6 +624,7 @@ void Enemy_Route(Actor *self)
             self->position.y = point.y;
     }
 
+    /* Moves the enemy. When blocked, a non-route enemy turns toward a free wall direction. */
     moved = TM_Check_Move(self);
     if (!moved) {
         if ((int)self->flags < 0) {
@@ -612,6 +656,7 @@ void Enemy_Route(Actor *self)
         Set_Motion(self, motion, MOTION_BLEND_DEFAULT);
     }
 
+    /* Wander moves extend the spline with a new point two route points ahead. */
     if ((work->pause_kind == ENEMY_MOVE_WANDER_A || work->pause_kind == ENEMY_MOVE_WANDER_B) &&
         (int)self->flags >= 0 && (work->spline_parameter % 128) == 0) {
         if (work->fast_point_count > 0)
@@ -646,6 +691,10 @@ void Enemy_Route(Actor *self)
     }
 }
 
+/*
+ * Steps an escaping enemy along its spline toward the sample point farthest from the
+ * escape target. The cooldown decides between run and walk.
+ */
 void Enemy_Escape(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -703,6 +752,10 @@ void Enemy_Escape(Actor *actor)
     actor->position.z = point.z;
 }
 
+/*
+ * Steps a route-chasing enemy along its spline toward the sample point nearest to the
+ * escape target. The cooldown decides between run and walk.
+ */
 void Enemy_Route_Chase(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
@@ -760,6 +813,10 @@ void Enemy_Route_Chase(Actor *self)
     self->position.z = point.z;
 }
 
+/*
+ * Turns a standing enemy toward the player when it faces the player. Once the hit
+ * limit is reached, starts the action that follows its pause kind.
+ */
 void Enemy_Pause(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -814,6 +871,7 @@ void Enemy_Pause(Actor *actor)
     }
 }
 
+/* Counts the threat hits; once the hit limit is reached, returns to the route action. */
 void Enemy_Threat(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -828,6 +886,10 @@ void Enemy_Threat(Actor *actor)
     }
 }
 
+/*
+ * Counts unique-move hits. Once the hit limit is reached, runs the next unique step
+ * while the pattern has one, otherwise returns to the route action.
+ */
 void Enemy_Unique(Actor *actor)
 {
     EnemyWorkEntry *work = &enepc[actor->number];
@@ -862,6 +924,11 @@ const char animNumberFormat[20] = "%3d AnimNumb  = %3d";
 
 const char animBlendFormat[20] = "%3d Hokan     = %8f";
 
+/*
+ * Per-frame update of an enemy actor: applies its light and floor effects, handles
+ * freeze and scale, runs the handler of its current action, then checks sight,
+ * ailments, sound and facing.
+ */
 void ACT_updateEnemy(Actor *self)
 {
     Vector4 marker;
@@ -883,6 +950,7 @@ void ACT_updateEnemy(Actor *self)
     color[1] = 0;
     marker.x = 0.0f;
     marker.z = 0.0f;
+    /* Debug readout of the animation values, for the debug actor only. */
     if (self->number == DebugActor) {
         xglFontDebugPrintf(8, 52, animTimeFormat, self->number, (double)self->animation.slot.frame);
         if (self->number == DebugActor) {
@@ -917,6 +985,7 @@ void ACT_updateEnemy(Actor *self)
         self == GameLoopState.player)
         return;
 
+    /* The light level sets the translucency flag and the draw transparency. */
     if (work->applied_light_level != params->light_level) {
         if (params->light_level == ENEMY_LIGHT_LEVEL_FULL) {
             self->flags &= ~ACTOR_FLAG_TRANSLUCENT;
@@ -930,6 +999,7 @@ void ACT_updateEnemy(Actor *self)
     work->applied_light_level = params->light_level;
     GameIdLightSet(self, 0);
 
+    /* Starts or stops the effect for the floor attribute under the enemy. */
     if (self->inUseId != 16646 && self->inUseId != 20594) {
         effect_code = Get_EffectCode(Get_Attr(&self->position, 0, 0));
         if (work->action == ENEMY_ACT_CHASE || work->action == 3 || work->action == ENEMY_ACT_ROUTE ||
@@ -999,6 +1069,7 @@ void ACT_updateEnemy(Actor *self)
     if (self->inUseId == 8705)
         Check_Locater(self);
 
+    /* Frozen enemies only run the script, contact, scale and motion updates, then return. */
     if (work->freeze_state != ENEMY_FREEZE_RELEASE) {
         if (work->freeze_state < ENEMY_FREEZE_STOP)
             Script_Action(self);
@@ -1038,6 +1109,7 @@ void ACT_updateEnemy(Actor *self)
 
     if (self->inUseId != 8705)
         Check_Locater(self);
+    /* Runs the handler of the current action. */
     switch (work->action) {
     case ENEMY_ACT_INIT:
         Enemy_Init(self);
@@ -1082,6 +1154,7 @@ void ACT_updateEnemy(Actor *self)
         break;
     }
 
+    /* Sight check: the fan test (Wooo variant for the two special kinds) that calls Check_Discovery. */
     if (params->sight_distance != 0.0f) {
         if (!(self->flags & ACTOR_FLAG_HIDDEN) && work->sense_block_timer <= 0 &&
             enepc[0].encount_lock == 0) {
@@ -1128,6 +1201,7 @@ void ACT_updateEnemy(Actor *self)
         Homing_Search(self);
     }
 
+    /* Active ailments switch the enemy to the matching damage action. */
     if ((unsigned short)self->inUseId - 0x4000 < 0xf23u) {
         if (self->flags & ACTOR_FLAG_AILMENT_ACTIVE) {
             if (self->flags & ACTOR_FLAG_STIFF_ACTIVE) {
@@ -1144,6 +1218,7 @@ void ACT_updateEnemy(Actor *self)
             }
         }
     }
+    /* Footstep sound for type 1 enemies; other enemies play their move and chase sounds. */
     id = self->inUseId;
     type = RES_GetEnemySeType(id);
     if (type == 1) {
@@ -1267,6 +1342,11 @@ void TM_Check_Move_at_GoBack(Actor *actor)
     actor->position.z -= work->goback_z;
 }
 
+/*
+ * Checks the enemy's position against the ground, its territory, other actors and
+ * map units. A blocked move is undone by the goback step and move_result records the
+ * reason. Returns 1 when the move is free.
+ */
 int TM_Check_Move(Actor *self)
 {
     EnemyWorkEntry *work = &enepc[self->number];
@@ -1295,6 +1375,7 @@ int TM_Check_Move(Actor *self)
         return 0;
     }
 
+    /* Territory limit: leaving the territory is refused, except for a locked chase. */
     if (attr != EneTerritoryID[work->wall_attribute] && work->wall_attribute != 0 &&
         work->action != 8 && (int)self->flags >= 0) {
         if (work->state_flags & ENEMY_STATE_FLAG_TERRITORY_LOCK) {
@@ -1310,6 +1391,7 @@ int TM_Check_Move(Actor *self)
         }
     }
 
+    /* Another actor in the way blocks the move. */
     blocker = Check_Actor(&self->position, self->number);
     if (blocker != -1) {
         TM_Check_Move_at_GoBack(self);
@@ -1333,6 +1415,10 @@ int TM_Check_Move(Actor *self)
     return 1;
 }
 
+/*
+ * Looks at the point `length` ahead of the enemy. Returns the index of a collidable
+ * actor within reach of it, or the ground or free result when there is none.
+ */
 char TM_Check_Before_Eyes(Actor *self, float length)
 {
     EnemyWorkEntry *work = &enepc[self->number];

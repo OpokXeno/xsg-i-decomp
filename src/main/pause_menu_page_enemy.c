@@ -262,6 +262,10 @@ static inline int wrappedEnemyDebugPage(int page, int increment)
     return (page + increment) % ENEMY_PAGE_COUNT;
 }
 
+/*
+ * Enemy debug page for DebugActor. Pad input changes the page, the debug actor
+ * and the frame-60 mode, then the page selected by Page_0 is printed.
+ */
 void PauseMenuPageEnemy(void)
 {
     const ActorPauseView *selected = &actor[DebugActor];
@@ -304,6 +308,7 @@ void PauseMenuPageEnemy(void)
     };
     DoublewordAlignedVector4 final_target;
 
+    /* Pad input: up/down change the page, left/right change the debug actor, start cycles the frame-60 mode. */
     if (PadData.half_2a & PAD_UP)
         Page_0 = wrappedEnemyDebugPage(Page_0, ENEMY_PAGE_COUNT - 1);
     if (PadData.half_2a & PAD_DOWN)
@@ -333,6 +338,7 @@ void PauseMenuPageEnemy(void)
     }
     printEnemyPageHeader(enemy);
     y = line_spacing;
+    /* Actor kind 1 shows only the suspected-face heading; other actors show the page for Page_0. */
     if (actor[DebugActor].kind == 1) {
         y = printEnemyHeading(0x60, y, ENEMY_SUSPECTED_FACE_TEXT);
     } else {
@@ -689,6 +695,7 @@ void PauseMenuPageEnemy(void)
                     }
                     y += 10;
             }
+            /* L2 and R2 move the selected route row, which the cursor is drawn on. */
             {
                 unsigned short route_buttons = PadData.half_2a;
                 if (route_buttons & PAD_L2)
@@ -704,6 +711,7 @@ void PauseMenuPageEnemy(void)
     xglFontDebugPrintf(8, y, downText);
 }
 
+/* Draws the debug marker model `entry` one unit above position, spinning with Times and lit by the studio light. */
 void Debug_Mark(const Vector4 *position, int entry)
 {
     Matrix4 place;

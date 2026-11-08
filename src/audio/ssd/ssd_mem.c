@@ -8,6 +8,7 @@ int SsdSpuMalloc2(int size, unsigned short type);
 void SsdDisposeMemoryMap(void *map);
 void SsdSetSpuType(unsigned int address, int type);
 
+/* Sets up the main memory arena from address for size bytes and writes its head block. */
 void SsdInitMainMemoryManager(unsigned int address, int size)
 {
     SsdMainMemoryBlock *block;
@@ -27,6 +28,7 @@ void SsdInitMainMemoryManager(unsigned int address, int size)
     block->next = 0;
 }
 
+/* Allocates size bytes from the first gap that is large enough and zeroes them. Returns the payload, or 0. */
 void *SsdNewPtr(int size)
 {
     SsdMainMemoryManager *manager = &SsdWork.main_memory;
@@ -63,6 +65,7 @@ allocate:
     return 0;
 }
 
+/* Allocates size bytes at the upper end of the last gap that is large enough and zeroes them. Returns the payload, or 0. */
 void *SsdNewPtr2(int size)
 {
     int required = ((size + 3) & ~3) + sizeof(SsdMainMemoryBlock);
@@ -107,6 +110,7 @@ void *SsdNewPtr2(int size)
     return payload;
 }
 
+/* Unlinks the block of memory from the main memory list. Returns the previous block's new next pointer, or the first block when the block has no previous one. */
 SsdMainMemoryBlock *SsdDisposePtr(void *memory)
 {
     SsdMainMemoryBlock *const first = SsdWork.main_memory.first;
@@ -122,6 +126,7 @@ SsdMainMemoryBlock *SsdDisposePtr(void *memory)
     return previous != 0 ? (previous->next = target->next) : first;
 }
 
+/* Returns the largest free gap between main memory blocks, in bytes, rounded down to a multiple of four. */
 int SsdGetMemoryFreeSize(void)
 {
     SsdMainMemoryBlock *block = SsdWork.main_memory.first;
@@ -153,6 +158,7 @@ int SsdGetMemoryBlockCount(void)
     return count;
 }
 
+/* Copies size bytes, 16 bytes at a time, then the remaining words and bytes. */
 void SsdMemoryCopy(void *destination_memory, const void *source_memory, int size)
 {
     unsigned int *destination = destination_memory;
@@ -188,6 +194,7 @@ void SsdMemoryCopy(void *destination_memory, const void *source_memory, int size
     }
 }
 
+/* Zeroes size bytes, 16 bytes at a time, then the remaining words and bytes. */
 void SsdMemoryClear(void *memory, int size)
 {
     unsigned int *destination = memory;
@@ -217,6 +224,7 @@ void SsdMemoryClear(void *memory, int size)
     }
 }
 
+/* Clears the SPU block table and the segment modes, and reserves the system area at address 0. */
 void SsdInitSpuMemoryManager(void)
 {
     int remaining;
@@ -260,6 +268,7 @@ void SsdResetSegmentAllocMode(unsigned int address)
     }
 }
 
+/* Allocates size bytes of SPU RAM at the first gap that is large enough. Returns the address, or 0. */
 int SsdSpuMalloc(int size, int type)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -300,6 +309,7 @@ int SsdSpuMalloc(int size, int type)
     return 0;
 }
 
+/* Allocates size bytes of SPU RAM at the top of the last gap that is large enough. Returns the address, or 0. */
 int SsdSpuMalloc2(int size, unsigned short type)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -343,6 +353,7 @@ int SsdSpuMalloc2(int size, unsigned short type)
     return 0;
 }
 
+/* Allocates size bytes of SPU RAM at the fixed address when that range is free. Returns the address, or 0. */
 int SsdSpuMallocAdrs(int size, int address, unsigned short type)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -391,6 +402,7 @@ int SsdSpuMallocAdrs(int size, int address, unsigned short type)
     }
 }
 
+/* Allocates size bytes of SPU RAM at the first gap at or above minimum_address. Returns the address, or 0. */
 int SsdSpuMallocAdrsDynamic(int size, int minimum_address, int type)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -413,7 +425,7 @@ int SsdSpuMallocAdrsDynamic(int size, int minimum_address, int type)
             address = minimum_address;
         }
         if (next->address - address >= size) {
-            /* readable-goto: reserve_descriptor: common insertion; structured form01 duplicates the failure exit. */
+            /* Goto the shared descriptor insertion below instead of repeating it. */
             goto reserve_descriptor;
         }
         block = next;
@@ -435,6 +447,10 @@ reserve_descriptor:
     return 0;
 }
 
+/*
+ * Like SsdSpuMallocAdrsDynamic, but minimum_address first advances in steps of
+ * segment_size past the end of the current block.
+ */
 int SsdSpuMallocAdrsSegment(int size, int minimum_address, int segment_size, int type)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -460,7 +476,7 @@ int SsdSpuMallocAdrsSegment(int size, int minimum_address, int segment_size, int
             address = minimum_address;
         }
         if (next->address - address >= size) {
-            /* readable-goto: reserve_descriptor: common first-fit insertion; structured form01 alters the failure exit. */
+            /* Goto the shared descriptor insertion below instead of repeating it. */
             goto reserve_descriptor;
         }
         block = next;
@@ -482,6 +498,7 @@ reserve_descriptor:
     return 0;
 }
 
+/* Frees the SPU block that starts at address. Returns address, or 0 when no block starts there. */
 unsigned int SsdSpuMFree(unsigned int address)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -513,6 +530,7 @@ void SsdSetSpuType(unsigned int address, int type)
     }
 }
 
+/* Returns the largest free gap in SPU RAM, in bytes. */
 int SsdGetSpuMemoryFree(void)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -539,6 +557,7 @@ int SsdGetSpuMemoryFree(void)
     return largest;
 }
 
+/* Returns the index of the first unused SPU block descriptor, or -1. */
 int SsdGetSpuMemManagerBlock(void)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;
@@ -551,6 +570,7 @@ int SsdGetSpuMemManagerBlock(void)
     return -1;
 }
 
+/* Returns the SPU block that starts at address, or 0. */
 SsdSpuMemoryBlock *SsdGetSpuAddsBlock(int address)
 {
     SsdSpuMemoryBlock *block = SsdWork.spu_memory.blocks;

@@ -70,7 +70,7 @@ extern const char expText[8];
 extern const char tPtsText[8];
 extern const char sPtsText[8];
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
+/* Data the original stores for this TU; no C code here reads it, and its type comes from the original bytes. */
 extern const char conditionBText[8];
 
 extern const char conditionSpText[8];
@@ -169,6 +169,10 @@ static unsigned short msg03_3[3];
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char MenuFileHardDiskDriveText[16] = "Hard Disk Drive";
 
+/*
+ * Copies the command list into the list menu and opens the command window and
+ * its information window at the given position.
+ */
 void eBattleWinOpen(BattleWinOpenParams *params)
 {
     BattleWindow *window = BW;
@@ -246,6 +250,11 @@ void eBattleWinClose(void *window)
     BW->message.mode = 0;
 }
 
+/*
+ * Runs one frame of the command window. While mode is not -1, it reads the
+ * pad selection into the task and updates the windows; otherwise it passes
+ * mode to the task as the selection.
+ */
 void eBattleWinMain(BattleWinTask *task)
 {
     int selection = -1;
@@ -275,6 +284,10 @@ void eBattleWinMain(BattleWinTask *task)
     task->selection = mode;
 }
 
+/*
+ * Opens the message window with the text and title. A negative width
+ * positions the text from the widest line of the text.
+ */
 void eBattleWinOpen2(BattleWinOpen2Params *param)
 {
     BattleWindow2 *window;
@@ -328,6 +341,10 @@ void eBattleWinOpen2(BattleWinOpen2Params *param)
     BW2->active = 1;
 }
 
+/*
+ * Advances the message window. Returns 0 when inactive or closed, 1 while it
+ * animates, and 2 when it is ready.
+ */
 int eBattleWinMain2(void)
 {
     if (BW2->active == 0) {
@@ -356,6 +373,10 @@ void eBattleWinClose2(void)
     BW2->window.state = WINDOWDX_STATE_CLOSED;
 }
 
+/*
+ * Opens the analysis windows for an analysis record: the name and labels,
+ * the condition labels, the point numbers and the code rows.
+ */
 void eBattleWinOpen3(void *data)
 {
     const BattleWinAnalysisParams *param = data;
@@ -426,6 +447,7 @@ void eBattleWinOpen3(void *data)
         message_window->messages[1].mode = E_MODE_SHOW_START;
         display_index = 0;
     }
+    /* Clears the condition text, then copies up to two set condition labels into it. */
     {
         unsigned char *condition_text = (unsigned char *)msg03_3;
         int clear_index;
@@ -554,6 +576,7 @@ initialize_next_number:
             entry_index++;
         } while (entry_index < 2);
     }
+    /* Code rows: catalog text in database mode, otherwise the rare and item texts. */
     entry_index = 0;
     do {
         if (*database_mode == 0) {
@@ -601,6 +624,10 @@ initialize_next_number:
     (*analysis_window_slot)->active = 1;
 }
 
+/*
+ * Advances the analysis windows. Returns 0 when inactive, 1 while they
+ * animate, and 2 when they are ready.
+ */
 int eBattleWinMain3(void)
 {
     int i;
@@ -643,6 +670,7 @@ void eBattleWinClose3(void)
     BW3->window2.state = WINDOWDX_STATE_CLOSE;
 }
 
+/* Opens the single message window with the title and text at the given position. */
 void eBattleWinOpen4(BattleWinOpenParam4 *param)
 {
     WindowDXSet(&BW4->window);
@@ -665,6 +693,11 @@ void eBattleWinOpen4(BattleWinOpenParam4 *param)
     BW4->page = 0;
 }
 
+/*
+ * Advances the paged message window. Circle asks for the next page, and page
+ * is set to 1 when eMessageNextPage returns 0 (no page left). Returns 0 when inactive, 1 while
+ * the window animates, and 2 when it is ready.
+ */
 int eBattleWinMain4(void)
 {
     if (BW4->active == 0) {
@@ -702,6 +735,10 @@ int eBattleWinPageCheck4(void)
     return BW4->page;
 }
 
+/*
+ * Places the battle window structs and their item list in the arena, one
+ * after another, and returns the first address after them.
+ */
 void *eBattleWinInit2(void *arena)
 {
     void *cursor = arena;
@@ -747,6 +784,11 @@ void eBattleWinInit(void)
     eBattleWinInit2(MenuWorkEndGet());
 }
 
+/*
+ * Applies a state flag to a window. An open request takes effect from the
+ * closed, close or closing states, a close request only from ready, and other
+ * flags are stored as given.
+ */
 void WindowDXFlagChange(WindowDX *window, int flag)
 {
     unsigned char current_state;
@@ -778,14 +820,15 @@ void WindowDXFlagChange(WindowDX *window, int flag)
     }
 }
 
+/* Resets a window to the closed state with its default alpha, colour and callback. */
 void WindowDXSet(WindowDX *window)
 {
     /*
      * These nine stores are independent of each other, so -O2 schedules them
      * out of source order: it fills the jr delay slot with the third-to-last
      * store below and moves the last store to right after the two immediate
-     * loads. color_r is written last here so it lands in that early slot,
-     * matching the original's own first store to window.
+     * loads. color_r is written last here so it lands in that early slot, as
+     * the original's own first store to window does.
      */
     window->alpha = 0x60;
     window->tag_id = 0;
@@ -798,6 +841,10 @@ void WindowDXSet(WindowDX *window)
     window->color_r = 0x80;
 }
 
+/*
+ * Runs one frame of a window. Open and close animate through the frame state;
+ * the ready state draws the frame, its ribbons and its title.
+ */
 void WindowDXMain(WindowDX *window)
 {
     char state;
@@ -825,6 +872,7 @@ void WindowDXMain(WindowDX *window)
         eTagFontSet(&window->title_font, window->tag_id);
         eRibbonSet(&window->ribbon_top, 1);
         eRibbonSet(&window->ribbon_bottom, 1);
+        /* Bottom ribbon: six points, each with its colour and alpha. */
         window->ribbon_bottom.points[3].red = 32;
         window->ribbon_bottom.points[2].red = 32;
         window->ribbon_bottom.points[1].red = 32;
@@ -915,6 +963,10 @@ void WindowDXMain(WindowDX *window)
     }
 }
 
+/*
+ * Fills the visible list rows from the item table, colours them by item flag
+ * and sets the scroll cursors. With no items it shows only the first row.
+ */
 void subMWModeExSet(WindowSPCursor *list)
 {
     int i;
@@ -997,6 +1049,10 @@ void subMWModeExSet(WindowSPCursor *list)
     }
 }
 
+/*
+ * Positions the list window, its counters, cursors and rows from the list
+ * geometry. With no items, the first message is centred in the window.
+ */
 void subMWPosSet(WindowSPCursor *list)
 {
     int row;
@@ -1044,6 +1100,7 @@ void subMWPosSet(WindowSPCursor *list)
                 }
             }
         }
+        /* Numbers sit in a second column for two-column lists, otherwise at the right edge. */
         if (list->columns == 2) {
             i = 0;
             for (row = 0; row < list->visible_rows; row++) {
@@ -1089,6 +1146,7 @@ void subMWPosSet(WindowSPCursor *list)
     }
 }
 
+/* Draws one frame of the list: window, cursors, messages and numbers, inside its scissor rect. */
 void subMWDraw(WindowSPCursor *list)
 {
     int i;
@@ -1116,6 +1174,7 @@ void subMWDraw(WindowSPCursor *list)
     endPrintExtFunc(list->rect.style, END_PRINT_CMD_SCISSOR_RESET, 0);
 }
 
+/* Moves the selection up or down a one-column list, wrapping at the ends and scrolling the rows. */
 void subMWControlType00(WindowSPCursor *list)
 {
     if (list->item_count < 2) {
@@ -1163,6 +1222,7 @@ void subMWControlType00(WindowSPCursor *list)
     }
 }
 
+/* Moves the selection through a multi-column list with the pad directions, wrapping at the ends. */
 void subMWControlType01(WindowSPCursor *list)
 {
     if (list->item_count < 2) {
@@ -1285,6 +1345,10 @@ void subMWControlType01(WindowSPCursor *list)
     }
 }
 
+/*
+ * Applies the pad buttons to an active list and returns the selected index.
+ * Returns -1 when there is no list, no items, or the list is not active.
+ */
 int WindowSPSelect(WindowSPCursor *cursor, int button_flags)
 {
     int control_type;
@@ -1316,6 +1380,7 @@ int WindowSPSelect(WindowSPCursor *cursor, int button_flags)
     return cursor->selected_index;
 }
 
+/* Resets the list selection and computes its visible rows and columns from the item count. */
 void WindowSPSet(WindowSPCursor *list)
 {
     MenuListEntry *item = list->items;
@@ -1368,6 +1433,7 @@ void WindowSPSet(WindowSPCursor *list)
     }
 }
 
+/* Recomputes the item count, scroll range and visible rows and columns after the item table changes. */
 void WindowSPItemChange(WindowSPCursor *list)
 {
     MenuListEntry *item;
@@ -1426,6 +1492,7 @@ void WindowSPItemChange(WindowSPCursor *list)
     }
 }
 
+/* Moves the selection of a one-column list to index, scrolling the visible rows as needed. */
 void WindowSPSelectJump(WindowSPCursor *list, int index)
 {
     if (list->items == 0) {
@@ -1459,6 +1526,10 @@ void WindowSPSelectJump(WindowSPCursor *list, int index)
     list->visible_bottom = index - list->current_row;
 }
 
+/*
+ * Runs one frame of the list window: opens it, waits until the window is ready,
+ * then updates and draws the rows while active, and closes it.
+ */
 void WindowSPMain(WindowSPCursor *list)
 {
     int sub;
@@ -1469,6 +1540,7 @@ void WindowSPMain(WindowSPCursor *list)
     }
     switch (list->state & 0xf) {
     case WINDOWSP_STATE_OPEN:
+        /* The high nibble of state selects a fresh open or one without animation. */
         sub = list->state >> 4;
         switch (sub) {
         case WINDOWSP_OPEN_FRESH:
@@ -1552,6 +1624,7 @@ void WindowSPMain(WindowSPCursor *list)
     }
 }
 
+/* Saves the list selection (item count, index, visible top and bottom, row) into keep when the list has items. */
 void WindowSPKeepSelect(WindowSPCursor *cursor, WindowSPKeepBuffer keep)
 {
     if (cursor->item_count != 0) {

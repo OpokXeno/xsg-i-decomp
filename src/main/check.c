@@ -3,6 +3,10 @@
 #include "main/check.h"
 #include "main/act_1.h"
 
+/*
+ * Returns the index of the first actor within reach of `position` (the sum of
+ * its body radius and actor `number`'s radius), or -1 if there is none.
+ */
 int Check_Actor(const Vector4 *position, short number)
 {
     short i;

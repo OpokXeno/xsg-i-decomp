@@ -17,6 +17,7 @@ extern void CallMethod(const char *method_name);
 
 const char event_suffix[8] = ".evt";
 
+/* Counts down a display on/off request; then sets or clears the display flag (bit 1) and removes itself. */
 static int disptest(XglTaskPrefix *task)
 {
     DispSwitchTask *display_task = (DispSwitchTask *)task;
@@ -37,6 +38,7 @@ static int disptest(XglTaskPrefix *task)
     }
 }
 
+/* Queues a task that sets the display flag after `countdown` ticks. */
 void DISP_on(int countdown)
 {
     XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -51,6 +53,7 @@ void DISP_on(int countdown)
     task->request = DISP_REQUEST_ON;
 }
 
+/* Queues a task that clears the display flag after `countdown` ticks. */
 void DISP_off(int countdown)
 {
     XglTaskScheduler *scheduler = GameLoopState.task_scheduler;
@@ -65,6 +68,7 @@ void DISP_off(int countdown)
     task->request = DISP_REQUEST_OFF;
 }
 
+/* Map-load task: performs the requested load (map, map with event script, or script only) once, then removes itself. */
 static void loader(MapLoadTask *task)
 {
     char path[256];
@@ -109,6 +113,7 @@ static void loader(MapLoadTask *task)
     }
 }
 
+/* Queues a load of map `map_id` together with its event script. */
 void LoadMap(int map_id)
 {
     XglTaskScheduler *scheduler;
@@ -130,6 +135,7 @@ void LoadMap(int map_id)
     task->event_index = -1;
 }
 
+/* Queues a load of map `map_id` with its event script, starting at `event_index`. */
 void LoadMap2(int map_id, int event_index)
 {
     XglTaskScheduler *scheduler;
@@ -151,6 +157,7 @@ void LoadMap2(int map_id, int event_index)
     task->request = MAP_LOAD_MAP_AND_EVENT;
 }
 
+/* Queues a load of map `map_id` without its event script. */
 void LoadMapOnly(int map_id)
 {
     XglTaskScheduler *scheduler;
@@ -169,6 +176,11 @@ void LoadMapOnly(int map_id)
     task->request = MAP_LOAD_MAP_ONLY;
 }
 
+/*
+ * Counts down an event timer and calls its method when the countdown reaches zero.
+ * The countdown pauses while runtime flag bit 0 is set; the task removes itself
+ * when flags 0x80000030 are set.
+ */
 int EventTimerTask(XglTaskPrefix *task)
 {
     EventTimerWork *timer_task = (EventTimerWork *)task;
@@ -186,6 +198,7 @@ int EventTimerTask(XglTaskPrefix *task)
     }
 }
 
+/* Queues an event timer task that calls `method_reference` after `countdown` ticks. */
 void setEventTimerTaskEntry(const char *method_reference, int countdown)
 {
     XglTaskScheduler *scheduler = GameLoopState.task_scheduler;

@@ -21,6 +21,10 @@ static unsigned long long iRandSeed;
 #define VU0_DATA_MEMORY 0x11004000
 #define VU0_FRUSTUM_WINDOW_OFFSET 0x800
 
+/*
+ * Returns the angle of the point (x, y) in radians, in the range [-pi, pi].
+ * The angle is computed from a single-precision polynomial in y / x.
+ */
 float xglAtan2(float y, float x)
 {
     int reciprocal = 0;
@@ -92,6 +96,7 @@ void xglMemCopy64(void *destination, const void *source, int count)
     QuadwordCopyMatrixArray(destination, source, count);
 }
 
+/* Copies count 64-byte blocks, moving both pointers backward by 64 bytes per block. */
 void xglMemCopy64b(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -118,6 +123,7 @@ void xglMemCopy16(void *destination, const void *source, int count)
     QuadwordCopyArray(destination, source, count);
 }
 
+/* Copies count 16-byte quadwords, moving both pointers backward. */
 void xglMemCopy16b(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -133,6 +139,7 @@ void xglMemCopy16b(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 8-byte units, moving both pointers forward. */
 void xglMemCopy8(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -148,6 +155,7 @@ void xglMemCopy8(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 8-byte units, moving both pointers backward. */
 void xglMemCopy8b(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -163,6 +171,7 @@ void xglMemCopy8b(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 4-byte units, moving both pointers forward. */
 void xglMemCopy4(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -178,6 +187,7 @@ void xglMemCopy4(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 4-byte units, moving both pointers backward. */
 void xglMemCopy4b(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -193,6 +203,7 @@ void xglMemCopy4b(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 2-byte units, moving both pointers forward. */
 void xglMemCopy2(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -208,6 +219,7 @@ void xglMemCopy2(void *destination, const void *source, int count)
         : "$2", "memory");
 }
 
+/* Copies count 2-byte units, moving both pointers backward. */
 void xglMemCopy2b(void *destination, const void *source, int count)
 {
     __asm__ __volatile__(
@@ -383,6 +395,7 @@ void xglVectorInterXYZ(float fraction, Vector4 *destination,
     destination->w = end->w;
 }
 
+/* Stores the x, y, z dot product in *result; each partial sum is stored as it is built. */
 void xglVectorInner(float *result, const Vector4 *left, const Vector4 *right)
 {
     float dot = left->x * right->x;
@@ -399,6 +412,7 @@ float xglVectorInner4(const Vector4 *left, const Vector4 *right)
          + left->z * right->z + left->w * right->w;
 }
 
+/* Cross product of the xyz parts of left and right; w is copied from left. */
 void xglVectorOuter(Vector4 *destination, const Vector4 *left,
                     const Vector4 *right)
 {
@@ -408,6 +422,7 @@ void xglVectorOuter(Vector4 *destination, const Vector4 *left,
     destination->w = left->w;
 }
 
+/* Stores the length of the xyz part of vector in *destination. */
 void xglVectorLength(float *destination, const Vector4 *vector)
 {
     __asm__ __volatile__(
@@ -425,6 +440,7 @@ void xglVectorLength(float *destination, const Vector4 *vector)
         : "$2", "memory");
 }
 
+/* Returns the distance between the xyz parts of point1 and point2. */
 float xglPointLength(const Vector4 *point1, const Vector4 *point2)
 {
     float length;
@@ -447,6 +463,7 @@ float xglPointLength(const Vector4 *point1, const Vector4 *point2)
     return length;
 }
 
+/* Returns the distance between point1 and point2 projected onto the XZ plane. */
 float xglPointLengthXZ(const Vector4 *point1, const Vector4 *point2)
 {
     float length;
@@ -468,6 +485,7 @@ float xglPointLengthXZ(const Vector4 *point1, const Vector4 *point2)
     return length;
 }
 
+/* Normalizes the xyz part of source into destination; w is copied unchanged. */
 void xglVectorNormal(Vector4 *destination, const Vector4 *source)
 {
     __asm__ __volatile__(
@@ -485,6 +503,7 @@ void xglVectorNormal(Vector4 *destination, const Vector4 *source)
     );
 }
 
+/* Clamps each component of source to [minimum, maximum] into destination. */
 void xglVectorClamp(Vector4 *destination, const Vector4 *source,
                     float minimum, float maximum)
 {
@@ -498,6 +517,7 @@ void xglVectorClamp(Vector4 *destination, const Vector4 *source,
                     : maximum < source->w ? maximum : source->w;
 }
 
+/* Like xglVectorClamp, but copies the w component of source unchanged. */
 void xglVectorClampXYZ(Vector4 *destination, const Vector4 *source,
                        float minimum, float maximum)
 {
@@ -510,6 +530,10 @@ void xglVectorClampXYZ(Vector4 *destination, const Vector4 *source,
     destination->w = source->w;
 }
 
+/*
+ * Stores the plane through p0, p1 and p2: xyz is the unit normal of the
+ * triangle and w is minus the dot product of that normal with p0.
+ */
 void xglPlaneParameter(Vector4 *destination, const Vector4 *p0,
                        const Vector4 *p1, const Vector4 *p2)
 {
@@ -526,6 +550,7 @@ void xglPlaneParameter(Vector4 *destination, const Vector4 *p0,
     destination->w = -destination->w;
 }
 
+/* Transforms vector by matrix into destination, all four components. */
 void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
                      const Vector4 *vector)
 {
@@ -546,6 +571,10 @@ void xglVectorMulMat(Vector4 *destination, Matrix4 matrix,
     );
 }
 
+/*
+ * Transforms point into screen space through camera cameraId, after the
+ * optional matrix (0 for none). Returns the w component of the result.
+ */
 float xglRotTransPers(Vector4 *out, Matrix4 matrix, Vector4 *point, int cameraId)
 {
     StudioCamera *camera;
@@ -561,6 +590,7 @@ float xglRotTransPers(Vector4 *out, Matrix4 matrix, Vector4 *point, int cameraId
     return out->w;
 }
 
+/* Transforms count points into screen space, as xglRotTransPers does, into destination. */
 void xglRotTransPersN(Vector4 *destination, Matrix4 matrix,
                       const Vector4 *points, int count, int cameraId)
 {
@@ -608,6 +638,7 @@ void xglMatrixUnit4s(Matrix4 destination)
     QuadwordCopyMatrix(destination, unit);
 }
 
+/* Writes the product left * right into destination. */
 void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
 {
     __asm__ __volatile__(
@@ -645,6 +676,7 @@ void xglMatrixMul(Matrix *destination, Matrix *left, Matrix *right)
     );
 }
 
+/* Writes the transpose of source into destination. */
 void xglMatrixReverse(Matrix4 destination, Matrix4 source)
 {
     Matrix4 transposed;
@@ -660,6 +692,10 @@ void xglMatrixReverse(Matrix4 destination, Matrix4 source)
     QuadwordCopyMatrix(destination, &transposed);
 }
 
+/*
+ * Writes the inverse of source into destination. The 3x3 part is inverted
+ * from its cofactors, and row 3 (the translation) is transformed to match.
+ */
 void xglMatrixInverse(Matrix4 destination, Matrix4 source)
 {
     Matrix4 inverseMatrix;
@@ -681,6 +717,7 @@ void xglMatrixInverse(Matrix4 destination, Matrix4 source)
     float translation1 = cofactor01 * x + cofactor11 * y + cofactor21 * z;
     float translation2 = cofactor02 * x + cofactor12 * y + cofactor22 * z;
 
+    /* Completes the determinant and takes its reciprocal. */
     inverse += source[0][2] * cofactor20;
     inverse = 1.0f / inverse;
     destination[0][3] = 0.0f;
@@ -701,6 +738,7 @@ void xglMatrixInverse(Matrix4 destination, Matrix4 source)
     inverseMatrix[3][2] = translation2 * inverse;
     destination[3][3] = 1.0f;
 
+    /* Copies the 3x3 part of the inverse into destination. */
     destination[0][0] = inverseMatrix[0][0];
     destination[0][1] = inverseMatrix[0][1];
     destination[0][2] = inverseMatrix[0][2];
@@ -715,6 +753,7 @@ void xglMatrixInverse(Matrix4 destination, Matrix4 source)
     destination[3][2] = inverseMatrix[3][2];
 }
 
+/* Writes source into destination with row i multiplied by scale[i]. */
 void xglMatrixScale(Matrix4 destination, Matrix4 source,
                     const float scale[4])
 {
@@ -728,6 +767,7 @@ void xglMatrixScale(Matrix4 destination, Matrix4 source,
     }
 }
 
+/* Writes source into destination with row 3 replaced by source moved by translation. */
 void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
                     const float translation[4])
 {
@@ -765,6 +805,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     float sinY;
     float sinZ;
 
+    /* Scaled axis terms: (1 - cos) * axis and sin * axis. */
     Vu0CallMicroResult(cosineForScale, (unsigned int)Vu0CallCos / 8, angle);
     xglVectorScaleXYZ(&oneMinusCosAxis, axis, 1.0f - cosineForScale);
 
@@ -779,6 +820,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     ay = axis->y;
     sinY = sinAxis.y;
     sinZ = sinAxis.z;
+    /* The rotation matrix, column by column: elements 0-3 are its first column. */
     rotation.elements[0] = oneMinusCosX * ax + cosineForRow0;
     rotation.elements[1] = oneMinusCosY * ax + sinZ;
     rotation.elements[2] = oneMinusCosZ * ax - sinY;
@@ -805,6 +847,7 @@ void xglMatrixRotV(Matrix *destination, Matrix *source, Vector4 *axis,
     xglMatrixMul(destination, source, &rotation);
 }
 
+/* Writes source rotated by angle about the X axis into destination. */
 void xglMatrixRotX(Matrix4 destination, const Matrix4 source, float angle)
 {
     float cosSin[4];
@@ -837,6 +880,7 @@ void xglMatrixRotX(Matrix4 destination, const Matrix4 source, float angle)
     );
 }
 
+/* Writes source rotated by angle about the Y axis into destination. */
 void xglMatrixRotY(Matrix4 destination, const Matrix4 source, float angle)
 {
     float cosSin[4];
@@ -869,6 +913,7 @@ void xglMatrixRotY(Matrix4 destination, const Matrix4 source, float angle)
     );
 }
 
+/* Writes source rotated by angle about the Z axis into destination. */
 void xglMatrixRotZ(Matrix4 destination, const Matrix4 source, float angle)
 {
     float cosSin[4];
@@ -901,6 +946,7 @@ void xglMatrixRotZ(Matrix4 destination, const Matrix4 source, float angle)
     );
 }
 
+/* Writes source multiplied by the perspective projection of the given frustum into destination. */
 void xglMatrixFrustum(Matrix *destination, Matrix *source,
                       float left, float right, float bottom, float top,
                       float nearPlane, float farPlane)
@@ -933,6 +979,7 @@ void xglMatrixStackUnit(void)
     Vu0CallMicro(entry);
 }
 
+/* Calls the VU0 micro routine that multiplies the matrix stack by matrix. */
 void xglMatrixStackMul(Matrix4 matrix)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackMul >> 3;
@@ -978,6 +1025,7 @@ void xglMatrixStackTrans(const float translation[4])
     Vu0CallMicroVector(entry, translation);
 }
 
+/* Calls the VU0 micro routine that rotates the matrix stack by angle about axis. */
 void xglMatrixStackRotV(const float axis[4], float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackRotV >> 3;
@@ -1035,6 +1083,7 @@ void xglMatrixStackFrustum(float left, float right, float bottom, float top,
                          : : : "memory");
 }
 
+/* Stores the VU0 current matrix (vf28-vf31) into matrix. */
 void xglMatrixStackSave(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -1049,6 +1098,7 @@ void xglMatrixStackSave(float matrix[4][4])
     );
 }
 
+/* Loads matrix into the VU0 current matrix (vf28-vf31). */
 void xglMatrixStackLoad(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -1077,6 +1127,7 @@ void xglMatrixStackPush(void)
     Vu0CallMicro(entry);
 }
 
+/* Calls the VU0 micro routine that pops count entries off the matrix stack. */
 void xglMatrixStackPop(int count)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackPop >> 3;
@@ -1092,6 +1143,7 @@ void xglMatrixStackPop(int count)
     );
 }
 
+/* Transforms vector by the VU0 matrix stack into out. */
 void xglMatrixStackMulVector(Vector4 *out, const Vector4 *vector)
 {
     unsigned int entry = (unsigned int)Vu0CallMatrixStackMulVector >> 3;
@@ -1109,6 +1161,7 @@ void xglMatrixStackMulVector(Vector4 *out, const Vector4 *vector)
     );
 }
 
+/* Transforms point into screen space with the VU0 RTPS micro routine, using scale and offset. */
 void xglMatrixStackRTPS(Vector4 *out, const Vector4 *point,
                         const Vector4 *scale, const Vector4 *offset)
 {
@@ -1128,6 +1181,7 @@ void xglMatrixStackRTPS(Vector4 *out, const Vector4 *point,
     );
 }
 
+/* Converts the rotation part of matrix into quaternion (x, y, z, w). */
 void xglMatrix2Quaternion(float quaternion[4], const Matrix *matrix)
 {
     float diagonalX = matrix->elements[0];
@@ -1209,12 +1263,14 @@ void xglQuaternion2Matrix(Matrix4 destination, const Vector4 *quaternion)
     );
 }
 
+/*
+ * Blends the quaternions left and right by their weights into destination and
+ * normalizes the result. right is negated first when the dot product of the
+ * two is not positive, so the blend takes the shorter arc.
+ */
 void xglQuaternionInterpolateLinear(Vector4 *destination, const Vector4 *left, const Vector4 *right,
                                     float left_weight, float right_weight)
 {
-    /* The blend takes the shorter arc: when the dot product of the two
-     * quaternions is not positive, right is negated first. The sum is then
-     * normalised with the VU0 reciprocal square root. */
     __asm__ __volatile__(
         "mfc1 $3, %3\n\t"
         "mfc1 $7, %4\n\t"
@@ -1263,6 +1319,10 @@ void xglRandSeedInit(void)
     iRandSeed = 0x12345678ULL;
 }
 
+/*
+ * Seeds the VU0 random generator, resets the seed, and starts the DMA
+ * direct source chain at D_004ADE80.
+ */
 void xglGeometryInit(void)
 {
     float random_seed = 0.1f;
@@ -1278,12 +1338,14 @@ void xglGeometryInit(void)
     xglDmaDirectSrcChain(0, (unsigned int)D_004ADE80);
 }
 
+/* Advances the random seed and returns its next 15-bit value. */
 unsigned short xglSRand(void)
 {
     iRandSeed = iRandSeed * 1103515245ULL + 12345ULL;
     return (iRandSeed >> 16) & 0x7fff;
 }
 
+/* Advances the random seed and returns a 32-bit value built from it. */
 unsigned int xglLRand(void)
 {
     int first = iRandSeed * 1103515245LL + 12345LL;
@@ -1293,6 +1355,7 @@ unsigned int xglLRand(void)
     return (unsigned int)(first << 16) + (unsigned int)(next >> 16);
 }
 
+/* Returns the next value of the VU0 random generator. */
 float xglFRand(void)
 {
     float value;
@@ -1307,6 +1370,7 @@ float xglFRand(void)
     return value;
 }
 
+/* Seeds the VU0 random generator with seed. */
 void xglFSrand(float seed)
 {
     __asm__ __volatile__(
@@ -1318,6 +1382,7 @@ void xglFSrand(float seed)
     );
 }
 
+/* Converts value to an int with the FPU's float-to-word conversion. */
 int F2I(float value)
 {
     int result;
@@ -1337,6 +1402,7 @@ float I2F(int value)
     return (float) value;
 }
 
+/* Returns the sine of angle, computed by the VU0 sine micro routine. */
 float xglSin(float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallSin >> 3;
@@ -1346,6 +1412,7 @@ float xglSin(float angle)
     return result;
 }
 
+/* Returns the cosine of angle, computed by the VU0 cosine micro routine. */
 float xglCos(float angle)
 {
     unsigned int entry = (unsigned int)Vu0CallCos >> 3;

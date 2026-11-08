@@ -29,7 +29,7 @@ typedef struct EMessageSprite {
     short width, height;
     unsigned char color[4];
     short sprite_id;
-    unsigned char unmodeled_12;
+    unsigned char unmodeled_12; /* Byte 18: not interpreted by this TU. */
     unsigned char colorize;
 } EMessageSprite;
 
@@ -76,7 +76,7 @@ static unsigned char otb[28] = {
 /* Current write position of the message text being built. */
 static char *MessageCpyEnd;
 
-/* Font command/text output buffer, ending where msg_spr begins. */
+/* Font command/text output buffer. */
 static unsigned char moji[EMESSAGE_TEXT_BUFFER_SIZE];
 
 static EMessageSprite msg_spr[EMESSAGE_SPRITE_COUNT];
@@ -101,6 +101,7 @@ void eMessageDrawType00(void)
 {
 }
 
+/* Returns the number of leading space bytes in text. */
 int eMessageHalfSpaseCheck(const unsigned char *text)
 {
     unsigned char character = *text++;
@@ -113,6 +114,10 @@ int eMessageHalfSpaseCheck(const unsigned char *text)
     return half_spaces;
 }
 
+/*
+ * Returns the end of the line that starts at text: the next newline or the
+ * terminator. Font command bytes and icon codes are stepped over whole.
+ */
 const char *eMessageNextGyou(const char *text)
 {
     int character = (unsigned char)*text;
@@ -143,6 +148,7 @@ const char *eMessageNextGyou(const char *text)
     return text;
 }
 
+/* Returns the number of lines in text, counting up to a wait-key code or the terminator. */
 int eMessageNextGyouMaxGet(const char *text)
 {
     int line_count = 0;
@@ -167,6 +173,7 @@ int eMessageNextGyouMaxGet(const char *text)
     return line_count;
 }
 
+/* Returns the position just after the next wait-key code in text, or the terminator when there is none. */
 const char *eMessageNextWaitKeySearch(const char *text)
 {
     signed char sentinel = *text;
@@ -208,7 +215,12 @@ const char *eMessageNextWaitKeySearch(const char *text)
     return text;
 }
 
-/* Partial sprite record: byte 18 is not interpreted by this TU. */
+/*
+ * Builds the font command stream for the current page of message into moji,
+ * wrapping lines at wrap_width_half and adding a sprite for each icon code,
+ * then prints it. In typewriter mode the output stops when the frame budget
+ * in remaining runs out.
+ */
 void eMessageDrawType01(EMessageParam *message)
 {
     struct EMessageColor color;
@@ -296,6 +308,7 @@ void eMessageDrawType01(EMessageParam *message)
         text = eMessageNextWaitKeySearch(text);
         i++;
     }
+    /* First pass: measure the page and record a wrap position at each word that overflows the line. */
     wrap_cursor = wraps;
     scan = text;
     line_width = 0;
@@ -344,6 +357,7 @@ void eMessageDrawType01(EMessageParam *message)
             line_width += xglFontGetStringWidth((const char *)&glyph);
         }
     }
+    /* Second pass: write the font command stream, starting a new line at each recorded wrap position. */
     wrap_cursor = wraps;
     code = *text & 255;
     if (code != 0) {
@@ -414,6 +428,7 @@ void eMessageDrawType01(EMessageParam *message)
                     int next_sprite_count;
                     EMessageSprite *sprite = &msg_spr[msg_spr_count];
                     int icon = *text;
+                    /* Icon codes 0..3 index icon_ids; larger codes map to sprite ids by range. */
                     if (icon < 4) {
                         sprite->sprite_id = icon_ids[(unsigned char)*text & 3];
                     } else if ((unsigned char)(*text - 4) < 23) {
@@ -522,14 +537,20 @@ void eMessageDrawType01(EMessageParam *message)
     }
 }
 
-/* Every caller compiles as the original only with a void declaration (a
-   discarded int result changes their register allocation around the call),
-   while the original body does not tail-call eMessageDrawType01, as an int
-   definition falling off its end would compile. The address-taken parameter
-   reproduces that: GCC 2.96 makes no sibling call in a function using
-   ADDRESSOF. */
+/*
+ * Advances the message state machine by one frame and draws the page when the
+ * message is visible and has text.
+ *
+ * Every caller compiles as the original only with a void declaration (a
+ * discarded int result changes their register allocation around the call),
+ * while the original body does not tail-call eMessageDrawType01, as an int
+ * definition falling off its end would compile. The address-taken parameter
+ * reproduces that: GCC 2.96 makes no sibling call in a function using
+ * ADDRESSOF.
+ */
 void eMessageMain(EMessageParam *message)
 {
+    /* Each *_START case sets visibility and mode, then falls into its *_STEP case. */
     switch (message->mode) {
     case E_MODE_INIT:
         message->visible = 0;
@@ -608,6 +629,7 @@ void eMessageModeChange(EMessageParam *message, unsigned char mode)
     message->mode = mode;
 }
 
+/* Resets message to its defaults (neutral colour, header on, default wrap width) and sets its text. */
 void eMessageSet(EMessageParam *message, const char *text)
 {
     message->x = 0;
@@ -628,6 +650,7 @@ void eMessageSet(EMessageParam *message, const char *text)
     eCursolSet(&message->cursor, 3);
 }
 
+/* Replaces the message text. When the message is paged, restarts at page 0 and counts the pages in text. */
 void eMessageTextChange(EMessageParam *message, const char *text)
 {
     message->text = text;
@@ -640,6 +663,11 @@ void eMessageTextChange(EMessageParam *message, const char *text)
     }
 }
 
+/*
+ * With reset_page 0, shows the rest of the current page while it is still being
+ * typed, or else opens the next page. Returns 1 when a page is started and 0 past
+ * the last page. A non-zero reset_page returns to page 0 and returns 0.
+ */
 int eMessageNextPage(EMessageParam *message, int reset_page)
 {
     int next_page;
@@ -680,6 +708,7 @@ void eMessageCpy(char *dst, const char *src)
     eMessageCat(src);
 }
 
+/* Appends src to the buffer that eMessageCpy set, copying font commands and icon codes whole, and terminates it. */
 void eMessageCat(const char *src)
 {
     char *dst = MessageCpyEnd;

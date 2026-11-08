@@ -4,22 +4,18 @@
 #include "ssd_4.h"
 #include "main/nml_packet_add.h"
 
-/* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
 /*
- * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
- * ELF symbol size 0x200 bytes. The accepted RssdWorkFlags in
- * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
- * carries the leading `flags` word; this function evidences more of the same
- * object, so the type is extended here under the same tag and leading field
- * Only the evidenced members are modeled here. Bytes this TU does not access
- * stay explicit unmodeled spans.
+ * RssdWork is the RSSD RPC / background-wave work area (ELF symbol size
+ * 0x200 bytes). This TU uses its sound-memory arena members (first_block,
+ * memory_end, memory_size); the other members are described in
+ * main/ssd_init.h.
  */
 struct SsdMemoryBlock;
 
 /* Sound memory blocks start on 64-byte boundaries and their header is one such unit. */
 #define SSD_MEMORY_ALIGN 64
 #define SSD_MEMORY_ALIGN_MASK 0x3f
-/* SsdMemoryBlock.state: the arena's first node, a block placed at the start of a free gap, one placed at its end. */
+/* SsdMemoryBlock.state: 0x81 marks the arena's first node, 2 a block allocated at the low end of a gap, 18 one allocated at its high end. */
 #define SSD_MEMORY_STATE_HEAD 0x81
 #define SSD_MEMORY_STATE_ALLOC 2
 #define SSD_MEMORY_STATE_ALLOC_HIGH 18
@@ -28,8 +24,8 @@ struct SsdMemoryBlock;
 
 /*
  * View of the sentinel node SsdInitMemoryManager writes at the arena start:
- * the same 0x40-byte node as SsdMemoryBlock. Here  is only cleared as
- * a word and  holds an address (the first byte after the node).
+ * the same 0x40-byte node as SsdMemoryBlock. Its end field points just past
+ * the node.
  */
 typedef struct SsdMemoryNode {
     int next;                           /* +0x00 */
@@ -41,54 +37,20 @@ typedef struct SsdMemoryNode {
     unsigned char _unmodeled_10[0x30];  /* +0x10..0x3f */
 } SsdMemoryNode;
 
-/*
- * Sends one RSSD command over SIF RPC (end function RssdSifRpcCallback):
- * `request` may be null, otherwise it is copied as above, and `size` bytes
- * of `data` are copied after the record (SsdCopyMemory into buffer +0x20).
- * Returns -1 when the rounded payload exceeds the buffer, otherwise the
- * sceSifCallRpc result.
- */
-/*
- * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
- * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
- * result, else flag bit 5) through the registered one-shot completion
- * callback, then signals the waiting thread's semaphore.
- *
- * It runs from the SIF RPC interrupt context, so it ends with the
- * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
- * orders every earlier load/store, including the iSignalSema effects, before
- * `ei` re-enables interrupts on the way out.
- */
-/*
- * libkernel syscall stubs (main:0x00208fe0 / main:0x00209028).
- */
+/* libkernel: DIntr disables interrupts and EIntr re-enables them. */
 extern int DIntr(void);
 
 extern int EIntr(void);
 
-/*
- * iSsdNewMemoryPtr is this TU's own low-address block allocator (its body is
- * still scaffold below, main:0x00242150). `tag` is stored verbatim at +0xc of
- * the returned block's header; nothing recovered in this TU reads it back.
- */
 extern void *iSsdNewMemoryPtr(int size, int tag);
 
-/*
- * iSsdNewMemoryPtr2 is this TU's own high-address block allocator (its body
- * is still scaffold below, main:0x00242278); same header convention as
- * iSsdNewMemoryPtr.
- */
 extern void *iSsdNewMemoryPtr2(int size, int tag);
 
-/*
- * iSsdDisposeMemoryPtr is this TU's own block-release routine (its body is
- * still scaffold below, main:0x002423b0): `ptr` minus the fixed 0x40-byte
- * header size is the block header, returned to the free list.
- */
 extern void iSsdDisposeMemoryPtr(void *ptr);
 
 void SsdClearMemory(void *buffer, int size);
 
+/* Sets up the sound-memory arena at `address`, aligned up to 64 bytes, and writes its head sentinel node. */
 void SsdInitMemoryManager(int address, int size)
 {
     SsdMemoryNode *head;
@@ -121,6 +83,11 @@ void *SsdNewMemoryPtr(int size, int tag)
     return ptr;
 }
 
+/*
+ * Allocates `size` bytes from the first free gap at the low end of the arena
+ * (first fit from the head). `tag` is stored at +0xc of the block header;
+ * nothing in this file reads it back.
+ */
 void *iSsdNewMemoryPtr(int size, int tag)
 {
     SsdMemoryBlock *previous;
@@ -176,6 +143,10 @@ void *SsdNewMemoryPtr2(int size, int tag)
     return ptr;
 }
 
+/*
+ * Allocates `size` bytes from the highest-address gap that fits, placed at
+ * the upper end of that gap. The `tag` convention matches iSsdNewMemoryPtr.
+ */
 void *iSsdNewMemoryPtr2(int size, int tag)
 {
     SsdMemoryBlock *current;
@@ -237,6 +208,11 @@ void SsdDisposeMemoryPtr(void *ptr)
     EIntr();
 }
 
+/*
+ * Unlinks the block that owns `ptr` from the arena list. `ptr` minus one
+ * SsdMemoryBlock (0x40 bytes) is the block header; nothing happens when the
+ * block is not linked.
+ */
 void iSsdDisposeMemoryPtr(void *ptr)
 {
     SsdMemoryBlock *block;
@@ -257,10 +233,9 @@ void iSsdDisposeMemoryPtr(void *ptr)
 }
 
 /*
- * Returns the payload size recorded in a sound-memory allocation header:
- * `ptr` minus one SsdMemoryBlock header is the header itself (same
- * convention as SsdDisposeMemoryPtr above), and `end` is the absolute
- * address just past the payload.
+ * Returns the span from a sound-memory allocation's header to the end of its
+ * payload: `ptr` minus one SsdMemoryBlock is the header and `end` is the
+ * address just past the payload, so the result includes the 0x40-byte header.
  */
 int SsdGetBlockMemorySize(void *ptr)
 {
@@ -270,6 +245,7 @@ int SsdGetBlockMemorySize(void *ptr)
     return block->end - (int)block;
 }
 
+/* Returns the largest free gap between arena blocks, in bytes, rounded down to 64-byte units. */
 int SsdGetMemoryFreeSize(void)
 {
     SsdMemoryBlock *block;
@@ -301,6 +277,7 @@ int SsdGetMemoryFreeSize(void)
     return largest;
 }
 
+/* Counts the blocks linked after the arena head. */
 int SsdGetMemoryBlocks(void)
 {
     SsdMemoryBlock *block;
@@ -321,6 +298,7 @@ int SsdGetMemoryBlocks(void)
     return count;
 }
 
+/* Copies byte_count bytes in 16-byte chunks, then whole words, then single bytes. */
 void SsdCopyMemory(void *destination, void *source, int byte_count)
 {
     int *destination_words = destination;
@@ -365,6 +343,7 @@ void SsdCopyMemory(void *destination, void *source, int byte_count)
     }
 }
 
+/* Zeroes size bytes in 32-byte steps, then one 16-byte step, then single bytes. */
 void SsdClearMemory(void *buffer, int size)
 {
     unsigned long long *destination64 = buffer;

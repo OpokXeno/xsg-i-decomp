@@ -22,6 +22,7 @@ const char gameCollisionAssertGroupsDiffer[40] = "pSrc->m_pGroup1 != pSrc->m_pGr
 const char gameCollisionAssertArgNotNil[16] = "pArg != NIL";
 const char gameCollisionAssertGameColiNotNil[24] = "pGameColi != NIL";
 
+/* Copies the group pair and callbacks of pSrc into a new heap-allocated check argument. */
 static RgGameColiArg *_CreateColiArg(RgGameColiArg *pSrc)
 {
     RgGameColiArg *pArg;
@@ -59,6 +60,7 @@ static void _InitGameCollision(RgGameCollision *pGameColi)
     pGameColi->m_pCheckList = CreateRgVector(RG_GAME_COLLISION_MAX_CHECKS, gameCollisionSourcePath, 57);
 }
 
+/* Disposes every queued check argument, then the check list itself. */
 static void _DisposeGameCollision(RgGameCollision *pGameColi)
 {
     unsigned int i;
@@ -77,6 +79,7 @@ static void _DisposeGameCollision(RgGameCollision *pGameColi)
     pGameColi->m_pCheckList = 0;
 }
 
+/* Queues a copy of pArg in the check list. */
 static void _AddCheck(RgGameCollision *pGameColi, RgGameColiArg *pArg)
 {
     RgGameColiArg *pNewArg;
@@ -91,6 +94,7 @@ static void _AddCheck(RgGameCollision *pGameColi, RgGameColiArg *pArg)
     RgVectorPush(pGameColi->m_pCheckList, pNewArg);
 }
 
+/* Disposes the queued check arguments and empties the check list. */
 static void _ClearCheck(RgGameCollision *pGameColi)
 {
     RgPtrVector *pCheckList;
@@ -110,6 +114,7 @@ static void _ClearCheck(RgGameCollision *pGameColi)
     RgVectorClear(pCheckList);
 }
 
+/* Runs the group collision check for every queued argument. */
 static void _JobCheck(RgGameCollision *pGameColi)
 {
     unsigned int i;
@@ -126,6 +131,7 @@ static void _JobCheck(RgGameCollision *pGameColi)
     }
 }
 
+/* Allocates a collision checker with an empty check list. */
 RgGameCollision *CreateRgGameCollision(void)
 {
     RgGameCollision *pGameColi;
@@ -147,6 +153,7 @@ void DisposeRgGameCollision(RgGameCollision *pGameColi)
     RgHeapFree(InstanceOfRgHeap(), pGameColi, gameCollisionSourcePath, 133);
 }
 
+/* Queues a check for pArg when both of its groups are set. */
 void RgGameCollisionAdd(RgGameCollision *pGameColi, RgGameColiArg *pArg)
 {
     if (pGameColi == 0) {

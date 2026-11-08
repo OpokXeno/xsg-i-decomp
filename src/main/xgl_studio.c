@@ -7,17 +7,9 @@
 #include "main/xgl_camera.h"
 
 /*
- * StudioCamera (include/shared.h; config/header-canon.json,
- * decisions.StudioCamera) is the active-flag/state/camera-slot layout this
- * TU evidences. xglStudioSelectGetActiveCamera (main:0x0022c618,
- * `lw $3,0($4)` feeding the `bne $3,$0` "camera in use" test) reads +0 as a
- * boolean active flag, and xglStudioMainCameraInit (main:0x0022c6f0/
- * 0x0022c6f8, `sw $17,4($2)` / `sw $17,0($2)` with $17=1) stores the same
- * word 1 to both +4 and +0 on init. The same function's
- * `addiu $4,$4,1520` stride (main:0x0022c620) sizes one camera slot at
- * 0x5F0 bytes, not just the 8-byte leading pair. +4 state keeps its name,
- * type and offset, so src/main/game.c's `camera->state == 4` reads the
- * same byte either way.
+ * Each studio holds a light and eight cameras.  In a StudioCamera (include/shared.h)
+ * +0 is the active flag and +4 the state; xglStudioMainCameraInit sets both to 1.
+ * src/main/game.c also reads the state field.
  */
 typedef struct Studio {
     StudioLight light;
@@ -48,6 +40,7 @@ void xglStudioGetCamera(StudioCamera **camera_out, int camera_index)
     *camera_out = &pCurrentStudio->cameras[camera_index];
 }
 
+/* Returns the first active camera of the current studio, or 0 when none is active. */
 StudioCamera *xglStudioGetActiveCamera(void)
 {
     int camera_index = 0;
@@ -63,6 +56,7 @@ StudioCamera *xglStudioGetActiveCamera(void)
     }
 }
 
+/* Returns the first active camera of studio `studio_index`, or 0 when none is active. */
 StudioCamera *xglStudioSelectGetActiveCamera(int studio_index)
 {
     int camera_index;
@@ -76,6 +70,7 @@ StudioCamera *xglStudioSelectGetActiveCamera(int studio_index)
     return 0;
 }
 
+/* Moves the active camera of each of the four studios. */
 void xglStudioFlushActiveCamera(void)
 {
     int studio_index;
@@ -98,6 +93,7 @@ StudioCamera *xglStudioGetCamera2(int camera_index)
     return &pCurrentStudio->cameras[camera_index];
 }
 
+/* Activates camera 0 of every studio and selects studio 0. */
 void xglStudioMainCameraInit(void)
 {
     int studio_index;
@@ -111,12 +107,14 @@ void xglStudioMainCameraInit(void)
     xglStudioChange(0);
 }
 
+/* Selects studio 0 and returns its camera 0. */
 StudioCamera *xglStudioMainCameraMove(void)
 {
     xglStudioChange(0);
     return xglStudioGetCamera2(0);
 }
 
+/* Initializes the light and all cameras of every studio, then selects studio 0. */
 void xglStudioInit(void)
 {
     int studio_index;
@@ -135,6 +133,7 @@ void xglStudioInit(void)
     xglStudioChange(0);
 }
 
+/* Runs the travel and move step for every active camera of every studio, then selects studio 0. */
 void xglStudioMove(void)
 {
     int studio_index;
@@ -154,6 +153,7 @@ void xglStudioMove(void)
     xglStudioChange(0);
 }
 
+/* Task entry: initializes the studios, then moves the cameras each frame unless StudioEntrySkip is set. */
 void xglStudioEntry(void *argument)
 {
     xglSleep();

@@ -41,6 +41,7 @@ static unsigned char act_align_0[6] = { 0, 1, 255, 255, 255, 255 };
 
 static unsigned char PadDmaBuffer[2 * PAD_DMA_BUFFER_SIZE];
 
+/* Opens both controller ports and clears the pad records, then sets the default repeat, button map and dead zones. */
 void xglPadInitial(void) {
     unsigned int byte_index;
     int map_remaining;
@@ -91,6 +92,7 @@ void xglPadInitial(void) {
     } while (dead_zone_remaining >= 0);
 }
 
+/* Sets the repeat mask, delay and interval of port (-1 sets both ports) and restarts the repeat counters. */
 void xglPadSetRepeat(int port, unsigned short mask, int delay, int interval)
 {
     unsigned short button_mask = mask;
@@ -110,6 +112,7 @@ void xglPadSetRepeat(int port, unsigned short mask, int delay, int interval)
     pad->repeat_count = 0;
 }
 
+/* Polls both pads once per frame: advances each controller's setup state, decodes its packet and updates the pressed, released and repeated bits. */
 void xglPadRead(void)
 {
     int port;
@@ -127,10 +130,10 @@ void xglPadRead(void)
         int buttons;
         int directions;
         /* One value serves both the 0x60 pressed-button word and the 0x50
-           first dead zone, matching the original register reuse. */
+           first dead zone, keeping the original register reuse. */
         unsigned short shared_value;
         /* One int holds the request-state reply of the mode setup and the
-           repeated-button word, matching the original register reuse. */
+           repeated-button word, keeping the original register reuse. */
         int result;
 
         pad = &PadData[port];
@@ -138,6 +141,7 @@ void xglPadRead(void)
         pad->connection_state = scePadGetState(port, 0);
         if (!pad->connection_state)
             pad->setup_state = PAD_SETUP_PROBE;
+        /* Run the setup state; PAD_SETUP_READY reads the packet and drives the actuators. */
         switch (pad->setup_state) {
         case PAD_SETUP_PROBE: {
             int mode;
@@ -226,6 +230,7 @@ void xglPadRead(void)
                 pad->actuator[5] = 0;
             }
             if (pad->packet[0] == 0) {
+            /* Decode the packet by controller type: sticks, buttons and pressures. */
             switch (pad->packet[1] & PAD_TYPE_MASK) {
             case PAD_TYPE_MOUSE: {
                 int stick_x;
@@ -331,6 +336,7 @@ void xglPadRead(void)
             break;
         }
         }
+        /* Packets without pressure data get their pressure values from the digital buttons. */
         if (pad->packet[1] != PAD_PACKET_ID_PRESSURE) {
             int maximum_pressure;
             int digital_horizontal;
@@ -389,6 +395,7 @@ void xglPadRead(void)
             pad->pressure[6] = l2 - 1;
             pad->pressure[7] = r2 - 1;
         }
+        /* Stick positions past the dead zones set direction bits; the button bits go through button_map. */
         directions = buttons;
         horizontal = pad->position[2];
         if (horizontal < -pad->horizontal_dead_zone)
@@ -414,6 +421,7 @@ void xglPadRead(void)
                 directions = (directions | pad->button_map[map_remaining]) & 0xffff;
             direction_bits >>= 1;
         }
+        /* Compare with the previous frame: changed bits give pressed and released. */
         {
             int changed = buttons ^ pad->buttons;
             int direction_changed = directions ^ pad->directions;
@@ -427,6 +435,7 @@ void xglPadRead(void)
             pad->direction_repeated = pad->direction_pressed = direction_pressed;
             pad->directions = directions;
         }
+        /* Auto-repeat: held directions and buttons repeat after repeat_delay, every repeat_interval frames. */
         {
             int repeat = directions & pad->repeat_mask;
             unsigned char repeat_count;

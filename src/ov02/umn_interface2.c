@@ -74,8 +74,11 @@ typedef struct UmnIf2Rgba {
     unsigned char alpha;
 } UmnIf2Rgba;
 
-/* UmnInterface2Init allocates these twelve bytes. UmnInterface2Main fades
- * the two alpha bytes, then queues this record as the callback argument. */
+/*
+ * UmnInterface2Init reserves these twelve bytes as UmnInterface2State. The two
+ * alpha bytes are the intensity counters that UmnInterface2Main fades; the state
+ * is passed to DrawUmnInterface2 as this record.
+ */
 typedef struct UmnIf2Parameters {
     unsigned int depth;
     UmnIf2Rgba first_vertex;
@@ -86,6 +89,10 @@ extern const UmnBgCubeLights bgCubeLightTable;
 extern const UmnIf2Coordinates backdropQuadXTable;
 extern const UmnIf2Coordinates backdropQuadYTable;
 
+/*
+ * Task callback for the background cube: runs the INIT/RUN/END state machine,
+ * then builds the cube's matrix and submits its lights and model.
+ */
 void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
 {
     UmnBgCubeMainTask *task = (UmnBgCubeMainTask *)task_opaque;
@@ -101,6 +108,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     StudioCamera *camera;
     int i;
 
+    /* Ends the cube task when UmnWork.mode is UMN_MODE_NONE. */
     if (UmnWork.mode == UMN_MODE_NONE)
         task->state = UMN_BG_CUBE_END;
 
@@ -134,6 +142,7 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
     }
     if (task->enabled == 0)
         return;
+    /* Build the cube matrix and save it, then submit the lights and model. */
     camera = xglStudioGetCamera2(task->camera_id);
     camera->active = 1;
     xglMatrixStackUnit();
@@ -159,9 +168,9 @@ void tskUmnBgCubeMain(XglTaskPrefix *task_opaque)
 }
 
 /*
- * Creates the background-cube task on task_xmx, gives it the 0x80-byte
- * UmnBgCubeData that starts at the next 16-byte boundary of `memory`, and
- * sets up studio camera 0 for it. Returns the first byte after that data.
+ * Creates the background-cube task on task_xmx with its 0x80-byte UmnBgCubeData at
+ * the next 16-byte boundary of memory, and sets up studio camera 0.
+ * Returns the first byte after that data.
  */
 void *UmnBgCubeInit(void *memory)
 {
@@ -194,6 +203,7 @@ void *UmnBgCubeInit(void *memory)
     return (void *)address;
 }
 
+/* Font draw callback: sends the GS setup and a six-vertex strip colored from the parameters. */
 static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument)
 {
     UmnIf2Parameters *parameters = argument;
@@ -254,6 +264,7 @@ static void DrawUmnInterface2(FontDrawCursor *cursor, void *argument)
     sceVif1PkAddDirectDataN(cursor->packet, geometry, 0x13);
 }
 
+/* Fades both intensity counters and draws the backdrop while either is still nonzero. */
 void UmnInterface2Main(void) {
     if (UmnInterface2->intensity_a != 0) {
         UmnInterface2->intensity_a -= UMN_IF2_FADE_STEP_A;
@@ -266,6 +277,10 @@ void UmnInterface2Main(void) {
     }
 }
 
+/*
+ * Places the state at the next 16-byte boundary of memory and resets its colors and
+ * intensities. Returns the first byte after its 12 bytes, or null when memory is null.
+ */
 void *UmnInterface2Init(void *memory) {
     unsigned int aligned_address;
     UmnInterface2State *color_a_state;

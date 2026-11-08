@@ -179,6 +179,7 @@ static void xglCameraControlInit(StudioCamera *camera)
     camera->state = camera->active = 0;
 }
 
+/* Sets the default depth range, clip range, port effect, resolution and window of the camera screen from sRender. */
 static void xglCameraScreenInit(StudioCamera *studio)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -198,6 +199,7 @@ static void xglCameraScreenInit(StudioCamera *studio)
     screen->window.w = sRender.height;
 }
 
+/* Sets the travel state (focus, fov, rotation, position and chase point) to the default vectors. */
 static void xglCameraTravelInit(StudioCamera *studio)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -226,6 +228,7 @@ static void xglCameraTravelReset(CameraTravel *travel)
     QuadwordCopy(&travel->place_delta, &sShootPlaceA_11);
 }
 
+/* Steps focus with Circle and Square within its limits, and sets the zoom scale while R1 or R2 is held. */
 static void xglCameraTravelFocus(CameraTravel *travel)
 {
     if (PadData[1].pressed_buttons & PAD_CIRCLE) {
@@ -246,6 +249,7 @@ static void xglCameraTravelFocus(CameraTravel *travel)
     }
 }
 
+/* Scales the angle and place deltas by the focus, and by the boost factor while Cross is held. */
 static void xglCameraTravelScale(CameraTravel *travel)
 {
     float angle_scale;
@@ -263,6 +267,10 @@ static void xglCameraTravelScale(CameraTravel *travel)
                       (travel->focus - CAMERA_FOCUS_DEFAULT) * 0.24f + 1.0f);
 }
 
+/*
+ * Free-camera travel for one frame: pad sticks and buttons set the angle and
+ * place deltas, which are integrated into the rotation and position.
+ */
 static void xglCameraTravelManual(XglCamera *camera)
 {
     CameraTravel *travel = &camera->travel;
@@ -307,6 +315,7 @@ static void xglCameraTravelManual(XglCamera *camera)
     if (PadData[1].analog_signed[3] > 0) {
         travel->place_delta.z = (PadData[1].analog_signed[3] - PadData[1].analog_magnitude[3]) * CAMERA_MOVE_STEP_STICK;
     }
+    /* Damp the velocities, add the deltas, then integrate them into rotation and position. */
     damping = CAMERA_VELOCITY_DAMPING;
     xglCameraTravelScale(travel);
     travel->fov_velocity = travel->fov_velocity * damping + travel->scale;
@@ -324,6 +333,11 @@ static void xglCameraTravelManual(XglCamera *camera)
     Vu0AddVectorXYZ(&travel->position, &travel->position, &travel->place_velocity);
 }
 
+/*
+ * Chase-camera travel for one frame: the chase point follows chase_reference,
+ * distance and height are clamped, and the rotation aims from the position at
+ * the chase point.
+ */
 static void xglCameraTravelChase(XglCamera *camera)
 {
     CameraTravel *travel = &camera->travel;
@@ -368,6 +382,7 @@ static void xglCameraTravelChase(XglCamera *camera)
     if (travel->chase_distance > CAMERA_CHASE_DISTANCE_MAX) {
         travel->chase_distance = CAMERA_CHASE_DISTANCE_MAX;
     }
+    /* Move the chase point toward the reference by CAMERA_CHASE_FOLLOW_RATE while it is within 1.0, otherwise snap to it. */
     Vu0SubVectorXYZ(&offset, &travel->chase_reference, &travel->chase_position);
     xglVectorLength(&offset.w, &offset);
     if (offset.w < 1.0f) {
@@ -393,6 +408,7 @@ static void xglCameraTravelChase(XglCamera *camera)
     if (travel->position.y > CAMERA_CHASE_HEIGHT_MAX) {
         travel->position.y = CAMERA_CHASE_HEIGHT_MAX;
     }
+    /* Derive yaw and pitch of the direction from position to the chase point. */
     Vu0SubVectorXYZ(&offset, &travel->chase_position, &travel->position);
     xglVectorNormal(&offset, &offset);
     offset.z = -offset.z;
@@ -402,6 +418,10 @@ static void xglCameraTravelChase(XglCamera *camera)
     travel->rotation.y = -travel->rotation.y;
 }
 
+/*
+ * Runs the travel update for the camera's state: manual flight (state 2) or chase
+ * (state 3). Holding Select suspends the update, and Select with Triangle resets the travel.
+ */
 int xglCameraTravelProc(StudioCamera *studio)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -433,6 +453,7 @@ int xglCameraTravelProc(StudioCamera *studio)
     }
 }
 
+/* Computes the screen projection, screen offset and scale, and the clip range of the camera from its window and resolution. */
 static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -485,6 +506,10 @@ static void xglCameraViewScreen(StudioCamera *studio, const Vector4 *offset)
     screen->screenScale.w = screen->portEffect.z * screen->portEffect.w * 255.0f;
 }
 
+/*
+ * Computes the travel frustum from fov and the clip range, then the camera
+ * transform and its inverse from the travel position and rotation, shifted by offset.
+ */
 static void xglCameraViewTravel(StudioCamera *studio, Vector4 *offset)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -528,6 +553,10 @@ static void xglCameraViewTravel(StudioCamera *studio, Vector4 *offset)
     xglMatrixStackSave(camera->inverseTransform);
 }
 
+/*
+ * Builds the view volume: the frustum matrix, then the eight corners and six
+ * planes of each of its two sets, and the packed plane set.
+ */
 static void xglCameraViewVolume(StudioCamera *studio, Vector4 *offset)
 {
     XglCamera *camera = (XglCamera *)studio;
@@ -595,6 +624,7 @@ void xglCameraInit(StudioCamera *camera)
     xglCameraTravelInit(camera);
 }
 
+/* Updates the camera's screen, travel and view volume with no offset. */
 void xglCameraMove(StudioCamera *camera)
 {
     Vector4 offset;
@@ -605,6 +635,7 @@ void xglCameraMove(StudioCamera *camera)
     xglCameraViewVolume(camera, &offset);
 }
 
+/* Same as xglCameraMove, with the travel position shifted by offset. */
 void xglCameraMoveOffset(StudioCamera *camera, Vector4 *offset)
 {
     xglCameraViewScreen(camera, offset);
@@ -612,6 +643,11 @@ void xglCameraMoveOffset(StudioCamera *camera, Vector4 *offset)
     xglCameraViewVolume(camera, offset);
 }
 
+/*
+ * Sets the screen window of camera to the rectangle (left, top)-(right, bottom).
+ * Reversed edges are swapped and each edge is clamped to the render size.
+ * Does nothing when camera is null.
+ */
 void xglCameraSetWindow(CameraWindowData *camera, int left, int top, int right, int bottom)
 {
     int swapCoordinate;

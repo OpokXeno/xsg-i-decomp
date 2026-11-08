@@ -25,6 +25,7 @@ extern void MMv2Stop(void);
 
 void MBattlePause(short pause);
 
+/* Initializes the effect objects, camera and movie players once; returns 0 when already initialized. */
 int MBattleInit(void)
 {
     if (batFlags & MBATTLE_FLAG_INITIALIZED) {
@@ -40,6 +41,7 @@ int MBattleInit(void)
     return 1;
 }
 
+/* Initializes the battle if needed, then enables the effect objects. */
 void MBattleCreate(void)
 {
     if (!(batFlags & MBATTLE_FLAG_INITIALIZED)) {
@@ -49,6 +51,7 @@ void MBattleCreate(void)
     MEfObjEnabled(1);
 }
 
+/* Disables the effect objects, stops both movie players and clears the pause state. */
 void MBattleDestroy(void)
 {
     MEfObjEnabled(0);
@@ -72,7 +75,7 @@ void MBattlePause(short pause)
         batFlags |= MBATTLE_FLAG_PAUSED;
         return;
     }
-    /* Clears the pause bit and 0x4, whose role is not established (not a named flag). */
+    /* Clears the pause bit and bit 0x4, which has no named flag. */
     batFlags &= ~6;
 }
 

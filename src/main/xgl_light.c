@@ -13,7 +13,7 @@ void xglLightIntensityAmbient(StudioLight *lightSet,
 void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index,
                                const XglLightQuadword *intensity);
 
-/* The row copy is one lq/sq pair through explicit address registers, as the original emits it. */
+/* Sets the default ambient intensity and the intensity and direction of the three parallel lights. */
 void xglLightSetDefault(StudioLight *lightSet)
 {
     static XglLightVector asIntensity[4] = {
@@ -46,6 +46,7 @@ void xglLightIntensityAmbient(StudioLight *lightSet, const XglLightQuadword *int
     QuadwordCopy(lightSet, intensity);
 }
 
+/* Copies intensity into the color of parallel light index; indices 3 and up are ignored. */
 void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index, const XglLightQuadword *intensity)
 {
     /* EE pointers are 32-bit addresses; the selected array entry stays aligned. */
@@ -59,6 +60,7 @@ void xglLightIntensityParallel(StudioLight *lightSet, unsigned int index, const 
     }
 }
 
+/* Stores the normalized source vector as the direction of parallel light index (0 to 2). */
 void xglLightDirection(StudioLight *lightSet, unsigned int index, const Vector4 *source)
 {
     if (index < 3U) {
@@ -66,6 +68,10 @@ void xglLightDirection(StudioLight *lightSet, unsigned int index, const Vector4 
     }
 }
 
+/*
+ * Builds a rotation from angle's z, y and x components, applied in that order, and stores the
+ * matrix's third row as the direction of parallel light index (0 to 2).
+ */
 void xglLightAngle(StudioLight *lightSet, unsigned int index, const Vector4 *angle)
 {
     /* EE pointers are 32-bit addresses; the selected array entry stays aligned. */
@@ -89,15 +95,10 @@ void xglLightAngle(StudioLight *lightSet, unsigned int index, const Vector4 *ang
 }
 
 /*
- * xglLightCalcMatrix (ee-vu-cop2): dispatches the VU0 macro-mode
- * Vu0CallLightCalcMatrix microprogram (src/main/vu0/Vu0MicroCode.dvp) on the
- * light set's seven quadwords (ambientIntensity and the three parallel
- * lights' intensity/direction pairs) and writes its two 4x4 output matrices
- * back at lightSet+0x70 and lightSet+0xB0: the first is the transpose of the
- * three light directions (each row padded with w=0, plus a trailing
- * (0,0,0,1) row) and the second has the three light intensities (w=0) and
- * ambientIntensity (w=1) as its columns -- see that file's own comment for
- * the per-lane derivation. Only the VU0 dispatch is inline assembly.
+ * Runs the VU0 microprogram Vu0CallLightCalcMatrix (src/main/vu0/Vu0MicroCode.dvp) on the seven
+ * quadwords at lightSet+0x00..0x60 and stores two 4x4 matrices: the transposed light directions at
+ * lightSet+0x70, and the light intensities (w=0) with ambient intensity (w=1) as columns at +0xB0.
+ * Only the VU0 dispatch is inline assembly.
  */
 void xglLightCalcMatrix(StudioLight *lightSet)
 {
@@ -126,6 +127,10 @@ void xglLightCalcMatrix(StudioLight *lightSet)
     );
 }
 
+/*
+ * Sets the ambient intensity to 1, and the intensity of each parallel light to 0 with its direction
+ * set through xglLightDirection from the vector (1, 1, 1, 1).
+ */
 void xglLightInit(StudioLight *lightSet)
 {
     static XglLightVector sIntensity0 = { .value = { 0.0f, 0.0f, 0.0f, 0.0f } };

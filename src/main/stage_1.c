@@ -5,8 +5,8 @@
 #include "main/jni.h"
 #include "main/stage_1.h"
 
-/* CameraWork's independently evidenced prefix: creation fills the object tag
- * and camera id; TCAMERA_update reads the four channel modes and frames. */
+/* Prefix of the CameraWork object: creation fills the object tag and camera id;
+ * TCAMERA_update reads the four channel modes and frames. */
 typedef struct StageCameraPrefix {
     DispatchTable *class_ref;
     int camera_id;
@@ -29,12 +29,17 @@ const char initMethodSignature[8] = "()V";
 /* Twenty-four halfwords occupy the stage peer block returned by STAGE_create. */
 static u16 defaultStage[STAGE_PEER_HALFWORDS];
 
+/* Stores stage_id in the peer block's id halfword and returns that block. */
 void *STAGE_create(u16 stage_id)
 {
     defaultStage[STAGE_PEER_ID_INDEX] = stage_id;
     return defaultStage;
 }
 
+/*
+ * Initializes a stage object: runs its constructor, links the camera, creates the Chr objects held
+ * in its fields and runs their init methods, then runs the init method of the parent's class.
+ */
 void STAGE_instance(SceneVm *vm, SceneObject stage_object)
 {
     SceneObject arguments[1];
@@ -54,6 +59,7 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
     stage_class = ((ObjectHeader *)primary_object)->classPointer->clazz;
     if (stage_class->name != 0)
         parent_object = primary_object;
+    /* Run the constructor, when the class declares one. */
     method = findMethod(stage_class, NAME_Constructor, TYPE_Void);
     if (method != 0) {
         arguments[0] = primary_object;
@@ -71,6 +77,8 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
         *(SceneObject *)(stage_object + field->location.offset) = tcamera;
     }
 
+    /* Walk the instance fields, resolving unresolved field types and creating a Chr object for each
+     * Chr-typed field. */
     stage_class = ((ObjectHeader *)stage_object)->classPointer->clazz;
     remaining = stage_class->fieldCount - stage_class->staticFieldCount;
     remaining--;
@@ -121,6 +129,7 @@ void STAGE_instance(SceneVm *vm, SceneObject stage_object)
         }
     }
 
+    /* Run the init method of the parent object's class. */
     stage_class = ((ObjectHeader *)parent_object)->classPointer->clazz;
     method_name = loadConstString(initMethodName, -1);
     method = findMethod(stage_class, method_name,

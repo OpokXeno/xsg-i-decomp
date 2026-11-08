@@ -1,5 +1,7 @@
 /*
  * OV11 original TU 1: 0x00a00100..0x00a091f8 (135 functions)
+ * Casino minigames: slot, nine-game, poker, menu, coin exchange,
+ * shop, data viewer and music.
  */
 #include "common.h"
 #include "shared.h"
@@ -40,8 +42,8 @@ void dprintf(const char *fmt, ...)
 }
 
 /* GIF tags of the packet helpers below, stored in the overlay's .rodata (the
- * D_00A0BBxx constants). Each function copies its tag to a stack local
- * because the 128-bit argument is passed by value. */
+ * constants). Each function copies its tag to a stack local because the
+ * 128-bit argument is passed by value. */
 typedef unsigned int Ov11Quadword __attribute__((mode(TI)));
 typedef union Ov11GifTag {
     struct { u64 lo, hi; } part;
@@ -49,7 +51,7 @@ typedef union Ov11GifTag {
 } Ov11GifTag;
 
 /* Declared here: every external function and datum the casino uses. Data
- * defined in this file (the static tables and the D_00A0Cxxx strings) keeps
+ * defined in this file (the static tables and the string literals) keeps
  * its definition where it is. */
 
 /* Packet helpers (sceVif1Pk*), GS packet tags and box vertices. */
@@ -320,19 +322,16 @@ extern const char musicSwdPathFormat[];
 extern const char versionDebugFormat[];
 extern const char casinoBuildDateText[];
 
-/* Preserve original compiler-owned NOBITS ordering: the BoxRGBA storage
- * must precede Pkt in the source declaration order for this pinned TU. */
+/* BoxRGBA is declared before Pkt: the NOBITS storage keeps the original
+ * order, so the box color state must come first. */
 static short BoxRGBA[4];
 static XglPacket *Pkt;
 
 
-/* ov11:0x00a00168. Emits one textured sprite into Pkt. The sprite
- * descriptor gives the texture position (u, v), its size, two words for
- * the texture setup and a mode; the mode picks one of four texture-setup
- * words (modes 1 and 3 also double the v coordinate). Then the four
- * corners of rect (x, y, width, height) go out as UV and XYZ pairs with
- * the screen origin offset and z = 0x80. Not sure of the GS
- * register meaning of the four setup words. */
+/* Emits one textured sprite into Pkt. The texture setup word is chosen by
+ * tex->format (formats 1 and 3 also double the v coordinate). Then the four
+ * corners of pos (x, y, width, height) go out as UV and XYZ pairs with the
+ * screen origin offset and z = 0x80. */
 static void MakeSprite(const struct SpriteTex *tex, const struct SpriteRect *pos)
 {
     Ov11GifTag tex_tag = spriteTextureGifTag;
@@ -387,10 +386,10 @@ static void MakeSprite(const struct SpriteTex *tex, const struct SpriteRect *pos
 }
 
 
-/* ov11:0x00a004d0. Builds the GS draw-state packet: it writes TEST_1,
- * TEX1_1 and CLAMP_1 with fixed values, then ALPHA_1 with a value chosen by
- * mode (0..6; modes 5 and 6 put the second argument in the upper word,
- * anything else writes 0), i.e. mode selects the blend. */
+/* Builds the GS draw-state packet: it writes TEST_1, TEX1_1 and CLAMP_1
+ * with fixed values, then ALPHA_1 with a value chosen by mode (0..6). Modes
+ * 5 and 6 put arg in the upper word; the other modes use a fixed value, and
+ * the default writes 0. */
 static void SetDrawStatus(int mode, int arg)
 {
     Ov11GifTag tag = drawStatusGifTag;
@@ -454,6 +453,7 @@ static void SetRegAD(XglPacket *packet, int reg, int value)
     sceVif1PkCloseDirectCode(packet);
 }
 
+/* Sets all four BoxRGBA components to 0x80. */
 static void ResetRGBA(void)
 {
     int index;
@@ -465,11 +465,9 @@ static void ResetRGBA(void)
     }
 }
 
-/* ov11:0x00a007e0. Stores the four caller-supplied components in the
- * shared untextured box color state (original LOCAL data symbol
- * BoxRGBA, ov11:0x00a0df78). */
 static short BoxRGBA[4];
 
+/* Stores the four components in BoxRGBA, the untextured box color state. */
 static void SetRGBA(short red, short green, short blue, short alpha)
 {
     BoxRGBA[0] = red;
@@ -558,9 +556,9 @@ static struct SpriteTex BGTEST_Tex  = {0, 0, 511, 447, 0, 1136, 0};
 static struct SpriteRect BGTEST_Rect  = {0, 0, 512, 448};
 static int flg_104  = 0;
 
-/* Four GS XYZ vertices for an untextured box. Coordinates use 12.4
- * fixed point around the casino's drawing origin;
- * the upper word supplies Z = 1. */
+/* Fills BoxPOS with the four GS XYZ vertices of a box at (x, y), sized
+ * width by height. Coordinates use 12.4 fixed point around the casino drawing
+ * origin; Z = 1 sits in the upper word. */
 
 static void MakeBoxPos(int x, int y, int width, int height)
 {
@@ -583,9 +581,7 @@ static void MakeBoxPos(int x, int y, int width, int height)
 }
 
 
-/* ov11:0x00a00878. Draws a filled box as a GS packet: MakeBoxPos builds
- * the corner positions, then four colour+position pairs are written using
- * the current box colour. */
+/* Draws a filled box at (x, y) as a GS packet, colored by BoxRGBA. */
 static void DrawNonTextureBox(XglPacket *packet, int x, int y, int width, int height)
 {
     Ov11GifTag tag = nonTextureBoxGifTag;
@@ -617,14 +613,9 @@ static void DrawNonTextureBox(XglPacket *packet, int x, int y, int width, int he
     sceVif1PkCloseDirectCode(packet);
 }
 
-/* Casino settings, prize text/costs and coin-purchase offers from CASINO.res.
- * Original RES_* symbols: slus-20469-412d448de315 / ov11:0x00a00998..0x00a00a58.
- * See reports/readability-semantics.md for asset/consumer evidence.
- *
- * All eight are LOCAL symbols in the original overlay, so they have internal
- * linkage and are defined `static` here. The compiled object binds them the
- * same way, which is what the linked comparison checks alongside the bytes.
- */
+/* Accessors for the settings in CASINO.res (loaded by RES_Load): debug flag,
+ * bonus and reel timing, prize text and cost, coin offers and sound effects.
+ * All are file-local. */
 
 static int RES_IsDebugMode(void)
 {
@@ -688,8 +679,8 @@ static void RES_SoundEffectStop(int soundId)
     xglSoundEffectStopDirect(soundEffectId);
 }
 
-/* ov11:0x00a00af0. Loads the casino resource table (CASINO.res) into the
- * fixed asset staging address and records it as ResData. */
+/* Loads the casino resource table (CASINO.res) into CASINO_RES_BUFFER and
+ * points ResData at it. */
 static const char casinoResPath[] = "data\\tanaka\\CASINO.res";
 
 static void RES_Load(void)
@@ -698,7 +689,8 @@ static void RES_Load(void)
     ResData = CASINO_RES_BUFFER;
 }
 
-
+/* Adds amount to the coin balance. The part above CASINO_COIN_MAX goes to
+ * dataMoneyBoxInc (times 8) instead. Returns 1. */
 static int AddCoin(int amount)
 {
     struct CasinoSaveWork *save;
@@ -717,7 +709,9 @@ static int AddCoin(int amount)
     return 1;
 }
 
-
+/* Returns the picture on reel `reel` at cell offset `positionOffset` from the
+ * stop position, wrapping around the strip. `row` selects the table entry
+ * realpt[reel + row * 3]. */
 static short SlGetPic(int reel, int positionOffset, int row)
 {
     int position;
@@ -738,11 +732,11 @@ static short SlGetPic(int reel, int positionOffset, int row)
 }
 
 
-/* ov11:0x00a00c10. Draws the three slot reels: wraps each reel position
- * (Gwork.slot.reel_pos) back by 0x540 when it passes 0x540, then for each reel
+/* Draws the three slot reels: wraps each reel position (Gwork.slot.reel_pos)
+ * back by SLOT_REEL_LENGTH when it passes that value, then for each reel
  * draws six picture cells (SlGetPic for the current row) scrolled by the
  * position, then the three reel windows and a dark box over the lower
- * area. Not sure what the box is for. */
+ * area. */
 static void SlRealDraw(void)
 {
     struct SpriteRect rect;
@@ -780,7 +774,7 @@ static void SlRealDraw(void)
 /* The double 10.0, as the raw 64-bit value the soft-float helpers take. */
 #define DOUBLE_TEN 0x4024000000000000ULL
 
-/* ov11:0x00a00de0. Prints value in decimal with 16x24 digit sprites from
+/* Prints value in decimal with 16x24 digit sprites from
  * decfont, right-aligned at x and moving left. A negative digits count
  * means as many digits as value needs (at most 11, found by comparing
  * against powers of ten); zero digits still draws one zero. */
@@ -830,9 +824,8 @@ static void SlCashPrint(void)
     decprint(slotPayoutAmount, -1, 448, 373);
 }
 
-/* ov11:0x00a00fb0. Slot: prints the five per-line pay amounts with
- * decprint at five fixed screen positions (a 20-byte position table copied
- * to the stack). */
+/* Slot: prints the five per-line pay amounts with decprint at five fixed
+ * screen positions (a 20-byte position table copied to the stack). */
 static void pay_print(XglPacket *packet)
 {
     struct PayLayout layout = linePayPositionTable;
@@ -843,14 +836,14 @@ static void pay_print(XglPacket *packet)
     }
 }
 
-/* ov11:0x00a01060. Draws the three-digit slot total stake at its fixed
- * screen position through decprint. */
-
+/* Draws the three-digit slot total stake at its fixed screen position
+ * through decprint. */
 static void total_pay_print(XglPacket *packet)
 {
     decprint(slotTotalPay, 3, 0x1DC, 0x1B);
 }
 
+/* Returns 1 while any slot reel is spinning, otherwise 0. */
 static int check_mode(void)
 {
     int index;
@@ -875,7 +868,8 @@ static void SlPayWindowPrint(void)
     }
 }
 
-
+/* Returns 0 when no reel is spinning, 1 on the frame a spin starts, and 2
+ * while the spin continues. Tracks the previous result in status_keep_5. */
 static int check_spin(void)
 {
     int active;
@@ -894,9 +888,8 @@ static int check_spin(void)
 }
 
 
-/* ov11:0x00a011b0. Slot: draws the spin button. The sprite comes from
- * check_spin()'s result plus a push counter (pushcnt_7); not sure of the
- * exact meaning of the counter. */
+/* Slot: draws the spin button. Its sprite follows check_spin()'s result and
+ * the push counter pushcnt_7. */
 static void SpinBtnPrint(void)
 {
     int index;
@@ -930,8 +923,8 @@ static void SpinBtnPrint(void)
 }
 
 
-/* ov11:0x00a01278. Slot: draws the three stop-button sprites, choosing
- * each texture from that reel's state (1, 2 or anything else). */
+/* Slot: draws the three stop-button sprites, choosing each texture from that
+ * reel's state (spinning, stopping or anything else). */
 static void SlStopBtnPrint(void)
 {
     int i;
@@ -954,7 +947,7 @@ static void SlStopBtnPrint(void)
 }
 
 
-/* ov11:0x00a01330. Prints value in decimal with 12x16 digit sprites from
+/* Prints value in decimal with 12x16 digit sprites from
  * DeciList_9 starting at x and moving left by w per digit, at height y.
  * The digit count is as many as value needs (at most 11); zero still
  * draws one zero. */
@@ -998,12 +991,10 @@ static void SlDecPrintSmall(int x, int y, int w, int value)
 }
 
 
-/* ov11:0x00a014b8. Draws the slot pay-rate table: six symbol pictures from
- * PicTable at the pos_10 positions, a seventh narrower one, six OptionText
- * labels from fixed rectangles, then the six rates (double_rate_12 when
- * Gwork.slot.double_pay is set, otherwise rate_11) with SlDecPrintSmall.
- * Not sure what the labels say or what SlDecPrintSmall's third argument
- * means. */
+/* Draws the slot pay-rate table: six symbol pictures from PicTable at the
+ * pos_10 positions, a seventh narrower one, six OptionText labels from fixed
+ * rectangles, then the six rates (double_rate_12 when Gwork.slot.double_pay
+ * is set, otherwise rate_11) with SlDecPrintSmall. */
 static void SlRateTableDraw(void)
 {
     struct SpriteRect rect;
@@ -1043,14 +1034,13 @@ static void SlRateTableDraw(void)
 }
 
 
-/* ov11:0x00a01750. Draws the slot result screen. For every pay line with a
- * prize it draws the three reel pictures (Pic_13), the prize and the
- * line's stake with SlDecPrintSmall, adds prize times stake to the total,
- * and either draws a label for the line's kind (OptionText 1, 2 or 0 for
- * kinds 1, 2, 3) or prints the line payout; rows move down 0x14 per
- * winning line. It then draws the total, and lights the winning pay lines
- * on the 3x3 grid (linetex_15 at linerect_16 positions). Not sure which
- * game labels the kinds stand for. */
+/* Draws the slot result screen. For every pay line with a prize it draws the
+ * three reel pictures (Pic_13), the prize and the line's stake with
+ * SlDecPrintSmall, adds prize times stake to the total, and either draws a
+ * label for the line's kind (OptionText 1, 2 or 0 for kinds 1, 2, 3) or
+ * prints the line payout; rows move down 0x14 per winning line. It then draws
+ * the total, and lights the winning pay lines on the 3x3 grid (linetex_15 at
+ * linerect_16 positions). */
 static void SlResultDraw(void)
 {
     int lit[9];
@@ -1066,6 +1056,7 @@ static void SlResultDraw(void)
     SetDrawStatus(3, 0);
     y = 0x125;
     total = 0;
+    /* One row per winning line, moving down the result list. */
     for (i = 0; i < 5; i++) {
         line = &Gwork.slot.line[i];
         if (line->prize != 0) {
@@ -1107,6 +1098,7 @@ static void SlResultDraw(void)
     rect = resultTotalLabelRect;
     MakeSprite(&Total_14, &rect);
     SlDecPrintSmall(0x119, 0x19D, 0xC, total);
+    /* Clear the 3x3 grid flags, then mark the cells of each winning line. */
     for (i = 8; i >= 0; i--) {
         lit[i] = 0;
     }
@@ -1145,13 +1137,12 @@ static void SlResultDraw(void)
 }
 
 
-/* ov11:0x00a01a90. Draws the bonus banner. Text_17[1] shows while the
- * prize doubling is on without the bonus, Text_17[2] while the bonus is
- * on, and Text_17[0] when neither is. With either one on, the time bar
- * (Bar_18, then TimeBar_19 scaled by the remaining bonus time over
- * RES_GetBonusTime) is drawn and the bonus time counts down on idle
- * frames; at zero it restarts when the slot state is nonzero, otherwise
- * it raises event 7. */
+/* Draws the bonus banner. Text_17[1] shows while the prize doubling is on
+ * without the bonus, Text_17[2] while the bonus is on, and Text_17[0] when
+ * neither is. With either one on, the time bar (Bar_18, then TimeBar_19 scaled
+ * by the remaining bonus time over RES_GetBonusTime) is drawn and the bonus
+ * time counts down while no event is pending; at zero it resets to 1 while the
+ * slot state is not idle, otherwise it raises event 7. */
 static void SlModePrint(void)
 {
     struct SpriteRect rect;
@@ -1200,10 +1191,9 @@ static void SlGuidPrint(int index)
     seq_21 = seq_21 % 10;
 }
 
-/* ov11:0x00a01d20. Slot pay-line pointer. check_mode() 0 draws the guide
- * at Gwork.slot.guide; 1 draws it at Gwork.slot.pointer + 5 and right /
- * left (newly pressed) step the pointer forward / back (wrapping within
- * 0..2) with a sound. Not sure what the pointer is for in game terms. */
+/* Slot pay-line pointer. check_mode() 0 draws the guide at Gwork.slot.guide;
+ * 1 draws it at Gwork.slot.pointer + 5, and right / left step the pointer
+ * forward / back (wrapping within 0..2) with a sound. */
 static void point_control(XglPacket *packet)
 {
     switch (check_mode()) {
@@ -1230,11 +1220,8 @@ static void point_control(XglPacket *packet)
     }
 }
 
-/* ov11:0x00a01e28. Configures background draw state, then emits the fixed
- * slot background sprite built from BoxRect (ov11:0x00a0a0e0) into BoxSpr
- * (ov11:0x00a0a0c0). */
-
-
+/* Sets the background draw state, then draws the slot background sprite
+ * BoxSpr at BoxRect. */
 static void SlBgDraw(XglPacket *packet)
 {
     SetDrawStatus(3, 0);
@@ -1244,19 +1231,19 @@ static void SlBgDraw(XglPacket *packet)
      * compiles a trailing call like that as a sibling jump; the original
      * keeps a real jal plus the shared epilogue (ld $31/jr $31). Wrapping
      * only this call in do{}while(0) defeats the sibcall pass instead
-     * (CP-0288, config/compiler-patterns.json). */
+     */
     do {
         MakeSprite(&BoxSpr, &BoxRect);
     } while (0);
 }
 
 
-/* Measured: SlCoinEntry's last loop only matches with the work addressed as
- * a struct SlotWork at each use; a pointer variable or the Gwork.slot member
- * path changes its register allocation and induction variables. */
+/* The slot work is addressed as a struct SlotWork at each use: a pointer
+ * variable or the Gwork.slot member path changes the register allocation and
+ * induction variables of SlCoinEntry's last loop. */
 #define SLOT_WORK ((struct SlotWork *)&Gwork)
 
-/* ov11:0x00a01e68. Stake entry on the slot idle screen. Up / down move the
+/* Stake entry on the slot idle screen. Up / down move the
  * pay line (Gwork.slot.guide, wrapping within 0..4); right / left (with
  * auto-repeat) raise or lower that line's stake step (0..3) while the
  * total stays below the coin balance; any other button toggles the help
@@ -1319,13 +1306,11 @@ static void SlCoinEntry(void)
 /* The slot picture that counts as any other on a pay line (SlPrizeCheck). */
 #define SLOT_PIC_WILD 6
 
-/* ov11:0x00a02068. Scores one slot pay line. A line of three equal
- * pictures pays in full; picture 6 acts as a wild card (two equal pictures
- * plus a 6, or two 6s) and pays half, rounded up. The picture number then
- * selects the prize (5, 10, 20, 20, 1, 30, 0 or 30) and a kind (1, 2 or 3
- * for some pictures, otherwise 0); Gwork.slot.double_pay doubles the
- * prize. Not sure of the in-game picture names or what the kind values
- * mean. */
+/* Scores one slot pay line. A line of three equal pictures pays in full;
+ * picture 6 acts as a wild card (two equal pictures plus a 6, or two 6s) and
+ * pays half, rounded up. The picture number then selects the prize (5, 10, 20,
+ * 20, 1, 30, 0 or 30) and a kind (1, 2 or 3 for some pictures, otherwise 0);
+ * Gwork.slot.double_pay doubles the prize. */
 static void SlPrizeCheck(int index)
 {
     struct SlotLine *line;
@@ -1401,18 +1386,14 @@ static void SlPrizeCheck(int index)
     }
 }
 
-/* The three reel cells read for each of the five pay lines (pat_22): the
- * reel and the cell offset passed to SlGetPic. The dprintf formats are
- * "line %d [%d,%d,%d]\n", "prize = %d [%d]\n" and "paid = %d\n"
- * (lineCheckFormat, prizeCheckFormat, paidCheckFormat). */
-
-/* ov11:0x00a02260. Reads the three pictures of each pay line (pat_22),
- * then scores every line that has a stake (SlPrizeCheck), adds its prize
- * times the stake to the payout and keeps the highest kind 1-3. With a
- * payout, that kind becomes the slot event, or sound 0x42 plays when there
- * is none. The dprintf calls are the original's debug output. The second
- * read of the kind after its dprintf (kind and prize_kind) is what gives
- * the original's load and store order. */
+/* Reads the three pictures of each pay line (pat_22: the reel and the cell
+ * offset passed to SlGetPic), then scores every line that has a stake
+ * (SlPrizeCheck), adds its prize times the stake to the payout and keeps the
+ * highest kind 1-3. With a payout, that kind becomes the slot event, or
+ * CASINO_SE_SLOT_WIN_NO_EVENT plays when there is none. The dprintf calls
+ * print the picks, prizes and paid total (lineCheckFormat, prizeCheckFormat,
+ * paidCheckFormat). The second read of the kind after its dprintf (kind and
+ * prize_kind) is what gives the original's load and store order. */
 static void SlLineCheck(void)
 {
     int i;
@@ -1438,6 +1419,7 @@ static void SlLineCheck(void)
 
         dprintf(lineCheckFormat, i, pic[0], pic[1], pic[2]);
     }
+    /* Score each line that has a stake and keep the best kind. */
     best = 0;
     for (i = 0; i < 5; i++) {
         struct SlotLine *ln = &Gwork.slot.line[i];
@@ -1476,8 +1458,7 @@ static void SlLineCheck(void)
     dprintf(paidCheckFormat, Gwork.slot.payout);
 }
 
-/* ov11:0x00a02460. Runs the complete slot line evaluation and reports
- * whether the resulting payout is nonzero. */
+/* Runs the slot line evaluation and returns 1 when the payout is nonzero. */
 
 
 static int check_real(void)
@@ -1488,11 +1469,10 @@ static int check_real(void)
 
 static void GameModeChange(int mode);
 
-/* ov11:0x00a02488. Payout handler. When Gwork.slot.start_nine_game is
- * set it switches to the nine-game and stops the payout sound;
- * otherwise pressing circle pays the pending coins at once, else one coin per
- * frame while the pending amount counts down. Not sure of the exact game
- * wording. */
+/* Payout handler. When Gwork.slot.start_nine_game is set it switches to the
+ * nine-game and stops the payout sound; otherwise pressing circle pays the
+ * pending coins at once, else one coin per frame while the pending amount
+ * counts down. */
 static int paid_action(void)
 {
     if (Gwork.slot.start_nine_game == 1) {
@@ -1526,6 +1506,9 @@ static int paid_action(void)
     return 0;
 }
 
+/* Walks the lines in linePayCheckOrderTable order with a running total of
+ * line_pay. A line that takes the total above the coin balance has its line_pay
+ * and line_bet cleared. */
 static void linepay_check(void)
 {
     struct W22LineIds ids = linePayCheckOrderTable;
@@ -1535,10 +1518,9 @@ static void linepay_check(void)
     int sum = 0;
     int *p = ids.index;
     int count = 4;
-    /* Measured: the addresses of line_pay[line] (SlotWork +0x56) and
-     * line_bet[line] (+0x60) must stay two separate sums off the work base;
-     * a member path or a struct pointer folds them into one register and
-     * changes the schedule. */
+    /* The addresses of line_pay[line] (SlotWork +0x56) and line_bet[line]
+     * (+0x60) must stay two separate sums off the work base; a member path or
+     * a struct pointer folds them into one register and changes the schedule. */
     do {
         int offset = (*p) * 2;
         int scoreoff = offset + 80;
@@ -1551,14 +1533,15 @@ static void linepay_check(void)
 }
 
 
-/* ov11:0x00a02630. Slot input handler, by Gwork.slot.state. Idle (0):
- * cross leaves to the menu; otherwise it runs SlCoinEntry, and circle
- * with a stake starts a spin (help off, pointer and reels reset to
- * spinning, the stake taken from the coin balance, sound 0x22). Spinning
- * (1): circle stops the reel under the pointer, a stopped reel slides on
- * by 0x10 per frame until it can snap to the next 64-pixel cell, and once
- * all three are still the result is checked (check_real, linepay_check).
- * Result (2): runs paid_action. A stop moves the pointer to the next reel. */
+/* Slot input handler, by Gwork.slot.state. Idle (SLOT_STATE_IDLE): cross
+ * leaves to the menu; otherwise it runs SlCoinEntry, and circle with a stake
+ * starts a spin (help off, pointer and reels reset to spinning, the stake
+ * taken from the coin balance, spin sound). Spinning (SLOT_STATE_SPINNING):
+ * circle stops the reel under the pointer, a stopping reel moves 0x10 per
+ * frame until it is within 0x11 of the next 64-pixel cell and snaps onto it,
+ * and once all three are stopped the result is checked (check_real,
+ * linepay_check). Payout (SLOT_STATE_PAYOUT) runs paid_action. A stop moves
+ * the pointer to the next reel. */
 static void slot_key(void)
 {
     int i;
@@ -1619,6 +1602,7 @@ static void slot_key(void)
                 break;
             }
         }
+        /* All three reels are stopped: evaluate the result. */
         if (stopped == 3) {
             if (check_real() == 0) {
                 Gwork.slot.state = SLOT_STATE_IDLE;
@@ -1643,16 +1627,16 @@ static void slot_key(void)
 }
 
 
-/* ov11:0x00a02938. Slot win banner animation, one step per call. Mode 0
+/* Slot win banner animation, one step per call. Mode 0
  * loads the banner sprite (its v offset chosen by kind 1-4), resets the
  * counters and plays sound 0x28. Mode 1 shrinks the width towards 0x140
  * and grows the height to 0x40, keeping the banner centred on (0x100,
  * 0x90). Mode 2 holds for 16 more calls. Mode 3 shrinks the width to 0
  * while stretching the height to 0x800, then returns 0 and goes back to
- * mode 0. Otherwise it draws the banner and returns 1. Not sure what the
- * four kinds are. */
+ * mode 0. Otherwise it draws the banner and returns 1. */
 static int SlPrizeEffect(int kind)
 {
+    /* Steps the prize banner through the state in mode_24. */
     switch (mode_24) {
     case 0:
         tex_28 = prizeEffectTexDefault;
@@ -1739,15 +1723,14 @@ static int SlPrizeEffect(int kind)
 }
 
 
-/* ov11:0x00a02d28. Slot reel-change animation, one step per call
+/* Slot reel-change animation, one step per call
  * (mode_33). Mode 0 resets the three panels with staggered delays. Mode 1
  * grows each panel to 0xC4 once its delay runs out (sound 0x29 when one
  * fills) and draws it. Mode 2 holds the full panels for 31 calls, then
  * picks the new reel row: 0 without a bonus, otherwise a random row 1-5
  * different from the current one. Mode 3 shrinks the panels. Mode 4 clears
  * or sets the bonus state (setting the bonus time from RES_GetBonusTime),
- * returns 0 and starts over. Returns 1 while the animation runs. Not sure
- * of the in-game meaning of the bonus state. */
+ * returns 0 and starts over. Returns 1 while the animation runs. */
 static int SlChangeRealEffect(int bonus)
 {
     struct SpriteRect rect;
@@ -1756,6 +1739,7 @@ static int SlChangeRealEffect(int bonus)
     int i;
     unsigned int number;
 
+    /* Panels grow (1), hold (2) and shrink (3); mode 4 applies the bonus state. */
     switch (mode_33) {
     case 0:
         for (i = 0; i < 3; i++) {
@@ -1858,14 +1842,13 @@ static int SlChangeRealEffect(int bonus)
 }
 
 
-/* ov11:0x00a03150. Runs the current slot event (Gwork.slot.event), one step
- * per call. Events 1-4 run the win banner (SlPrizeEffect with the event as
- * its kind) and then: 1 and 4 move on to events 6 and 5; 2 turns on double
- * pay with a bonus time and sound 0x2B; 3 sets Gwork.slot.start_nine_game and plays
- * sound 0x2C. Event 5 just ends. Events 6 and 7 run the reel-change
- * animation with and without a bonus, then end with sounds 0x2A and 0x2D.
- * Returns 0 when idle (no event and busy_35 clear), otherwise 1. Not sure
- * of the in-game names of the events. */
+/* Runs the current slot event (Gwork.slot.event), one step per call. Events
+ * 1-4 run the win banner (SlPrizeEffect with the event as its kind) and then:
+ * 1 and 4 move on to events 6 and 5; 2 turns on double pay with a bonus time
+ * and plays sound 0x2B; 3 sets Gwork.slot.start_nine_game and plays sound
+ * 0x2C. Event 5 just ends. Events 6 and 7 run the reel-change animation with
+ * and without a bonus, then end with sounds 0x2A and 0x2D. Returns 0 when idle
+ * (no event and busy_35 clear), otherwise 1. */
 static int SlEvent(int event)
 {
     if (busy_35 == 0) {
@@ -1919,9 +1902,8 @@ static int SlEvent(int event)
 }
 
 
-/* ov11:0x00a032c0. Slot help screen: uploads the help texture (0x0110A000)
- * and draws it as one sprite from the slotHelpTex descriptor and slotHelpRect
- * rectangle. Not sure what the help image shows. */
+/* Slot help screen: uploads the help texture (SLOT_HELP_TEX_BUFFER) and draws
+ * it as one sprite from the slotHelpTex descriptor and slotHelpRect rectangle. */
 static void SlHelpMode(void)
 {
     struct SpriteTex tex = slotHelpTex;
@@ -1934,13 +1916,12 @@ static void SlHelpMode(void)
 }
 
 
-/* ov11:0x00a03380. Slot main loop. Fetches the current packet, then draws
+/* Slot main loop. Fetches the current packet, then draws
  * in order: the reels (SlRealDraw), cash, pay amounts and total stake, the
  * slot_1 background, the spin/stop/mode buttons and the pointer, the pay
- * window, and either the rate table or the result (Gwork.slot.state == 2
- * picks the result). Then runs SlEvent on Gwork.slot.event and, when it
- * returns 0, slot_key, and shows the help screen when Gwork.slot.help is
- * 1. Not sure of the exact game wording. */
+ * window, and either the rate table or the result (SLOT_STATE_PAYOUT picks
+ * the result). Then runs SlEvent on Gwork.slot.event and, when it returns 0,
+ * slot_key, and shows the help screen when Gwork.slot.help is 1. */
 static void slot_main(void)
 {
     Pkt = xglPacketGetCurrent();
@@ -1973,7 +1954,7 @@ static void slot_main(void)
     }
 }
 
-/* ov11:0x00a034d8. Loads the five slot-machine texture resources into their
+/* Loads the five slot-machine texture resources into their
  * fixed rendering buffers through the resource loader. */
 static const char slot1TexturePath[] = "data\\tanaka\\slot_1.xtx";
 static const char slot2TexturePath[] = "data\\tanaka\\slot_2.xtx";
@@ -1990,6 +1971,8 @@ static void init_slot(void)
     xglCdReadFile(slotHelpTexturePath, SLOT_HELP_TEX_BUFFER, 0, 0);
 }
 
+/* Draws the nine-game time bar. The time is capped at 900 and scales the bar
+ * width up to 188 pixels. */
 static void NgTimePrint(int time)
 {
     struct SpriteRect rect = ngTimeBarRect;
@@ -2000,15 +1983,13 @@ static void NgTimePrint(int time)
 }
 
 
-/* ov11:0x00a03610. Draws the pending nine-reel payout at its fixed screen
- * position, multiplied by the current power-of-two streak factor. pow
- * (main/tu284) computes the streak factor; litodp and dptoli (main/tu330,
- * main/tu331) are this compiler's own int<->double conversion routines.
- * They pass a double as a raw 64-bit value in an integer register (this
- * target has no hardware double support); a genuinely double-typed call
- * chain here schedules the calls' delay slots differently from the
- * original bytes, so the encoded form is required. DOUBLE_TWO is the
- * IEEE-754 double-precision encoding of the literal 2.0. */
+/* Draws the pending nine-reel payout at its fixed screen position, multiplied
+ * by the current power-of-two streak factor. pow computes the streak factor;
+ * litodp and dptoli convert between int and double. They pass a double as a
+ * raw 64-bit value in an integer register (this target has no hardware double
+ * support); a genuinely double-typed call chain here schedules the calls'
+ * delay slots differently from the original bytes, so the encoded form is
+ * required. DOUBLE_TWO is the IEEE-754 double-precision encoding of 2.0. */
 #define DOUBLE_TWO 0x4000000000000000ULL
 
 
@@ -2018,7 +1999,7 @@ static void NgPaidPrint(void)
 }
 
 
-/* ov11:0x00a03668. Nine-game: draws the "gets down" button. A non-negative
+/* Nine-game: draws the "gets down" button. A non-negative
  * argument restarts the countdown count_39; the sprite is picked from
  * three textures by the sign of the countdown, which then counts down and
  * wraps to -1 at zero. */
@@ -2047,7 +2028,7 @@ static void NgGetsDownBtnPrint(int button)
 }
 
 
-/* ov11:0x00a03710. Nine-game: same shape as NgGetsDownBtnPrint, for the
+/* Nine-game: same shape as NgGetsDownBtnPrint, for the
  * spin button (spinbt, count_41). */
 static void NgSpinBtnPrint(int button)
 {
@@ -2073,7 +2054,7 @@ static void NgSpinBtnPrint(int button)
     }
 }
 
-/* ov11:0x00a037b8. Nine-game lamp row: draws one RateLamp_Rect cell per
+/* Nine-game lamp row: draws one RateLamp_Rect cell per
  * counted streak level with pay_window[1], then the cell after them with
  * pay_window[anm_42 % 2], and advances anm_42. Nothing is drawn while the
  * counter is negative or the guide is 2. */
@@ -2093,7 +2074,7 @@ static void NgLamp(void)
     anm_42++;
 }
 
-/* ov11:0x00a038c0. Selects the loaded nine-game slot background texture
+/* Selects the loaded nine-game slot background texture
  * (SLOT_2_TEX_BUFFER, the "slot_2.xtx" buffer init_slot fills), sets the
  * packet's GS register write and draw state, then emits the fixed
  * nine-game background sprite. */
@@ -2108,6 +2089,7 @@ static void NineGameBG_Draw(void)
 
 static void NgStopGuidPt(void);
 
+/* Draws the guide point for the reel at Gwork.nine.mode and advances seq_45. */
 static void NgStopGuidPt(void)
 {
     struct SpriteRect rect;
@@ -2120,7 +2102,7 @@ static void NgStopGuidPt(void)
     seq_45 = seq_45 + 1;
 }
 
-/* ov11:0x00a039b0. Nine-game cursor: moves Gwork.nine.mode on to the next
+/* Nine-game cursor: moves Gwork.nine.mode on to the next
  * reel after it that is still running (state 0); if there is none, wraps
  * to the first running reel from 0 up to the old cursor; if there is none
  * at all, the cursor goes to the gets-down button (10). */
@@ -2152,7 +2134,7 @@ static void NgFwdGuidPt(void)
 }
 
 
-/* ov11:0x00a03a80. Nine-game: draws the nine reel stop buttons. Each
+/* Nine-game: draws the nine reel stop buttons. Each
  * button sits at its stopbtn_pos_47 position, 16 by 24, and its texture
  * comes from the reel's state (0: stopbt[0], 1 or 3: stopbt[2], 2:
  * stopbt[1]); other states keep the previous texture. */
@@ -2190,6 +2172,8 @@ static void NgStopBtnPrint(void)
 }
 
 
+/* Sets the status of every reel whose stored status is 0 to 3 (forced stop)
+ * and stops sound effect 47. */
 static void NgAllStop(void)
 {
     int forced_stop;
@@ -2209,7 +2193,7 @@ static void NgAllStop(void)
 }
 
 
-/* ov11:0x00a03be0. Nine-game: looks up the reel's result in ng_realtbl for
+/* Nine-game: looks up the reel's result in ng_realtbl for
  * its current position; a hit (== 1) bumps the counter, otherwise it stops
  * all reels and resets the counter, amount and mode (10). */
 static void NgCheckReal(int index)
@@ -2232,7 +2216,7 @@ static void NgCheckReal(int index)
     }
 }
 
-/* ov11:0x00a03ca0. Returns the 28-byte sprite descriptor of one reel's
+/* Returns the 28-byte sprite descriptor of one reel's
  * shape: the reel's index table in ng_realtbl picks the entry of
  * NgReal_Tex_48, with the shape number wrapped into 0..20. */
 
@@ -2247,7 +2231,7 @@ static struct SpriteTex get_ngreal_shape(int reel, int shape)
     return NgReal_Tex_48[selected];
 }
 
-/* ov11:0x00a03d58. Nine-game reel panel: splits the reel position into
+/* Nine-game reel panel: splits the reel position into
  * 48-pixel cells and draws the visible panel pieces from the shape table
  * NgReal_49 (x, y per reel index) and the sprites of get_ngreal_shape. */
 
@@ -2286,10 +2270,9 @@ static void DrawNgPanel(int index, int y, int x)
 }
 
 
-/* ov11:0x00a03eb0. Nine-game: draws the nine reel panels, then advances
- * each reel's state machine (+12 per frame, finishing when the remaining
- * distance runs out, wrapping at 0x3F0). Not sure of the exact game
- * wording. */
+/* Nine-game: draws the nine reel panels, then advances each reel's state
+ * machine (+12 per frame, finishing when the remaining distance runs out,
+ * wrapping at 0x3F0). */
 static void NgReal(void)
 {
     int i;
@@ -2323,7 +2306,7 @@ static void NgReal(void)
 }
 
 
-/* ov11:0x00a03fc0. Nine-game: scales the pending amount by 2^counter with
+/* Nine-game: scales the pending amount by 2^counter with
  * the double helpers, clears the counter, redraws the gets-down button and
  * stops all reels. */
 static void NgGame_GetsDown(void)
@@ -2333,7 +2316,7 @@ static void NgGame_GetsDown(void)
     Gwork.nine.guide = 2;
     scale = pow(2.0, litodp(Gwork.nine.counter));
     /* Empty loop: GCC 2.96 does not schedule across loop notes, which keeps
-     * the original instruction order here (as in act_2.c). */
+     * the original instruction order here. */
     do { } while (0);
     Gwork.nine.payout = dptoli(dpmul(litodp(Gwork.nine.payout), scale));
     Gwork.nine.counter = 0;
@@ -2342,10 +2325,9 @@ static void NgGame_GetsDown(void)
 }
 
 
-/* ov11:0x00a04040. Nine-game select handler: up/down toggles the cursor
- * between the spin (9) and gets-down (10) buttons, circle starts the spin
- * or the gets-down action, and the shoulder, face, select and start buttons
- * toggle the flag. Not sure what the flag shows. */
+/* Nine-game select handler: up/down toggles the cursor between the spin (9)
+ * and gets-down (10) buttons, circle starts the spin or the gets-down action,
+ * and the shoulder, face, select and start buttons toggle the flag. */
 static void NgGame_Select(void)
 {
     int i;
@@ -2401,13 +2383,12 @@ enum NgCursorMove {
     NG_MOVE_DOWN
 };
 
-/* ov11:0x00a04188. Nine-game input: the direction buttons (auto-repeat
- * word) move the cursor (Gwork.nine.mode) through ptmove_50, cross jumps to
+/* Nine-game input: the direction buttons (auto-repeat) move the cursor (Gwork.nine.mode) through ptmove_50, cross jumps to
  * the gets-down button (10), and circle acts on the cursor: on a reel that
  * is still running (state 0) it starts the stop (state 2, remaining = 96
  * minus position % 48) and moves the cursor on (NgFwdGuidPt); on 10 it
- * takes the winnings (NgGame_GetsDown). The case range is what gives the
- * original's compare order (below 0, below 9, equal to 10). */
+ * takes the winnings (NgGame_GetsDown). Cursor positions 0-8 are the reels
+ * and 10 is the gets-down button. */
 static void NgGame_Key(void)
 {
     struct NineGameReel *reel;
@@ -2428,6 +2409,7 @@ static void NgGame_Key(void)
         Gwork.nine.mode = ptmove_50[Gwork.nine.mode][NG_MOVE_DOWN];
         RES_SoundEffect(0x2E);
     }
+    /* Cross jumps to the gets-down button; circle acts on the cursor. */
     if (PadData.canonical.half_2a & PAD_CROSS) {
         Gwork.nine.mode = 10;
         RES_SoundEffect(0x31);
@@ -2454,7 +2436,7 @@ static void NgGame_Key(void)
 }
 
 
-/* ov11:0x00a04360. Nine-game payout step: when nothing is left to pay it
+/* Nine-game payout step: when nothing is left to pay it
  * stops the payout sound, switches back to the slot game and clears
  * se_51; otherwise it starts the payout sound once and pays out coins, all
  * at once if circle is pressed and one per call otherwise. */
@@ -2483,7 +2465,7 @@ static void NgGame_Paid(void)
 }
 
 
-/* ov11:0x00a04410. Nine-game help screen: two textured sprites from fixed
+/* Nine-game help screen: two textured sprites from fixed
  * tables. */
 static void NgHelpMode(void)
 {
@@ -2500,13 +2482,12 @@ static void NgHelpMode(void)
 }
 
 
-/* ov11:0x00a04560. Nine-game main loop. Fetches the current packet and
+/* Nine-game main loop. Fetches the current packet and
  * draws the reels, paid amount, background, lamps, the two buttons, the
  * countdown (time_left), the stop buttons and the guide pointer. Then runs
  * the handler for the current guide state (0 select, 1 key, 2 paid); in
  * state 1 it counts time_left down and calls NgGame_GetsDown when it runs
- * out, and it shows the help screen when the flag is 1. Not sure of the
- * exact game wording. */
+ * out, and it shows the help screen when the flag is 1. */
 static void NineGameMain(void)
 {
     Pkt = xglPacketGetCurrent();
@@ -2544,10 +2525,9 @@ static void NineGameMain(void)
     }
 }
 
-/* ov11:0x00a046d0. Nine-game start-up: clears the counter and guide, sets
+/* Nine-game start-up: clears the counter and guide, sets
  * mode 9, resets all nine reels, then gives each reel a unique random
- * number in 0..19 (re-rolling on a duplicate) and redraws the two buttons.
- * Not sure of the exact game wording. */
+ * number in 0..19 (re-rolling on a duplicate) and redraws the two buttons. */
 static void init_ninegame(void)
 {
     int i;
@@ -2579,7 +2559,7 @@ static void init_ninegame(void)
 }
 
 
-/* ov11:0x00a04828. Poker: draws a coin counter, a frame sprite picked by
+/* Poker: draws a coin counter, a frame sprite picked by
  * mode and then the decimal digits of value right to left, 16 pixels apart
  * from x = 472 (a single 0 for a value below 1). The digit count comes from
  * comparing value with the powers of ten. */
@@ -2617,7 +2597,7 @@ static void PoMoneyPrint(int mode, int value)
 }
 
 
-/* ov11:0x00a04a08. Poker: draws the animated cursor at pos (x, y), a 24 by
+/* Poker: draws the animated cursor at pos (x, y), a 24 by
  * 24 rectangle, using the frame counter cnt_54 to pick one of the eight
  * PoCurTex frames, then advances the counter. */
 static void PoCurDraw(short *pos)
@@ -2636,7 +2616,7 @@ static void PoCurDraw(short *pos)
 }
 
 
-/* ov11:0x00a04ac8. Poker: draws a message window sized by the text length
+/* Poker: draws a message window sized by the text length
  * (left cap, right cap, middle) and prints the message. */
 static void PoWindowMessage(const char *message, int length)
 {
@@ -2659,12 +2639,11 @@ static void PoWindowMessage(const char *message, int length)
 
 static short PoGetBase(int cardValue);
 
-/* ov11:0x00a04be0. Poker yes/no style dialog. type 0 shows a two-choice
+/* Poker yes/no style dialog. type 0 shows a two-choice
  * window and any other type a three-choice window. Up moves the cursor
  * (dialog_cur_67) up with wraparound and down moves it down, both with a
  * sound; circle confirms (plays a sound, resets the cursor and returns the
- * chosen entry) and cross cancels (returns -1); otherwise it
- * returns 0. Not sure of the exact game wording. */
+ * chosen entry) and cross cancels (returns -1); otherwise it returns 0. */
 static int PoDialog(int type)
 {
     int limit;
@@ -2714,9 +2693,8 @@ static int PoDialog(int type)
     return 0;
 }
 
-/* ov11:0x00a04dc0. Selects the loaded poker table-1 background texture
- * (0x0138f000, the "poker_1.xtx" buffer PokerInit below fills as
- * POKER_TABLE1_TEX_BUFFER) and emits the fixed poker background sprite. */
+/* Selects the loaded poker table-1 background texture (POKER_TABLE1_TEX_BUFFER)
+ * and emits the fixed poker background sprite. */
 
 static void PoBgDraw(void)
 {
@@ -2728,7 +2706,7 @@ static void PoBgDraw(void)
 }
 
 
-/* ov11:0x00a04e20. Poker: for each of the four suits selects the card
+/* Poker: for each of the four suits selects the card
  * texture buffer and draws the held cards that fall in that suit's number
  * range. */
 static void PoCardDraw(void)
@@ -2754,13 +2732,13 @@ static void PoCardDraw(void)
 }
 
 
-/* ov11:0x00a04f60. Poker deal animation for all five cards at once, driven
- * by status_73. State 0 copies each card's slot rect and moves it up and
- * left by an amount that grows per card; state 1 draws the five card
+/* Poker deal animation for all five cards at once, driven by status_73.
+ * State 0 copies each card's slot rect and moves it up by 0xA0 plus 0x80 per
+ * card index; state 1 draws the five card
  * sprites, moves each down 0x20 per call (a sound plays when a card's y
  * reaches 5) until all five arrive, then switches to state 2 with a 4-call
  * hold; state 2 keeps drawing and, when the hold ends, resets to state 0
- * and returns 1. Otherwise returns 0. Not sure of the exact game wording. */
+ * and returns 1. Otherwise returns 0. */
 static int PoCardDrawAnime(void)
 {
     int i;
@@ -2809,14 +2787,13 @@ static int PoCardDrawAnime(void)
 }
 
 
-/* ov11:0x00a05180. Poker bonus card animation, one step per call, driven
- * by status_77 and the card index in Gwork.poker_deal.bonus_round. State 0 starts a card
- * sprite at the card's slot position moved up by 0xA0; state 1 draws it,
- * moves it down 0x20 per call (a sound plays at y == 5) until it reaches
- * the slot, then switches to state 2 with a 4-call hold; in state 2 it
- * keeps drawing and, when the hold runs out, sets that hand slot to 0x35
- * (face-down, not sure) and marks it selected, returning 1. Otherwise
- * returns 0. Not sure of the exact game wording. */
+/* Poker bonus card animation, one step per call, driven by status_77 and the
+ * card index in Gwork.poker_deal.bonus_round. State 0 starts a card sprite at
+ * the card's slot position moved up by 0xA0; state 1 draws it, moves it down
+ * 0x20 per call (a sound plays at y == 5) until it reaches the slot, then
+ * switches to state 2 with a 4-call hold; in state 2 it keeps drawing and,
+ * when the hold runs out, sets that hand slot to 0x35 (face-down) and marks it
+ * selected, returning 1. Otherwise returns 0. */
 static int PoBonusCardAnime(void)
 {
     int card;
@@ -2857,7 +2834,7 @@ static int PoBonusCardAnime(void)
     }
 }
 
-/* ov11:0x00a05358. Emits the single fixed poker payout table sprite. */
+/* Emits the single fixed poker payout table sprite. */
 
 static void PoRateTableDraw(void)
 {
@@ -2865,12 +2842,11 @@ static void PoRateTableDraw(void)
 }
 
 
-/* ov11:0x00a05380. Poker bonus-round background: draws the background
- * sprite, then pulses rate_84 up and down by 8 over a 16-frame cycle
- * (cnt_82, add_83). It draws one marker per bonus card so far
- * (Gwork.poker_deal.bonus_round) and then one pointer per card, the last with the pulsing blend
- * value and the others with 0x30. Not sure what the markers and pointers
- * mean in the game, or why the pointer loop also stops at 5. */
+/* Poker bonus-round background: draws the background sprite, then pulses
+ * rate_84 up and down by 8 over a 16-frame cycle (cnt_82, add_83). It draws
+ * one marker per bonus card so far (Gwork.poker_deal.bonus_round), then one
+ * pointer per card up to 5; the last pointer uses the pulsing blend value and
+ * the others 0x30. */
 static void PoBonusBGDraw(void)
 {
     int i;
@@ -2902,9 +2878,9 @@ static void PoBonusBGDraw(void)
     }
 }
 
-/* Poker's deck-use flags, dealt cards and replacement choices occupy
- * these fields of Gwork. PoShuffleCard uses replacement value 1 to deal
- * a slot; card value 53 denotes an empty hand slot. */
+/* Poker's deck-use flags, dealt cards and replacement choices occupy these
+ * fields of Gwork. A hand slot with replace_selected 1 is dealt a new card by
+ * PoShuffleCard; card value 53 marks an empty hand slot. */
 static void PoResetCard(void)
 {
     int index;
@@ -2944,6 +2920,7 @@ static int PoShuffleCard(void)
         }
         i++;
     }
+    /* Pick an unused card for slot i: random normally, fixed values in bonus mode. */
     for (;;) {
         if (Gwork.poker_deal.bonus_mode == 0) {
             card = xglSRand() % 52;
@@ -2980,9 +2957,8 @@ static int PoShuffleCard(void)
 }
 
 
-/* ov11:0x00a05758. Poker: draws the five selection marks, texture picked
- * from replace_selected[], then one fixed sprite. 0x013CF800 is the buffer
- * POKER_TABLE2_TEX_BUFFER names below. */
+/* Poker: draws the five selection marks, texture picked from
+ * replace_selected[], then one fixed sprite. */
 static void PoSelectMarkDraw(void)
 {
     int i;
@@ -2997,7 +2973,7 @@ static void PoSelectMarkDraw(void)
 }
 
 
-/* ov11:0x00a05818. Poker: card selection. Up and down switch mode_93
+/* Poker: card selection. Up and down switch mode_93
  * between the card cursor (0) and the confirm button (1). In card mode
  * right and left (auto-repeat) move the cursor cur_92 over the five cards
  * with wraparound and circle toggles the card's replace flag. In button
@@ -3049,9 +3025,9 @@ static int PoKey(void)
 }
 
 
-/* ov11:0x00a059b8. Poker: sets cards the player chose to replace to 53
- * (face-down, not sure); when all five are chosen for 32 frames it sets
- * the flag at Gwork+0x190 and clears the used-card table. */
+/* Poker: sets cards the player chose to replace to 53 (face-down). When all
+ * five are chosen for 32 frames it sets Gwork.poker_deal.bonus_mode to 1 and
+ * clears the used-card table. */
 static void PoCardFlip(void)
 {
     int i;
@@ -3079,10 +3055,8 @@ static void PoCardFlip(void)
     }
 }
 
-/* ov11:0x00a05a78. Maps a 0..0x33 standard 52-card value (13 ranks per
- * suit) to its suit index. Callers (PoChk4 and PokerMain) read cardValue
- * as a signed `lh` from the sorted hand in Gwork; any value outside
- * 0..0x33 reports 0, matching the pre-switch init below. */
+/* Maps a 0..0x33 standard 52-card value (13 ranks per suit) to its suit
+ * index. Any value outside 0..0x33 returns 0. */
 static int PoGetMark(int cardValue)
 {
     int mark;
@@ -3154,6 +3128,8 @@ static int PoGetMark(int cardValue)
 }
 
 
+/* Returns the base offset of a card group: 13 for 1, 26 for 2, 39 for 3, and
+ * 0 for any other value. */
 static short PoGetBase(int cardValue)
 {
     short base;
@@ -3177,7 +3153,7 @@ static short PoGetBase(int cardValue)
 }
 
 
-/* ov11:0x00a05b10. Poker: copies the five hand cards into sorted_hand,
+/* Poker: copies the five hand cards into sorted_hand,
  * bubble-sorts them and prints each with dprintf (debug output). */
 static void PoSortCard(void)
 {
@@ -3203,7 +3179,7 @@ static void PoSortCard(void)
 }
 
 
-/* ov11:0x00a05bf0. Poker: counts, over all ordered pairs of the five
+/* Poker: counts, over all ordered pairs of the five
  * sorted hand cards, how many differ by exactly 13, 26 or 39 (same rank in
  * another suit), printing a debug line for each hit. The match count
  * (1..4, 6) maps to the group POKER_MULTI_* (pair, two pair, three of a
@@ -3256,6 +3232,7 @@ static int PoMultiChk(void)
     }
 }
 
+/* Returns 1 when all five sorted hand cards share one suit (PoGetMark). */
 static int PoFlushChk(void)
 {
     struct PokerDealWork *hand;
@@ -3278,10 +3255,9 @@ static int PoFlushChk(void)
  * PoFlushChk classifies same-suit runs. dprintf is the overlay's debug
  * printf. */
 
-/* ov11:0x00a05de0. Reports category 1, printing pokerOnePairDebugText through
- * dprintf, when PoMultiChk's multiplicity equals 1. */
-/* JP: ワンペア\n
- * EN: One pair\n */
+/* Reports category 1, printing pokerOnePairDebugText, when PoMultiChk returns
+ * POKER_MULTI_ONE_PAIR. */
+/* Text: "One pair" (Japanese string, newline terminated). */
 static const char pokerOnePairDebugText[16] = "\xA5\xEF\xA5\xF3\xA5\xDA\xA5\xA2\n";
 
 static int PoChk1(void)
@@ -3293,10 +3269,9 @@ static int PoChk1(void)
     return 0;
 }
 
-/* ov11:0x00a05e20. Reports category 2, printing pokerTwoPairDebugText through
- * dprintf, when PoMultiChk's multiplicity equals 2. */
-/* JP: ツーペア\n
- * EN: Two pair\n */
+/* Reports category 2, printing pokerTwoPairDebugText, when PoMultiChk returns
+ * POKER_MULTI_TWO_PAIR. */
+/* Text: "Two pair" (Japanese string, newline terminated). */
 static const char pokerTwoPairDebugText[16] = "\xA5\xC4\xA1\xBC\xA5\xDA\xA5\xA2\n";
 
 static int PoChk2(void)
@@ -3308,10 +3283,9 @@ static int PoChk2(void)
     return 0;
 }
 
-/* ov11:0x00a05e60. Reports category 3, printing pokerThreeOfAKindDebugText through
- * dprintf, when PoMultiChk's multiplicity equals 3. */
-/* JP: スリーカード\n
- * EN: Three of a kind\n */
+/* Reports category 3, printing pokerThreeOfAKindDebugText, when PoMultiChk
+ * returns POKER_MULTI_THREE_OF_A_KIND. */
+/* Text: "Three of a kind" (Japanese string, newline terminated). */
 static const char pokerThreeOfAKindDebugText[16] = "\xA5\xB9\xA5\xEA\xA1\xBC\xA5\xAB\xA1\xBC\xA5\xC9\n";
 
 static int PoChk3(void)
@@ -3323,9 +3297,9 @@ static int PoChk3(void)
     return 0;
 }
 
-/* ov11:0x00a05ea0. Poker: category 4. Sorts the hands' rank offsets and,
- * when they are consecutive, prints pokerStraightDebugText with dprintf and returns 4
- * (looks like a straight; not sure of the label). */
+/* Reports category 4 (straight). diff[] holds each sorted hand card's value
+ * minus PoGetBase of its suit; when the sorted offsets are consecutive it
+ * prints pokerStraightDebugText and returns POKER_HAND_STRAIGHT. */
 static int PoChk4(void)
 {
     int diff[5];
@@ -3354,11 +3328,10 @@ static int PoChk4(void)
     return 0;
 }
 
-/* ov11:0x00a05fb0. Substitutes category 5 and prints pokerFlushDebugText through
- * dprintf whenever PoFlushChk returns nonzero; PoFlushChk's own nonzero
- * value is discarded rather than reused as the category. */
-/* JP: フラッシュ\n
- * EN: Flush\n */
+/* Reports category 5 (flush) and prints pokerFlushDebugText whenever
+ * PoFlushChk returns nonzero; PoFlushChk's own nonzero value is discarded
+ * rather than reused as the category. */
+/* Text: "Flush" (Japanese string, newline terminated). */
 static const char pokerFlushDebugText[16] = "\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
 static int PoChk5(void)
@@ -3372,10 +3345,9 @@ static int PoChk5(void)
     return category;
 }
 
-/* ov11:0x00a05fe8. Reports category 6, printing pokerFullHouseDebugText through
- * dprintf, when PoMultiChk's multiplicity equals 4. */
-/* JP: フルハウス\n
- * EN: Full house\n */
+/* Reports category 6, printing pokerFullHouseDebugText, when PoMultiChk
+ * returns POKER_MULTI_FULL_HOUSE. */
+/* Text: "Full house" (Japanese string, newline terminated). */
 static const char pokerFullHouseDebugText[16] = "\xA5\xD5\xA5\xEB\xA5\xCF\xA5\xA6\xA5\xB9\n";
 
 static int PoChk6(void)
@@ -3387,10 +3359,9 @@ static int PoChk6(void)
     return 0;
 }
 
-/* ov11:0x00a06028. Reports category 7, printing pokerFourOfAKindDebugText through
- * dprintf, when PoMultiChk's multiplicity equals 5. */
-/* JP: フォーカード\n
- * EN: Four of a kind\n */
+/* Reports category 7, printing pokerFourOfAKindDebugText, when PoMultiChk
+ * returns POKER_MULTI_FOUR_OF_A_KIND (match count 6). */
+/* Text: "Four of a kind" (Japanese string, newline terminated). */
 static const char pokerFourOfAKindDebugText[16] = "\xA5\xD5\xA5\xA9\xA1\xBC\xA5\xAB\xA1\xBC\xA5\xC9\n";
 
 static int PoChk7(void)
@@ -3402,10 +3373,11 @@ static int PoChk7(void)
     return 0;
 }
 
-/* JP: ストレートフラッシュ\n
- * EN: Straight flush\n */
+/* Text: "Straight flush" (Japanese string, newline terminated). */
 static const char pokerStraightFlushDebugText[24] = "\xA5\xB9\xA5\xC8\xA5\xEC\xA1\xBC\xA5\xC8\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
+/* Reports category 8 (straight flush): a flush whose five sorted ranks are
+ * consecutive. */
 static int PoChk8(void)
 {
     struct PokerDealWork *hand;
@@ -3428,15 +3400,12 @@ static int PoChk8(void)
     return 0;
 }
 
-/* ov11:0x00a060e8. Reports category 9 when PoFlushChk finds a flush and
- * the sorted hand's ranks, read from the Gwork work block, form a
- * consecutive run starting at the lowest card: base, base+9, base+0xA,
- * base+0xB, base+0xC. The double
- * PoGetBase(PoGetBase(base)) round trip is the original's own check, not
- * a simplification. Any other outcome, including a flush that is not
- * this run, reports 0. */
-/* JP: ロイヤルストレートフラッシュ\n
- * EN: Royal flush\n */
+/* Reports category 9 (royal straight flush) when PoFlushChk finds a flush and
+ * the sorted hand's ranks, read from the Gwork work block, form the run base,
+ * base+9, base+0xA, base+0xB, base+0xC. The test base == PoGetBase(PoGetBase(base))
+ * is kept as written; it holds only when base is 0. Any other outcome,
+ * including a flush that is not this run, reports 0. */
+/* Text: "Royal flush" (Japanese string, newline terminated). */
 static const char pokerRoyalStraightFlushDebugText[32] = "\xA5\xED\xA5\xA4\xA5\xE4\xA5\xEB\xA5\xB9\xA5\xC8\xA5\xEC\xA1\xBC\xA5\xC8\xA5\xD5\xA5\xE9\xA5\xC3\xA5\xB7\xA5\xE5\n";
 
 static int PoChk9(void)
@@ -3462,20 +3431,13 @@ static int PoChk9(void)
     return 0;
 }
 
-/* ov11:0x00a06190. Sorts the hand, then checks hand-rank categories from
- * nine downward until one reports nonzero, plays one of three sound tiers
- * for the result, and reports it through the same debug printf as the
- * PoChk* family (pokerResultFormat, "result = %d\n").
+/* Sorts the hand, then checks the hand-rank categories from 9 downward until
+ * one reports nonzero, plays a sound tier for the result, and reports it with
+ * dprintf (pokerResultFormat, "result = %d\n").
  *
- * The nested PoChk9..PoChk1 chain and the shared-tail-block `goto
- * defaultSound` are the shape recorded as CP-0254 in
- * config/compiler-patterns.json: a flat "if (category == 0) category =
- * PoChkN();" per-line chain lets cc1 2.96's range analysis fold the
- * repeated zero tests together with the sound-tier comparisons instead of
- * keeping each PoChkN call, and a fully structured if/else-if/else sound
- * dispatch duplicates the shared RES_SoundEffect(0x3A) call into two
- * physical blocks instead of the original's single call reached from both
- * the category<=0 and category>=0xA paths. */
+ * The nested PoChk9..PoChk1 chain and the shared sound tail are kept in this
+ * shape: a flat per-line chain or an if/else-if/else sound dispatch compiles
+ * differently from the original. */
 static const char pokerResultFormat[] = "result = %d\n";
 
 static int PoCardCheck(void)
@@ -3528,10 +3490,8 @@ defaultSound:
     return category;
 }
 
-/* ov11:0x00a062b8. Draws the poker result lamp sprite for hand category
- * index category, selecting its fixed rect from a shared row of 0x10-byte
- * rects (the same tex/rect MakeSprite pair shape used throughout this TU;
- * the row's entry count beyond this stride is not separately evidenced). */
+/* Draws the poker result lamp sprite for hand category index `category`,
+ * taking its fixed rect from result_rect_97. */
 
 static void PoResultLamp(int category)
 {
@@ -3540,14 +3500,13 @@ static void PoResultLamp(int category)
     SetDrawStatus(3, 0);
 }
 
-/* ov11:0x00a06308. Sets the poker sequence state (an enum PokerSeq
- * value). */
+/* Sets the poker sequence state (an enum PokerSeq value). */
 static void PoSeqChange(int sequenceState)
 {
     Gwork.poker_deal.seq = sequenceState;
 }
 
-/* ov11:0x00a06318. Looks up the currently selected bet level's ready
+/* Looks up the currently selected bet level's ready
  * message and message-box width from two fixed four-entry tables and
  * forwards both to the message window renderer. Gwork.modes.level is the
  * level index level_select stores (0..3); the four strings are the "Play N
@@ -3570,12 +3529,13 @@ const PokerReadyMessageTable pokerReadyTexts = {{
 const PokerReadyWidthTable pokerReadyWidthTable = {{29, 30, 30, 31}};
 
 
-/* ov11:0x00a063a0. Poker main loop, one call per frame, switching on
- * Gwork.poker_deal.seq (enum PokerSeq; jump table jtbl_00A0C220):
+/* Poker main loop, one call per frame, switching on Gwork.poker_deal.seq
+ * (enum PokerSeq):
  *   READY: if the coin balance is below the level's stake (PokerCoinRate)
- *      go to NO_COINS, else show the "Play N coins" dialog; yes goes to
- *      BET, anything else back to the casino menu. NO_COINS: "There are no
- *      more coins.", any button leaves.
+ *      go to NO_COINS, else show the "Play N coins" dialog; choice 1 goes to
+ *      BET, cancel (-1) and other choices go back to the casino menu, and no
+ *      choice yet (0) waits. NO_COINS: "There are no more coins.", any button
+ *      leaves.
  *   BET: move the stake from the balance into the pot, 1, 5 or 10 coins
  *      per frame. DEAL to SCORE: deal (PoCardDrawAnime), fill the hand
  *      (PoShuffleCard), choose cards (PoKey), PoCardFlip and PoShuffleCard
@@ -3591,8 +3551,8 @@ const PokerReadyWidthTable pokerReadyWidthTable = {{29, 30, 30, 31}};
  *      (BONUS_LOST waits for circle).
  *   PAYOUT: pay the pot out, a step per frame by level (1, 5, 10, 100) or
  *      all at once with circle.
- * Not sure what enters CONTINUE (nothing in OV11 does). coins is kept apart
- * from step: one shared variable allocates PAYOUT differently. */
+ * coins is kept apart from step: one shared variable allocates PAYOUT
+ * differently. */
 static void PokerMain(void)
 {
     int sel;
@@ -3763,6 +3723,7 @@ static void PokerMain(void)
         PoCardDraw();
         break;
     case POKER_SEQ_BONUS_JUDGE:
+        /* Judge the newest bonus card against the one before it. */
         if (Gwork.poker_deal.bonus_round == 0) {
             Gwork.poker_deal.bonus_round = 1;
             PoSeqChange(POKER_SEQ_BONUS_GUESS);
@@ -3863,6 +3824,7 @@ static void PokerMain(void)
     SetDrawStatus(3, 0);
     xglPacketTextureTrans(POKER_TABLE2_TEX_BUFFER);
     SetRegAD(Pkt, SCE_GS_TEXFLUSH, 0);
+    /* Rate table unless hidden, then the balance or the pot. */
     if (Gwork.poker_deal.rates_hidden == 0) {
         PoRateTableDraw();
     }
@@ -3873,10 +3835,9 @@ static void PokerMain(void)
     }
 }
 
-/* ov11:0x00a06c08. Resets five poker words before a session (its only
- * caller is GameModeChange): the sequence state, rates_hidden, bonus_mode,
- * bonus_round, and the word at 0x180, which nothing else in the TU reads
- * or writes. */
+/* Resets five poker words before a session (its only caller is
+ * GameModeChange): the sequence state, rates_hidden, bonus_mode, bonus_round,
+ * and unknown_180, which nothing else in the TU reads or writes. */
 static void PoInitWork(void)
 {
     Gwork.poker_deal.unknown_180 = 0;
@@ -3886,9 +3847,8 @@ static void PoInitWork(void)
     Gwork.poker_deal.seq = POKER_SEQ_READY;
 }
 
-/* ov11:0x00a06c28. Loads the six poker minigame textures (four suits plus
- * two poker-table backgrounds; the "data\\tanaka\\*.xtx" paths are these
- * D_00A0Cxxx strings themselves) into fixed EE main RAM staging addresses. */
+/* Loads the six poker minigame textures (four suit textures plus two table
+ * backgrounds) into their fixed texture buffers. */
 static const char pokerSpadeTexturePath[] = "data\\tanaka\\spade.xtx";
 static const char pokerCloverTexturePath[] = "data\\tanaka\\clover.xtx";
 static const char pokerHeartTexturePath[] = "data\\tanaka\\heart.xtx";
@@ -3906,13 +3866,12 @@ static void PokerInit(void)
     xglCdReadFile(pokerTable2TexturePath, POKER_TABLE2_TEX_BUFFER, 0, 0);
 }
 
-/* ov11:0x00a06ce0. Switches the casino to another game and resets that
+/* Switches the casino to another game and resets that
  * game's state. The menu clears the bet level; the nine-game runs
  * init_ninegame; poker runs PoInitWork. For the slot, unless it is coming
  * back from the nine-game it clears the per-line stakes and turns the help
  * screen on; it always clears the reel positions and states, the pointer,
- * state, total stake, the word at 0x40, double pay, the bonus flag and the
- * row. Finally it stores the new game in Gwork.modes.game. */
+ * state, total stake, unknown_40, double pay, the bonus flag and the row. Finally it stores the new game in Gwork.modes.game. */
 static void GameModeChange(int mode)
 {
     int i;
@@ -3955,10 +3914,9 @@ static void GameModeChange(int mode)
     Gwork.modes.game = mode;
 }
 
-/* ov11:0x00a06df0. Draws the submenu window sprite as a fixed 0xB8 x 0x70
- * rectangle with its top-left corner at (x, y). packet itself is not read
- * here; level_select and exchange_select forward it on to submenu_select
- * right after calling sub_window. */
+/* Draws the submenu window sprite as a fixed 0xB8 x 0x70
+ * rectangle with its top-left corner at (x, y). The packet argument is not
+ * used here. */
 
 static void sub_window(XglPacket *packet, int x, int y)
 {
@@ -3973,12 +3931,12 @@ static void sub_window(XglPacket *packet, int x, int y)
 }
 
 
-/* ov11:0x00a06e50. Draws a submenu and handles its input: the window
+/* Draws a submenu and handles its input: the window
  * (sub_window), one 0x48 x 0x10 icon per choice in a column at x + 0x34,
  * starting at y + 0xC and 0x18 apart, and an animated 0x10 x 0x10 cursor
  * (Cursor_Tex, 8 frames by anm_100) just left of the selected icon. Up and
- * down on the auto-repeat pad word move *selected with wraparound (sounds 5
- * and 6). Returns 1 when circle is pressed, else 0. */
+ * down on the auto-repeat pad word move *selected with wraparound (submenu
+ * sounds). Returns 1 when circle is pressed, else 0. */
 static int submenu_select(XglPacket *packet, int x, int y, int iconCount,
                           const struct SpriteTex *icons, int *selected)
 {
@@ -4028,22 +3986,17 @@ static int submenu_select(XglPacket *packet, int x, int y, int iconCount,
     return 0;
 }
 
-/* ov11:0x00a07000. Draws a four-choice submenu bound to the shared game
- * level selection, with the window's top-left corner at (x, y). sub_window
- * does not read packet, so it only reaches submenu_select. level_select's
- * own tail call (`j submenu_select`) is why its return value is
- * submenu_select's, and menu_mode branches on it (`beqz $2` right after
- * `jal level_select`). */
+/* Draws a four-choice submenu bound to the shared game level selection, with
+ * the window's top-left corner at (x, y). Returns submenu_select's result. */
 static int level_select(XglPacket *packet, int x, int y)
 {
     sub_window(packet, x, y);
     return submenu_select(packet, x, y, 4, Level_Tex, &Gwork.modes.level);
 }
 
-/* ov11:0x00a07060. Draws a three-choice submenu bound to the shared exchange
- * mode selection, the same sub_window()+submenu_select() shape level_select
- * uses above; exchange_select's own tail call (`j submenu_select`) is why its
- * return value is submenu_select's. */
+/* Draws a three-choice submenu bound to the shared exchange mode selection,
+ * with the same sub_window() and submenu_select() shape as level_select.
+ * Returns submenu_select's result. */
 static int exchange_select(XglPacket *packet, int x, int y)
 {
     sub_window(packet, x, y);
@@ -4052,7 +4005,7 @@ static int exchange_select(XglPacket *packet, int x, int y)
 
 
 
-/* ov11:0x00a070c0. Casino menu: draws the background, then in state 0 moves
+/* Casino menu: draws the background, then in state 0 moves
  * the cursor over the four entries with the d-pad and picks one with
  * circle; state 2 shows the exchange submenu (entry 0), a bet level submenu
  * (entries 1 and 2) or leaves the menu (entry 3). Returns 1 on leaving. */
@@ -4068,6 +4021,7 @@ static int menu_mode(void)
     MakeSprite(&EntryBG_Tex, &EntryBG_Rect);
     xglPacketTextureTrans(MENU_WINDOW_TEX_BUFFER);
     SetRegAD(Pkt, SCE_GS_TEXFLUSH, 0);
+    /* State 0 moves the cursor; state 2 acts on the entry the cursor chose. */
     switch (menu_mode_103) {
     case 0:
         if (PadData.canonical.half_2a & PAD_UP) {
@@ -4141,9 +4095,8 @@ static int menu_mode(void)
     return 0;
 }
 
-/* ov11:0x00a07410. Loads the menu background and window textures, then
- * clears the bet level (Gwork.modes.level) and the short at 0x10 (not
- * sure what that one holds). */
+/* Loads the menu background and window textures, then clears the bet level
+ * (Gwork.modes.level) and Gwork.modes.unknown_10. */
 static const char menuBackgroundTexturePath[] = "data\\tanaka\\BG.xtx";
 static const char menuWindowTexturePath[] = "data\\tanaka\\window.xtx";
 
@@ -4156,8 +4109,7 @@ static void init_menu_mode(void)
     Gwork.modes.unknown_10 = 0;
 }
 
-/* ov11:0x00a07470. Loads the casino test-mode background texture
- * ("data\\tanaka\\base.xtx", baseTexturePath above). */
+/* Loads the casino test-mode background texture. */
 
 
 static void init_test_mode(void)
@@ -4165,10 +4117,9 @@ static void init_test_mode(void)
     xglCdReadFile(baseTexturePath, TEST_MODE_BASE_TEX_BUFFER, 0, 0);
 }
 
-/* ov11:0x00a074a0. Lazily loads the test-mode background texture on first
- * entry (flg_104 latches this), then selects it and draws the fixed
- * test-mode background sprite. xglPacketGetCurrent is main:0x0022c450
- * (src/main/xgl_packet.c). */
+/* Lazily loads the test-mode background texture on first entry (flg_104
+ * latches this), then selects it and draws the fixed test-mode background
+ * sprite. */
 
 static void test_mode(void)
 {
@@ -4184,7 +4135,7 @@ static void test_mode(void)
 }
 
 
-/* ov11:0x00a07528. Prints value like decprint with 14x24 digit sprites
+/* Prints value like decprint with 14x24 digit sprites
  * from tex_105, stepping left by 14 per digit; a nonzero flag adds the
  * eleventh sprite of the table, the one past the digits, 16 pixels right
  * of x. */
@@ -4251,10 +4202,10 @@ static void UtlCurPrint(int x, int y)
 
 
 
-/* ov11:0x00a077a0. Coin-exchange screen, one frame per call. Draws the
+/* Coin-exchange screen, one frame per call. Draws the
  * background, the price list (RES_Coin_Info) and labels, moves the cursor
  * (cur_108, five rows) with up/down on the auto-repeat word, and when
- * circle is pressed or R1 repeats (one doubleword test) it trades one money
+ * circle is pressed or R1 repeats it trades one money
  * box for 10, 100, 500 or 1000 coins on rows 0-3. If the balance is already
  * 9999999 or more, the box is put back. Circle on the last row, or cross,
  * leaves to the menu. Then it draws the cursor and the money-box and coin
@@ -4279,6 +4230,7 @@ static void coin_main(void)
     xglFontPrint(0, 0, 0, coinExchangeExitFontControl);
     xglFontPrint(0x19A, 0xD0, 0xFF00, coinExchangeExitText);
     xglFontPrint(0, 0, 0xFF00, coinExchangeAfterExitFontControl);
+    /* Move the cursor over the five rows. */
     if (PadData.wide.repeat & PAD_UP) {
         RES_SoundEffect(CASINO_SE_EXCHANGE_UP);
         cur_108--;
@@ -4297,6 +4249,7 @@ static void coin_main(void)
     if (PadData.canonical.half_2a & PAD_CROSS) {
         leave = 1;
     }
+    /* Circle or R1 buys the selected row's coins; if the coin balance is already at the maximum, the money box is put back. */
     if (PadData.dword.words & (PAD_WORDS_PRESSED(PAD_CIRCLE) | PAD_WORDS_REPEAT(PAD_R1))) {
         switch (cur_108) {
         case 0:
@@ -4363,9 +4316,8 @@ static void coin_main(void)
     }
 }
 
-/* ov11:0x00a07c38. Loads the casino coin-exchange minigame's background and
- * exchange textures (baseTexturePath is the same "base.xtx" path init_test_mode
- * uses, into a different fixed buffer address here). */
+/* Loads the casino coin-exchange minigame's exchange texture and the base
+ * background texture into their fixed buffers. */
 static const char coinExchangeTexturePath[] = "data\\tanaka\\exchange2.xtx";
 
 
@@ -4375,8 +4327,7 @@ static void init_coin(void)
     xglCdReadFile(coinExchangeTexturePath, COIN_EXCHANGE_TEX_BUFFER, 0, 0);
 }
 
-/* ov11:0x00a07c80. Loads the casino shop's exchange and background textures
- * (baseTexturePath "base.xtx" again, into the same fixed buffer init_coin uses). */
+/* Loads the casino shop's exchange texture and the base background texture. */
 static const char shopExchangeTexturePath[] = "data\\tanaka\\exchange1.xtx";
 
 
@@ -4387,6 +4338,8 @@ static void init_shop(void)
 }
 
 
+/* Fills shpmenu_work with the indices of the enabled shop prizes and sets
+ * MenuNum to their count. */
 static void init_shpmenu(void)
 {
     int *entry;
@@ -4483,6 +4436,10 @@ static void init_shpmenu(void)
 
 #define SHOP_PRIZE_COUNT 8
 
+/* Shop screen, one frame per call. Draws the coin balance and the enabled
+ * prizes from top_112 (SHOP_PRIZE_COUNT rows), moves the cursor, and on circle
+ * or R1 buys the selected prize. A refused purchase refunds the coins. Cross
+ * leaves to the menu. */
 static void shop_main(void)
 {
     int prize;
@@ -4513,6 +4470,7 @@ static void shop_main(void)
         init_shpmenu();
         *init = 1;
     }
+    /* List the visible prizes, starting at top_112. */
     shown = 0;
     i = 0;
     if (i < MenuNum) {
@@ -4529,6 +4487,7 @@ static void shop_main(void)
     }
     SetDrawStatus(3, 0);
     UtlCurPrint(216, cur_111 * 24 + 34);
+    /* Move the cursor, scrolling the list when it reaches the edge. */
     if (PadData.wide.repeat & PAD_UP) {
         RES_SoundEffect(19);
         if (cur_111 == 0) {
@@ -4560,6 +4519,7 @@ static void shop_main(void)
     xglFontPrint(0, 0, 0xFF00, fontModeControl);
     xglFontPrint(0, 0, 0, infoFontControl);
     xglFontPrint(32, 310, 0xFF00, RES_ShopDataInfo(prize));
+    /* Circle or R1 buys the selected prize when the balance covers its cost. */
     if (PadData.dword.words & PAD_WORDS_REPEAT(PAD_CIRCLE | PAD_R1)) {
         if (RES_ShopDataCoin(prize) <= SaveWork->coin_balance) {
         SaveWork->coin_balance -= RES_ShopDataCoin(prize);
@@ -4668,7 +4628,7 @@ static void shop_main(void)
     }
 }
 
-/* ov11:0x00a083f8. Loads the data-viewer minigame's dataviewer and sampler
+/* Loads the data-viewer minigame's dataviewer and sampler
  * textures. */
 static const char viewerDataViewerTexturePath[] = "data\\tanaka\\dataviewer.xtx";
 static const char viewerSampleTexturePath[] = "data\\tanaka\\sam.xtx";
@@ -4681,9 +4641,9 @@ static void VW_Init(void)
 }
 
 /* Start of Gwork.viewer.sample (word 114) and a zero count, for
- * VW_SamlistInit. Measured: they have to come out of this helper (the
- * original's inline function), because written in line the count and the
- * loop index become one shared zero and the pointer setup is rescheduled. */
+ * VW_SamlistInit. They have to come out of this helper (the original's inline
+ * function): written in line, the count and the loop index become one shared
+ * zero and the pointer setup is rescheduled. */
 static __inline void sampler_offset(int **base, int *count)
 {
     *base += 114;
@@ -4716,14 +4676,10 @@ static int VW_SamlistInit(void)
 }
 
 
-/* Viewer image pages: VW_ViewModeInit loads NN_Y1/Y2.xtx into the first
- * two and NN_W1..W4.xtx into all four. */
-
-/* ov11:0x00a08498. Viewer: when the selected entry changes, builds its
- * file names (data\\tanaka\\NN_Y1/Y2.xtx for type 0, NN_W1..W4.xtx
- * otherwise, with the type taken from fileinfo) and loads them into fixed
- * buffers, then resets the scroll offsets (Gwork.viewer). Returns the entry's type.
- * Not sure what the Y and W image sets are. */
+/* Viewer: when the selected entry changes, builds its file names and loads
+ * them into fixed buffers, then resets the scroll offsets (Gwork.viewer).
+ * The type comes from fileinfo: type 0 loads NN_Y1/Y2.xtx into the first two
+ * pages, other types load NN_W1..W4.xtx into all four. Returns the entry's type. */
 static int VW_ViewModeInit(int index)
 {
     char path[256];
@@ -4754,13 +4710,13 @@ static int VW_ViewModeInit(int index)
 }
 
 
-/* ov11:0x00a08650. Viewer image display: loads the entry's images with
- * VW_ViewModeInit, draws them as a 2x2 grid of 578-wide pages at the scroll
- * offsets (the second row is 448 high, one page when the type is not 1 is
- * shown only as the first two), scrolls with the larger of the two stick
- * axes (the x offset only when the entry type is 1), clamps the offsets,
- * then draws the key sprite. Returns 1 when cross is newly pressed (sound
- * 0x1C), else 0. Not sure which stick bytes are which axis. */
+/* Viewer image display: loads the entry's images with VW_ViewModeInit and
+ * draws IMAGE_1 and IMAGE_2 as 578-wide pages at the scroll offsets (the lower
+ * page is 448 high). When the type is 1, IMAGE_3 and IMAGE_4 are drawn beside
+ * them. Scrolls y with the larger of stick[1] and stick[3] (in absolute value),
+ * and x the same way with stick[0] and stick[2] only when the type is 1, then
+ * clamps the offsets and draws the key sprite. Returns 1 when cross is pressed
+ * (sound 0x1C), else 0. */
 static int VW_ViewMode(int arg)
 {
     struct SpriteRect rect[4];
@@ -4809,6 +4765,7 @@ static int VW_ViewMode(int arg)
         SetRegAD(Pkt, SCE_GS_TEXFLUSH, 0);
         MakeSprite(&tex_114, &rect[3]);
     }
+    /* Halved stick values, with their absolute values for choosing the larger axis. */
     ax = PadData.wide.stick[0] / 2;
     abs_ax = ax;
     if (ax < 0) {
@@ -4866,15 +4823,13 @@ static int VW_ViewMode(int arg)
 }
 
 
-/* ov11:0x00a08960. Viewer sample list. With arg 0 it resets the cursor and
- * scroll offset and returns 0. Otherwise it builds the list of enabled
- * samples once (VW_SamlistInit), draws the background and up to eight
- * titles from the scroll offset, the cursor, and moves the cursor or
- * scroll offset with up/down on the auto-repeat word (sounds 0x18 and
- * 0x19). If the list is not
- * empty it prints the selected sample's title and info and draws its
- * picture, returning the sample id; otherwise it returns -1. Not sure what
- * the font control strings select. */
+/* Viewer sample list. With arg 0 it resets the cursor and scroll offset and
+ * returns 0. Otherwise it builds the list of enabled samples once
+ * (VW_SamlistInit), draws the background and up to eight titles from the
+ * scroll offset and the cursor, and moves the cursor or scroll offset with
+ * up/down on the auto-repeat word (sounds 0x18 and 0x19). If the list is not
+ * empty it prints the selected sample's title and info and draws its picture,
+ * returning the sample id; otherwise it returns -1. */
 static int VW_SamMode(int arg)
 {
     int i;
@@ -4939,9 +4894,9 @@ static int VW_SamMode(int arg)
 }
 
 
-/* ov11:0x00a08ce0. View mode main: switches between VW_ViewMode and
- * VW_SamMode on mode_123; triangle enters the sample list and cross leaves
- * it (calls GameModeChange(CASINO_MENU)). */
+/* View mode main: runs VW_SamMode (the sample list) unless mode_123 is set,
+ * in which case it runs VW_ViewMode. Triangle sets mode_123 to enter
+ * VW_ViewMode; cross calls GameModeChange(CASINO_MENU). */
 static void VW_Main(void)
 {
     int result;
@@ -4970,13 +4925,12 @@ static void VW_Main(void)
 }
 
 
-/* ov11:0x00a08dc0. Starts a background music request. -1 and a repeat of
- * the previous request (oldreq_126) do nothing. Otherwise it clears the
- * two sound banks, loads the shared sound data, waits for the SPU DMA,
- * then loads the sequence (.smd) and wave (.swd) files for the requested
- * track from MUSICLIST_125 and starts the normal sequence at volume 0x7F.
- * Note the function never updates oldreq_126 itself. Not sure of the exact
- * sound API semantics. */
+/* Starts a background music request. -1 and a repeat of the previous request
+ * (oldreq_126) do nothing. Otherwise it clears the two sound banks, loads the
+ * shared sound data, waits for the SPU DMA, then loads the sequence (.smd) and
+ * wave (.swd) files for the requested track from MUSICLIST_125 and starts the
+ * normal sequence at volume 0x7F. The function does not update oldreq_126
+ * itself. */
 static void MUSIC_CALL(int musicId)
 {
     char path[256];
@@ -5006,16 +4960,16 @@ static void MUSIC_CALL(int musicId)
     xglSoundSequenceNormal(0x7F);
 }
 
-/* ov11:0x00a08f40. Resets the four leading Gwork words and the six
- * per-game initialised flags, loads the casino resource table and starts the
- * background sound queue, applies four debug-mode config-flag unlocks and
- * grants a near-maximum bank balance plus a matching coin total when
- * RES_IsDebugMode() is set, then seeds the slot stake fields (total_bet 5,
- * line_pay 0..4). Its only caller, MiniG_Init, runs this once. */
-/* The original materializes Gwork's address once (%lo(Gwork)=0, so
- * `addiu s0,v0,0`) and reaches every field below off that same register
- * with an immediate byte offset, which needs the base held in a pointer to
- * the whole work union. */
+/* Resets the four leading Gwork words and the six per-game initialised flags,
+ * loads the casino resource table and plays the first background track,
+ * applies four debug-mode config-flag unlocks and grants a near-maximum bank
+ * balance plus a large coin total when RES_IsDebugMode() is set, then sets
+ * total_bet to 5 and line_pay[i] to i. Its only caller, MiniG_Init, runs this
+ * once.
+ *
+ * The work base is held in a pointer to the whole union, so each field below
+ * is addressed from one register with an immediate offset, as the original
+ * compiles it. */
 static void InitWork(void)
 {
     union CasinoWork *work = &Gwork;
@@ -5055,10 +5009,10 @@ static void InitWork(void)
     } while (value >= 0);
 }
 
-/* ov11:0x00a09020. Logs the configured heap address, then delegates all
- * casino state initialization to InitWork. */
 static const char workSizeFormat[] = "work size = %x\n";
 
+/* Prints the work size (0x7CF000) with dprintf, then initializes the casino
+ * state through InitWork. */
 void MiniG_Init(void)
 {
     dprintf(workSizeFormat, 0x7CF000);
@@ -5066,12 +5020,12 @@ void MiniG_Init(void)
 }
 
 
-/* ov11:0x00a09048. Casino main dispatcher. Gwork.modes.game selects the game:
- * 0 menu (returns 1 when the menu handler asks to leave), 1 slot, 2 poker,
- * 3 coin exchange, 4 shop, 5 viewer, 6 nine-game, 7 test mode. Each game's
- * init routine runs once, guarded by a per-game flag. After a game runs it
- * prints a debug line and returns 0; an unknown mode returns 0 without
- * printing. Not sure of the exact game wording. */
+/* Casino main dispatcher. Gwork.modes.game selects the game: 0 menu (returns
+ * 1 when the menu handler asks to leave), 1 slot, 2 poker, 3 coin exchange,
+ * 4 shop, 5 viewer, 6 nine-game, 7 test mode. Modes 0 to 5 run their init
+ * routine once, guarded by the flag in Gwork.modes.initialized; modes 6 and 7
+ * have no flag. After a game runs it prints the build date line and returns 0;
+ * an unknown mode returns 0 without printing. */
 int MiniG_Main(void)
 {
     switch (Gwork.modes.game) {

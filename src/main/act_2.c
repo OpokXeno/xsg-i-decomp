@@ -59,10 +59,9 @@ typedef struct ActorJointMatrix {
 } ActorJointMatrix;
 
 /* One of the eight Java camera records embedded at `tcamera + n * 0x12c0`.
- * TCAMERA_update establishes the four 0x4a0 channel strides and TCAMERA_init
- * establishes the 0x12c0 record stride. The channel union names the fields
- * proved by the channel callers; the rest stays explicitly unmodeled storage
- * until another access gives it meaning. */
+ * TCAMERA_update uses the four 0x4a0 channel strides and TCAMERA_init uses the
+ * 0x12c0 record stride. The channel union names the fields the channel
+ * callers use; the rest stays unmodeled storage. */
 typedef struct CameraChannelSpline {
     unsigned char unmodeled_00[4];
     unsigned short weight_mode;
@@ -114,18 +113,10 @@ extern Actor actor[64];
 extern unsigned int GameLoopState[];
 extern EnemyWorkEntry enepc[16];
 
-/*
- * JNT_getMoveElement (main/tu261, src/main/jnt.c) is not yet recovered as C.
- * It dereferences its argument (main:0x00313b50, addiu v1,a0,16; lhu
- * a3,8(a0)), so the parameter is a pointer.
- */
+/* Returns the move element id of move; defined in jnt.c. */
 extern int JNT_getMoveElement(void *move);
 
-/*
- * FCV2_checkData is not yet recovered as C. It dereferences its argument to
- * compare a signature word (main:0x0030d8c8..0x0030d8d8), so the parameter is
- * a pointer.
- */
+/* Checks the FCV2 data block at data; defined in fcv2.c. */
 extern int FCV2_checkData(void *data);
 static void ACT_updateMotionCore(Actor *actor, int pause);
 static void ACT_modelDrawSub(Actor *actor);
@@ -204,6 +195,10 @@ static unsigned int tblHand[9] = {
 
 float newsToDirection[16] = { 0.0f, 3.1415927410125732f, 1.5707963705062866f, 2.3561944961547852f, -1.5707963705062866f, -2.3561944961547852f, 0.0f, 0.0f, 0.0f, 0.0f, 0.78539818525314331f, 0.0f, -0.78539818525314331f, 0.0f, 0.0f, 0.0f };
 
+/*
+ * Rebuilds actor's joint matrices from its position, rotation and scale, then
+ * resets the joint work for both the current and the previous matrices.
+ */
 void ACT_resetMatrix(Actor *actor)
 {
     ActorJointMatrix *matrices = actor->jointMatrices;
@@ -251,6 +246,7 @@ void ACT_resetMatrix(Actor *actor)
     JNT_resetMatrix(work, work->channels);
 }
 
+/* Detaches actor from its parent: frees its attachment slot and removes it from the child list. */
 void ACT_resetParent(Actor *actor, Actor *parent)
 {
     int childIndex;
@@ -275,6 +271,11 @@ void ACT_resetParent(Actor *actor, Actor *parent)
     actor->parent = 0;
 }
 
+/*
+ * Attaches actor to parent at joint, when the parent has a free attachment slot.
+ * flags & 1 shares the parent's matrix resource; flags & 2 copies the joint
+ * chain instead of using JC_setParent.
+ */
 Actor *ACT_setParent(Actor *actor, int type, Actor *parent, int joint, int flags)
 {
     int slot;
@@ -319,6 +320,10 @@ Actor *ACT_setParent(Actor *actor, int type, Actor *parent, int joint, int flags
     return actor;
 }
 
+/*
+ * Like ACT_setParent, but the joint consumer is the given filter function
+ * instead of JC_setParent or JC_copyChain.
+ */
 Actor *ACT_setParent2(Actor *actor, int type, Actor *parent, int joint, int flags,
                       void (*filter)(void *work, void *parameter, int flags))
 {
@@ -359,6 +364,7 @@ Actor *ACT_setParent2(Actor *actor, int type, Actor *parent, int joint, int flag
     return actor;
 }
 
+/* Returns the move element id of actor's joint producer, looking it up on first use. */
 int ACT_jointGetMoveElementID(Actor *actor)
 {
     if (actor->jointProducer.move_element_id < 0) {
@@ -371,6 +377,7 @@ int ACT_jointGetMoveElementID(Actor *actor)
     return actor->jointProducer.move_element_id;
 }
 
+/* Returns the joint id of accessoryId from actor's accessory table, or -1 when there is none. */
 int ACT_jointGetAccessories(Actor *actor, unsigned int accessoryId)
 {
     ActorAccessoryJointTable *accessories;
@@ -389,6 +396,7 @@ int ACT_jointGetAccessories(Actor *actor, unsigned int accessoryId)
     return result;
 }
 
+/* For the arms accessory, detaches actor from other and clears other's hand models. */
 void ACT_resetArms(Actor *actor, Actor *other, int acc_id)
 {
     if (acc_id == ACT_ACCESSORY_ARMS) {
@@ -397,6 +405,11 @@ void ACT_resetArms(Actor *actor, Actor *other, int acc_id)
     }
 }
 
+/*
+ * Attaches actor to parent as an accessory. Plain accessory ids use the
+ * accessory joint table and return 0 when it has no joint. The arms id attaches
+ * to the hand joint and sets the hand models.
+ */
 Actor *ACT_setArms(Actor *actor, Actor *parent, unsigned int accessoryId, int flags)
 {
     int joint;
@@ -415,6 +428,11 @@ Actor *ACT_setArms(Actor *actor, Actor *parent, unsigned int accessoryId, int fl
     return actor;
 }
 
+/*
+ * Attaches actor to parent from a relation word. A relation with the joint
+ * flag picks an accessory, arms or face attachment by its kind; any other
+ * relation is a plain joint index.
+ */
 Actor *ACT_setRelation(Actor *actor, Actor *parent, int relation, int flags)
 {
     int joint;
@@ -455,11 +473,9 @@ Actor *ACT_setRelation(Actor *actor, Actor *parent, int relation, int flags)
 }
 
 /*
- * Attaches `actor` to `parent` at joint 0x30 (type 2, id `faceId`); on
- * success (main:0x00306d40..0x00306d64) it hides the base model's own FACE
- * part with ACT_setVisible(parent, 0x46414345, 0) - 0x46414345 is "FACE"
- * read from most- to least-significant byte, matching lui 0x4641/ori 0x4345
- * at 0x00306d44/0x00306d5c.
+ * Attaches actor to parent's head joint (type 2, id faceId). On success it
+ * hides the parent's own FACE part, ACT_PART_FACE ("FACE" read from the most-
+ * to least-significant byte).
  */
 Actor *ACT_setFace(Actor *actor, Actor *parent, int faceId)
 {
@@ -482,6 +498,10 @@ int ACT_animCheckData(Actor *actor)
     return FCV2_checkData(actor->animation.animData);
 }
 
+/*
+ * Updates the motion of a root actor and then its children. A child is only
+ * flagged with 0x1000 when the root has that flag set.
+ */
 static void ACT_updateMotionCore(Actor *actor, int pause)
 {
     int childIndex;
@@ -516,6 +536,10 @@ void ACT_updateMotionPause(Actor *actor)
     ACT_updateMotionCore(actor, 1);
 }
 
+/*
+ * Starts the queued next motion when queue has flag 0x1000 set. GameLoopState[1]
+ * is skipped while enepc[0] holds an encounter lock.
+ */
 static inline void ACT_runQueuedMotion(Actor *actor, ActorAnimSlot *queue)
 {
     if ((queue->flags & 0x1000) && queue->nextDataId != ANIM_DATA_ID_NONE) {
@@ -525,6 +549,11 @@ static inline void ACT_runQueuedMotion(Actor *actor, ActorAnimSlot *queue)
     }
 }
 
+/*
+ * Advances one actor's animation by a frame: counts down its pause, transition
+ * and hold counters, applies the queued motion, rebuilds and swaps the joint
+ * matrices, and runs the joint production.
+ */
 static void ACT_updateMotionSub(Actor *actor, int pause)
 {
     ActorAnimationState *animation = &actor->animation;
@@ -537,6 +566,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     void *move;
     float frame;
 
+    /* Counts down the pause counter, unless the update is paused. */
     if (pause == 0) {
         if (actor->pauseCounter > 0) {
             actor->pauseCounter--;
@@ -547,6 +577,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     if (0x408 == (*(unsigned long long *)actor & 0x408)) {
         return;
     }
+    /* Counts down the transition and hold frames. */
     if (0 != actor->transitionFrames) {
         actor->transitionFrames -= 1;
         actor->animation.slot.flags &= 0xbfffffff;
@@ -569,6 +600,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
         || (0 != move && (*(unsigned short *)move != 0x4e4a || ((char *)move)[2] != 'T'))) {
         return;
     }
+    /* Rebuilds the joint matrix from the actor's transform. */
     CUR_MATRIX_Unit4s();
     CUR_MATRIX_SetT(&actor->position);
     CUR_MATRIX_Rx4s((const int *)&actor->rotation.x);
@@ -577,6 +609,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     CUR_MATRIX_Sxyz4s(&actor->scale);
     CUR_MATRIX_Get(matrices);
     actor->flags &= ~0x1000;
+    /* Swaps the current and previous matrix buffers when the slot asks for it. */
     if ((slotFlags & 0x10000) != 0) {
         void *swapTmp;
         void *valueTmp;
@@ -593,6 +626,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     }
     FCV2_setStep(slot->speed);
     JNT_animSetFlags(slot->flags);
+    /* Blends from the previous pose while the slot has flag 2 and the actor is not paused; otherwise uses the plain flags. */
     if ((slotFlags & 2) != 0 && actor->pauseCounter == 0) {
         unsigned int pausedFlags = 0x8002u;
 
@@ -638,6 +672,7 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     JNT_setFCurve(animation->animData, slot->channelMask);
     JNT_setMatrix(actor->jointMatrices);
     JNT_setCurve(actor->staticValueRecords, actor->valueRecords);
+    /* Clamps the frame to the forward or reverse limit, by playback direction. */
     frame = slot->frame;
     if (0.0f <= slot->speed) {
         if (slot->forwardLimit < frame) {
@@ -663,6 +698,10 @@ static void ACT_updateMotionSub(Actor *actor, int pause)
     ANM_update(slot);
 }
 
+/*
+ * Applies the actor's draw environment to the model renderer: Z write, stencil,
+ * transparency, fog and point lights, each when its flag bit is set.
+ */
 void ACT_setDrawEnv(Actor *actor)
 {
     ActorDrawEnv *environment = &actor->drawEnv;
@@ -689,6 +728,7 @@ void ACT_setDrawEnv(Actor *actor)
     }
 }
 
+/* Draws a root actor, then its children unless the actor has flag 0x1008. */
 void ACT_modelDraw(Actor *actor)
 {
     Actor **children;
@@ -707,6 +747,10 @@ void ACT_modelDraw(Actor *actor)
     }
 }
 
+/*
+ * Draws one actor's model. Pending deferred shape bindings are applied first,
+ * then the light, scale and render state are set, and the model is submitted.
+ */
 static void ACT_modelDrawSub(Actor *actor)
 {
     void *model;
@@ -808,6 +852,7 @@ static void ACT_modelDrawSub(Actor *actor)
             : "memory");
     }
     nmlModelSetScale(&scaleVector);
+    /* Sets the cull bit when the actor is farther from the camera than its cull distance. */
     if (((actor->drawEnv.renderLevel & 0x80) != 0) && nmlModelAskNonLinearCamera() != 0) {
         StudioCamera *camera = xglStudioSelectGetActiveCamera(0);
         actor->drawEnv.renderLevel = actor->drawEnv.renderLevel & 0xfffffeff;
@@ -815,6 +860,7 @@ static void ACT_modelDrawSub(Actor *actor)
             actor->drawEnv.renderLevel = actor->drawEnv.renderLevel | 0x100;
         }
     }
+    /* A child model takes the parent's window and render level; a root model sets its shadow texture. */
     if (parent != 0) {
         if (actor->kind == 1 && (parent->drawEnv.flags & 0x80) != 0) {
             nmlModelClear();
@@ -862,6 +908,7 @@ static void ACT_modelDrawSub(Actor *actor)
             nmlModelSetAxisSymmetry(actor->position.y);
         }
     }
+    /* Per-model render state, then the draw call. */
     nmlModelSetFaceModel(actor->kind == 1);
     nmlModelSetHumanModel(actor->humanKind);
     nmlModelSetSortOffset(actor->sortOffset);
@@ -881,6 +928,7 @@ static void ACT_modelDrawSub(Actor *actor)
     if ((actor->drawEnv.flags & 0x40) != 0) {
         nmlModelSetShadowHeight(0.0f);
     }
+    /* Draws through the actor's own model when flag 0x4000 is set, else through the shared model entry. */
     if ((actor->flags & 0x4000) != 0) {
         MDL_draw(&actor->model[0].model, matrixBuffer);
         nmlModelGetGblPosition(&actor->globalPosition);
@@ -895,6 +943,10 @@ static void ACT_modelDrawSub(Actor *actor)
     (void)scaleVector;
 }
 
+/*
+ * Creates the actor's model from its resource. With a move, the actor's joint
+ * matrices start after the base and extra joints.
+ */
 void ACT_setModelWrapper(Actor *actor, int unused)
 {
     ActorModelState *modelState = actor->model;
@@ -917,6 +969,11 @@ void ACT_setModelWrapper(Actor *actor, int unused)
     }
 }
 
+/*
+ * Loads actor's model, matrices and move from resource resourceId, retrying with
+ * the low byte cleared. For an id without a sub-id, the actor's face actor is
+ * also created.
+ */
 void ACT_loadResource(Actor *actor, int resourceId)
 {
     int fileId = resourceId & 0x00ffffff;
@@ -970,16 +1027,20 @@ void ACT_loadResource(Actor *actor, int resourceId)
     }
 }
 
-/* main:0x00307c38 is `jr ra` / nop: no argument is read and no state changes. */
-/* main:0x00307c40 is `jr ra` / nop: no argument is read and no state changes. */
+/* No-op: reads no argument and changes no state. */
 void ACT_initMTNResource(void)
 {
 }
 
+/* No-op. */
 void ACT_resourceInit(void)
 {
 }
 
+/*
+ * Resets actor's animation slot and blend state, sets up its joint producer
+ * with the default consumers, and adds the eye and head look consumers.
+ */
 void ACT_initMotion(Actor *actor)
 {
     static float min[3];
@@ -1033,6 +1094,10 @@ void ACT_initMotion(Actor *actor)
     } while (0);
 }
 
+/*
+ * Sets the current motion of actor to motionId. ANIM_MOTION_CLEAR drops the
+ * motion and resets the joint matrices instead.
+ */
 void ACT_setMotion(Actor *actor, int motionId)
 {
     ActorAnimationState *animation = &actor->animation;
@@ -1070,6 +1135,12 @@ void ACT_setMotion(Actor *actor, int motionId)
     slot->flags = (slot->flags & 0xdffffff6) | 0x10000;
 }
 
+/*
+ * Starts motion motionId on actor with flags; ANIM_MOTION_CLEAR drops the motion
+ * instead. Requesting the current motion only ORs in flags. A new motion is
+ * queued as the next one while flag 2 is set in the slot, unless flag 0x20 is
+ * set, which starts it at once.
+ */
 void ACT_setMotion2(Actor *actor, int motionId, unsigned int flags)
 {
     ActorAnimationState *animation = &actor->animation;
@@ -1163,6 +1234,7 @@ void ACT_animGetCurrent(Actor *actor)
     ANM_getEntry(slot, actor->animPackTables[(slot->currentDataId >> 8) & 7]);
 }
 
+/* Loads the animation pack for id from bank into the actor's pack table 0, with a default pack as fallback. */
 void ACT_loadMotion(Actor *actor, int id, int bank)
 {
     unsigned short kind;
@@ -1197,6 +1269,7 @@ void ACT_loadMotion(Actor *actor, int id, int bank)
     }
 }
 
+/* Sets pack table slot to motion for target, or for every actor when target is 0. */
 void ACT_initExMotion(Actor *target, unsigned int slot, void *motion)
 {
     int i;
@@ -1211,6 +1284,7 @@ void ACT_initExMotion(Actor *target, unsigned int slot, void *motion)
     target->animPackTables[slot] = motion;
 }
 
+/* Shows or hides model part; part numbers from 128 up are group parts. */
 void ACT_setVisible(Actor *actor, int part, int visible)
 {
     if ((unsigned int)part >= 128) {
@@ -1220,6 +1294,10 @@ void ACT_setVisible(Actor *actor, int part, int visible)
     }
 }
 
+/*
+ * Shows the hand models selected by hand: bits 0-7 pick the right hand and
+ * bits 8-15 the left, with 0x80 meaning none. Other hand models are hidden first.
+ */
 void ACT_setHumanHand(Actor *actor, int hand)
 {
     int left;

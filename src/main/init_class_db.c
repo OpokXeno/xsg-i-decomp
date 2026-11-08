@@ -36,7 +36,7 @@ extern char *strncpy(char *dest, const char *src, unsigned int count);
 extern char *strcat(char *dest, const char *src);
 extern ClassFile *PDB_findFile(int volume, const char *name);
 
-/* classFromSig resolves both reference classes and primitive type records. */
+/* getClassFromSignature resolves both reference classes and primitive type records. */
 extern JavaClass *getClassFromSignature(const char *signature, void *class_loader);
 
 void setFieldValue(SceneField *field, unsigned int value);
@@ -66,6 +66,7 @@ void initClassDB(void)
     }
 }
 
+/* Finds the class file named by entry in the class-path volumes and reads it. Returns 0 when no volume has it. */
 JavaClass *findClass(ClassFileEntry *entry)
 {
     char filename[256];
@@ -92,6 +93,7 @@ JavaClass *findClass(ClassFileEntry *entry)
     return 0;
 }
 
+/* Parses a class file from buffer into class_info. Returns class_info, or 0 when the magic number is wrong. */
 JavaClass *readClass(DataBuffer *buffer, JavaClass *class_info,
                      void *class_loader)
 {
@@ -117,6 +119,7 @@ JavaClass *readClass(DataBuffer *buffer, JavaClass *class_info,
     return class_info;
 }
 
+/* Reads a Code attribute into method: records the bytecode position and length, skips the exception table, then reads the nested attributes. */
 void addCode(DataBuffer *buffer, JavaClass *class_info, JavaMethod *method,
              u32 attributeLength)
 {
@@ -142,6 +145,10 @@ void addCode(DataBuffer *buffer, JavaClass *class_info, JavaMethod *method,
     readAttributes(buffer, class_info, method);
 }
 
+/*
+ * Adds one field to class_info->fields and resolves its type. Static fields fill
+ * the array from the front, instance fields from the back.
+ */
 SceneField *addField(JavaClass *class_info,
                      const ClassFileMemberHeader *field_info)
 {
@@ -181,6 +188,7 @@ SceneField *addField(JavaClass *class_info,
     return field;
 }
 
+/* Adds one method to class_info->methods, taking its name and descriptor from the constant pool, and computes its parameter and return sizes. */
 JavaMethod *addMethod(JavaClass *class_info,
                       ClassFileMemberHeader *method_info)
 {
@@ -219,6 +227,7 @@ JavaMethod *addMethod(JavaClass *class_info,
     return method;
 }
 
+/* Reads the field table and adds each field to class_info. */
 static void readFields(DataBuffer *buffer, JavaClass *class_info)
 {
     u16 field_count;
@@ -248,6 +257,7 @@ static void readFields(DataBuffer *buffer, JavaClass *class_info)
     class_info->fieldCount = field_count;
 }
 
+/* Reads the method table and adds each method to class_info. */
 static void readMethods(DataBuffer *buffer, JavaClass *class_info)
 {
     u16 method_count;
@@ -275,6 +285,7 @@ static void readMethods(DataBuffer *buffer, JavaClass *class_info)
     }
 }
 
+/* Reads the interface table into class_info->interfaces. */
 static void readInterfaces(DataBuffer *buffer, JavaClass *class_info)
 {
     u16 interface_count;
@@ -299,6 +310,7 @@ static void readInterfaces(DataBuffer *buffer, JavaClass *class_info)
     }
 }
 
+/* Reads an attribute table for attribute_target. Code is parsed, ConstantValue sets the field value, and other attributes are skipped. */
 static void readAttributes(DataBuffer *buffer, JavaClass *class_info,
                            void *attribute_target)
 {
@@ -346,6 +358,7 @@ static void readAttributes(DataBuffer *buffer, JavaClass *class_info,
     }
 }
 
+/* Reads the constant pool into class_info->constants; the tag bytes are stored after the entries. */
 static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
 {
     unsigned int count;
@@ -371,6 +384,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
     constant_pool[0].tags = tags;
     tags[0] = 0;
 
+    /* Read each entry: its tag byte, then the payload that tag defines. */
     for (index = 1; index < count;) {
         unsigned char *tag_slot;
         unsigned int current_tag = DataBuffer_getUByteAt(buffer);
@@ -432,6 +446,7 @@ static void readConstantPool(DataBuffer *buffer, JavaClass *class_info)
         index++;
     }
 
+    /* Give class and string entries the object of their UTF8 name; entries without one lose their tag. */
     for (index = 1; index < count; index++) {
         tag = tags[index];
         is_non_member_tag = tag < JVM_CONSTANT_FIELDREF;
@@ -453,6 +468,7 @@ void setFieldValue(SceneField *field, unsigned int value)
     field->flags |= VM_FIELD_FLAG_HAS_CONSTANT_VALUE;
 }
 
+/* Fills in the name, flags, loader and super class index when this_class names a class constant. */
 void setupClass(JavaClass *class_info, u32 this_class_index,
                 u32 super_class_index, u32 access_flags,
                 void *class_loader)

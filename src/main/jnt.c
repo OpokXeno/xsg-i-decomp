@@ -9,16 +9,12 @@
 #include "vu0_macro.h"
 
 /*
- * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000).
- * Two of its slots are named here, because this file's two recovered
- * functions are their writers; the area itself is not recovered, so the
- * slots are named relative to a base the caller materializes rather than
- * modeled as members.
+ * The JNT producer's work area is in the EE scratchpad (SPR, 0x70000000);
+ * functions reach it through JNT_SCRATCH_BASE.
  *
  * The base has to stay a value the function holds: folding it into each
- * store's address instead (`*(T *)0x700007a0`) makes 2.96 emit the two
- * absolute stores as separate li/sw pairs, four instructions in place of the
- * original's single shared `lui $2,0x7000` and two displaced stores.
+ * store's address instead (`*(T *)0x700007a0`) makes 2.96 emit separate
+ * li/sw pairs in place of one shared `lui $2,0x7000` and displaced stores.
  */
 #define JNT_SCRATCH_BASE ((void *)SCRATCHPAD_BASE)
 
@@ -39,7 +35,7 @@
 /* JntProducer.consumer_ids: bit marking a filter rather than an interrupt channel. */
 #define JNT_CONSUMER_ID_FILTER 0x8000
 
-/* Producer consumers must point into the program image (checked before every call). */
+/* A producer consumer is called only when its address is word-aligned and in 0x1F0000..0x1FFFFFF. */
 #define JNT_CONSUMER_CODE_BASE 0x001F0000U
 #define JNT_CONSUMER_CODE_SPAN 0x01E0FFFFU
 
@@ -82,20 +78,16 @@ typedef void *(*JntProductionConsumer)(JntWork *work,
  * field: JNT_setInterpMatrix stores its matrix-buffer argument at 0x7A4 and
  * its float argument at 0x800 (interp_matrix / interpolation in JntWork above).
  *
- * JNT_setCurve stores its two pointer arguments at 0x7A8/0x7AC. Neither is
- * an end pointer: this same TU's JNT_getStaticVal (VA 0x0030EDC8) and
- * JNT_getVal (VA 0x0030F038) read them back as two independent per-element
- * 32-byte record tables, each gated on both slots being non-null and then
- * indexed by element_index*32 (the element's own 0x2C field):
- *   - JNT_getStaticVal: `sll $3,$11,5 / addu $3,$3,$5` with
- *     $5 = lw 0x7A8($10) -- 0x7A8 is the table it reads, static_value_records.
- *   - JNT_getVal: `sll $2,$6,5 / addu $3,$2,$3` with
- *     $3 = lw 0x7AC($17) -- 0x7AC is the table it reads, value_records.
+ * JNT_setCurve stores its two pointer arguments at 0x7A8 and 0x7AC. Neither is
+ * an end pointer: JNT_getStaticVal reads the 0x7A8 table as
+ * static_value_records and JNT_getVal reads the 0x7AC table as value_records.
+ * Both are independent 32-byte record tables indexed by the current element
+ * index, and each function uses its table only when both slots are non-null.
  */
 /*
  * A joint element is a fixed-size record: JNT_getElement indexes an array of
  * them and JNT_nextElement advances by exactly one. The layout beyond that
- * 0x40-byte stride is not recovered, so it stays a single unmodeled span
+ * 0x40-byte stride is not modeled, so it stays a single unmodeled span
  * (docs/naming.md) rather than invented members.
  */
 typedef struct JntElement {
@@ -104,7 +96,7 @@ typedef struct JntElement {
 
 /*
  * The joint resource header JNT_getRootElement reads: 0x10 bytes not
- * recovered here, then a self-relative offset field whose own address plus
+ * modeled here, then a self-relative offset field whose own address plus
  * its value is the joint's root element.
  */
 typedef struct JntElementHeader {
@@ -235,9 +227,8 @@ JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
                                          float frame);
 
 /*
- * Hair-smoothing toggle at VA 0x004DC248: JNT_computeMatrix reads it with
- * `lb $2,flagSmoothHair` (VA 0x00314B14) to decide whether to apply the
- * interpolated hair matrix; this pair only sets/clears it.
+ * Hair-smoothing toggle, set by JNT_onSmoothHair and JNT_offSmoothHair.
+ * JNT_computeMatrix reads it to decide whether to apply the interpolated hair matrix.
  */
 static signed char flagSmoothHair = 0;
 
@@ -264,6 +255,7 @@ static inline JntMatrix *jntMatrixAt(void *base, int index)
     return (JntMatrix *)((index << 6) + (unsigned int)base);
 }
 
+/* Fills three values: each from the pack when its mask bit is set, otherwise from fallback_values. */
 void get_fcvpack(float *destination, const float *fallback_values,
                  JntWork *pack, unsigned int pack_mask,
                  float frame)
@@ -282,6 +274,7 @@ void get_fcvpack(float *destination, const float *fallback_values,
     }
 }
 
+/* Like get_fcvpack, but components whose mask bit is clear take default_value. */
 void get_fcvpack_fix(float *destination, float default_value,
                     JntWork *pack, unsigned int pack_mask, float frame)
 {
@@ -298,6 +291,7 @@ void get_fcvpack_fix(float *destination, float default_value,
     } while (index < 3);
 }
 
+/* When channel_flags bit 0 is set, sets or clears pack->flags bit 0 from the next pack value. */
 void get_fcvpack_flag(JntWork *pack, int channel_flags,
                       float frame)
 {
@@ -310,6 +304,10 @@ void get_fcvpack_flag(JntWork *pack, int channel_flags,
     }
 }
 
+/*
+ * Copies the static channel's translation and rotation into the current
+ * element and its static record, then advances to the next channel.
+ */
 JntStaticChannel *JNT_getStaticVal(JntWork *work, JntStaticChannel *channel)
 {
     int index;
@@ -322,6 +320,7 @@ JntStaticChannel *JNT_getStaticVal(JntWork *work, JntStaticChannel *channel)
     type = channel->type;
     element = &work->elements[index];
 
+    /* Types 1-4 also reset the element scale to 1; type 5 copies only translation and rotation. */
     switch (type) {
     case 5:
         {
@@ -389,6 +388,10 @@ JntStaticChannel *JNT_getStaticVal(JntWork *work, JntStaticChannel *channel)
     return next_channel;
 }
 
+/*
+ * Reads a pack attribute, then the values its value_mask selects into values,
+ * with a stride of four floats. Unselected entries are set to zero.
+ */
 struct FcvPackAttribute *FCV_getAttrAndValue(float *values,
                                              unsigned short **cursor,
                                              float frame)
@@ -429,6 +432,11 @@ struct FcvPackAttribute *FCV_getAttrAndValue(float *values,
     return attribute;
 }
 
+/*
+ * Samples the current channel from the joint pack into the current element,
+ * applying inheritance and the type's rotation limits, then advances the
+ * element index. Returns the next channel.
+ */
 JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
                             float frame)
 {
@@ -567,6 +575,7 @@ JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
     case 6:
         break;
     }
+    /* With both record tables set, blend with the previous frame's record (flag 0x80), then store the sample. */
     {
         const JntPreviousTransform *previous = work->value_records;
 
@@ -618,6 +627,11 @@ JntStaticChannel *JNT_getVal(JntWork *work, JntStaticChannel *channel,
     return next_channel;
 }
 
+/*
+ * Static-chain variant of JNT_getVal: samples the channel into the current
+ * element without the previous-frame blend or the record-table store, then
+ * advances the element index.
+ */
 JntStaticChannel *JNT_getVal_staticChain(JntWork *work,
                                         JntStaticChannel *channel, float frame)
 {
@@ -783,6 +797,12 @@ static inline void JntCopyVector(Vector4 *destination, const Vector4 *source)
     *destination = *source;
 }
 
+/*
+ * Builds the current channel's matrix into matrix_buffer. Direct channels
+ * (types 0, 1, 5) use their own transform, chain-root and chain-link channels
+ * (types 3 and 2) add slots to the chain, and the chain end (type 4) solves it.
+ * An interrupt consumer, when set, runs first.
+ */
 JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
 {
     Vector4 target;
@@ -813,6 +833,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
                 }
             }
         }
+        /* A link flag takes translation or rotation from an earlier joint's matrix when that joint is already built. */
         switch (channel->type) {
         case 0:
         case 1: {
@@ -912,6 +933,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
             work->matrix_index++;
             break;
         }
+        /* Chain end: solves the collected chain toward its target, or places it without one. */
         case 4: {
             float distance;
             float z_component;
@@ -1311,6 +1333,7 @@ JntStaticChannel *JNT_constructMatrix(JntWork *work, JntStaticChannel *channel)
     return next_channel;
 }
 
+/* Builds the channel's static matrix into matrix_buffer and advances the element index. */
 void *JNT_getStaticVal2(JntWork *work, JntStaticChannel *channel)
 {
     int type;
@@ -1353,6 +1376,11 @@ void *JNT_getStaticVal2(JntWork *work, JntStaticChannel *channel)
     return next;
 }
 
+/*
+ * Samples the current channel from the joint pack for the matrix path and
+ * stores its matrix in matrix_buffer. Channels with the inherit flag also
+ * update the root translation, rotation and scale.
+ */
 JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float frame) {
     Vector4 *translation = &channel->translation;
     JntChainSlot *slot;
@@ -1410,6 +1438,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
         work->root_scale.y = work->channel_scale.y;
         work->root_scale.z = work->channel_scale.z;
     }
+    /* Each case builds this channel's part of the chain by type: 1 direct, 3 chain root, 2 chain link, 4 chain end, 5 direct with pack values. */
     switch (channel->type) {
     case 0:
         break;
@@ -1546,6 +1575,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
         work->matrix_index++;
         break;
     }
+    /* Chain end: when the target joint is already built, solves the chain toward it. */
     case 4: {
         float *source;
         int computed = 0;
@@ -1625,7 +1655,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 float lane_y;
                 float lane_z;
 
-                /* sums - slot0 translation, computed as one VU0 vector subtract. */
+                /* sums_pair[1] minus slot 0's translation, as one VU0 vector subtract. */
                 Vu0SubVector(&axis_a, &sums_pair[1], &jntChainAt(work, 0)->translation);
                 lane_x = axis_a.x;
                 lane_y = axis_a.y;
@@ -1720,7 +1750,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                     CUR_MATRIX_Txyz4s(&jntChainAt(work, 2)->translation);
                     CUR_MATRIX_Get(work->transform_basis);
                     CUR_MATRIX_GetT(&mid_b);
-                    /* sums - end translation, computed as one VU0 vector subtract. */
+                    /* sums_pair[1] minus mid_b (the translation just read back), as one VU0 vector subtract. */
                     Vu0SubVector(&axis_a, &sums_pair[1], &mid_b);
                     lane_x = axis_a.x;
                     lane_y = axis_a.y;
@@ -1770,7 +1800,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
                 float lane_z;
                 float direction_z;
 
-                /* sums - slot0 translation, computed as one VU0 vector subtract. */
+                /* sums_pair[1] minus slot 0's translation, as one VU0 vector subtract. */
                 Vu0SubVector(cp, &sums_pair[1], &jntChainAt(work, 0)->translation);
                 lane_x = axis_c.x;
                 lane_y = axis_c.y;
@@ -1899,6 +1929,7 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
     case 6:
         break;
     }
+    /* Inherited channels snap this matrix's translation onto its parent and keep the offset in root_correction. */
     if (has_fcv != 0) {
         xglMatrixUnit(work->root_correction);
         value_mask = work->channel_index;
@@ -1918,6 +1949,10 @@ JntStaticChannel *JNT_getVal2(JntWork *work, JntStaticChannel *channel, float fr
     return next_channel;
 }
 
+/*
+ * Matrix-path sampler, a variant of JNT_getVal2 that falls back to the static
+ * channel's translation when a pack value is unset.
+ */
 JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, float frame) {
     Vector4 displacement;
     Vector4 sums;
@@ -2347,6 +2382,7 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
         CUR_MATRIX_Get((work->matrix_buffer + work->current_index)->elements);
         break;
     }
+    /* Inherited channels rescale this matrix's y translation from the previous channel, then take the parent's translation. */
     if ((attribute->channel_flags & JNT_CHANNEL_FLAG_INHERIT) != 0) {
         JntMatrix *matrices;
         float (*dest)[4];
@@ -2382,9 +2418,13 @@ JntStaticChannel *JNT_getVal_HOGE2(JntWork *work, JntStaticChannel *channel, flo
     return next_channel;
 }
 
+/*
+ * Blends the translation row of matrix toward other_matrix by blend. The
+ * basis rows are kept from matrix, with their w lanes set to 1.
+ */
 static void liner_interpolate(JntMatrix *matrix, const JntMatrix *other_matrix, float blend)
 {
-    /* Move the scalar blend from COP1 through v1 into VU0's x broadcast. */
+    /* Move the scalar blend from COP1 through $3 into VF31, whose x lane is used as the weight. */
     __asm__ __volatile__(
         "mfc1 $3, %0\n"
         "qmtc2.ni $3, $vf31"
@@ -2434,6 +2474,7 @@ static inline void jntCopyTranslation(float destination[3],
     destination[2] = translation[2];
 }
 
+/* Blends the current matrix with the interpolation matrix for the channel type, then advances the element index. */
 JntStaticChannel *JNT_interpolate(JntWork *work, JntStaticChannel *channel)
 {
     JntMatrix result_matrix;
@@ -2485,6 +2526,7 @@ JntStaticChannel *JNT_interpolate(JntWork *work, JntStaticChannel *channel)
         }
     case 2:
         {
+        /* Rotation is interpolated as a quaternion; scale comes from the interpolation basis lengths when flag 0x20000 is set. */
         float scale;
         if (work->flags & 0x40000) {
             if ((work->current_index == 0x30) ||
@@ -2555,6 +2597,7 @@ int JNT_getFlags(void)
     return work->flags;
 }
 
+/* Returns the data after the list's type-4 accessory record, or 0 when there is none. */
 void *JNT_getAccessories(JntMoveResource *move)
 {
     unsigned int accumulated = 4;
@@ -2585,6 +2628,10 @@ void *JNT_getAccessories(JntMoveResource *move)
     return 0;
 }
 
+/*
+ * Walks an attribute buffer: a type-5 record sets the current value tag, and
+ * a type-1 record sets the attribute key and its 8-character name.
+ */
 void JNT_readAttribute(void *scratch_address, void *attribute_buffer)
 {
     typedef struct JntAttributeRecord {
@@ -2668,6 +2715,11 @@ void JNT_setCurve(void *static_value_records, void *value_records)
     work->value_records = value_records;
 }
 
+/*
+ * Applies one channel to the model matrix tables: type 5 copies the current
+ * matrix, type 2 multiplies it by the model matrix into the combined table.
+ * Returns the next channel.
+ */
 JntStaticChannel *JNT_setMDLMatrix(JntWork *work, JntStaticChannel *channel)
 {
     JntModelMatrixResource *model = work->model;
@@ -2716,6 +2768,7 @@ JntStaticChannel *JNT_setMDLMatrix(JntWork *work, JntStaticChannel *channel)
     return next_channel;
 }
 
+/* Runs JNT_setMDLMatrix over the channels in two passes: up to the hair-id primary and secondary counts, then up to the channel limit. */
 void JNT_setModelMatrix(void)
 {
     JntWork *work = JNT_SCRATCH_BASE;
@@ -2743,6 +2796,10 @@ void JNT_setModelMatrix(void)
     }
 }
 
+/*
+ * Scans the move elements from the first one and returns one less than the
+ * index of the first element whose type is not 1, or 0 when none is found.
+ */
 int JNT_getMoveElement(void *move)
 {
     JntMoveElementHeader *header = move;
@@ -2779,6 +2836,11 @@ void *JNT_getRootElement(void *joint)
     return (unsigned char *)root_element_offset + *root_element_offset;
 }
 
+/*
+ * Sets the model and hair-id source and locates the channel table. Version 2
+ * and later resources read their attribute header first, and the channels
+ * follow at its offset.
+ */
 void JNT_setModel(void *model, JntHairIdSource *joint)
 {
     JntWork *work = JNT_SCRATCH_BASE;
@@ -2800,6 +2862,10 @@ void JNT_setModel(void *model, JntHairIdSource *joint)
     work->channels = (JntStaticChannel *)&joint->channel_offset;
 }
 
+/*
+ * Starts an FCV pack for channel_index. A null pack sets JNT_WORK_NO_PACK, so
+ * the consumers do nothing.
+ */
 void JNT_setFCurve(void *pack, unsigned int channel_index)
 {
     JntWork *work = JNT_SCRATCH_BASE;
@@ -2817,6 +2883,10 @@ void JNT_setFCurve(void *pack, unsigned int channel_index)
     work->elements = &work->default_element;
 }
 
+/*
+ * Starts an FCV pack for channel_index and sets the matrix buffer. Unlike
+ * JNT_setFCurve, the pack is not checked for null.
+ */
 void JNT_setFCurve2(void *pack, void *matrix_buffer,
                     unsigned int channel_index)
 {
@@ -2865,6 +2935,7 @@ JntRootStorage JNT_getRootScale(volatile JntRootSlot *destination)
     return value;
 }
 
+/* Registers a consumer and its argument under consumer_id, reusing an existing entry with that id. Returns 0. */
 int JNT_addConsumer(JntProducer *producer, int consumer_id,
                     JntProductionConsumer consumer, int argument)
 {
@@ -2901,6 +2972,11 @@ void JNT_initProducer(JntProducer *producer)
     }
 }
 
+/*
+ * Starts one production pass for actor at current_frame. Passes with flag
+ * 0x08000000 produce nothing; otherwise the first consumer runs when its
+ * address is inside the program image. Returns 0.
+ */
 int JNT_startProduction(float current_frame, JntProducer *producer, void *actor)
 {
     JntWork *work = JNT_SCRATCH_BASE;
@@ -2951,6 +3027,12 @@ void *JNT_nextElement(void *element)
     return current + 1;
 }
 
+/*
+ * Default interrupt consumer. Samples the hair channels from the pack, then
+ * from static values once the pack ends, and blends them when flag 2 is set.
+ * Returns the next channel, or 0 when there is no channel or pack, or when the
+ * pack ends with flag 0x40 set.
+ */
 JntStaticChannel *JNT_defaultConsumer(JntWork *work,
                                       JntStaticChannel *channel,
                                       int consumer_argument)
@@ -2971,6 +3053,7 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
     difference = work->requested_attribute_key - work->attribute_key;
     frame = work->current_frame;
     work->attribute_difference = difference;
+    /* Matching attribute keys use JNT_getVal2 over the primary and secondary channels; other keys use JNT_getVal_HOGE2 for the primary ones. */
     if (difference == 0) {
         count = work->hair_id_source->primary_id;
         count += work->hair_id_source->secondary_id;
@@ -3048,6 +3131,7 @@ JntStaticChannel *JNT_defaultConsumer(JntWork *work,
     return cursor;
 }
 
+/* Refreshes the secondary hair channels from their static values. */
 void JNT_resetHair(void)
 {
     JntWork *work = JNT_SCRATCH_BASE;
@@ -3066,6 +3150,10 @@ void JNT_resetHair(void)
     }
 }
 
+/*
+ * Returns the channel count for the current tag: the primary count, plus the
+ * secondary count when the tag flag is 0, plus the tag value for hair-offset tags.
+ */
 static int JNT_hairID(JntWork *work)
 {
     JntChannelTag *tag = work->current_value;
@@ -3082,6 +3170,11 @@ static int JNT_hairID(JntWork *work)
     return id;
 }
 
+/*
+ * Computes the hair channel run for the current hair id, sampling the pack,
+ * static values or EXM motion depending on the attribute key and animation
+ * flags. Returns the next channel, or 0 when there is no channel or pack.
+ */
 JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
                                  int consumer_argument)
 {
@@ -3114,6 +3207,7 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
                 cursor = JNT_getStaticVal2(work, cursor);
             }
         }
+        /* Flag 0x80000000 samples the whole hair range from the pack; otherwise static values or EXM motion are used. */
         if (work->animation_flags & 0x80000000U) {
             count = work->hair_id_source->primary_id +
                     work->hair_id_source->secondary_id;
@@ -3204,6 +3298,10 @@ JntStaticChannel *JNT_computeHair(JntWork *work, JntStaticChannel *channel,
     return cursor;
 }
 
+/*
+ * Points each element at the channel of every non-filter consumer id, and
+ * returns how many were set.
+ */
 int JNT_setInterrupt(JntWork *work, JntProducer *producer)
 {
     int count = producer->count;
@@ -3223,9 +3321,9 @@ int JNT_setInterrupt(JntWork *work, JntProducer *producer)
 }
 
 /*
- * The filter list is the joint producer itself: its consumer table, with a
- * consumer id carrying 0x8000 marking a filter (JNT_setInterrupt skips the
- * same ids).
+ * Returns the first filter consumer, searched from index 1 of the producer's
+ * consumer table. A filter is an entry whose consumer id has the 0x8000 bit
+ * set; JNT_setInterrupt skips those ids.
  */
 JntProductionConsumer JNT_getFilter(void *work, JntProducer *producer)
 {
@@ -3252,6 +3350,10 @@ JntProductionConsumer JNT_getFilter(void *work, JntProducer *producer)
     return 0;
 }
 
+/*
+ * Keeps the root matrix and multiplies each matrix in the hair range by it,
+ * advancing past the static channels first. Returns the next channel.
+ */
 JntStaticChannel *JNT_resetMatrix(JntWork *work, JntStaticChannel *channel)
 {
     JntMatrix base_matrix;
@@ -3300,6 +3402,11 @@ JntStaticChannel *JNT_resetMatrix(JntWork *work, JntStaticChannel *channel)
     return next;
 }
 
+/*
+ * Computes the joint matrices of one channel run. The owner's movement sets a
+ * follow speed, the chain root is clip-tested, and the run may be skipped by
+ * returning 0 when the clip test rejects it.
+ */
 JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
 {
     JntMatrix previous_matrix;
@@ -3354,6 +3461,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             animation_flags |= 0x40000000;
         }
     }
+    /* Derive the owner's follow speed from how far it moved since the last frame. */
     if (owner != 0) {
         previous_speed = owner->movement.y;
         speed = 0.0f;
@@ -3389,6 +3497,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
     }
     work->channel_start_index = -1;
     work->attribute_difference = work->requested_attribute_key - work->attribute_key;
+    /* Matching attribute keys sample the pack first; other keys take the static-chain path below. */
     if (work->attribute_difference == 0) {
         end_index = JNT_hairID(work);
         while (work->current_index < end_index) {
@@ -3429,6 +3538,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             dynamic_clip_position.x = dynamic_clip_result.elements[3][0] += work->root_matrix.elements[3][0];
             dynamic_clip_position.y = dynamic_clip_result.elements[3][1] += work->root_matrix.elements[3][1];
             dynamic_clip_position.z = dynamic_clip_result.elements[3][2] += work->root_matrix.elements[3][2];
+            /* Clip test on the chain root: a failing test marks the run, and it returns early unless flag 0x100 is set. */
             if (nmlModelCalcClip(&dynamic_clip_position) != 0 || (work->flags & 0x200)) {
                 if (!(work->flags & 0x100)) {
                     work->flags |= 0x40;
@@ -3459,6 +3569,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             next_channel = JNT_constructMatrix(work, next_channel);
         }
         jntCopyMatrix(&work->matrix_buffer[0], &previous_matrix);
+        /* The rest of the run uses the pack (flag 0x80000000), static values (0x40000000 or no owner matrix), or EXM motion. */
         if ((int)animation_flags < 0) {
             end_index = work->hair_id_source->primary_id + work->hair_id_source->secondary_id;
             while (work->current_index < end_index) {

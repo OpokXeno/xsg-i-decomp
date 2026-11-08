@@ -16,44 +16,41 @@
 #define CARD_TUTORIAL_SET_COUNT 2         /* layout/texture pairs loaded after the first file */
 #define CARD_TUTORIAL_TABLE_SIZE 64       /* tutoxtx_tbl entries; 47 are filled */
 
-/* Tutorial page count and the pad actions CardTutorialProc handles. Evidence (OV10, CardTutorialProc 0x00a215e0):
- * `slti a0,a1,47` at 0x00a2163c ends the pages after tutopage++ (valid pages are 0..46); `andi v0,a1,0x8` at 0x00a21618
- * advances (sound 1, tutopage++, load the page); `andi v0,a1,0x4` at 0x00a21690 goes back (tutopage--, sound 2, load the
- * page); `andi v1,a1,0x800` at 0x00a216d0 closes the viewer (returns 0). */
+/* Tutorial page count and the pad actions CardTutorialProc handles: pages run 0..46.
+ * Next advances a page and ends the viewer past the last one, Prev goes back, and
+ * Close ends the viewer. */
 #define CARD_TUTORIAL_PAGE_COUNT 47
 #define CARD_TUTORIAL_PAD_NEXT 0x0008
 #define CARD_TUTORIAL_PAD_PREV 0x0004
 #define CARD_TUTORIAL_PAD_CLOSE 0x0800
 
-/* Two-entry, NULL-terminated list of tutorial base names; the original pair is at 0x00A4E4B0 ({"Tutorial", NULL}). */
+/* Two-entry, NULL-terminated list of tutorial base names; cardTutorialNameListInit holds {"Tutorial", NULL}. */
 typedef struct {
     const char *name[CARD_TUTORIAL_SET_COUNT];
 } TutorialNameList;
 
 /* Translation vector {1.2f, -1.82f, 0.0f, 1.0f}, read by xglMatrixTrans as four floats. The original copies the 16 bytes from
- * cardTutorialTranslationInit with two doubleword moves (`ld`/`ld`/`sd`/`sd` at 0x00a21600..0x00a21610). A plain float[4] or struct of floats has
- * only 4-byte alignment and compiles to unaligned ldl/ldr/sdl/sdr pairs; the u64 member gives the aggregate the 8-byte alignment
- * that yields the doubleword copy. */
+ * cardTutorialTranslationInit with two doubleword moves. A plain float[4] or struct of floats has only 4-byte alignment and
+ * compiles to unaligned ldl/ldr/sdl/sdr pairs; the u64 member gives the aggregate the 8-byte alignment that yields the
+ * doubleword copy. */
 typedef union CardTutorialTranslation {
     float v[4];
     u64 words[2];
 } CardTutorialTranslation;
 
 
-/* Declared here: nmlModelSetRenderLevel is void (main/nml_model_set.h returns int)
- * (measured: with the int return CardTutorialProc keeps a different register for the lex table address). */
+static int tutopage;
+static u32 tulex_tbl[CARD_TUTORIAL_SET_COUNT];
+static void *tuxtx_tbl[CARD_TUTORIAL_SET_COUNT];
+static u32 lex;
 
-static int tutopage;       /* 0x00A487C8 */
-static u32 tulex_tbl[CARD_TUTORIAL_SET_COUNT];    /* 0x00A57DB0 */
-static void *tuxtx_tbl[CARD_TUTORIAL_SET_COUNT];  /* 0x00A57DB8 */
-static u32 lex;            /* 0x00A57DA8 */
-
-/* Declared here, defined at the end of the file (the name table above them needs each address): */
-/* Void here (measured): declaring the int it returns changes the object at its call sites. */
+/* Declared void here, though main/nml_model_set.h returns int: with the int return the call
+ * sites change, and CardTutorialProc keeps a different register for the lex table address. */
 extern void nmlModelSetRenderLevel(int level);
+/* Declared here, defined at the end of the file. */
 extern const TutorialNameList cardTutorialNameListInit;
-extern const char cardTutorialFirstLexName[];   /* "Tu_000.lex" at 0x00A4E4B8 */
-extern const char cardTutorialLexExtension[];   /* ".lex" at 0x00A4E4C8 */
+extern const char cardTutorialFirstLexName[];
+extern const char cardTutorialLexExtension[];
 extern const CardTutorialTranslation cardTutorialTranslationInit;
 extern const char cardTutorialEndLog[];
 
@@ -124,6 +121,7 @@ static const char *tutoxtx_tbl[CARD_TUTORIAL_TABLE_SIZE] = {
 const char cardTutorialXtxExtension[8] = ".xtx";
 static void *tuxtx;
 
+/* Reads the texture file of the tutorial page at tutorialIndex into tuxtx. Returns the xglCdReadFile result. */
 int CardTutorialFileLoad(int tutorialIndex)
 {
     char path[CARD_TUTORIAL_PATH_SIZE];
@@ -135,6 +133,10 @@ int CardTutorialFileLoad(int tutorialIndex)
     return xglCdReadFile(path, tuxtx, 0, 1);
 }
 
+/*
+ * Loads the first layout file, then a layout and a texture file for each set name, each
+ * file starting on a 16-byte boundary in the tutorial buffer. Ends by loading page 0.
+ */
 void CardTutorialInit(void)
 {
     char path[CARD_TUTORIAL_PATH_SIZE];
@@ -185,6 +187,10 @@ void CardTutorialInit(void)
     CardTutorialFileLoad(0);
 }
 
+/*
+ * Per-frame tutorial viewer: Next and Prev change the page, Close ends the viewer, and the
+ * page model is drawn while it stays open. Returns 0 when the viewer ends, 1 otherwise.
+ */
 int CardTutorialProc(CardGameWork *work)
 {
     Matrix4 source;

@@ -149,6 +149,7 @@ float AdjTable_Z[LADDER_DIRECTION_COUNT] = {-0.41f, 0.0f, 0.41f, 0.0f};
 
 float LadderStep[LADDER_STEP_COUNT] = {0.0f};
 
+/* Returns the ladder index whose attribute matches, or -1. */
 short Get_Ladder(int attribute)
 {
     struct LadderAttributeTable table = ladderAttributeTable;
@@ -165,6 +166,7 @@ short Get_Ladder(int attribute)
     return -1;
 }
 
+/* Returns the arrival index whose attribute matches, or -1. */
 short Get_Arrival(int attribute)
 {
     struct ArrivalAttributeTable table = arrivalAttributeTable;
@@ -181,6 +183,11 @@ short Get_Arrival(int attribute)
     return -1;
 }
 
+/*
+ * Walks from start by (xStep, zStep) while the attribute is a ladder and
+ * writes the last ladder position's X and Z to position. If the walk never
+ * leaves the ladder within LADDER_ID_SEARCH_MAX steps, start's X and Z are used.
+ */
 void Get_LadderID_Limit(const float *start, float *position,
                         float xStep, float zStep)
 {
@@ -218,6 +225,11 @@ void Get_LadderID_Limit(const float *start, float *position,
     }
 }
 
+/*
+ * Walks from start by (xStep, zStep) until an arrival attribute is found and
+ * leaves position there. Returns 1 if one was found within ARRIVAL_SEARCH_MAX
+ * steps, 0 otherwise.
+ */
 int Get_ArrivalID_First(const float *start, float *position,
                         float xStep, float zStep)
 {
@@ -248,6 +260,10 @@ int Get_ArrivalID_First(const float *start, float *position,
     return index != ARRIVAL_SEARCH_MAX;
 }
 
+/*
+ * Runs the approach and the flight onto the ladder. When the flight ends,
+ * the actor is set on the ladder and LadderStep[] is filled around the middle rung.
+ */
 void Fly_to_Ladder(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];
@@ -311,6 +327,7 @@ void Fly_to_Ladder(Actor *actor)
     }
     LadderStep[LADDER_STEP_MIDDLE] = actor->position.y;
 
+    /* Fill the rungs above and below the middle one, rising by FLY_TO_LADDER_RISE_STEP per rung. */
     for (i = 1; i < LADDER_STEP_MIDDLE; i++) {
         float rise = i * FLY_TO_LADDER_RISE_STEP;
         float base = actor->position.y;
@@ -320,6 +337,10 @@ void Fly_to_Ladder(Actor *actor)
     }
 }
 
+/*
+ * Moves the actor from the ladder to its landing point. On arrival it returns
+ * to idle and sets player flag 0x1000 and map flag 0x20.
+ */
 void Get_Off_Ladder(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];
@@ -340,6 +361,10 @@ void Get_Off_Ladder(Actor *actor)
     actor->animation.slot.speed = GET_OFF_LADDER_SPEED;
 }
 
+/*
+ * Starts a ladder approach when the actor stands on a ladder, or on an arrival
+ * point with a ladder one step ahead. Returns 1 if the approach started, 0 otherwise.
+ */
 short Ready_Ladder(Actor *actor)
 {
     AlignedVector4 point;
@@ -365,6 +390,7 @@ short Ready_Ladder(Actor *actor)
     }
 
     work->from = actor->position;
+    /* Standing on a ladder, or on an arrival point with a ladder ahead of it. */
     if (ladder != -1) {
         direction = GameLoopState.ladder_direction[ladder];
         work->to = actor->position;
@@ -405,6 +431,7 @@ short Ready_Ladder(Actor *actor)
     work->ceiling_height = ceiling;
     point = edge;
 
+    /* Find the ladder's limits along its axis and aim the target at their midpoint. */
     switch (direction) {
     case 0:
         Get_LadderID_Limit(&point.x, &edge.x, -0.001f,
@@ -443,6 +470,10 @@ short Ready_Ladder(Actor *actor)
     return 1;
 }
 
+/*
+ * Moves the actor while it is on a ladder: applies stick or d-pad input, steps
+ * between LadderStep[] rung heights, and starts the get-off move at either end.
+ */
 void On_Ladder(register Actor * const actor)
 {
     AlignedVector4 destination;
@@ -555,6 +586,7 @@ void On_Ladder(register Actor * const actor)
         }
     }
 
+    /* Debug text: ladder id, direction, input speeds, heights and limits, then the rung heights. */
     xglFontDebugPrintf(4, 2, "NUM = %3d,%3d,%8f", ladder_id, direction,
                        height);
     xglFontDebugPrintf(4, 10, "XYZ = %4f,%4f,%4f", move_x,
@@ -578,6 +610,7 @@ void On_Ladder(register Actor * const actor)
         }
     }
 
+    /* Climb state machine: a rung step runs for LADDER_STEP_FRAMES; HANG starts the next one from move_y. */
     switch (work->state) {
     case LADDER_STATE_STEP_UP:
         work->step_frame++;
@@ -664,6 +697,7 @@ void On_Ladder(register Actor * const actor)
         (actor->animation.slot.forwardLimit - actor->animation.slot.reverseLimit) *
         work->step_frame / LADDER_STEP_FRAMES_F;
 
+    /* Bottom exit when below the ground, otherwise apply the move and check the sides for an arrival point. */
     if (actor->position.y + move_y < ground &&
         GameLoopState.ladder_bottom_exit[ladder_id] == 1) {
         CallMethod_I(hashigoBottomName, work->ladder_id);
@@ -793,6 +827,11 @@ void On_Ladder(register Actor * const actor)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const char hashigoBottomName[16] = "HashigoBottom";
 
+/*
+ * Per-frame update for a ladder actor: turns it toward its target angle, runs the
+ * handler for its state and updates its motion. Returns 1 while active, or the
+ * Ready_Ladder result when the actor is idle.
+ */
 int Ladder_Main(Actor *actor)
 {
     LadderWork *work = &enepc[actor->number];

@@ -25,9 +25,9 @@ typedef struct Kosbw02GsParameter {
     float scale_v;
 } Kosbw02GsParameter;
 
-/* Partial views of the GS packet (same template as fnAMP02_DP000; the a1..a5
- * A+D stores go through the volatile vul/vuc members, which plain
- * MEfGsPacket/MEfGsQword fields did not reproduce in amp_02). */
+/* Partial views of the GS packet (same template as fnAMP02_DP000). The a1..a5
+ * A+D stores go through the volatile vul/vuc members, which the plain
+ * MEfGsPacket/MEfGsQword fields do not reproduce. */
 typedef union Kosbw02QuadwordView {
     Quadword q;
     unsigned long ul[2];
@@ -118,6 +118,7 @@ extern Vector4 *MMathRotateMatrixYXZ(Vector4 *destination,
                                      const Vector4 *angles);
 extern void MEfDrawModel(const Vector4 *place, int entry, const char *texture);
 
+/* Sets up the effect in storage: the start, midpoint and rotation from the source and target actors, a cleared trail, and the four callbacks. */
 int MEfCreate_KOSBW02(MEfObjRecord *storage)
 {
     Kosbw02Allocation *allocation = (Kosbw02Allocation *)storage;
@@ -174,6 +175,7 @@ int MEfCreate_KOSBW02(MEfObjRecord *storage)
     return 1;
 }
 
+/* Per-frame update. While frame is below 25 the head moves along its arc. The trail history shifts by one step, and while frame is below 25 its newest points are reseeded. */
 static void fnKOSBW02_PR000(void *task, Kosbw02CreateState *work)
 {
     Vector4 work_vector;
@@ -275,6 +277,7 @@ static void fnKOSBW02_PR000(void *task, Kosbw02CreateState *work)
     }
 }
 
+/* Draws the model at the head position while frame is below 25. */
 static void fnKOSBW02_DM000(void *task, Kosbw02DrawWork *work)
 {
     Vector4 matrix[4];
@@ -300,6 +303,7 @@ extern Quadword McEfSTQtbl[];
 static const Quadword coltbl_0_00A518A0[10];
 static const float sztbl_1[10];
 
+/* Builds the GS packet: the state setup, for each non-zero entry of the ten-halfword table, one textured strip per point (three per entry), the head strip while frame is below 26, then terminates the packet. */
 static void fnKOSBW02_DP000(void *task, Kosbw02CreateState *state)
 {
     int i;
@@ -352,6 +356,7 @@ static void fnKOSBW02_DP000(void *task, Kosbw02CreateState *state)
     pk->current->us[0] |= nreg;
     pk->current += n;
     pk->count += n;
+    /* Ten trail entries; each non-zero one gets a strip for each of its three points. */
     i = 0;
     rec = (unsigned char *)state + 8;
     for (; i < 10; i++) {
@@ -424,6 +429,7 @@ static void fnKOSBW02_DP000(void *task, Kosbw02CreateState *state)
             }
         }
     }
+    /* Head strip, drawn while frame is below 26. */
     if (state->frame < 26) {
         if (MEfMake4Vertex(verts, &state->position, 0.5f) == 0) {
             Kosbw02QuadwordView *t;
@@ -477,17 +483,17 @@ static void fnKOSBW02_DP000(void *task, Kosbw02CreateState *state)
 extern void sefHitEffect(void);
 
 /*
- * The KOSBW02 effect record: the work area MEfCreate_KOSBW02 (outside this
- * allocation) installs fnKOSBW02_PO000 into. `frame` is the same counter role
- * the sibling MSP02 effect keeps at this same offset (MspEffect,
- * src/ov01/m_ef_create_msp_02.c): incremented once per call, it fires
- * sefHitEffect at 25 and MEfObjDestroy at 35.
+ * The KOSBW02 effect record passed to fnKOSBW02_PO000. frame is incremented
+ * once per call; it fires sefHitEffect at 25 and MEfObjDestroy at 35. The MSP02
+ * effect keeps its counter at the same offset (MspEffect in
+ * src/ov01/m_ef_create_msp_02.c).
  */
 typedef struct Kosbw02Effect {
     unsigned char unmodeled_00[0x70];
     int frame;
 } Kosbw02Effect;
 
+/* Post-update: advances frame, fires sefHitEffect at 25 and destroys the object from 35 on. */
 static void fnKOSBW02_PO000(void *self, Kosbw02Effect *work)
 {
     work->frame++;

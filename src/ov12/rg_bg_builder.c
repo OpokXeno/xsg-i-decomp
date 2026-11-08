@@ -62,7 +62,7 @@ typedef struct RgColiEntry {
 /* Distance of one "grid" or "rand" cell. */
 #define RG_BG_BUILDER_GRID_SCALE 10.0f
 
-/* Hardness of an object whose keyword has no "*<hardness>" suffix. */
+/* Hardness used when a keyword's "*" suffix is empty. */
 #define RG_BG_BUILDER_DEFAULT_HARDNESS 10
 
 
@@ -110,6 +110,11 @@ static int _GetTailParameter(const char *pszStr, int cDelim, int nBase);
 
 
 
+/*
+ * Creates the tray or pillar geometry for the collision box named pszVariant
+ * and adds it to pGroup, placed at the box's x/z position. Returns 0 when no
+ * such box is registered.
+ */
 static RgGeom *_CreateColi(RgSimpleDB *pDB, const char *pszVariant,
                            RgGeomGroup *pGroup)
 {
@@ -150,6 +155,10 @@ static RgGeom *_CreateColi(RgSimpleDB *pDB, const char *pszVariant,
 
 
 
+/*
+ * Allocates a collision-box entry with the given kind and size and registers
+ * it under pszName. Returns 0 and reports an error when the name is taken.
+ */
 static RgColiEntry *_EntryColi(RgSimpleDB *pDB, const char *pszName, int kind,
                                float width, float height, float value1,
                                float value2)
@@ -178,6 +187,7 @@ static RgColiEntry *_EntryColi(RgSimpleDB *pDB, const char *pszName, int kind,
     return pEntry;
 }
 
+/* Allocates a builder that adds its objects to pGroup, with an empty collision-box database. */
 RgBgBuilder *CreateRgBgBuilder(RgGeomGroup *pGroup)
 {
     RgBgBuilder *pBuilder;
@@ -208,6 +218,11 @@ void DisposeRgBgBuilder(RgBgBuilder *pBuilder)
 }
 
 
+/*
+ * Reads the DATA paragraph until EOF. The "file" keyword loads a data file,
+ * and tray, box and posbox register collision boxes in pDB. Returns the
+ * loaded data file.
+ */
 static RgFileSysData *_ReadBgData(RgReadText *pReader, RgSimpleDB *pDB)
 {
     char token[RG_BG_BUILDER_TOKEN_SIZE];
@@ -263,6 +278,10 @@ static RgFileSysData *_ReadBgData(RgReadText *pReader, RgSimpleDB *pDB)
 
 
 
+/*
+ * Creates a background object from the model named variant. Its collision
+ * geometry, if the database has one, is moved by the x and z of offset.
+ */
 static RgBgObj *_NewBgObj(RgSimpleDB *pDB, RgFileSysData *pData,
                           RgGeomGroup *pGroup, RgVector offset,
                           const char *variant)
@@ -288,6 +307,10 @@ static RgBgObj *_NewBgObj(RgSimpleDB *pDB, RgFileSysData *pData,
     return pObj;
 }
 
+/*
+ * Returns the integer after the first cDelim in pszStr, or nBase when nothing
+ * follows the delimiter. Returns -1 when the delimiter is absent.
+ */
 static int _GetTailParameter(const char *pszStr, int cDelim, int nBase)
 {
     char delimiter;
@@ -315,6 +338,11 @@ static void _SetBgObjAttr(RgBgObj *pObj, const char *pszKeyWord)
 }
 
 
+/*
+ * Builds the objects of stage pszStageName from its BG paragraph: loads the
+ * stage's data file, then handles one keyword at a time until the reader
+ * reaches EOF.
+ */
 void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
                               const char *pszStageName)
 {
@@ -349,6 +377,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
         assert_prog(bgBuilderAssertReaderNotNil, bgBuilderSourcePath, 397);
     }
 
+    /* Warns and returns when the stage has no BG paragraph. */
     RgReadTextRewind(pReader);
     if (RgReadTextFindParagraph(pReader, bgBuilderParagraphBg, pszStageName) == 0) {
         RgWarn(bgBuilderStageNotExistFormat, bgBuilderSourcePath, 405, pszStageName);
@@ -358,6 +387,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
     RgReadTextRewind(pReader);
     RgReadTextFindParagraph(pReader, bgBuilderParagraphBg, pszStageName);
     RgReadTextGetString(pReader, bgDataName);
+    /* Loads the DATA paragraph that the BG entry names. */
     if (bgDataName[0] != '*') {
         RgReadTextRewind(pReader);
         RgReadTextFindParagraph(pReader, bgBuilderParagraphData, bgDataName);
@@ -371,6 +401,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
     RgReadTextFindParagraph(pReader, bgBuilderParagraphBg, pszStageName);
     RgReadTextGetString(pReader, bgDataName);
 
+    /* Each pass reads one keyword with its leading options and arguments. */
     while (RgReadTextIsEOF(pReader) == 0) {
         pGroup = pBuilder->group;
         RgReadTextGetString(pReader, keyword);
@@ -380,6 +411,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
         enableBodyAttack = 0;
         pDispModel = 0;
 
+        /* Leading "-" options apply to the object that the keyword creates. */
         if (keyword[0] == '-') {
             do {
                 if (strcasecmp(keyword + 1, bgBuilderOptionNoFog) == 0) {
@@ -421,6 +453,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
             _SetBgObjAttr(pObj, keyword);
             pDispModel = RgBgObjGetDispModel(pObj);
         } else if (strncmp(keyword, bgBuilderKeywordRand, 4) == 0) {
+            /* Each axis takes a random cell between its two bounds, in either order. */
             firstX = RgReadTextGetInt(pReader);
             secondX = RgReadTextGetInt(pReader);
             firstZ = RgReadTextGetInt(pReader);
@@ -437,6 +470,7 @@ void RgBgBuilderBuildFromText(RgBgBuilder *pBuilder, RgReadText *pReader,
             _SetBgObjAttr(pObj, keyword);
             pDispModel = RgBgObjGetDispModel(pObj);
         } else if (strncmp(keyword, bgBuilderKeywordLight, 5) == 0) {
+            /* lightN reads three direction values, then three color values. */
             lightCode = keyword[5];
             errorCode = (unsigned char) keyword[5];
             if (lightCode < '0' + RG_BG_BUILDER_LIGHT_COUNT) {

@@ -77,6 +77,7 @@ static struct XrgEventWeaponEntry s_aWepTbl_0[XRG_EVENT_WEAPON_COUNT] = {
     { eventWeaponLwVx4Name, 110 }, { eventWeaponDefVxName, 111 },
 };
 
+/* Sets the event level that XrgEventGetLevel returns. XRG_EVENT_LEVEL_NONE clears it. */
 void XrgSetEventLevel(int level)
 {
     if (level == XRG_EVENT_LEVEL_NONE) {
@@ -87,6 +88,7 @@ void XrgSetEventLevel(int level)
     s_eEventLevel = level;
 }
 
+/* Returns the level set by XrgSetEventLevel, or else a level derived from two event flags. */
 int XrgEventGetLevel(void)
 {
     int usable;
@@ -98,6 +100,7 @@ int XrgEventGetLevel(void)
     return (xglFlagsGet1(0x12D) == 0) ? (usable != 0) : 2;
 }
 
+/* Returns whether enemy index may appear at the current event level. */
 int XrgEventIsUsableEnemy(unsigned int index)
 {
     int level;
@@ -121,6 +124,7 @@ int XrgEventIsUsableEnemy(unsigned int index)
     }
 }
 
+/* Returns whether the character at character_index is in the current party. */
 int XrgEventIsUsablePlayer(unsigned int character_index)
 {
     int party_ids[XRG_EVENT_PARTY_MAX];
@@ -160,6 +164,10 @@ int XrgEventIsUsablePlayer(unsigned int character_index)
     return 0;
 }
 
+/*
+ * Returns 1 when weapon may be used. A null weapon is usable; otherwise its name
+ * must match a table entry whose weapon box check passes.
+ */
 int XrgEventIsUsableWeapon(RgWeaponEssence *weapon)
 {
     const struct XrgEventWeaponEntry *entry;

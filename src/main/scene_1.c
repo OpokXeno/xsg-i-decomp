@@ -20,6 +20,12 @@ const char scene_void_signature[8] = "()V";
 
 const char scene_cleanup_name[8] = "cleanup";
 
+/*
+ * Sets up a scene instance: runs its constructor, creates the window stored in
+ * the "msg" field, creates each Chr or Unit field (running its constructor and
+ * init, and pointing its fields of the scene's own type back at the scene),
+ * then calls init().
+ */
 void SCENE_instance(SceneVm *vm, SceneObject scene_object)
 {
     SceneObject arguments[2];
@@ -52,17 +58,15 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
 
     /*
      * field and scene_class are reused for the message field and the window
-     * class, as the original does (the same registers as the field scan).
-     * lookupClassField returns the same 20-byte field record the scan walks.
+     * class, as the original does. lookupClassField returns the same 20-byte
+     * field record the scan walks.
      */
     field = (SceneField *)lookupClassField(
         classJava_xeno_Scene,
         loadConstString(scene_message_field_name, -1), 0);
     /*
-     * Turns the native window into a xeno/util/Window instance: copy the
-     * loaded class's own class-ref word into the window's object header,
-     * the same idiom newObject uses to seed a freshly allocated instance.
-     * The window is then stored into the scene's "msg" field below.
+     * Turns the native window into a xeno/util/Window instance by setting its
+     * class reference, then stores it in the scene's "msg" field.
      */
     scene_class = loadClass(loadConstString(scene_window_class_name, -1), 0);
     window = TWIN_create2(-1);
@@ -70,6 +74,7 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
     TWIN_initScene(window);
     *(TComponent **)(primary_object + field->location.offset) = window;
 
+    /* Create each instance field of the scene class that is a Chr or a Unit. */
     scene_class = ((ObjectHeader *)primary_object)->classPointer->clazz;
     remaining = scene_class->fieldCount - scene_class->staticFieldCount;
     remaining--;
@@ -198,6 +203,7 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
         remaining--;
     }
 
+    /* Call init() on the parent object. */
     scene_class = ((ObjectHeader *)parent_object)->classPointer->clazz;
     method_name = loadConstString(scene_init_name, -1);
     constructor = findMethod(scene_class, method_name,
@@ -210,22 +216,16 @@ void SCENE_instance(SceneVm *vm, SceneObject scene_object)
 }
 
 /*
- * Return-type caveat : `long` is a proven
- * zero-extra-instruction codegen lever blocking ee-gcc2.96 -O2 sibling-call
- * (`int`/`void`/int-temp all sibcall to the 24B `j` form; `long` keeps the
- * 32B `jal` form; `unsigned char`/`short` add truncation). `void` vs
- * predicate `int` vs `long` dispose semantics are unproven from callers/data:
- * no direct `jal SCENE_dispose` callers in SLUS_204.69, JNI_isInstanceOf
- * returns int 0/1 (see SCENE_start predicate use), and the original forwards
- * a0/v0 unchanged with gp-loaded classJava_xeno_Scene. For 0/1 values
- * int/long are indistinguishable (upper already zero). No cleaner pure-C
- * hypothesis exists in evidence.
+ * Returns 1 when scene_object is a xeno.Scene instance, else 0. The return type
+ * is long because that matches the original's call form; int and long agree for
+ * these 0/1 values.
  */
 long SCENE_dispose(SceneObject scene_object)
 {
     return JNI_isInstanceOf(scene_object, classJava_xeno_Scene);
 }
 
+/* Calls the scene object's cleanup() method, if its class has one. */
 void SCENE_cleanup(SceneVm *vm, SceneObject scene_object)
 {
     SceneObject arguments[1];
@@ -243,6 +243,12 @@ void SCENE_cleanup(SceneVm *vm, SceneObject scene_object)
     }
 }
 
+/*
+ * Attaches the scene's default script method to its thread. Mode 1 takes the
+ * method name from a SceneString and mode 8 from a C string; other modes do
+ * nothing. The thread is flagged as started on itself when it is the calling
+ * VM thread.
+ */
 void SCENE_start(SceneVm *vm, SceneObject scene_object, int mode,
                  void *method_name)
 {

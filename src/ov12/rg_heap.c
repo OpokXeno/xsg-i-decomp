@@ -61,7 +61,7 @@ const char heapAssertHeadSizeBelowBlockSize[24] = "HEAD_SIZE < nBlockSize";
 
 const char heapMakeBlockComment[16] = "make block";
 
-/* Three adjacent diagnostics occupy this one original 48-byte string pool. */
+/* Three adjacent diagnostics share one 48-byte string pool. */
 const struct {
     char heapNotNil[16];
     char alignedHeaderSize[24];
@@ -100,23 +100,6 @@ const char heapDumpBlockModuleFormat[24] = "module '%s' line %d\n";
 
 const char heapDumpBlockNotInHeapFormat[32] = "  this block is not in heap %p\n";
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a52a68 contains the source filename "../rg_heap.euc.c".
- * ov12:0x00a52b18 contains the assertion expression "pHeap != NIL".
- * ov12:0x00a52b48 contains the assertion expression "(nBufSize & 0xf) == 0".
- * ov12:0x00a52b60 contains the tag "init-2".
- * ov12:0x00a52f70 contains the assertion expression
- *      "pHeap != NIL && pPtr != NIL".
- * ov12:0x00a52f90 contains the format string "------------ dump %p\n".
- * ov12:0x00a52fa8 contains the format string "pre %p next %p\n".
- * ov12:0x00a52fb8 contains the format string "size %p mark %d\n".
- * ov12:0x00a52fd0 contains the format string "module '%s' line %d\n".
- * ov12:0x00a52fe8 contains the format string
- *      "  this block is not in heap %p\n".
- */
 static void _Error(const char *expression, const char *tag, RgHeap *pHeap,
                    const char *source_file, int line)
 {
@@ -175,8 +158,8 @@ static int _IsAllocated(struct RgHeapBlock *pBlock)
 }
 
 /*
- * s_szMagicString is a pointer to the 15-character stamp copied into every
- * block's magic field (lw of the symbol itself, not an inline array).
+ * s_szMagicString is a pointer to the stamp whose first 15 bytes are copied into
+ * every block's magic field (it loads the symbol's address, not an inline array).
  */
 static const unsigned char *s_szMagicString = heapMagicString;
 
@@ -202,11 +185,7 @@ static int _IsCollectMagicString(struct RgHeapBlock *pBlock)
     return 1;
 }
 
-/*
- * ov12:0x00a52af0 contains the assertion expression
- *      "HEAD_SIZE < nBlockSize".
- * ov12:0x00a52b08 contains the tag "make block".
- */
+/* Makes pTop the only block of a heap of nBufSize bytes and returns it. */
 static struct RgHeapBlock *_SetHeapHead(void *pTop, u32 nBufSize)
 {
     struct RgHeapBlock *pHead;
@@ -244,6 +223,7 @@ static void _MergeBlocks(struct RgHeapBlock *pHead)
     } while (pBlock != pHead);
 }
 
+/* Returns the normal heap, initializing it over its static arena on first use. */
 RgHeap *InstanceOfRgHeap(void)
 {
     static int s_bInit1 = 0;
@@ -257,6 +237,7 @@ RgHeap *InstanceOfRgHeap(void)
     return &s_inHeap;
 }
 
+/* Returns the data heap, initializing it over its static arena on first use. */
 RgHeap *InstanceOfRgHeapData(void)
 {
     static int s_bInit2 = 0;
@@ -278,6 +259,10 @@ void ClearRgHeap(RgHeap *pHeap)
     pHeap->pHead = _SetHeapHead(pHeap->top, pHeap->size);
 }
 
+/*
+ * Attaches a heap to nBufSize bytes at pTop, zeroes them and makes them one free
+ * block. nBufSize must be a multiple of 16.
+ */
 void InitRgHeap(RgHeap *pHeap, void *pTop, u32 nBufSize)
 {
     struct RgHeapBlock *pHead;
@@ -296,6 +281,11 @@ void InitRgHeap(RgHeap *pHeap, void *pTop, u32 nBufSize)
     pHeap->pHead = pHead;
 }
 
+/*
+ * Allocates nSize bytes from the smallest free block that fits, splitting off the
+ * unused tail. source_file and line are kept in the block for heap dumps. Returns 0
+ * when no free block is large enough.
+ */
 void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
 {
     struct RgHeapBlock *pHead;
@@ -322,6 +312,7 @@ void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
     nNeed = ((nSize + RG_HEAP_ALIGN_MASK) & ~RG_HEAP_ALIGN_MASK) +
             sizeof(struct RgHeapBlock);
 
+    /* Find the smallest free block that still holds the request. */
     pBest = 0;
     nBestSize = 0;
     pCur = pHead;
@@ -333,6 +324,7 @@ void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
         pCur = pCur->next;
     } while (pCur != pHead);
 
+    /* No free block fits: dump the heap, then report the failure. */
     if (pBest == 0) {
         if (pHeap == InstanceOfRgHeapData()) {
             RgHeapDump_sub(pHeap, heapNoDataHeapComment, heapSourcePath, 245);
@@ -349,6 +341,7 @@ void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
     if (nBestSize < nNeed) {
         _Error(heapAssertMatchBlockSizeEnough, heapBlockAlignComment, pHeap, heapSourcePath, 262);
     }
+    /* Split off the tail when it can hold a block header; otherwise give out the whole block. */
     nRemain = nBestSize - nNeed;
     if (nRemain > RG_HEAP_HEAD_SIZE) {
         nBlockSize = nNeed;
@@ -368,6 +361,7 @@ void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
     _SetHeapHead(pBest, nBlockSize);
     _MarkAlloc(pBest);
 
+    /* Record the call site in the block, or clear it when there is none. */
     if (source_file != 0) {
         strncpy(pBest->module, source_file, RG_HEAP_MODULE_LENGTH);
         pBest->module[RG_HEAP_MODULE_LENGTH] = 0;
@@ -391,6 +385,10 @@ void *RgHeapAlloc(RgHeap *pHeap, u32 nSize, const char *source_file, int line)
     return pPtr;
 }
 
+/*
+ * Returns a block to the heap. The block leaves the allocated list, goes back into
+ * the address-ordered free list and is merged with adjacent free blocks.
+ */
 void RgHeapFree(RgHeap *pHeap, void *pPtr, const char *source_file, int line)
 {
     struct RgHeapBlock *pHdr = (struct RgHeapBlock *)pPtr - 1;
@@ -419,6 +417,7 @@ void RgHeapFree(RgHeap *pHeap, void *pPtr, const char *source_file, int line)
     if (!RgHeapIsInSelf(pHeap, pHdr)) {
         RgError(heapPtrNotInAreaFormat, heapSourcePath, 350, pHeap, source_file, line);
     }
+    /* Remove the block from the allocated list. */
     pAlloc = pHeap->pAlloc;
     pNext = pAlloc->next;
     if (pNext == pAlloc) {
@@ -439,6 +438,7 @@ void RgHeapFree(RgHeap *pHeap, void *pPtr, const char *source_file, int line)
         pHeap->pHead = _SetHeapHead(pHdr, pHdr->size);
         return;
     }
+    /* Find the free-list position that keeps the list in address order. */
     pCur = pHeap->pHead;
     _Link(pHdr, 0, 0);
     do {
@@ -468,6 +468,7 @@ int RgHeapIsInSelf(RgHeap *pHeap, void *pPtr)
     return 0;
 }
 
+/* Returns nonzero when pPtr is NIL, not allocated, damaged or outside the heap. */
 int RgHeapIsInvalidMemory(RgHeap *pHeap, void *pPtr)
 {
     struct RgHeapBlock *pBlock;
@@ -485,19 +486,7 @@ int RgHeapIsInvalidMemory(RgHeap *pHeap, void *pPtr)
     return !RgHeapIsInSelf(pHeap, pBlock);
 }
 
-/*
- * ov12:0x00a52e88 contains the format string
- *      "\n\n---------------------------------\n".
- * ov12:0x00a52eb0 contains the format string "HEAD DUMP %p from %s %d\n".
- * ov12:0x00a52ed0 contains the format string
- *      "***** FREE MAP top %p (comment %s)\n".
- * ov12:0x00a52ef8 contains the format string
- *      "%p : size = %x(%d) next:%p\n".
- * ov12:0x00a52f18 contains the format string
- *      "***** ALLOC MAP top %p (comment %s)\n".
- * ov12:0x00a52f40 contains the format string
- *      "%p : size = %x(%d) next:%p allocated at %s,%d\n".
- */
+/* Logs the free and allocated block lists of a heap under the given comment tag. */
 void RgHeapDump_sub(RgHeap *pHeap, const char *comment, const char *source_file,
                     int line)
 {
@@ -523,6 +512,7 @@ void RgHeapDump_sub(RgHeap *pHeap, const char *comment, const char *source_file,
     }
 }
 
+/* Logs the header fields of the block that holds pPtr, or a note when it is outside the heap. */
 void RgHeapDumpBlock(RgHeap *pHeap, void *pPtr)
 {
     struct RgHeapBlock *pBlock;

@@ -17,8 +17,7 @@
 
 #define DEFAULT_VECTOR_RATE 0.0007999999798f
 
-/* HitCheckActor's minimum collision radius and maximum vertical separation
- * thresholds. These literal-pool values are read once for each actor scan. */
+/* HitCheckActor's minimum body radius and maximum vertical separation. */
 #define HIT_CHECK_MIN_BODY_RADIUS (0.0099999997764825821f)
 
 #define HIT_CHECK_MAX_HEIGHT_DIFFERENCE (1.8999999761581421f)
@@ -105,8 +104,7 @@ typedef struct PlayerPadView {
     signed char stick_y;
 } PlayerPadView;
 
-/* Partial view of CfCameraDefinition; the full type changes this object (the extern below
- * declares one record, and its size is recorded in the object). */
+/* Partial view of CfCameraDefinition: only its yaw field is modeled here. */
 typedef struct CfCameraDefinitionYawView {
     u8 unmodeled_00[0x34];
     float yaw;
@@ -171,6 +169,10 @@ static u16 GameCfPlayerLoadResource_preCID;
 
 static u8 GameCfPlayerLoadResource_preCurry;
 
+/*
+ * Updates the player's look-at each frame. With no locked target, the player
+ * looks at the nearest visible actor; with a locked target, it aims at that.
+ */
 void LookAt_Player(Actor *player_actor)
 {
     int nearest_actor_index;
@@ -202,6 +204,7 @@ void LookAt_Player(Actor *player_actor)
     Actor_LookAt_Release(player_actor, 1);
 }
 
+/* Resets the player actor's state, sequence, effect slots, ladder data and look-at. */
 void Player_System_Init(Actor *player_actor)
 {
     SequenceState *sequence;
@@ -275,6 +278,10 @@ void GameCfPlayerMoveInit(void)
     VECTOR_RATE = DEFAULT_VECTOR_RATE;
 }
 
+/*
+ * Advances the player by one frame: flash and ladder state, stick-driven
+ * velocity, collision with actors and map units, then the transform.
+ */
 void GameCfPlayerMove(void)
 {
     Actor *player = GameLoopState.player_actor;
@@ -299,6 +306,7 @@ void GameCfPlayerMove(void)
         }
         GameLoopState.effect = 0;
     }
+    /* Blink the player while its flash timer runs. */
     if (player->flash_timer != 0) {
         if (--player->flash_timer <= 0) {
             player->flash_timer = 0;
@@ -316,6 +324,7 @@ void GameCfPlayerMove(void)
             }
         }
     }
+    /* While Ladder_Main handles the frame, normal ground movement is skipped. */
     if (Ladder_Main(player) == 1) {
         player->flags &= ~0x20;
         return;
@@ -331,6 +340,7 @@ void GameCfPlayerMove(void)
     player->velocity.z = 0.0f;
     player->acceleration.x = 0.0f;
     player->acceleration.z = 0.0f;
+    /* Turn the stick (or d-pad) into a walk or run speed and a heading. */
     if (!(GameLoopState.flags & GAME_LOOP_FLAG_INPUT_DISABLED) && SCRIPT_getCfTime() >= 3) {
         signed char stick_x = PadData.stick_x;
         signed char stick_y = PadData.stick_y;
@@ -410,6 +420,7 @@ void GameCfPlayerMove(void)
             run_scale = rate[(u32)terrain_bits >> ACTOR_ATTR_FLOOR_SPEED_SHIFT];
         }
     }
+    /* Choose the idle, walk or run motion from the stick magnitude. */
     if (!(GameLoopState.flags & GAME_LOOP_FLAG_MOTION_FROZEN)) {
         int abs_speed = stick_speed;
 
@@ -431,6 +442,7 @@ void GameCfPlayerMove(void)
             Enemy_FindByEar(player, &player->position);
         }
     }
+    /* Spawn the ground effect of the floor under the player while it moves or the floor loops one. */
     speed = __builtin_fabsf(speed);
     ground_effect = Get_EffectCode(Get_Attr(&player->position, 0, 0));
     if (0.01f < speed || EfTab_Loop[ground_effect] == 1) {
@@ -444,7 +456,7 @@ void GameCfPlayerMove(void)
 
                 player->effects[player->effect_slot] = effect;
                 if (effect != 0) {
-                    effect->caster = player; /* look_at_player.c's player record is its view of the Actor */
+                    effect->caster = player;
                     player->effect_timer = 0;
                     player->effect_slot = (player->effect_slot + 1) % ACTOR_EFFECT_SLOT_COUNT;
                 }
@@ -453,6 +465,7 @@ void GameCfPlayerMove(void)
             player->effect_timer = ground_effect;
         }
     }
+    /* Apply the frame's motion, then resolve collisions with actors and map units. */
     player->velocity.x += player->acceleration.x;
     player->velocity.y += player->acceleration.y;
     player->velocity.z += player->acceleration.z;
@@ -481,6 +494,7 @@ void GameCfPlayerMove(void)
     if (HitCheckMapUnit(player) != -1) {
         player->position = position_before_move;
     }
+    /* Turn toward the target heading, then rebuild the player's transform. */
     player->rotation.y = Get_Cursol_by_Reduce_Speed_Angle_Loop(player->rotation.y, player->target_angle, 4.0f);
     xglMatrixStackUnit();
     xglMatrixStackTrans(&player->position.x);
@@ -500,6 +514,7 @@ void GameCfPlayerMove(void)
     }
 }
 
+/* Returns the index of the first other actor whose body overlaps the player's, or -1. */
 static short HitCheckActor(Actor *player_actor)
 {
     short i;
@@ -536,6 +551,10 @@ static short HitCheckActor(Actor *player_actor)
     return -1;
 }
 
+/*
+ * Moves the player to the edge of `other`'s body. Returns 0 and restores the
+ * previous position when the new spot collides with an actor or map unit.
+ */
 static int NyuruActor(Actor *player_actor, Actor *other)
 {
     float angle;
@@ -568,6 +587,7 @@ static int NyuruActor(Actor *player_actor, Actor *other)
     return 1;
 }
 
+/* Aims the player's look-at at the locked map unit, 1.0 above its position. */
 void PlayerLookAtAim(void)
 {
     int look_at_target;
@@ -582,6 +602,11 @@ void PlayerLookAtAim(void)
     Actor_LookAt(player_actor);
 }
 
+/*
+ * Loads the player's model, motion and sound files into the fixed player
+ * buffers. With use_cache == 0, returns early when the buffers already hold
+ * this player and costume.
+ */
 void GameCfPlayerLoadResource(int use_cache)
 {
     char path[256];

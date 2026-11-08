@@ -9,9 +9,9 @@
 /*
  * Partial view of XglPadRecord (include/main/xgl_pad.h), 0x68 bytes per pad:
  * the held and pressed halfwords and, from +0x30, the block whose last four
- * bytes are the signed stick positions, scaled by 1/128 (measured: with the
- * canonical record's 8-byte alignment the original's address arithmetic is
- * not reproduced, so the stick block is addressed by its byte offset).
+ * bytes are the signed stick positions, scaled by 1/128 (with the canonical
+ * record's 8-byte alignment the address arithmetic differs, so the stick
+ * block is addressed by its byte offset).
  */
 typedef struct XglPadRecordSticks {
     u8 unmodeled_00[8];
@@ -31,6 +31,7 @@ typedef struct XglPadRecordView {
 
 extern XglPadRecordView PadData[2];
 
+/* Resets the input state for the pad padId. */
 void InitXrgInput(XrgInput *pInput, int padId)
 {
     int i;
@@ -52,6 +53,11 @@ void InitXrgInput(XrgInput *pInput, int padId)
     pInput->flags = 0;
 }
 
+/*
+ * Reads the pad record for this input and updates the angle, magnitude and the
+ * shoulder, stick-click and pair flags from the buttons and button timers.
+ * frameTime is added to every button timer.
+ */
 void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
 {
     float stickX[2];
@@ -77,6 +83,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
     memset(stickY, 0, 8);
     memset(magnitude, 0, 8);
 
+    /* Restart the timer of each shoulder button pressed this frame. */
     if (pressed & PAD_L1) {
         pInput->buttonTimer[0] = 0;
     }
@@ -90,6 +97,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
         pInput->buttonTimer[3] = 0;
     }
 
+    /* Reads both sticks from the pad record, scaled by 1/128. */
     stickOffset = padIdx * sizeof(XglPadRecordView) + XGL_PAD_RECORD_STICKS_OFFSET;
     sticks = (XglPadRecordSticks *)((char *)PadData + stickOffset);
     stickX[0] = (float)sticks->position[3] * 0.0078125f;
@@ -97,6 +105,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
     stickX[1] = (float)sticks->position[1] * 0.0078125f;
     stickY[1] = (float)sticks->position[0] * 0.0078125f;
 
+    /* The D-pad overrides the first stick: up and down set X, left and right set Y. */
     if (buttons & PAD_UP) {
         stickX[0] = -1.0f;
     } else if (buttons & PAD_DOWN) {
@@ -108,6 +117,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
         stickY[0] = 1.0f;
     }
 
+    /* Turns each stick into a clamped magnitude, with the dead zone applied, and an angle. */
     for (i = 0; i < 2; i++) {
         vec[0] = stickX[i];
         vec[1] = stickY[i];
@@ -123,6 +133,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
     }
 
     pInput->flags = 0;
+    /* A shoulder press is latched here and the latch is cleared when the button is released. */
     if (pressed & XRG_INPUT_LEFT_SHOULDER_BUTTONS) {
         pInput->latchedFlags |= XRG_INPUT_FLAG_LEFT_SHOULDER;
     }
@@ -138,6 +149,7 @@ void XrgInputDeviceCheck(XrgInput *pInput, float frameTime)
         }
     }
 
+    /* A shoulder flag is set while a latched press stays held and is dropped when the button is released. */
     held = buttons & XRG_INPUT_LEFT_SHOULDER_BUTTONS;
     if (held) {
         if (pInput->latchedFlags & XRG_INPUT_FLAG_LEFT_SHOULDER) {

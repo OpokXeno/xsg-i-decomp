@@ -201,6 +201,11 @@ static unsigned char clut_1[32] = {
     0x48, 0x4c, 0x58, 0x5c, 0x68, 0x6c, 0x78, 0x7c,
 };
 
+/*
+ * Draws one unit6003 frame as a quad with a neutral colour. The texture is
+ * a sheet cell or the current movie frame. The corners are placed in world
+ * or screen space, and the draw is skipped when a world corner is clipped.
+ */
 static void unit6003_draw(MapUnitRecord *unit)
 {
     Unit6003Scratch *scratch = (Unit6003Scratch *)SCRATCHPAD_BASE;
@@ -211,6 +216,7 @@ static void unit6003_draw(MapUnitRecord *unit)
     int texture_page;
     float texture_scale;
 
+    /* Send the sheet or the current movie frame's XTX data. */
     switch (unit->unit6003.frame_type) {
     case UNIT6003_FRAME_SHEET:
         nmlModelDirectSendXtx(draw_mode, unit->unit6003.movie_work.resource);
@@ -226,6 +232,7 @@ static void unit6003_draw(MapUnitRecord *unit)
         break;
     }
 
+    /* Texture register word of the draw environment for this frame type. */
     switch (unit->unit6003.frame_type) {
     case UNIT6003_FRAME_SHEET:
         texture_page = sRender.texture_page << 5;
@@ -246,6 +253,7 @@ static void unit6003_draw(MapUnitRecord *unit)
             break;
     }
 
+    /* Texture rectangle of the frame inside its texture, as fractions. */
     switch (unit->unit6003.frame_type) {
     case UNIT6003_FRAME_SHEET:
         texture_scale = 1.0f / 512.0f;
@@ -267,6 +275,7 @@ static void unit6003_draw(MapUnitRecord *unit)
         break;
     }
 
+    /* Placement: world-space rectangle, or screen rectangle when use_screen_coordinates is set. */
     scratch->screen_coordinates = unit->unit6003.use_screen_coordinates;
     scratch->alpha = unit->unit6003.alpha;
     if (scratch->screen_coordinates == 0) {
@@ -288,6 +297,7 @@ static void unit6003_draw(MapUnitRecord *unit)
     }
     xglMatrixStackSave(scratch->matrix);
 
+    /* Transform the four corners of the quad. */
     for (corner = 0; corner < 4; ++corner, ++vertex) {
         int right = corner & 1;
         int bottom;
@@ -329,6 +339,7 @@ static void unit6003_draw(MapUnitRecord *unit)
     nmlModelDirectSend(draw_mode, &TestEnv_0_00490520, 0x15);
 }
 
+/* Allocates a movie work over source_data, opens it and builds its two XTX header arrays. */
 static XglMovieWorkXtxView *movie_work_setup(void *source_data, int source_size)
 {
     XglMovieWorkXtxView *info;
@@ -355,6 +366,11 @@ static XglMovieWorkXtxView *movie_work_setup(void *source_data, int source_size)
     return info;
 }
 
+/*
+ * Runs the unit6003 state machine for one frame. The first step loads the
+ * resource and sets its frame type (sheet or movie). Then the unit fades in
+ * and out with its signal, and the frame index advances after frame_delay ticks.
+ */
 void unit6003_update(MapUnitRecord *unit)
 {
     switch (unit->actionSub) {
@@ -429,6 +445,7 @@ void unit6003_update(MapUnitRecord *unit)
         unit->unit6003.movie_work = source;
     }
         /* fall through */
+    /* Idle until the signal arrives, then fade in while drawing. */
     case 1:
         if (unit->signal != 0) {
             unit->actionSub = 2;
@@ -448,6 +465,7 @@ void unit6003_update(MapUnitRecord *unit)
             }
         }
         break;
+    /* Fade out, then stop drawing and return to the idle state. */
     case 4:
         if (unit->sequenceNo != 0) {
             unit->sequenceNo = unit->sequenceNo - 1;
@@ -458,6 +476,7 @@ void unit6003_update(MapUnitRecord *unit)
         break;
     }
 
+    /* Rebuild the movie work when its source or XTX headers no longer match. */
     if (unit->unit6003.frame_type == UNIT6003_FRAME_MOVIE) {
         XglMovieWorkXtxView *movie_work = unit->unit6003.movie_work.movie;
 

@@ -2,10 +2,9 @@
 #include "main/xgl_2.h"
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in the
- * TU map (src/main/runtime.c, src/main/window.c, src/main/system.c) show.
+ * Every Java native receives (thread, arguments, result), as the other
+ * Java natives in src/main do. JThread is the VM's per-thread context
+ * (include/main/jni.h).
  */
 typedef struct JThread JThread;
 

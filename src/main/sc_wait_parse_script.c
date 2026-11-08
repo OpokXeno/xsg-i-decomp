@@ -33,8 +33,7 @@ static int scWaitParseMovScript(ScriptTaskWaitView *script);
 static int scWaitMissileScript(ScriptTaskWaitView *script);
 extern void sefCaclAllTarget(int *target);
 
-/* OV01 MEfCreate at 0x00a33648 returns the allocation success status.
- * The main linker retains its address alias; this caller discards the status. */
+/* Returns MEfCreate's allocation status; the missile caller ignores it. */
 extern int func_A33648(MissileSpawn *spawn);
 
 static int scWaitParseNopScript(ScriptTaskWaitView *script)
@@ -57,6 +56,7 @@ static int scWaitParseEveScript(ScriptTaskWaitView *script)
     return event_task == 0 || event_task->flags == 0;
 }
 
+/* Returns nonzero once the effect scheduler is dead; then sets the ambient state for the effect. */
 static int scWaitParseEftScript(ScriptTaskWaitView *script)
 {
     int scheduler_dead = sefIsDeadSchduler(script->wait_operand);
@@ -84,6 +84,10 @@ static int scWaitParseMovScript(ScriptTaskWaitView *script)
     return ((script->flags >> 5) ^ 1) & 1;
 }
 
+/*
+ * Runs the handler for the task's wait kind.  Returns nonzero, and clears
+ * SCRIPT_TASK_WAITING, once the wait is over.
+ */
 int scWaitParseScript(ScriptTaskWaitView *script)
 {
 
@@ -98,7 +102,7 @@ int scWaitParseScript(ScriptTaskWaitView *script)
  * WAITEVE: the wait is over once the event task the command names has gone
  * away or stopped running.  `wait_operand` is the task index scWAITEVEScript
  * stored when it parsed the command, and scGetTaskAdr returns 0 for a negative
- * one (bltz at 0x002ebc58), which counts as finished.
+ * one, which counts as finished.
  */
 
 /*
@@ -137,6 +141,10 @@ static int (*waitHandlerTbl[SCRIPT_WAIT_MODE_COUNT])(ScriptTaskWaitView *) = {
     return (short)result;
 }
 
+/*
+ * Spawns the missile records whose frame has been reached, one call per record.
+ * Returns 1 when the command block is finished, 0 while it still runs.
+ */
 static int scWaitMissileScript(ScriptTaskWaitView *script)
 {
     const float position_scale = 0.01f;
@@ -171,6 +179,7 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
             int context2;
             int context0;
 
+            /* Resolve the command's primary and secondary images and their texture words. */
             mapper_index = sefSearchMapperIndex(script->amb_effect_no);
             primary = data->primary_image_index > 0
                 ? svGetImageListItem(mapper_index, data->primary_image_index) : 0;
@@ -184,6 +193,7 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
             if (secondary != 0)
                 secondary_word = secondary->texture_word;
 
+            /* Pack each image pair's two buffers into one 64-bit register value. */
             for (i = 0, pair = data->image_pairs; i < MISSILE_IMAGE_PAIR_COUNT; i++, pair++) {
                 primary_index = pair->primary_index;
                 primary = primary_index > 0
@@ -255,6 +265,10 @@ static int scWaitMissileScript(ScriptTaskWaitView *script)
     return 0;
 }
 
+/*
+ * Runs the handler for the task's move kind (0 = nop, 1 = missile command).
+ * Returns nonzero, and clears SCRIPT_TASK_MISSILE, once the move is over.
+ */
 int scMoveParseScript(ScriptTaskWaitView *script)
 {
     static int (*moveHandlerTbl[])(ScriptTaskWaitView *) = {

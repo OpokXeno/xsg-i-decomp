@@ -426,6 +426,7 @@ static inline u32 nmlPacketInvalidatePixelModel(
     return *material_flags;
 }
 
+/* Builds the GS TEST register value from the alpha, destination alpha and depth test fields. */
 static inline u64 nmlPacketMakeGsTest(int alpha_test_enabled, int alpha_test,
                                       int alpha_reference, int alpha_failure,
                                       int destination_alpha_enabled,
@@ -516,6 +517,7 @@ static void _CurMatrixGet(Matrix4 matrix)
     Vu0GetCurrentMatrix(matrix);
 }
 
+/* Combines `matrix` with the current VU0 matrix (vf27-vf30) and keeps the product as the current matrix. */
 static void _CurMatrixMul(Matrix4 matrix)
 {
     __asm__ __volatile__(
@@ -553,6 +555,7 @@ static void _CurApplyMatrix(Vector4 *destination, const Vector4 *source)
     Vu0ApplyCurrentMatrix(destination, source);
 }
 
+/* Transforms the 3x3 part of `source` by the current VU0 matrix and writes the normalized result to `destination`. */
 static void _CurMatrixMul33norm(Vector4 *destination, Matrix4 source)
 {
     __asm__ __volatile__(
@@ -613,6 +616,11 @@ static void _CurSetViewScaleTrans(const Vector4 *view_scale, const Vector4 *view
     Vu0SetViewScaleTranslation(view_scale, view_translation);
 }
 
+/*
+ * Transforms `position` by the current VU0 matrix and divides by w. Writes the screen
+ * position to `projectedPosition` and the scaled `coordinates` to `perspectiveCoordinates`,
+ * then returns the clip flags (low six bits).
+ */
 static int _CurRotTransPersClip(
     Vector4 *projectedPosition,
     Vector4 *perspectiveCoordinates,
@@ -660,6 +668,10 @@ static void _CurSetMatrix(Matrix4 matrix)
     Vu0SetCurrentMatrix(matrix);
 }
 
+/*
+ * Uploads the queued GS writes to VU1, starts the kick microprogram for the current
+ * program type and waits for it to finish. Clears the queue.
+ */
 void nmlPacketAddGsFlush(void)
 {
     XglPacket *packet;
@@ -711,6 +723,10 @@ void nmlPacketAddGsFlush(void)
     g_nGsEntry = 0;
 }
 
+/*
+ * Same as nmlPacketAddGsFlush with the wide kick programs. Waits for the microcode
+ * before the upload.
+ */
 void nmlPacketAddGsFlushWide(void)
 {
     XglPacket *packet = xglPacketGetCurrent();
@@ -762,6 +778,10 @@ void nmlPacketAddGsFlushWide(void)
     g_nGsEntry = 0;
 }
 
+/*
+ * Uploads the reflection parameters for `material`: its texture registers as a GS tag list,
+ * then the reflection alpha.
+ */
 void nmlPacketAddReflectParam(const NmlModelBlock *material,
                               const LayoutStore *model)
 {
@@ -809,6 +829,7 @@ void nmlPacketAddReflectParam(const NmlModelBlock *material,
     sceVif1PkAddUpkData128N(current_packet->sdk, tags, 5);
     sceVif1PkCloseUpkCode(current_packet->sdk);
 
+    /* Reflection alpha, scaled by 128 and repeated in all four lanes. */
     {
         u32 alpha[4];
 
@@ -824,6 +845,10 @@ void nmlPacketAddReflectParam(const NmlModelBlock *material,
     }
 }
 
+/*
+ * Starts a transform microcode pass: selects the plain program, resets the cached state,
+ * advances the reflection rotation, uploads an identity matrix and resets the light parameters.
+ */
 void nmlPacketAddTransMicrocodeInit(void)
 {
     Matrix4 matrix;
@@ -859,6 +884,10 @@ void nmlPacketAddTransMicrocodeInit(void)
         s_inLc0[3].lanes[2] = s_inLc0[3].lanes[3] = 1.0f;
 }
 
+/*
+ * Selects the transform microprogram for the material's render status and flags. Loads its
+ * reference data unless it is already the current program.
+ */
 void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
                                 const LayoutStore *model)
 {
@@ -869,6 +898,7 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
     selected.sdk = xglPacketGetCurrent();
     s_pPacket = selected;
     status = model->fields.render_status;
+    /* Pick the program from the render status, then from the material flags. */
     program_type = NML_UCODE_PLAIN;
     if (status & NML_RENDER_TEXTURE_PASS) {
         program_type = NML_UCODE_TEX_ENV;
@@ -889,6 +919,7 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
         }
     }
 
+    /* Load the program unless it is the current one. */
     switch (program_type) {
     case NML_UCODE_PROREAL:
         if (s_nProgType == NML_UCODE_PROREAL)
@@ -961,6 +992,7 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
 
 }
 
+/* Uploads the camera's screen offset and screen scale to VU1. */
 void nmlPacketAddScreen(const StudioCamera *camera)
 {
     NmlPacketData128 translation;
@@ -984,6 +1016,10 @@ void nmlPacketAddScreen(const StudioCamera *camera)
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
 
+/*
+ * Uploads two GS register writes to VU1 in two passes: the first carries the test values,
+ * the second the real values, both with their register addresses.
+ */
 void nmlPacketAddPixelTestPacket(int first_address, u64 first_value,
                                u64 first_test, int second_address,
                                u64 second_value, u64 second_test)
@@ -1029,6 +1065,10 @@ void nmlPacketAddWaitMicrocode(void)
     sceVif1PkAddCode(selected.sdk, VIF_CODE_FLUSH);
 }
 
+/*
+ * Uploads one material block: material parameters, the alpha tag and its limit flags,
+ * alpha options, the ProReal or model data, and the light parameters when the material uses them.
+ */
 void nmlPacketAddBlockMaterial(NmlModelBlock *material,
                                LayoutStore *model,
                                int use_base_alpha, int view_index)
@@ -1048,6 +1088,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     s_pPacket = selected;
     sceVif1PkCnt(selected.sdk, 0);
 
+    /* Alpha parameter: the material scale times the model transparency. */
     material->materialParameters.lanes[3] =
         material->materialAlphaScale * model->fields.transparency;
     {
@@ -1086,6 +1127,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
          (strstr(material->name, eye_name) != 0)))
         material_alpha = model->fields.specialBlockAlpha;
 
+    /* Material tag: alpha tag, alpha value, and the limit flag in words[2]. */
     material_tag_data->words[0] = material->alphaTag;
     material_tag.lanes[1] = material_alpha;
     material_tag_data->words[2] = 0;
@@ -1156,6 +1198,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
+    /* Light parameters, when the material uses them. */
     if (material->materialFlags & NML_MATERIAL_LIGHT_PARA) {
         selected = s_pPacket;
         sceVif1PkOpenUpkCode(selected.sdk, 0x3D1, VIF_UNPACK_V4_32, 1, 1);
@@ -1166,6 +1209,10 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     }
 }
 
+/*
+ * Projects four points around the circle through the camera, builds the GS records that
+ * draw the circle texture and flushes them to VU1.
+ */
 void nmlPacketMakeCircleTexture(LayoutStore *model,
                                 StudioCamera *camera)
 {
@@ -1205,6 +1252,7 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
     _CurSetMatrix(camera->viewMatrix);
     height_offset = circleHeightOffset;
 
+    /* Project the four circle points through the camera. */
     for (i = 0; i < 4;) {
         int clip_flags;
         NmlCircleVector *position = &scratch->position[i];
@@ -1233,6 +1281,7 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
             projected->words[3] = 4;
     }
 
+    /* GS records 0-18: the state, then each point's colour, ST and position. */
     nmlCircleSetGsRecord(nmlCircleGsRecord(0), NML_GS_REG_TEXFLUSH, 0);
     texture_base = sRender.texture_buffer_base << 5;
     nmlCircleSetGsRecord(nmlCircleGsRecord(1), NML_GS_REG_TEX0_1,
@@ -1291,6 +1340,7 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
         int remaining;
         NmlCircleGsRecord *cursor = (NmlCircleGsRecord *)NML_SCRATCH_GS_RECORDS;
 
+        /* Append the 19 records in order. */
         for (remaining = 18; remaining >= 0; remaining--) {
             nmlPacketAppendGsValue(cursor->address.words[0],
                                    &cursor->value.value);
@@ -1300,6 +1350,10 @@ void nmlPacketMakeCircleTexture(LayoutStore *model,
     nmlPacketAddGsFlushWide();
 }
 
+/*
+ * Uploads the circle texture: a 64x64 8-bit index image, a 16x16 32-bit image after it,
+ * and a copy of the palette.
+ */
 void nmlPacketSendCircleTexture(const void *indices, const void *palette)
 {
     XglLoadImage image;
@@ -1339,6 +1393,10 @@ void nmlPacketSendCircleTexture(const void *indices, const void *palette)
     sceVif1PkRef(selected.sdk, palette_copy, 66, 0, 0, 0);
 }
 
+/*
+ * Uploads each texture of the model's texture set to VRAM at the texture buffer base, each
+ * with its image descriptor and pixel data.
+ */
 static void nmlPacketTextureTrans(LayoutStore *model)
 {
     XglLoadImage image;
@@ -1401,6 +1459,10 @@ void nmlPacketClrModelCache(void)
     s_pLightLayout = 0;
 }
 
+/*
+ * Uploads the model's texture unless it is already the cached one. Returns nonzero when the
+ * packet is too full.
+ */
 int nmlPacketAddTexture(LayoutStore *model)
 {
     NmlProRealParam *proreal = model->fields.proreal;
@@ -1423,6 +1485,7 @@ int nmlPacketAddTexture(LayoutStore *model)
         NML_PACKET_SIZE_LIMIT)
         return 1;
 
+    /* ProReal models take their texture from the ProReal parameters. */
     if (model->fields.render_status & NML_RENDER_PROREAL) {
         const void *cached_texture;
         texture = proreal->texture;
@@ -1463,6 +1526,10 @@ int nmlPacketAddTexture(LayoutStore *model)
     }
 }
 
+/*
+ * Uploads the vertex data, bone matrices, matrices and light data for one model block.
+ * Returns nonzero when the packet is too full.
+ */
 int nmlPacketAddParts(const NmlModelBlock *block,
                       LayoutStore *model,
                       StudioCamera *camera)
@@ -1496,6 +1563,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
         NML_PACKET_SLACK > NML_PACKET_SIZE_LIMIT)
         return 1;
     {
+        /* Vertex vectors, for blocks that index their vertices. */
         if (block->flags & 0x10) {
             geometry_offsets = (const int *)((const u8 *)resource +
                               resource->geometryTableOffset);
@@ -1516,6 +1584,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             }
         }
 
+        /* Drop the bone-matrix cache when the layout, part or bone indices change. */
         if (s_pModelLayout != model) {
             s_pModelLayout = model;
             s_pMatrixCache = 0;
@@ -1530,6 +1599,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
         matrix_changed = s_pMatrixCache == 0;
         s_pMatrixCache = bone_indices;
 
+        /* Bone matrices: one four-row upload per bone index up to the zero terminator. */
         {
             geometry_rows = model->fields.weightedMatrices->rows;
             if (*bone_indices != 0) {
@@ -1554,6 +1624,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             }
         }
 
+        /* Part matrix, its inverse, and the normal, reference and light transforms. */
         if (matrix_changed) {
             const u16 *cached_bones = s_pMatrixCache;
             const Vector4 *base_rows =
@@ -1657,6 +1728,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
             sceVif1PkCloseUpkCode(selected.sdk);
 
         }
+        /* Camera or projection, then placement and part, read back as the clip matrix. */
         if (matrix_changed) {
             if (model->fields.render_status & NML_RENDER_TEXTURE_PASS) {
                 _CurMatrixSet(model->fields.projectionMatrix);
@@ -1687,6 +1759,10 @@ int nmlPacketAddParts(const NmlModelBlock *block,
            NML_PACKET_SIZE_LIMIT;
 }
 
+/*
+ * Adds the texture GS registers for the material: the ProReal texture registers when the
+ * model uses ProReal, otherwise the material's texture parameters when materialFlags bit 0 is set.
+ */
 void nmlPacketAddTextureParam(NmlModelBlock *material,
                               LayoutStore *model)
 {
@@ -1718,6 +1794,10 @@ void nmlPacketAddTextureParam(NmlModelBlock *material,
     }
 }
 
+/*
+ * Adds the VU1 program for the current program type, taking the slot in table `program_index`
+ * from the material and model flags. Returns 0 when that slot has no program.
+ */
 static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
                          int program_index)
 {
@@ -1754,6 +1834,7 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
     s_pPacket.sdk = xglPacketGetCurrent();
     sceVif1PkCnt(s_pPacket.sdk, 0);
 
+    /* One case per program family; each picks a slot in its table. */
     switch (s_nProgType) {
     case NML_UCODE_DROP: {
         int slot = 0;
@@ -1940,6 +2021,10 @@ static int add_exec_prog(NmlModelBlock *material, LayoutStore *model,
     return result;
 }
 
+/*
+ * Adds the material's VU1 program and transform data. Some flag combinations run a second
+ * program after waiting for the microcode to finish.
+ */
 void nmlPacketAddExecProg(NmlModelBlock *material,
                           LayoutStore *model,
                           int allow_extended_programs,
@@ -2014,6 +2099,10 @@ void nmlPacketAddTransData(NmlModelBlock *material)
     nmlPacketAddWaitMicrocode();
 }
 
+/*
+ * Copies `size` bytes from `data` into the attribute area of the current packet.
+ * Returns the address of the copy.
+ */
 u8 *nmlPacketSetAttributeData(const void *data, u32 size)
 {
     NmlCurrentPacket selected;
@@ -2033,6 +2122,10 @@ u8 *nmlPacketSetAttributeData(const void *data, u32 size)
     }
 }
 
+/*
+ * Reserves one 64-byte attribute record in the current packet, copies four quadwords from
+ * `data` into it and returns the record's address.
+ */
 u8 *nmlPacketSetAttributeData64(const void *data)
 {
     NmlAttributePacket *packet;
@@ -2045,9 +2138,9 @@ u8 *nmlPacketSetAttributeData64(const void *data)
         NmlCurrentPacket allocated = s_pPacket;
         Quadword *destination = allocated.attributes->cursor.quadwords;
         const Quadword *source = data;
-        /* The original SDK-style transfers at 0x00238e8c-0x00238ea8
-         * reuse GPR2 for all four aligned quadwords. Address calculation
-         * and allocation remain C; the block owns only these transfers. */
+        /* The original transfers reuse GPR2 for all four aligned quadwords.
+         * Address calculation and allocation stay in C; only the copy is the
+         * quadword macro. */
         QuadwordCopyMatrix(destination, source);
     }
     {
@@ -2056,6 +2149,10 @@ u8 *nmlPacketSetAttributeData64(const void *data)
     }
 }
 
+/*
+ * Reserves `count` 64-byte attribute records and copies `count` records from `data`.
+ * Returns the start of the reserved block.
+ */
 void *nmlPacketSetAttributeData64N(const void *data, int count)
 {
     int remaining;
@@ -2075,6 +2172,10 @@ void *nmlPacketSetAttributeData64N(const void *data, int count)
     return s_pPacket.sdk->cursor;
 }
 
+/*
+ * Reserves `count` quadwords in the attribute area and copies them from `data`.
+ * Returns the start of the reserved block.
+ */
 void *nmlPacketSetAttributeData16N(const void *data, int count)
 {
     NmlAttributePacket *packet;
@@ -2094,6 +2195,7 @@ void *nmlPacketSetAttributeData16N(const void *data, int count)
     return s_pPacket.attributes->cursor.bytes;
 }
 
+/* Reserves `count` quadwords in the attribute area without filling them and returns their address. */
 u8 *nmlPacketSetAttributeAlloc16N(u32 count)
 {
     NmlCurrentPacket selected;
@@ -2108,6 +2210,10 @@ u8 *nmlPacketSetAttributeAlloc16N(u32 count)
     return current->cursor.bytes;
 }
 
+/*
+ * Sends the material's GIF tag to VU1 three times, each with different flags. The loop count
+ * and end-of-packet bit are set first.
+ */
 void nmlPacketAddGifTag(NmlModelBlock *material,
                         LayoutStore *model, int count)
 {
@@ -2147,6 +2253,7 @@ void nmlPacketAddGifTag(NmlModelBlock *material,
     sceVif1PkCloseUpkCode(current_packet->sdk);
 }
 
+/* Sends a GIF tag with the end-of-packet bit `eop` and loop count `count` to VU1. */
 void nmlPacketAddGifTagStandard(int eop, int count)
 {
     NmlPacketData128 gif_tag;
@@ -2168,6 +2275,10 @@ void nmlPacketAddGifTagStandard(int eop, int count)
     sceVif1PkCloseUpkCode(selected.sdk);
 }
 
+/*
+ * Sends the model's fog color and fog parameters. The color intensity is set from the
+ * viewport's fog intensity when that viewport is a sub-window.
+ */
 void nmlPacketAddFog(LayoutStore *model, int viewport_index)
 {
     s_pPacket.sdk = xglPacketGetCurrent();
@@ -2184,6 +2295,10 @@ void nmlPacketAddFog(LayoutStore *model, int viewport_index)
     sceVif1PkCloseUpkCode(s_pPacket.sdk);
 }
 
+/*
+ * Queues the GS pixel test and alpha registers for one material. The mode comes from the
+ * pixel control flags, the render status and the material's alpha.
+ */
 void nmlPacketAddPixelControl(NmlModelBlock *material,
                               LayoutStore *model,
                               u32 pixel_control_flags)
@@ -2211,6 +2326,7 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
         }
     }
 
+    /* Use the alpha listed for this part, when there is one. */
     for (i = 0; i < *&model->fields.partPixelAlphaCount; i++) {
         s_nPixelTestType = -1;
         if (((short *)((u8 *)model + i * 4))[361] ==
@@ -2230,6 +2346,7 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
             &model->fields.model, &material->materialFlags);
     }
 
+    /* Pick the GS pixel test and alpha state from the flags. */
     if (pixel_control_flags & 0x10000) {
         if (material_flags & 4) {
             if (pixel_control_flags & 0x20000) {
@@ -2302,6 +2419,7 @@ void nmlPacketAddPixelControl(NmlModelBlock *material,
         s_nPixelTestType = -1;
 }
 
+/* Sends `size` bytes of direct data to VU1. Returns nonzero when the packet is too full. */
 int nmlPacketDirectData(const void *data, int size)
 {
     s_pPacket.sdk = xglPacketGetCurrent();
@@ -2319,6 +2437,10 @@ void nmlPacketSetCurrent(void)
     s_pPacket.sdk = xglPacketGetCurrent();
 }
 
+/*
+ * Uploads the reflection rotation matrix for the material: the identity for type 1, or the
+ * saved rotation for type 2. Skips the upload when that matrix is already loaded.
+ */
 void nmlPacketAddReflRot(const NmlModelBlock *material,
                          const LayoutStore *model)
 {
@@ -2372,6 +2494,10 @@ static inline void nmlScreenClearAppendGs(u32 address, const u64 *value)
     g_nGsEntry++;
 }
 
+/*
+ * Queues the GS state for a full-screen clear (alpha override, depth, pixel test, frame buffer
+ * and a sprite spanning the frame) and flushes it.
+ */
 void nmlPacketAddScreenClear(void)
 {
     u64 depth_format = NML_GS_ZBUF_PSMZ24;

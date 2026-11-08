@@ -3,24 +3,17 @@
 #include "align.h"
 #include "main/matrix_print.h"
 
-/* These matrix helpers are defined in the matrix_print translation unit.
- * Their angle arguments are pointers to the float bit patterns consumed by
- * the VU0 trigonometric path. */
+/* The CUR_MATRIX_* helpers are defined in matrix_print.c. Their angle
+ * arguments point at float values stored as int bit patterns. */
 extern void CUR_MATRIX_Unit(void);
 void alignXYAxis(void) {
 
 }
 
 /*
- * alignXAxisEuler: derive the yaw/pitch Euler pair that rotates an object's
- * local X axis onto "direction". The VU0 macro-mode block reads direction as
- * a quadword, forms x^2+y^2 and x^2+y^2+z^2, and uses two reciprocal-square-
- * root passes (Q) to rescale the components by 1/sqrt(x^2+y^2) and by
- * 1/length, packing the four ratios into components. components.y/components.x
- * hold sin/cos of the heading about Z (their ratio is atan2(y,x), unchanged
- * by the common horizontal scale); components.z/components.w hold sin/cos of
- * the elevation about Y. euler->x (no additional roll once X is aligned) and
- * euler->w (homogeneous term) are fixed.
+ * Gives the yaw/pitch Euler pair that turns the local X axis onto direction.
+ * The VU0 block leaves the heading's sin/cos in components.y/x and the
+ * pitch's sin/cos in components.z/w; euler->x is 0 and euler->w is 1.
  */
 void alignXAxisEuler(const Vector4 *direction, Vector4 *euler) {
     Vector4 components;
@@ -74,9 +67,8 @@ typedef union {
     int bits[3];
 } AlignRotationAngles;
 
-/* The VU0 block builds the component ratios used for the two rotations that
- * place the current matrix's X axis along direction.  The scalar atan2 calls
- * and the persistent matrix operations remain ordinary C. */
+/* Writes into matrix the rotation (Y, then Z) that turns the X axis onto
+ * direction. */
 void alignXAxis(const Vector4 *direction, Matrix4 matrix) {
     AlignRotationAngles rotation_angles;
     Vector4 components;
@@ -124,8 +116,8 @@ void alignXAxis(const Vector4 *direction, Matrix4 matrix) {
     CUR_MATRIX_Get(matrix);
 }
 
-/* The VU0 block derives the two angles for the X-then-Z rotations that align
- * the current matrix's Y axis with direction. */
+/* Writes into matrix the rotation (X, then Z) that turns the Y axis onto
+ * direction. */
 void alignYAxis(const Vector4 *direction, Matrix4 matrix) {
     AlignRotationAngles rotation_angles;
     Vector4 components;
@@ -173,8 +165,8 @@ void alignYAxis(const Vector4 *direction, Matrix4 matrix) {
     CUR_MATRIX_Get(matrix);
 }
 
-/* The VU0 block derives the two angles for the X-then-Y rotations that align
- * the current matrix's Z axis with direction. */
+/* Writes into matrix the rotation (X, then Y) that turns the Z axis onto
+ * direction. */
 void alignZAxis(const Vector4 *direction, Matrix4 matrix) {
     AlignRotationAngles rotation_angles;
     Vector4 components;

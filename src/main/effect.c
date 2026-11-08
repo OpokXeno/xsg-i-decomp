@@ -35,6 +35,7 @@ char effectRotationYName[8] = "ry";
 
 char effectRotationZName[8] = "rz";
 
+/* Native Effect.call(int): passes the command to FX_call with the object's id and argument buffer. */
 void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
 {
     unsigned char *object;
@@ -54,6 +55,7 @@ void Java_xeno_Effect_call__I(JThread *thread, EffectCommandCall *arguments)
     }
 }
 
+/* Native Effect.disp(boolean): rewinds the peer effect and shows it when true, hides it otherwise. */
 void Java_xeno_Effect_disp__Z(JThread *thread, EffectBooleanCall *arguments)
 {
     EffectFieldValue *field_value;
@@ -97,6 +99,7 @@ void Java_xeno_Effect_setScale__FFF(JThread *thread, EffectVectorCall *arguments
     }
 }
 
+/* Native Effect.getScale(): copies the peer's scale into a static Vector4f object and returns it through the result word. */
 void Java_xeno_Effect_getScale__(JThread *thread, EffectCall *arguments, unsigned int *result)
 {
     EffectFieldValue *field_value;
@@ -124,6 +127,7 @@ void Java_xeno_Effect_getScale__(JThread *thread, EffectCall *arguments, unsigne
     }
 }
 
+/* Native Effect.getTranslate(): copies the peer's position into the Java fields px, py and pz. */
 void Java_xeno_Effect_getTranslate__(JThread *thread, EffectCall *arguments)
 {
     unsigned char *object;
@@ -146,6 +150,7 @@ void Java_xeno_Effect_getTranslate__(JThread *thread, EffectCall *arguments)
     }
 }
 
+/* Native Effect.setTranslate(): copies the Java fields px, py and pz into the peer's position. */
 void Java_xeno_Effect_setTranslate__(JThread *thread, EffectCall *arguments)
 {
     unsigned char *object;
@@ -168,6 +173,7 @@ void Java_xeno_Effect_setTranslate__(JThread *thread, EffectCall *arguments)
     }
 }
 
+/* Native Effect.getRotate(): writes the peer's rotation to the Java fields rx, ry and rz in degrees. */
 void Java_xeno_Effect_getRotate__(JThread *thread, EffectCall *arguments)
 {
     unsigned char *object;
@@ -192,6 +198,7 @@ void Java_xeno_Effect_getRotate__(JThread *thread, EffectCall *arguments)
     }
 }
 
+/* Native Effect.setRotate(): reads the Java fields rx, ry and rz in degrees and stores radians in the peer's rotation. */
 void Java_xeno_Effect_setRotate__(JThread *thread, EffectCall *arguments)
 {
     unsigned char *object;
@@ -216,6 +223,7 @@ void Java_xeno_Effect_setRotate__(JThread *thread, EffectCall *arguments)
     }
 }
 
+/* Native Effect.setCaster(Chr): sets the peer's caster to the Chr's peer pointer. */
 void Java_xeno_Effect_setCaster__Lxeno_Chr_(JThread *thread, EffectChrCall *arguments)
 {
     unsigned char *object;
@@ -234,6 +242,7 @@ void Java_xeno_Effect_setCaster__Lxeno_Chr_(JThread *thread, EffectChrCall *argu
     }
 }
 
+/* Native Effect.setTarget(Chr): sets the peer's target to the Chr's peer pointer. */
 void Java_xeno_Effect_setTarget__Lxeno_Chr_(JThread *thread, EffectChrCall *arguments)
 {
     unsigned char *object;
@@ -252,6 +261,7 @@ void Java_xeno_Effect_setTarget__Lxeno_Chr_(JThread *thread, EffectChrCall *argu
     }
 }
 
+/* Native Effect.setCaster(Unit): sets the peer's casterUnit and records the effect in the unit's effectCf[0]. */
 void Java_xeno_Effect_setCaster__Lxeno_Unit_(JThread *thread, EffectUnitCall *arguments)
 {
     unsigned char *object;
@@ -279,6 +289,7 @@ void Java_xeno_Effect_setCaster__Lxeno_Unit_(JThread *thread, EffectUnitCall *ar
     }
 }
 
+/* Native Effect.setTarget(Unit): sets the peer's targetUnit to the Unit's peer pointer. */
 void Java_xeno_Effect_setTarget__Lxeno_Unit_(JThread *thread, EffectUnitCall *arguments)
 {
     unsigned char *object;
@@ -305,6 +316,7 @@ void Java_xeno_Effect_setTarget__Lxeno_Unit_(JThread *thread, EffectUnitCall *ar
     }
 }
 
+/* Native Effect.setTransOffset(float, float, float): adds the three values to the peer's position. */
 void Java_xeno_Effect_setTransOffset__FFF(JThread *thread, EffectVectorCall *arguments)
 {
     EffectFieldValue *field_value;

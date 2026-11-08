@@ -412,10 +412,12 @@ static void (*func_14[11])(DefocusLayer *layer, XglPacket *packet) = { DefocusMa
 
 static u64 Tail_15[8] = { 0x0000000000000000ULL, 0x5100000300000000ULL, 0x2000000000008001ULL, 0x00000000000000eeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000031000000ULL, 0x000000000000004eULL };
 
-/* Runtime writes the layer entries through DefocusSet; the original table is
- * sixteen 0x44-byte records whose initial bytes are all zero. */
+/* Layer table written by GameDefocusSet and GameDefocusQuickSet; every
+ * entry starts zeroed. */
 DefocusLayer GameDefocusParam[DEFOCUS_LAYER_COUNT] = { 0 };
 
+/* Builds a GS TEX0 value from the saved texture state selected by type (0, 1
+ * or 2) and the colour-component mode tex_cc; other types give 0. */
 static u64 GetTex0(int type, int tex_cc)
 {
     switch (type) {
@@ -433,6 +435,8 @@ static u64 GetTex0(int type, int tex_cc)
     }
 }
 
+/* Draws a textured rectangle over the layer rect (parameters[4..7]) with the
+ * colour from parameters[3], repeated parameters[1] times. */
 static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet)
 {
     DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
@@ -481,6 +485,8 @@ static void DefocusMainType01(DefocusLayer *layer, XglPacket *packet)
     }
 }
 
+/* Sends the frame copy TestPrim_1, then a tint copy (TestPrim_2) when
+ * parameters[1] is nonzero or a plain copy (TestPrim_3) otherwise. */
 static void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
 {
     int tint_color;
@@ -505,6 +511,8 @@ static void DefocusMainType02(DefocusLayer *layer, XglPacket *packet)
     sceVif1PkAddDataN(packet, TestPrim_3, 12);
 }
 
+/* Draws a textured rectangle over parameters[2..5] with the colour from
+ * parameters[1], repeated parameters[0] times. */
 static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet)
 {
     DefocusTexturedPacket *draw = (DefocusTexturedPacket *)SCRATCHPAD_BASE;
@@ -555,6 +563,8 @@ static void DefocusMainType03(DefocusLayer *layer, XglPacket *packet)
     }
 }
 
+/* Sends a textured rectangle over parameters[2..5] with the colour from
+ * parameters[1]; the texture dimensions come from parameters[6..7]. */
 static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet)
 {
     const u8 *color;
@@ -611,6 +621,8 @@ static void DefocusMainType05(DefocusLayer *layer, XglPacket *packet)
     sceVif1PkAddDataN(packet, DEFOCUS_TYPE05_PACKET, 28);
 }
 
+/* Sends a flat-colour rectangle over parameters[2..5]; the colour comes from
+ * parameters[1] and the vertex colour from parameters[0]. */
 static void DefocusMainType06(DefocusLayer *layer, XglPacket *packet)
 {
     DefocusSolidPacket *draw;
@@ -649,6 +661,8 @@ static void DefocusMainType06(DefocusLayer *layer, XglPacket *packet)
     sceVif1PkAddDataN(packet, DEFOCUS_SCRATCH, DEFOCUS_SOLID_WORDS);
 }
 
+/* Draws a radial wave around (parameters[2], parameters[3]) in the colour
+ * parameters[1], one sprite header plus 32 angular rings. */
 static void DefocusMainType07(DefocusLayer *layer, XglPacket *packet)
 {
     const u8 *color;
@@ -693,6 +707,7 @@ static void DefocusMainType07(DefocusLayer *layer, XglPacket *packet)
     header->sprite_registers = 0x53;
     header->sprite_padding = 0;
     sceVif1PkAddDataN(packet, DEFOCUS_WAVE_HEADER, 16);
+    /* Each ring sends eight two-vertex segments, then a closing vertex. */
     for (ring = 0; ring < 32; ring++) {
         angle = I2F(ring) * 0.03125f * 2.0f * 3.1415927f;
         next_angle = I2F(ring + 1) * 0.03125f * 2.0f * 3.1415927f;
@@ -749,6 +764,9 @@ static void DefocusMainType07(DefocusLayer *layer, XglPacket *packet)
     }
 }
 
+/* Draws sparks and a ring of strips. parameters[2] sparks are spawned at
+ * random positions; parameters[5] rows of strips keep their lifetimes in
+ * parameters[8..]. */
 static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
 {
     DefocusStarHeader *header = DEFOCUS_STAR_HEADER;
@@ -800,6 +818,7 @@ static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
     base_angle = I2F(layer->parameters[3]) / 180.0f * 3.1415927f;
     spread = I2F(layer->parameters[4]) / 180.0f * 3.1415927f;
     spark_depth = layer->parameters[0];
+    /* One spark packet per iteration, centred on a random point. */
     if (layer->parameters[2] != 0) {
         do {
             index++;
@@ -847,6 +866,7 @@ static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
             sceVif1PkAddDataN(packet, DEFOCUS_STAR_HEADER, 40);
         } while (index < (u32)layer->parameters[2]);
     }
+    /* Offsets of the inner, middle and outer ring (8, 28 and 48 pixels) at 33 angles. */
     for (ring = 0; ring <= 32; ring++) {
         sine = xglSin(I2F(ring) * 2.0f * 3.1415927f * (1.0f / 32.0f));
         cosine = xglCos(I2F(ring) * 2.0f * 3.1415927f * (1.0f / 32.0f));
@@ -865,6 +885,8 @@ static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
     DEFOCUS_STAR_WORD(1) = 0;
     DEFOCUS_STAR_WORD(2) = 0;
     DEFOCUS_STAR_WORD(7) = 0;
+    /* Each row keeps a lifetime counter in its slot, respawned when it runs
+     * out, then emits 32 strip segments of six vertices. */
     for (row = 0; row < (u32)layer->parameters[5]; row++) {
         slot = (u32 *)&layer->parameters[8 + row];
         strip = DEFOCUS_STAR_STRIP;
@@ -962,6 +984,9 @@ static void DefocusMainType08(DefocusLayer *layer, XglPacket *packet)
     }
 }
 
+/* Enables scan-line interpolation. The first call saves the current
+ * interpolation and display-enable state in the layer; later calls set the
+ * display and extended-buffer registers. */
 static void DefocusMainType09(DefocusLayer *layer, XglPacket *packet)
 {
     u64 *extbuf;
@@ -991,6 +1016,8 @@ static void DefocusMainType09(DefocusLayer *layer, XglPacket *packet)
     DispEnv.extwrite |= 1;
 }
 
+/* Restores the scan-line interpolation and display-enable state saved by
+ * DefocusMainType09. */
 static void DefocusMainType09Final(DefocusLayer *layer)
 {
     u64 enable = (u32)layer->parameters[1];
@@ -1000,6 +1027,9 @@ static void DefocusMainType09Final(DefocusLayer *layer)
     DispEnv.extwrite &= ~1ULL;
 }
 
+/* Fades a full-screen copy. State 0 copies the frame; state 1 subtracts the
+ * per-channel decrement from the stored colour each frame and draws a quad
+ * whose rect moves by parameters[1..4]. At zero alpha the layer is cleared. */
 static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
 {
     extern void GameDefocusSet(int index, int type, const int *settings);
@@ -1016,6 +1046,7 @@ static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
     u32 vertex_color;
 
     switch (layer->state) {
+    /* State 0: copy the frame and start the fade. */
     case 0:
         Copy_10.texture = 0x80000 | (u64)(sRender.tex0_state_20 << 5) |
                           ((u64)sRender.tex0_state_14 << 37) |
@@ -1088,6 +1119,8 @@ static void DefocusMainType10(DefocusLayer *layer, XglPacket *packet)
     }
 }
 
+/* Draws a sine-warped sprite grid. The phase stored in parameters[8..9] is
+ * advanced each frame, then 14 rows of 16 sprites are offset by the wave. */
 static void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
 {
     const u8 *color;
@@ -1131,6 +1164,7 @@ static void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
     layer->parameters[9] += layer->parameters[7];
     phase_x = I2F(layer->parameters[8] & 0xfff) * 0.0015339808f;
     phase_y = I2F(layer->parameters[9] & 0xfff) * 0.0015339808f;
+    /* Sample 17 points of each sine wave, stepping the phases by parameters[3] and [6]. */
     for (index = 0; index <= 16; index++) {
         DEFOCUS_WAVE_TABLE->x[index] =
             F2I(xglSin(phase_x) * I2F(layer->parameters[2]));
@@ -1143,6 +1177,7 @@ static void DefocusMainType11(DefocusLayer *layer, XglPacket *packet)
     ((int *)SCRATCHPAD_BASE)[0] = 0;
     ((int *)SCRATCHPAD_BASE)[31] = 0;
     ((int *)SCRATCHPAD_BASE)[17] = 0;
+    /* 14 rows of 16 sprites, each corner taken from the wave tables. */
     for (row = 0, wave_y = DEFOCUS_WAVE_TABLE->y, y = 0; row < 14; row++, y = row * 512) {
         column = 0;
         sprite_y = y + DEFOCUS_SCREEN_Y_BIAS;
@@ -1197,6 +1232,8 @@ static void DefocusMain(XglPacket *packet)
     sceVif1PkAddDataN(packet, Tail_15, 16);
 }
 
+/* Points the render callback at DefocusMain while any layer has a type, and
+ * clears it otherwise. */
 void GameDefocusCheck(void)
 {
     int layer_index;
@@ -1218,6 +1255,8 @@ void GameDefocusCheck(void)
     sRender.callback = DefocusMain;
 }
 
+/* Ends one layer: type 9 runs DefocusMainType09Final first, then the index
+ * and state are reset and the type is cleared. */
 static void GameDefocusFinalize(int index)
 {
     DefocusLayer *layer;
@@ -1231,6 +1270,9 @@ static void GameDefocusFinalize(int index)
     layer->type = 0;
 }
 
+/* Installs a layer of the given type at index with 16 settings words (zeros
+ * when settings is NULL). A negative index finalizes every layer; an index of
+ * 16 or more is rejected. */
 void GameDefocusSet(int index, int type, const int *settings)
 {
     int clear_index;
@@ -1238,8 +1280,7 @@ void GameDefocusSet(int index, int type, const int *settings)
     DefocusLayer *layer;
 
     if (index >= 16) {
-        /* JP: GameDefocusSet()の引数が異常です(%d)。\n
-         * EN: Invalid argument to GameDefocusSet() (%d).\n */
+        /* Text: Invalid argument to GameDefocusSet() (%d). */
         printf("GameDefocusSet()\xA4\xCE\xB0\xFA\xBF\xF4\xA4\xAC\xB0\xDB\xBE\xEF\xA4\xC7\xA4\xB9(%d)\xA1\xA3\n", index);
         return;
     }
@@ -1264,6 +1305,8 @@ void GameDefocusSet(int index, int type, const int *settings)
     GameDefocusCheck();
 }
 
+/* Replaces the four layers of one group with a preset (preset 0 only clears
+ * them). color and intensity are written into the preset parameters. */
 void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
 {
     DefocusLayer *layers;
@@ -1271,8 +1314,7 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
 
     layers = &GameDefocusParam[group_index * DEFOCUS_GROUP_LAYERS];
     if (group_index >= DEFOCUS_GROUP_COUNT) {
-        /* JP: GameDefocusQuickSet()の引数が異常です(%d)。\n
-         * EN: Invalid argument to GameDefocusQuickSet() (%d).\n */
+        /* Text: Invalid argument to GameDefocusQuickSet() (%d). */
         printf("GameDefocusQuickSet()\xA4\xCE\xB0\xFA\xBF\xF4\xA4\xAC\xB0\xDB\xBE\xEF\xA4\xC7\xA4\xB9(%d)\xA1\xA3\n", group_index);
         return;
     }
@@ -1283,6 +1325,7 @@ void GameDefocusQuickSet(int group_index, int preset, int color, int intensity)
     GameDefocusFinalize(first_index + 2);
     GameDefocusFinalize(first_index + 3);
 
+    /* Presets 1 and 2 fill several layers; the others fill only layers[0]. */
     switch (preset) {
     case 0:
         break;

@@ -29,10 +29,11 @@ extern Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first,
 extern Vector4 *MEfCalcAngle(Vector4 *destination, const Vector4 *from,
                            const Vector4 *to);
 
-/* MGsGPInit (src/ov01/m_gs.c, ov01 TU 18): still TU-local there, declared
- * here for this TU until its header is published. MEfCreate_EAD00 calls it
- * with a null address and zero size, so it targets MGsGPInit's own default
- * scratchpad buffer and capacity. */
+/*
+ * MGsGPInit (src/ov01/m_gs.c). MEfCreate_EAD00 and fnEAD00_DP000 call it with a
+ * null address and zero size, which selects its default scratchpad buffer and
+ * capacity.
+ */
 extern void MGsGPInit(void *packet, void *address, int size);
 extern MEfObjCamParams mefCamParams;
 
@@ -43,8 +44,11 @@ extern MEfObjCamParams mefCamParams;
  */
 typedef void (*EAD00Callback)(void *self, EAD00ProcessWork *work);
 
-/* The pooled effect object: callbacks in its prefix, the work record at +0x20
- * (its frame at +0x70 and the MGs direct-transfer packet at +0x140 are MEfCreate_EAD00's). */
+/*
+ * The pooled effect object: callbacks in its prefix, the work record at +0x20.
+ * Inside the work record, the frame is at +0x70 and the GS packet at +0x140;
+ * MEfCreate_EAD00 initializes both.
+ */
 typedef struct EAD00Object {
     unsigned char unmodeled_00[4];
     EAD00Callback process; /* +0x04 */
@@ -59,6 +63,10 @@ static void fnEAD00_PR000(void *self, EAD00ProcessWork *work);
 static void fnEAD00_DP000(void *self, EAD00ProcessWork *work);
 static void fnEAD00_PO000(void *self, EAD00ProcessWork *work);
 
+/*
+ * Initializes an EAD00 effect object: resets its frame, sets up its GS packet
+ * and installs the process, draw and lifetime callbacks.
+ */
 int MEfCreate_EAD00(MEfObjRecord *self)
 {
     EAD00Object *object = (EAD00Object *)self;
@@ -74,6 +82,10 @@ int MEfCreate_EAD00(MEfObjRecord *self)
 /* From this frame on the strip fades out (both fnEAD00_PR000 and fnEAD00_DP000). */
 #define EAD00_FADE_START 62
 
+/*
+ * Process callback: transforms the start and end points of three strip points by
+ * the actor matrix, scaled by the frame fade, and derives each one's displacement and angle.
+ */
 static void fnEAD00_PR000(void *self, EAD00ProcessWork *work)
 {
     EAD00ProcessWork *state = work;
@@ -145,6 +157,7 @@ static MEfGsQword coltbl_0_00A437B0[3];
 #define EAD00_RAYS 4
 #define EAD00_SEGMENTS 51
 
+/* Writes a GIF tag at the packet's current qword and returns the qword after it. */
 static inline MEfGsQword *ead00OpenTag(MEfGsPacket *packet, int pre, int prim, int reg_count,
                                          u64 registers)
 {
@@ -162,6 +175,7 @@ static inline void ead00SetRegister(MEfGsQword *qword, unsigned char address, u6
     qword->ad.address = address;
 }
 
+/* Records nloop in the open tag and advances the packet past its data qwords. */
 static inline void ead00CloseTag(MEfGsPacket *packet, int nloop)
 {
     int size;
@@ -172,6 +186,11 @@ static inline void ead00CloseTag(MEfGsPacket *packet, int nloop)
     packet->count += size;
 }
 
+/*
+ * Draw callback: writes the GS setup packet, then one packet per fan. Each fan
+ * holds EAD00_RAYS triangle strips with colour fading along the length and, in the
+ * final frames, out entirely.
+ */
 static void fnEAD00_DP000(void *self, EAD00ProcessWork *work)
 {
     EAD00ProcessWork *state = work;
@@ -198,6 +217,7 @@ static void fnEAD00_DP000(void *self, EAD00ProcessWork *work)
 
     screen = mefCamParams.screen;
     view = mefCamParams.matrix;
+    /* Setup packet: alpha test, z-buffer and additive blend registers. */
     first = &state->packet;
     MGsGPInit(first, 0, 0);
     setting = first->current;
@@ -252,6 +272,10 @@ static void fnEAD00_DP000(void *self, EAD00ProcessWork *work)
                 QuadwordCopyT0(&angles, angle);
                 angles.z = ray_angle + (float)segment * 0.5235988f;
                 MMathRotateMatrixYXZ(&rotation, 0, &angles);
+                /*
+                 * Store the position as the rotation's translation row, step the
+                 * position by the displacement, then copy the translation to point.
+                 */
                 __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&position) : "memory");
                 __asm__ __volatile__("vmove.w vf1, vf0" : : : "memory");
                 __asm__ __volatile__("sqc2 vf1, 48(%0)" : : "r"(&rotation) : "memory");
@@ -295,11 +319,10 @@ static void fnEAD00_DP000(void *self, EAD00ProcessWork *work)
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* work's layout is unresolved beyond +0x70: the per-frame lifetime counter
- * this function advances, firing sefHitEffect and expiring through
- * MEfObjDestroy on the same frame, 0x46. */
+/* Frame at which the effect calls sefHitEffect and is destroyed, from then on. */
 #define EAD00_LIFETIME 0x46
 
+/* Lifetime callback: advances the frame and destroys the effect at EAD00_LIFETIME. */
 static void fnEAD00_PO000(void *self, EAD00ProcessWork *work)
 {
     EAD00ProcessWork *state = work;

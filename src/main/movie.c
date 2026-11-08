@@ -6,10 +6,8 @@
 #include "main/string_utf_get_hash.h"
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in this
- * TU map (and in main/tu238, src/main/runtime.c) show.
+ * The script VM's per-thread context. Every Java native receives
+ * (thread, arguments, result).
  */
 typedef struct JThread JThread;
 
@@ -25,15 +23,16 @@ typedef struct MovieObjectCall {
 } MovieObjectCall;
 
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
-/* GameMovieInit is defined in main/tu125 (src/main/game_movie.c), not yet
- * recovered. */
+/* Defined in src/main/game_movie.c. */
 extern void GameMovieInit(int size);
 
+/* Calls GameMovieInit with the first argument converted from KiB to bytes. */
 void Java_xeno_Movie_init__I(JThread *thread, int *arguments, unsigned int *result)
 {
     GameMovieInit(arguments[1] << 10);
 }
 
+/* Plays the movie whose number is the first argument. */
 void Java_xeno_Movie_start__I(JThread *thread, int *arguments,
                               unsigned int *result)
 {
@@ -57,6 +56,10 @@ void Java_xeno_Movie_stop__(JThread *thread, void *arguments, unsigned int *resu
     GameMovieStop();
 }
 
+/*
+ * Writes GameMovieFrame into the Movie object's frame field, then reads
+ * the transparent and alpha fields back into the GameMovie globals.
+ */
 void Java_xeno_Movie_update__(JThread *thread, MovieObjectCall *arguments,
                               unsigned int *result)
 {

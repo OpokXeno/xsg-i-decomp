@@ -31,8 +31,8 @@ typedef struct RgAnnounceUvRectHalves {
     long long uvSize;
 } RgAnnounceUvRectHalves;
 
-/* Scaffold-owned strings of _InitAnn: texture names, assert expressions and the
- * asset file name. Their bytes stay in the original .rodata. */
+/* Strings used by _InitAnn: texture names, assert expressions and the
+ * asset file name. They are defined in the original .rodata. */
 extern const char announceIdHeaderPath[];
 
 extern const char announceRound1PicName[];
@@ -136,7 +136,7 @@ extern const char announceAssertPicYoulos2NotNil[];
 extern const char announcePicNameCntinu2[];
 extern const char announceAssertPicCntinu2NotNil[];
 
-/* ov12:0x00a586a0: the fixed color the total line copies before drawing (scaffold .rodata). */
+/* The fixed colour the total line copies before drawing. */
 extern const RgAnnounceColorHalves announceClearPanelColor;
 
 static void _InitAnn(RgAnnounce *pAnn);
@@ -150,17 +150,14 @@ static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
 static void _paint_add(RgAnnounce *pAnn, int index, int x, int y);
 static void _paint_sub(RgAnnounce *pAnn, int index, int x, int y);
 
-/*
- * External file-backed witnesses, not candidate-emitted data: this window is
- * asm-owned scaffold data (splat names, no config/symbols/ov12.txt entry).
- *
- * ov12:0x00a57bc0 contains the source filename "../rg_announce.euc.c".
- * ov12:0x00a57bb0 contains the assertion expression "pAnn != NIL".
- */
 const char announceAssertAnnNotNil[] = "pAnn != NIL";
 
 const char announceSourcePath[] = "../rg_announce.euc.c";
 
+/*
+ * Loads the announcement textures from the add and sub common data, creates
+ * the paint object and sets the default state. Asserts when a texture is missing.
+ */
 static void _InitAnn(RgAnnounce *pAnn)
 {
     RgBattleCommonDataEnv *common;
@@ -283,6 +280,7 @@ static void _InitAnn(RgAnnounce *pAnn)
         assert_prog(announceAssertTimePointPicNotNil, announceIdHeaderPath, 27);
     }
 
+    /* Textures 27 to 49 come from the sub common data. */
     pAnn->textures[27] = RgBxxGetPic(subCommon, announceYouWinSubPicName);
     if (pAnn->textures[27] == 0) {
         assert_prog(announceAssertYouWinSubPicNotNil, announceIdHeaderPath, 29);
@@ -412,6 +410,10 @@ void DisposeRgAnnounce(RgAnnounce *pAnn)
     RgHeapFree(InstanceOfRgHeap(), pAnn, announceSourcePath, 120);
 }
 
+/*
+ * Counts the timer down by deltaTime and clears the draw function when it runs
+ * out. An infinite timer does not count.
+ */
 void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
 {
     if (pAnn == 0) {
@@ -426,6 +428,10 @@ void RgAnnouncePassTime(RgAnnounce *pAnn, float deltaTime)
     }
 }
 
+/*
+ * Draws the announcement: its draw function, then the stage-clear or game-clear
+ * panel when one is active, and flushes the paint object.
+ */
 void RgAnnounceDisp(RgAnnounce *pAnn)
 {
     unsigned int totalTime;
@@ -439,6 +445,7 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
     if (pAnn->drawFunc != 0) {
         pAnn->drawFunc(pAnn);
     }
+    /* Stage clear: the panel fades in, then shows the stage time and damage. */
     if (pAnn->stageClearActive != 0) {
         XrgPaint2D *paint;
         XrgPaint2DRGBA color;
@@ -471,6 +478,7 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
             _damage_disp(pAnn, 0, 313, pAnn->stageClearDamage);
         }
     }
+    /* Game clear: the panel fades in, then lists the per-stage totals and their sum. */
     if (pAnn->gameClearActive != 0) {
         XrgPaint2D *paint;
         XrgPaint2DRGBA color;
@@ -524,11 +532,7 @@ void RgAnnounceDisp(RgAnnounce *pAnn)
     _paint_flush(pAnn);
 }
 
-/*
- * The two fixed title rectangles, asm-owned scaffold data (splat names, no
- * config/symbols/ov12.txt entry): ov12:0x00a586b0 belongs to the time title
- * and ov12:0x00a586c0 to the damage title.
- */
+/* UV rectangles of the time title and the damage title, read by their draw functions. */
 const RgAnnounceUvRectHalves announceTimeTitleUvRect = {
     0, 0x0000001800000200LL
 };
@@ -547,6 +551,7 @@ static void _time_disp_title(RgAnnounce *pAnn, int x, int y)
     _paint_uvwh(pAnn, RG_ANNOUNCE_TEX_TITLE_BAR, x, y, (const RgAnnounceUvRect *) &rect);
 }
 
+/* Draws a time in centiseconds as minutes, seconds and centiseconds at x, y, with its label. */
 static void _time_disp(RgAnnounce *pAnn, int x, int y, unsigned int time)
 {
     XrgPaint2D *paint;
@@ -584,9 +589,10 @@ static void _damage_disp_title(RgAnnounce *pAnn, int x, int y)
     _paint_uvwh(pAnn, RG_ANNOUNCE_TEX_TITLE_BAR, x, y, (const RgAnnounceUvRect *) &rect);
 }
 
-/* ov12:0x00a586d0 is the scaffold-owned "%d" format string. */
+/* Format of the damage value. */
 const char announceDamageFormat[] = "%d";
 
+/* Draws the damage, rounded down, at x, y, with its label. */
 static void _damage_disp(RgAnnounce *pAnn, int x, int y, float damage)
 {
     XrgPaint2D *paint;
@@ -676,6 +682,7 @@ static void _you_lose_you_win(RgAnnounce *pAnn) {
     _paint_add(pAnn, RG_ANNOUNCE_TEX_YOU_LOSE_ADD, -RG_ANNOUNCE_COMBO_X_OFFSET, pAnn->dispY);
 }
 
+/* Draws texture at x, y with the given blend mode, if it is not null. */
 static void _paint(XrgPaint2D *paint, struct RgBxxPic *texture, int blend, int x, int y)
 {
     if (texture != 0) {
@@ -685,6 +692,7 @@ static void _paint(XrgPaint2D *paint, struct RgBxxPic *texture, int blend, int x
     }
 }
 
+/* Draws the texture at index at x, y, using the UV offset and size from rect. */
 static void _paint_uvwh(RgAnnounce *pAnn, int index, int x, int y,
                         const RgAnnounceUvRect *rect)
 {
@@ -716,6 +724,10 @@ static void _paint_flush(RgAnnounce *pAnn)
     XrgPaint2DFlush(pAnn->paint);
 }
 
+/*
+ * Selects the announcement drawn for kind; an out-of-range kind draws nothing.
+ * The pending vertical position becomes the current one.
+ */
 void RgAnnounceDispInit(RgAnnounce *pAnn, int kind)
 {
     static RgAnnounceDrawFunc s_apFuncs[RG_ANNOUNCE_DRAW_KIND_COUNT] = {
@@ -736,6 +748,7 @@ void RgAnnounceDispInit(RgAnnounce *pAnn, int kind)
     pAnn->pendingDispY = RG_ANNOUNCE_DISP_Y_DEFAULT;
 }
 
+/* Selects the announcement as RgAnnounceDispInit does, and sets its timer to duration when one was chosen. */
 void RgAnnounceDispInitTime(RgAnnounce *pAnn, int kind, float duration)
 {
     RgAnnounceDispInit(pAnn, kind);
@@ -753,6 +766,7 @@ void RgAnnounceDispOff(RgAnnounce *pAnn)
     pAnn->stageClearActive = 0;
 }
 
+/* Starts the stage-clear panel with the stage time and damage, and clears the game-clear panel. */
 void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
 {
     if (pAnn == 0) {
@@ -765,10 +779,13 @@ void RgAnnounceSetStageClear(RgAnnounce *pAnn, int time, float damage)
     pAnn->stageClearTick = 0;
 }
 
-/* "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])" */
 const char announceAssertStageInTotalTimeRange[72] =
     "uStage < sizeof(pAnn->m_auTotalTime) / sizeof(pAnn->m_auTotalTime[0])";
 
+/*
+ * Copies the times and damages of the first uStage stages and starts the
+ * game-clear panel.
+ */
 void RgAnnounceSetGameClear(RgAnnounce *pAnn, const unsigned int *auTime,
                             const float *afDamage, unsigned int uStage)
 {

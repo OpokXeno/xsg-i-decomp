@@ -8,8 +8,10 @@
 #include "ov01/calc.h"
 #include "debug_entry_data.h"
 
-/* Debug menu: enters the battle debug interface; page 0/1/2 selects the
- * status, parameter or spec display (debugBattle tail-calls one of them). */
+/*
+ * Debug menu entry: page 0, 1 or 2 selects the status, parameter or spec
+ * display.
+ */
 extern void debugBattle(int page);
 
 void debugEntry(int page)
@@ -47,6 +49,7 @@ extern const char debugEntryJpText[];
 extern const char debugEntryAPPosIdText[];
 extern const char debugEntryAPERRORText[];
 
+/* Prints one command-trace line for unit, with the format selected by cmd. */
 void debugCmdPrint(BattleUnit *unit, int cmd)
 {
     int *cmdRec;
@@ -115,6 +118,10 @@ void debugCmdPrint(BattleUnit *unit, int cmd)
 #define DEBUG_THINK_NUMERIC_LIMIT 16
 #define CMD_STR_TBL_REG_NAMES 0x28
 
+/*
+ * Returns the printable name of a think register code, or an empty string
+ * when the code is not valid.
+ */
 char *debugThinkRegName(int reg_code)
 {
     int reg_index;
@@ -157,6 +164,7 @@ extern const char debugEntryJpText6[];
 extern const char debugEntryJpText7[];
 extern const char debugEntryJpText8[];
 
+/* Prints one think command at pc, selected by cmd, with its register and operand values. */
 void debugThinkPrint(int cmd, short pc, short jmp)
 {
     int regCode, a, b, c;
@@ -263,6 +271,7 @@ extern const char debugEntrySTPText[];
 extern const char debugEntrySTTText[];
 extern const char debugEntryJpText10[];
 
+/* Prints a status dump for every non-null battle unit. */
 int debugStatDisp(void)
 {
     BattleUnit **units;
@@ -313,6 +322,7 @@ int debugStatDisp(void)
     return 1;
 }
 
+/* Prints a parameter dump for every non-null battle unit. */
 int debugParaDisp(void)
 {
     BattleUnit **units;
@@ -351,6 +361,7 @@ extern char *dataPlChaGet(int cid);
 extern const char debugEntrySPECPARAText[];
 extern const char debugEntryTidSpdPowAglUseKillText[];
 
+/* Prints the special-slot table of every non-null battle unit whose work flags lack 0x40. */
 int debugSpecDisp(void)
 {
     BattleUnit **units;
@@ -453,10 +464,9 @@ int debugEquSet(void)
 }
 
 /*
- * The party roster record plUnitTblGet (ov01 VA 0x00a0b630, battle_init.c)
- * returns the base of: configPlayer cycles player
- * (+0x00) 0..0x1F, configPlPos cycles position (+0x02) 1..9. plUnitTblSet
- * writes both fields back for one slot.
+ * plUnitTblGet returns the base of the party roster. configPlayer cycles the
+ * player field (+0x00) over 0..0x1F and configPlPos cycles the position
+ * field (+0x02) over 1..9. plUnitTblSet writes both fields back for one slot.
  */
 typedef struct DebugPartyUnit {
     short player;   /* +0x00 */
@@ -469,14 +479,10 @@ extern void plUnitTblSet(int slot, int player, int position);
 extern int valLR(int *value, int min, int max, int step);
 
 /*
- * dataUnitOrgGet (ov01 VA 0x00a191c0, data_unit_org_get.c) returns character
- * chrNo's original stat record; calcTotalParaMenu (ov01 VA 0x00a11108,
- * calc.c) returns a
- * recalculated copy of the same record (its own maxHp/maxEp lead the same
- * way src/main/menu_para_pt_rate_get.c's CharParaData already evidences).
- * The equip screens below index its agws/engine/frame/accessory/attachment/
- * special/ether/skill ids by the character calcXxxEquipOrg is told to
- * refit.
+ * dataUnitOrgGet returns character chrNo's original stat record;
+ * calcTotalParaMenu returns a recalculated copy of the same record. The
+ * equip screens below index its agws/engine/frame/accessory/attachment/
+ * special/ether/skill ids by the character calcXxxEquipOrg is told to refit.
  */
 typedef struct UnitOrgData {
     short maxHp;               /* +0x00 */
@@ -527,9 +533,8 @@ extern UnitOrgData *dataUnitOrgGet(int chrNo);
 
 extern PadPrefix PadData;
 /*
- * The battle configuration screen's per-character stat record. dataUnitOrgGet
- * returns the character's own copy; dataUnitInitGet the initial record whose
- * leading fields have the same layout; both are printed by the STAT screen.
+ * Gain record returned by dataGainGet: experience, money, the TP/EP/SP values
+ * and the layer, group and item counts.
  */
 typedef struct DebugGainRecord {
     int exp;                      /* +0x00: "EXP   =%8d" */
@@ -660,6 +665,12 @@ extern const char debugEntrySPText2[];
 extern const char debugEntryGROWPARAText[];
 extern const char debugEntryJpText15[];
 
+/*
+ * Battle configuration debug screen. Page 0 is the settings list and pages 1
+ * to 3 show the stat, equipment and gain records. Cross returns from a page to
+ * the list; Cross on the list, or Circle on an entry whose command returns 1,
+ * leaves the screen.
+ */
 void debugBattleConfig(void)
 {
     DebugPartyUnit *party;
@@ -698,6 +709,7 @@ void debugBattleConfig(void)
     lastCmd = cmdCount - 1;
     for (;;) {
         if (configSeq == 0) {
+            /* Page 0: settings list. */
             row = 0;
             x = 12;
             valUD(&configPos, 0, lastCmd, 1);
@@ -742,6 +754,7 @@ void debugBattleConfig(void)
                 goto done;
             }
         } else if (configSeq == 1) {
+            /* Page 1: stat record of the selected character. */
             row = 0;
             valLR(&statId, 1, DEBUG_CHARA_ID_MAX, 1);
             if (statId < 0x21) {
@@ -784,6 +797,7 @@ void debugBattleConfig(void)
                 configSeq = 0;
             }
         } else if (configSeq == 2) {
+            /* Page 2: equipment of the selected character. */
             row = 0;
             for (equipCount = 0; equipCmdTbl[equipCount] != 0; equipCount++) {
             }
@@ -826,6 +840,7 @@ void debugBattleConfig(void)
                 configSeq = 0;
             }
         } else if (configSeq == 3) {
+            /* Page 3: gain record for ids from 0x21, grow record for ids below 0x11. */
             valLR(&gainId, 1, DEBUG_CHARA_ID_MAX, 1);
             row = 0;
             xglFontDebugPrintf(12, h * row++ + 12, debugEntryGAINText2);
@@ -924,10 +939,6 @@ int configPlPos(int slot)
     plUnitTblSet(slot, units[slot].player, position);
     return 0;
 }
-
-/* Debug menu left/right adjuster: steps *value by step (d-pad) or by
-   10 * step (shoulder buttons), wrapping from past max to min and from below
-   min to max. Returns nonzero when *value changed. */
 
 extern void monsSetNoSet(int monsSetNo);
 int configMonsSet(int *pos) {
@@ -1063,6 +1074,10 @@ typedef struct DebugPadView {
     unsigned short buttons; /* +0x2C */
 } DebugPadView;
 
+/*
+ * Debug menu up/down adjuster: steps *value by step, wrapping at both ends.
+ * Returns nonzero when *value changed.
+ */
 int valUD(int *value, int min, int max, int step)
 {
     int old = *value;
@@ -1082,6 +1097,11 @@ int valUD(int *value, int min, int max, int step)
     return *value != old;
 }
 
+/*
+ * Debug menu left/right adjuster: steps *value by step (Left/Right) or by
+ * 10 * step (L1/R1), wrapping from past max to min and from below min to max.
+ * Returns nonzero when *value changed.
+ */
 int valLR(int *value, int min, int max, int step)
 {
     int old = *value;
@@ -1251,6 +1271,10 @@ extern int calcSpecEquipOrg(int charaId, int slot, int specId);
 extern int slot; /* shared debug cursor for the spec/ether/skill equip screens */
 extern int specPos[6]; /* screen cursor column per spec slot */
 
+/*
+ * Edits the special-action id of the spec slot selected by slot. Circle moves
+ * to the next slot.
+ */
 int equipSpec(void) {
     UnitOrgData *unit;
     int specId;
@@ -1286,6 +1310,10 @@ int equipEther2(void) {
 
 extern int etherPos[4]; /* screen cursor column per ether sub-slot */
 
+/*
+ * Edits the ether id of the slot selected by slot within firstSlot..lastSlot.
+ * Circle moves to the next slot, wrapping back to firstSlot after lastSlot.
+ */
 int equipEther(int firstSlot, int lastSlot) {
     UnitOrgData *unit;
     int etherId;
@@ -1307,6 +1335,10 @@ int equipEther(int firstSlot, int lastSlot) {
 extern int calcSkillEquipOrg(int charaId, int slot, int skillId);
 extern int skillPos[3]; /* screen cursor column per skill slot */
 
+/*
+ * Edits the skill id of the skill slot selected by slot. Circle moves to the
+ * next of the three slots.
+ */
 int equipSkill(void) {
     UnitOrgData *unit;
     int skillId;

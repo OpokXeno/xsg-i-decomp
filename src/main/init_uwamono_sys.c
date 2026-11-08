@@ -85,7 +85,7 @@ enum {
 #define SOUND_BANK_EMPTY 0xFFFF
 #define UWAMONO_BGM_FADE_FRAMES 0x12C
 
-/* DrawRadar: dot centre and range in GS fixed point, dot half size, world units per radar unit. */
+/* DrawRadar: dot centre and range in GS fixed point, dot half size, radar units per world unit. */
 #define RADAR_CENTER_X 0x8B00
 #define RADAR_CENTER_Y 0x8900
 #define RADAR_DEPTH 0xFFFFFF
@@ -144,9 +144,8 @@ typedef struct UwamonoCrossBasis {
 } UwamonoCrossBasis;
 
 /*
- * GetPartsPos's own additive view of the global game-loop record (TU-local
- * by canon, config/header-canon.json): only the map-parts resource root
- * pointer at +0x54 is read here.
+ * GetPartsPos's own view of the game-loop record: only the map-parts resource
+ * root pointer at +0x54 is read here.
  */
 typedef struct MapPartsResource {
     unsigned char unmodeled_00[0x40];
@@ -179,13 +178,12 @@ typedef struct UwamonoGameLoopState {
 } UwamonoGameLoopState;
 
 /*
- * ClearUwamonoEffect's own additive view of the same MapUnit[] record
- * MapUnitRecord above already partially names; only the fields
- * ClearUwamonoEffect (VA 0x002be8c0) reads or writes are named here.
+ * ClearUwamonoEffect's view of a MapUnit[] record: only the fields it reads
+ * or writes are named here.
  */
 typedef struct UwamonoEffectUnit {
     unsigned char unmodeled_00[0xa0];
-    /* Read once (`lbu`), plus one, as the channel argument to
+    /* Read once, plus one, as the channel argument to
      * xglSoundEffectStopID; no other role is evidenced here. */
     unsigned char seChannel;           /* +0xA0 */
     unsigned char unmodeled_a1[0x47];
@@ -194,10 +192,9 @@ typedef struct UwamonoEffectUnit {
     int effectCf[3];                   /* +0xE8 */
     unsigned char unmodeled_f4[0xac];
     /*
-     * The original computes this sub-pointer once, ahead of the effect
-     * loop, and keeps it live (register evidence) across the whole
-     * function; UwamonoTimers below names the same +0x1A0 block for
-     * UwamonoCommonFunc's view.
+     * The sub-pointer is computed once, ahead of the effect loop, and
+     * stays live across the whole function; UwamonoTimers below names the
+     * same +0x1A0 block for UwamonoCommonFunc's view.
      */
     struct UwamonoEffectTimers {
         unsigned char unmodeled_00[0x48];
@@ -755,18 +752,18 @@ extern void InitMapDoor(InitMapPartsUnit *unit);
 void InitMapKoware(InitMapPartsUnit *mapUnit);
 extern void InitDrill(InitMapPartsUnit *unit);
 
-/* Defined in src/main/map_create_unit_peer.c (main/tu270), still in asm. */
+/* Defined in src/main/map_create_unit_peer.c. */
 extern void MAP_updateUnitPartsSequence(void *unit);
 
 extern void MAP_updateUnitSequence(void *unit);
 
-/* Defined later in this TU (a local sibling still in asm). */
+/* Defined later in this TU. */
 void CheckUwamonoHeight(UwamonoCommonUnit *unit);
 
-/* Defined later in this TU (a local sibling still in asm). */
+/* Defined later in this TU. */
 void UwamonoBgmFunc(UwamonoCommonUnit *unit);
 
-/* Defined in src/main/ssd_1.c (main/tu ssd_1), already C. */
+/* Defined in src/audio/ssd/ssd_sec.c. */
 extern void SsdFadeoutEffect(int effect_id, int source_id, int fade_time);
 
 void MAP_updateUnitSaveSymbol(MapUnitRecord *unit);
@@ -784,8 +781,8 @@ int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 static int NyuruCircle(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit);
 static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode);
 /*
- * Still assembler: it only reads `from` and `to`, and reads the unit's
- * position and radius (+0x10/+0x18, +0xB0), so it takes the collision view.
+ * Reads only `from` and `to`, plus the unit's position and radius
+ * (+0x10/+0x18, +0xB0), so it takes the collision view.
  */
 int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
                             UwamonoCollisionUnit *unit);
@@ -879,7 +876,6 @@ extern const signed char printflgReadOnly __asm__("printflg");
 void SetUwaWind(UwamonoWindUnit *unit);
 void UwamonoCommonFunc(UwamonoCommonUnit *unit);
 
-/* Runtime-loaded object message with a hexadecimal unit identifier. */
 /* Loading resident field objects, followed by their hexadecimal identifier. */
 const char loadResidentObjectFormat[24] = "\xBE\xEF\xC3\xF3\xBE\xE5\xCA\xAA\xA5\xED\xA1\xBC\xA5\xC9 %x\n";
 
@@ -913,6 +909,7 @@ static inline float UwamonoProjectBoxBasisXZ(float x, float z,
     return x * basis->x + z * basis->z;
 }
 
+/* Reads the resident model and texture pairs into uwamono_dat, then the karakama item tables. */
 void InitUwamonoSys(void)
 {
     char path[128];
@@ -974,6 +971,11 @@ void InitUwamonoSys(void)
     GameLoopState.selectionDistance = 3.0f;
 }
 
+/*
+ * Returns the unit for a resource id. Serials below UWAMONO_SERIAL_RESOURCE_BASE
+ * reuse an active unit with the same serial; otherwise a new unit is created.
+ * The uwamono state is reset to its defaults.
+ */
 MapUnitRecord *Unit_CreateUwamono(int index, int resourceId)
 {
     int slot;
@@ -1005,6 +1007,7 @@ MapUnitRecord *Unit_CreateUwamono(int index, int resourceId)
         }
     }
 
+    /* Load the resource unless the id is in the special or symbol ranges, or is 0x7013. */
     if (resourceId >= UWAMONO_SERIAL_RESOURCE_BASE + 1 &&
         ((unsigned int)(resourceId - UWAMONO_ID_SPECIAL_FIRST) >= UWAMONO_ID_SPECIAL_COUNT) &&
         ((unsigned int)(resourceId - UWAMONO_ID_SYMBOL_FIRST) >= UWAMONO_ID_SYMBOL_COUNT) &&
@@ -1087,6 +1090,7 @@ void MAP_LoadUwamonoResource(MapUnitRecord *unit, int resourceId)
     }
 }
 
+/* Copies the parts matrix for unit->serial from the map-parts resource into the unit's basis, position and Y rotation. */
 void GetPartsPos(MapUnitRecord *unit)
 {
     MapPartsRoot *root;
@@ -1114,6 +1118,10 @@ void SendBrokenSignal(MapUnitRecord *unit)
     unit->trap.state = 2;
 }
 
+/*
+ * Sets a breakable part's dimensions from its base size, or from its kind
+ * table entry when no base size is set, then applies the size offsets.
+ */
 void GetPartsSize(UwamonoKowareSizeUnit *unit)
 {
     UwamonoMapUnitState *state;
@@ -1148,6 +1156,7 @@ void GetPartsSize(UwamonoKowareSizeUnit *unit)
     }
 }
 
+/* Deletes the unit's effect handles, and stops its BGM sound when a BGM timer is running. */
 void ClearUwamonoEffect(UwamonoEffectUnit *unit)
 {
     int i;
@@ -1172,6 +1181,7 @@ signed char GetUwamonoSignal(MapUnitRecord *unit)
     return unit->trap.state;
 }
 
+/* Initializes a map unit: probes its ground height, then dispatches to the parts or symbol init for its map type. */
 void InitUwamono(MapUnitRecord *unit)
 {
     UwamonoCreatedState *map = &unit->uwamono;
@@ -1234,6 +1244,7 @@ void InitUwamono(MapUnitRecord *unit)
     }
 }
 
+/* Dispatches a map parts unit to its init by map type; an unknown type disables the unit. */
 void InitMapParts(InitMapPartsUnit *unit)
 {
     unit->uwaresId = 0;
@@ -1254,6 +1265,11 @@ void InitMapParts(InitMapPartsUnit *unit)
     }
 }
 
+/*
+ * Initializes a breakable map part: reads its position and size, sets its update
+ * and makes its model part visible. An out-of-range serial is reported and
+ * disables the part.
+ */
 void InitMapKoware(InitMapPartsUnit *mapUnit)
 {
     KowareInitUnit *unit = (KowareInitUnit *)mapUnit;
@@ -1287,6 +1303,7 @@ void InitMapKoware(InitMapPartsUnit *mapUnit)
     }
 }
 
+/* Initializes a save point symbol: sets its resource ids and transform, then its update function. */
 void InitSaveSymbol(MapUnitRecord *unit)
 {
     UwamonoInitSymbolState *timerState = &unit->symbol;
@@ -1323,6 +1340,7 @@ void InitSaveSymbol(MapUnitRecord *unit)
     }
 }
 
+/* Initializes a shop symbol with the shop resource ids and transform, then its update function. */
 void InitShopSymbol(MapUnitRecord *unit)
 {
     UwamonoInitSymbolState *timerState = &unit->symbol;
@@ -1358,6 +1376,7 @@ void InitShopSymbol(MapUnitRecord *unit)
     }
 }
 
+/* Initializes an EVS symbol: builds its transform and sets its update function. */
 void InitEvsSymbol(MapUnitRecord *unit)
 {
     UwamonoInitSymbolState *timerState = &unit->symbol;
@@ -1383,6 +1402,7 @@ void InitEvsSymbol(MapUnitRecord *unit)
            fptodp(unit->position.z));
 }
 
+/* Initializes a return symbol: builds its transform and sets its update function. */
 void InitRetSymbol(MapUnitRecord *unit)
 {
     UwamonoInitSymbolState *timerState = &unit->symbol;
@@ -1412,6 +1432,10 @@ void InitRetSymbol(MapUnitRecord *unit)
     }
 }
 
+/*
+ * Links a new breakable part to its enemy actor and hidden map unit at the same
+ * position, and hides the part's model.
+ */
 void SetHideObject(void *argument)
 {
     MapUnitRecord *created = argument;
@@ -1463,6 +1487,7 @@ void SetHideObject(void *argument)
     }
 }
 
+/* Hides the model of every breakable part recorded in the shoot list. */
 void GameStateRestoreKoware(void)
 {
     UwamonoGameLoopState *state;
@@ -1475,6 +1500,7 @@ void GameStateRestoreKoware(void)
     }
 }
 
+/* Clears the shoot list, runs the update of each active map unit, then unlocks the units. */
 void SetMapUwamono(void)
 {
     UwamonoGameLoopState *state = &GameLoopState;
@@ -1494,6 +1520,7 @@ void SetMapUwamono(void)
     UnlockMapUnit();
 }
 
+/* Fills the shoot list with -1 and unlocks the map units. */
 void ResetShootSys(void)
 {
     UwamonoGameLoopState *state = &GameLoopState;
@@ -1510,6 +1537,7 @@ void ResetShootSys(void)
     UnlockMapUnit();
 }
 
+/* Creates a map unit at a position and Y rotation with a cleared uwamono state, then sets up its trap. */
 MapUnitRecord *CreateUwamono(float x, float y, float z, float rotationY, int resourceId)
 {
     MapUnitRecord *unit =
@@ -1542,6 +1570,7 @@ MapUnitRecord *CreateUwamono(float x, float y, float z, float rotationY, int res
     return unit;
 }
 
+/* Creates a breakable map part at its parts-table position, taking its shape, dimensions and target from the kind table entry. */
 UwamonoKowareUnit *CreateKowaremono(short resourceId, short kindIndex)
 {
     UwamonoKowareUnit *unit = (UwamonoKowareUnit *)MAP_createUnit(-1, resourceId);
@@ -1574,6 +1603,11 @@ void CreateUwamonoCommon(MapUnitRecord *unit)
     unit->actionSub = 0;
 }
 
+/*
+ * Per-frame update of a breakable part. On its first hit it is recorded in the
+ * shoot list and plays the break effects and sound. Its model is hidden after
+ * UWAMONO_KOWARE_HIDE_COUNT frames, and the part is removed after its frame limit.
+ */
 void MAP_updateUnitKoware(void *argument)
 {
     UwamonoKowareUnit *unit = argument;
@@ -1629,6 +1663,7 @@ void MAP_updateUnitKoware(void *argument)
     }
 }
 
+/* Hides the linked enemy actor while its map unit is inactive; otherwise moves it to the unit and hands it to ACT_updateEnemy. */
 void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit)
 {
     unsigned char linkedUnitId = enepc[unit->actorIndex].unitId;
@@ -1646,6 +1681,10 @@ void MAP_updateUnitEnemy(UwamonoEnemyUnit *unit)
     }
 }
 
+/*
+ * Per-frame update of a hidden map unit: follows its linked unit while that unit
+ * is active, then sets the update and draw functions for its kind.
+ */
 void MAP_updateUnitHide(void *argument)
 {
     UwamonoMapSlot *unit = argument;
@@ -1725,6 +1764,7 @@ void MAP_updateUnitSymbol(MapUnitRecord *unit)
     unit->rotation.y = unit->rotation.y + UWAMONO_SYMBOL_PHASE_STEP;
 }
 
+/* Sets the global wind from the unit's position and height and passes it to EXM_SetWindStruct. */
 void SetUwaWind(UwamonoWindUnit *unit)
 {
     UwamonoWind *wind = &uwaWind;
@@ -1742,6 +1782,7 @@ void SetUwaWind(UwamonoWindUnit *unit)
     EXM_SetWindStruct(wind);
 }
 
+/* Plays the break sound: the unit's own sound id when set, otherwise the one for its material. */
 void UwamonoBrokenSe(UwamonoBrokenSoundUnit *unit)
 {
     UwamonoBrokenSoundState *state = &unit->state;
@@ -1768,12 +1809,18 @@ void UwamonoBrokenSe(UwamonoBrokenSoundUnit *unit)
     }
 }
 
+/*
+ * Shows the cursor effect of a selectable unit: the aimed cursor on the aimed
+ * unit, the plain cursor on the others, and none when the unit is signalled or
+ * not selectable.
+ */
 void DrawActiveCursol(MapUnitRecord *argument)
 {
     DrawActiveCursorUnit *unit = (DrawActiveCursorUnit *)argument;
     UwamonoEffectUnit *effects = (UwamonoEffectUnit *)argument;
     SchedulerState *effect;
     float scale;
+    /* effectCf[1] is the plain cursor and effectCf[2] the aimed cursor. */
     if (unit->signal == 1 || !(unit->flags & MAP_UNIT_SELECTABLE)) {
         if (effects->effectCf[1] != 0) {
             sefDeleteEffectCf(effects->effectCf[1]);
@@ -1840,6 +1887,7 @@ void DrawActiveCursol(MapUnitRecord *argument)
     effect->scale.x = scale;
 }
 
+/* Returns the index of the first active, visible map unit whose collision test hits the actor, or -1. */
 int HitCheckMapUnit(void *actor)
 {
     int index = 0;
@@ -1860,6 +1908,10 @@ int HitCheckMapUnit(void *actor)
     return -1;
 }
 
+/*
+ * Collision test that pushes the actor out of the map units it hits. Returns 1
+ * when the actor was pushed clear of every hit unit, otherwise 0.
+ */
 int HitCheckMapUnitWithNyuru(UwamonoCollisionActor *actor)
 {
     int candidates[MAP_UNIT_COUNT];
@@ -1894,6 +1946,7 @@ int HitCheckMapUnitWithNyuru(UwamonoCollisionActor *actor)
         return HitCheckNyuru(actor, (UwamonoCollisionUnit *)&MapUnit[candidates[0]]);
     }
 
+    /* Try each candidate in turn: keep the first push that clears every unit, otherwise restore the position and cancel the move. */
     if (candidates[0] != -1) {
         candidate = 0;
         while (candidates[candidate] != -1) {
@@ -1928,6 +1981,7 @@ int HitCheckMapUnitWithNyuru(UwamonoCollisionActor *actor)
     return 0;
 }
 
+/* Like HitCheckMapUnit, but scans downward from MAP_UNIT_COUNT and stops before index 0. */
 int HitCheckMapUnitReverse(void *actor)
 {
     int index = MAP_UNIT_COUNT;
@@ -1948,15 +2002,14 @@ int HitCheckMapUnitReverse(void *actor)
 }
 
 /*
- * HitCheckMapUnitPos (main:0x002c02f0): a thin tail call into
- * HitCheckMapUnitPosSize with its distance threshold fixed at 0.0f (a
- * true `j`, no `jal`, so this function's own return value is whatever
- * HitCheckMapUnitPosSize returns).
+ * Tests a point against the map units: HitCheckMapUnitPosSize with a radius
+ * of 0.0f.
  */
 int HitCheckMapUnitPos(const Vector4 *position) {
     return HitCheckMapUnitPosSize(position, 0.0f);
 }
 
+/* Returns the index of the first active map unit that a point with the given radius hits, or -1. */
 int HitCheckMapUnitPosSize(const Vector4 *position, float radius)
 {
     UwamonoCollisionActor probe;
@@ -1977,6 +2030,7 @@ int HitCheckMapUnitPosSize(const Vector4 *position, float radius)
     return -1;
 }
 
+/* Like HitCheckMapUnitPosSize with a zero radius, but scans downward from MAP_UNIT_COUNT and stops before index 0. */
 int HitCheckMapUnitPosReverse(Vector4 *position)
 {
     UwamonoCollisionActor probe;
@@ -1996,6 +2050,7 @@ int HitCheckMapUnitPosReverse(Vector4 *position)
     return -1;
 }
 
+/* Tests the actor against one map unit by height, then by its circle or box shape. Returns 1 on a hit. */
 int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapUnitState *state;
@@ -2024,6 +2079,7 @@ int HitCheckMapUnitAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 0;
 }
 
+/* Tests a point against one map unit by height, then by its shape. Returns nonzero on a hit. */
 unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapUnitState *state = &unit->state;
@@ -2052,6 +2108,7 @@ unsigned int HitCheckMapUnitPosAt(UwamonoCollisionActor *actor, UwamonoCollision
     }
 }
 
+/* Tests a circle actor against a box unit in the box's own X and Z axes. Returns nonzero when they overlap. */
 int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit)
 {
     const float (*basis)[4];
@@ -2102,6 +2159,7 @@ int HitCheckBox(UwamonoCollisionActor *actor, struct UwamonoBoxUnit *boxUnit)
     return testDistance < depthSquared;
 }
 
+/* Tests an actor against a box unit, falling back to HitCheckCorner when the actor is beyond the box's width. */
 int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoMapSlot *box = (UwamonoMapSlot *)unit;
@@ -2154,6 +2212,7 @@ int HitCheckBoxCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 0;
 }
 
+/* Tests the actor against the four corners of a box unit; returns 1 when any corner is within the actor's radius. */
 int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoCornerCollisionUnit *box = (UwamonoCornerCollisionUnit *)unit;
@@ -2189,6 +2248,10 @@ int HitCheckCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return CheckDist2D(&actor->position, &corners[3]) < actor->radius * UWAMONO_RADIUS_SCALE;
 }
 
+/*
+ * Debug probe for a box unit: holding circle or cross turns the unit about Y, and
+ * the box matrix and distances are printed to the debug font. Always returns 0.
+ */
 int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoCrossBasis basisCopy;
@@ -2226,6 +2289,7 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
         xglMatrixStackSave(unit->matrix);
     }
 
+    /* Print the four matrix rows to the debug font. */
     xglFontDebugPrintf(8, 0x80, hitCheckMatrixFormat,
                        basis[0][0],
                        basis[0][1],
@@ -2296,6 +2360,7 @@ int HitCheckBoxTest(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 0;
 }
 
+/* Pushes the actor out of one unit (circle or box). Returns 1 when the push leaves it clear of every map unit, otherwise 0. */
 int HitCheckNyuru(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     AlignedVector4 position = actor->position;
@@ -2328,6 +2393,10 @@ int HitCheckNyuru(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 1;
 }
 
+/*
+ * Slides the actor around a circular unit along its displacement, then checks the
+ * ground height there. Returns 0 and undoes the move when no ground height is found.
+ */
 static int NyuruCircle(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     float gapZ;
@@ -2384,6 +2453,10 @@ static int NyuruCircle(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
     return 1;
 }
 
+/*
+ * Slides the actor along the box unit's X or Z axis, whichever side it is on.
+ * Returns 0 when no ground height is found; mode 0 also halves stalled moves.
+ */
 static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
 {
     UwamonoCrossBasis *basis;
@@ -2417,6 +2490,7 @@ static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit,
     direction.z = actor->displacement.z / distance;
     direction.y = 0.0f;
 
+        /* Inside the box's X extent the X axis is the wall to slide along, otherwise the Z axis. */
         if (__builtin_fabsf(alongX) < dims.x + actor->radius * UWAMONO_RADIUS_SCALE) {
         projection = direction.x * basis->xAxisX + direction.z * basis->xAxisZ;
         actor->displacement.x = projection * basis->xAxisX * distance;
@@ -2462,6 +2536,10 @@ static int NyuruMatrix(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit,
     return 1;
 }
 
+/*
+ * Like NyuruMatrix for a box unit. For mode 0 it first tries NyuruCorner when the
+ * actor is at a corner. Returns 0 when no ground height is found.
+ */
 int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
 {
     UwamonoCrossBasis *basis;
@@ -2523,6 +2601,7 @@ int NyuruBox(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit, int mode)
     return 1;
 }
 
+/* Pushes the actor away from the nearest corner of a box unit, treating that corner as a small circle of nyuruCornerRadius. */
 static void NyuruCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit)
 {
     UwamonoCrossBasis *basis;
@@ -2539,6 +2618,7 @@ static void NyuruCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit
     basis = unit->basis;
     center = unit->position;
     dimensions = unit->dimensions;
+    /* Start from one corner and keep the nearest of the four. */
     nearest.vector.x = center.vector.x +
                       (dimensions.x * basis->xAxisX +
                        dimensions.z * basis->zAxisX);
@@ -2596,6 +2676,11 @@ static void NyuruCorner(UwamonoCollisionActor *actor, UwamonoCollisionUnit *unit
     actor->radius = actorRadius;
 }
 
+/*
+ * Per-frame shot control. While the aim is set and the square button is pressed it
+ * starts the shoot motion. During the motion it signals the aimed unit and releases
+ * the aim and shoot flags after frame 0.5.
+ */
 void ShootMapUnit(void)
 {
     UwamonoGameLoopState *state = &GameLoopState;
@@ -2652,6 +2737,7 @@ void ShootMapUnit(void)
         actor->animation.slot.frame < 0.36f) {
             Vibration_Set_Weak(4);
     }
+    /* Signal the aimed unit once the motion passes the threshold frame. */
     threshold = 0.36f;
     if (threshold < actor->animation.slot.frame) {
         if (unitState->signal == 0) {
@@ -2662,6 +2748,7 @@ void ShootMapUnit(void)
             unitState->signal = 1;
         }
     }
+    /* After frame 0.5 release the aim and shoot flags. */
     if (actor->animation.slot.frame > 0.5f) {
         GameLoopState.aimMapUnitIndex = -1;
         GameLoopState.systemFlags &= ~UWAMONO_SYSTEM_SHOOT_MOTION;
@@ -2670,6 +2757,11 @@ void ShootMapUnit(void)
     }
 }
 
+/*
+ * Finds where a moving point (from previous to position, with the given radius)
+ * first hits a map unit, and writes the stop point to result. Returns 1 on a hit;
+ * otherwise returns 0 with result set to previous.
+ */
 int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
                       float radius, Vector4 *result)
 {
@@ -2733,6 +2825,7 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
     farEnd.x -= scaledRadius * normal.z;
     farEnd.z += scaledRadius * normal.x;
 
+    /* Intersect the near and far edges of the swept radius with each candidate, and keep the nearest point. */
     for (i = 0; i < MAP_UNIT_COUNT; i++) {
         UwamonoMapSlot *unit;
         if (candidates[i] == -1) {
@@ -2764,6 +2857,7 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
         *result = *previous;
         return 0;
     }
+    /* Pull the stop point back by the radius along the movement. */
     nearEnd.x = position->x - result->x;
     nearEnd.y = position->y;
     nearEnd.z = position->z - result->z;
@@ -2779,6 +2873,7 @@ int CrossPointUwamono(const Vector4 *position, const Vector4 *previous,
     return 1;
 }
 
+/* Intersects a segment with one map unit, using the circle or box test for its shape. */
 void CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, MapUnitRecord *unit, void *result)
 {
     switch (unit->trap.windState) {
@@ -2791,6 +2886,7 @@ void CrossPointUwamonoAt(const Vector4 *first, const Vector4 *second, MapUnitRec
     }
 }
 
+/* Writes the point where a segment reaches a circular unit's edge; out->y is CROSS_POINT_NONE when the segment misses. */
 void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
                               UwamonoCollisionUnit *unit, Vector4 *out)
 {
@@ -2816,6 +2912,7 @@ void CalcNearCrossPointCircle(const Vector4 *from, const Vector4 *to,
     }
 }
 
+/* Writes the nearest crossing of a segment with a box unit's four edges to result; result->y is CROSS_POINT_NONE when there is none. */
 void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
                            MapUnitRecord *unit, AlignedVector4 *result)
 {
@@ -2872,6 +2969,7 @@ void CalcNearCrossPointBox(const Vector4 *first, const Vector4 *second,
     }
 }
 
+/* Writes whichever of the two candidate points is nearer to origin into out. */
 void CheckNearPoint(const Vector4 *origin, const Vector4 *candA, const Vector4 *candB, Vector4 *out)
 {
     Vector4 delta;
@@ -2890,6 +2988,7 @@ void CheckNearPoint(const Vector4 *origin, const Vector4 *candA, const Vector4 *
         *out = *candB;
 }
 
+/* Returns 1 when a point with the given radius lies inside a unit's circle or box, within the unit's height range. */
 int UwamonoAreaCheck(const Vector4 *position, UwamonoMapSlot *unit, float radius)
 {
     const struct UwamonoMapCollisionState *state = &unit->state;
@@ -2928,6 +3027,7 @@ static inline float UwamonoProjectBoxAxisXZ(float x, float z,
     return x * (*matrix)[0][0] + z * (*matrix)[0][2];
 }
 
+/* Returns 1 when a point with the given radius lies inside a box unit's footprint along its X and Z axes. */
 int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
 {
     AlignedVector4 dimensionsSnapshot;
@@ -2947,7 +3047,7 @@ int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
 
     unitX = unit->position.x;
     unitZ = unit->position.z;
-    /* The routine snapshots dimensions here but reads live bounds below. */
+    /* The dimensions copy is not used below: the checks read unit->dimensions directly. */
     dimensionsSnapshot = unit->dimensions;
     offsetX = pointX - unitX;
     offsetZ = pointZ - unitZ;
@@ -2970,6 +3070,7 @@ int AreaCheckBox(const Vector4 *position, UwamonoMapSlot *unit, float radius)
     return 0;
 }
 
+/* Returns the index of the first map unit, other than one on the aim's own channel, that the segment from `from` to the aim position crosses, or -1. */
 int CrossCheckMapUnitAim(Vector4 *from, UwamonoScanUnit *aim)
 {
     int index = 0;
@@ -2996,6 +3097,7 @@ int CrossCheckMapUnitAim(Vector4 *from, UwamonoScanUnit *aim)
     return -1;
 }
 
+/* Returns the index of the first active map unit that the segment from `from` to `to` crosses, or -1. */
 int CrossCheckMapUnit(Vector4 *from, Vector4 *to)
 {
     int index = 0;
@@ -3016,6 +3118,7 @@ int CrossCheckMapUnit(Vector4 *from, Vector4 *to)
     return -1;
 }
 
+/* Returns the index of the first visible actor, other than the source, whose circle the segment from the source to `to` crosses, or -1. */
 int CrossCheckActor(UwamonoEnemyUnit *source, const Vector4 *to)
 {
     int index;
@@ -3030,6 +3133,7 @@ int CrossCheckActor(UwamonoEnemyUnit *source, const Vector4 *to)
     return -1;
 }
 
+/* Tests a segment against one map unit by height, then by its circle or box shape. */
 int CrossCheckMapUnitAt(Vector4 *first, Vector4 *second, UwamonoCrossUnit *unit)
 {
     UwamonoCrossState *state = &unit->state;
@@ -3046,6 +3150,7 @@ int CrossCheckMapUnitAt(Vector4 *first, Vector4 *second, UwamonoCrossUnit *unit)
     }
 }
 
+/* Returns 1 when the segment from `from` to `to` passes within a circular unit. */
 int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
                             UwamonoCollisionUnit *unit)
 {
@@ -3086,6 +3191,7 @@ int CrossCheckMapUnitCircle(const Vector4 *from, const Vector4 *to,
     return hit;
 }
 
+/* Returns 1 when the segment from `first` to `second` crosses any edge of a box unit, widened by crossCheckMapUnitPadding. */
 int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
                          UwamonoCrossUnit *unit)
 {
@@ -3127,6 +3233,7 @@ int CrossCheckMapUnitBox(Vector4 *first, Vector4 *second,
     return CheckCrossLine(first, second, &corners[3], &corners[0]) != 0;
 }
 
+/* Clears the selectable flag on every map unit, deletes their cursor effects and clears the aim index. */
 void UnlockMapUnit(void)
 {
     int unitIndex = MAP_UNIT_COUNT - 1;
@@ -3150,6 +3257,7 @@ void UnlockMapUnit(void)
     GameLoopState.aimMapUnitIndex = -1;
 }
 
+/* Returns the index of the selectable map unit nearest the actor within the selection distance, or -1. */
 int CheckNearMapUnit(void)
 {
     UwamonoScanUnit *unit = (UwamonoScanUnit *)MapUnit;
@@ -3177,6 +3285,7 @@ int CheckNearMapUnit(void)
     return -1;
 }
 
+/* Returns the unit's broken id, or 0 when the unit is inactive, already signalled or has no id. */
 int CheckBrokenMapUnit(BrokenMapUnit *unit)
 {
     BrokenMapUnitState *state = &unit->brokenState;
@@ -3196,6 +3305,7 @@ int CheckBrokenMapUnit(BrokenMapUnit *unit)
     return brokenId == -1 ? 0 : brokenId;
 }
 
+/* Returns 1 when the aim height check is off, or when the unit is within UWAMONO_AIM_HEIGHT_RANGE of the actor's height. */
 int AimHeightCheck(MapUnitRecord *unit)
 {
     UwamonoGameLoopState *state = &GameLoopState;
@@ -3205,6 +3315,10 @@ int AimHeightCheck(MapUnitRecord *unit)
     return __builtin_fabsf(heightReference->position.y - unit->position.y) < UWAMONO_AIM_HEIGHT_RANGE;
 }
 
+/*
+ * Chooses the aim target among the units in range and steps it with R1 and L1.
+ * Returns the selected unit index, or the first candidate's index when none is selected.
+ */
 int AimMapUnit(void)
 {
     UwamonoAlignedScreenPoint actorScreen;
@@ -3274,6 +3388,7 @@ int AimMapUnit(void)
         return candidates[0].unitIndex;
     }
 
+    /* Bubble-sort the candidates by screen x, restarting after each swap. */
     index = 1;
     if (candidates[1].unitIndex != -1) {
         for (;;) {
@@ -3290,6 +3405,7 @@ int AimMapUnit(void)
         }
     }
 
+    /* Draw a sight line to each candidate, highlighting the selected one. */
     for (index = 0; index < MAP_UNIT_COUNT - 1 && candidates[index].unitIndex != -1; ++index) {
         if (GameLoopState.aimMapUnitIndex == candidates[index].unitIndex) {
             int offset = index * 48 + 16;
@@ -3306,6 +3422,7 @@ int AimMapUnit(void)
         GameLoopState.aimMapUnitIndex = CheckNearMapUnit();
     }
 
+    /* R1 and L1 step the selection to the next and previous candidate. */
     if (PadData.half_2a & PAD_R1) {
         xglSoundEffectNormalID(UWAMONO_SE_CURSOR_MOVE, 0);
         for (index = 0; index <= candidateCount; ++index) {
@@ -3338,6 +3455,11 @@ int AimMapUnit(void)
     return candidates[0].unitIndex;
 }
 
+/*
+ * Returns 1 when the aim target is in view from the actor: no other unit blocks the
+ * line (when UWAMONO_AIM_LOOK_UNITS is set), and the ground check reaches the
+ * target (when UWAMONO_AIM_LOOK_GROUND is set).
+ */
 int AimMapUnitLookCheck(UwamonoScanUnit *target)
 {
     Actor *listener = GameLoopState.actor;
@@ -3378,6 +3500,7 @@ int AimMapUnitLookCheck(UwamonoScanUnit *target)
     return __builtin_fabsf(position.z - target->position.z) < aimMapUnitLookEpsilon;
 }
 
+/* Returns the distance from a point to a unit's outline: to the circle's edge, or for a box to its nearest corner. */
 static float CheckCornerDist(const Vector4 *position, UwamonoCollisionUnit *unit)
 {
     AlignedVector4 corner;
@@ -3412,6 +3535,11 @@ static float CheckCornerDist(const Vector4 *position, UwamonoCollisionUnit *unit
     return distance;
 }
 
+/*
+ * Per-frame update shared by the uwamono units: runs the sequence update, applies
+ * the height check, copies the position to the linked unit and plays the BGM when
+ * its timer runs.
+ */
 void UwamonoCommonFunc(UwamonoCommonUnit *unit)
 {
     UwamonoTimers *timers = &unit->timers;
@@ -3435,6 +3563,7 @@ void UwamonoCommonFunc(UwamonoCommonUnit *unit)
     }
 }
 
+/* Plays the unit's BGM sound at its position, or, when projectSound is set, at the point of its direction line nearest the actor. */
 void UwamonoBgmFunc(UwamonoCommonUnit *unit)
 {
     UwamonoTimers *timers = &unit->timers;
@@ -3460,6 +3589,7 @@ void UwamonoBgmFunc(UwamonoCommonUnit *unit)
     xglSoundEffectPosID(timers->bgmTimer, &soundPosition.x, 1, unit->seChannel + 1);
 }
 
+/* Fades out the BGM of every active unit that has one. */
 void UwamonoBgmFadeOut(void)
 {
     MapUnitRecord *unit;
@@ -3489,6 +3619,7 @@ void UwamonoBgmFadeOut(void)
     }
 }
 
+/* Applies gravity to the unit, then bounces it off the ground or off a unit above it. */
 void CheckUwamonoHeight(UwamonoCommonUnit *unit)
 {
     UwamonoTimers *timers = &unit->timers;
@@ -3534,6 +3665,7 @@ void CheckUwamonoHeight(UwamonoCommonUnit *unit)
     }
 }
 
+/* Returns the index of the first unbroken, visible, active map unit on another channel that the actor's box hits, or -1. */
 int HitCheckUwamono(UwamonoScanUnit *actor)
 {
     int index = 0;
@@ -3563,6 +3695,7 @@ int HitCheckUwamono(UwamonoScanUnit *actor)
     return -1;
 }
 
+/* Tests a box actor against one unit by height, then by its circle or box shape. Returns 1 on a hit. */
 int HitCheckUwamonoAt(UwamonoBoxUnit *actor, UwamonoBoxUnit *unit)
 {
     UwamonoBoxCollisionState *state = &unit->state;
@@ -3584,6 +3717,7 @@ int HitCheckUwamonoAt(UwamonoBoxUnit *actor, UwamonoBoxUnit *unit)
     return 0;
 }
 
+/* Tests the actor against a box unit's footprint along its own axes, widened by UWAMONO_BOX_HIT_MARGIN. Returns nonzero on a hit. */
 int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit)
 {
     AlignedVector4 dimensionsSnapshot;
@@ -3604,7 +3738,7 @@ int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit)
     actorX = actor->position.x;
     actorZ = actor->position.z;
     position = unit->position;
-    /* The routine snapshots dimensions here but reads live bounds below. */
+    /* The dimensions copy is not used below: the checks read unit->dimensions directly. */
     dimensionsSnapshot = unit->dimensions;
     offsetZ = actorZ - position.z;
     /* Keep an addressed reference to the real matrixView member. */
@@ -3626,6 +3760,10 @@ int HitCheckBoxUwamono(UwamonoBoxUnit *actor, UwamonoMapSlot *unit)
     return testDistance < depthSquared;
 }
 
+/*
+ * Draws the radar: a red dot at the centre for the player, and a yellow dot for each
+ * visible enemy within RADAR_RANGE, offset by RADAR_SCALE.
+ */
 void DrawRadar(void)
 {
     UwamonoScreenPoint color;
@@ -3684,6 +3822,7 @@ void DrawRadar(void)
     }
 }
 
+/* Adds one sprite to the draw list, centred on position, with the given colour and half sizes. */
 void DrawSprite(const UwamonoAlignedScreenPoint *position,
                 const UwamonoScreenPoint *color, int width, int height)
 {
@@ -3709,6 +3848,11 @@ void DrawSprite(const UwamonoAlignedScreenPoint *position,
     xglPrimAddGifTagDirect(0, packet, 7);
 }
 
+/*
+ * Draws a sight line between two screen points: blue when mode is 1 (selected),
+ * red otherwise. It is drawn only when lineflg is set and both points have a
+ * non-negative depth.
+ */
 void SortLine(const UwamonoAlignedScreenPoint *from,
               const UwamonoAlignedScreenPoint *to, int mode)
 {

@@ -15,12 +15,6 @@ typedef union {
 
 extern CmdTecparaValue *cmdTecparaSub(CmdTecRecord *tecRecord, short category, short *valueType);
 
-/*
- * Returns int: with a void callee gcc keeps cmdUnitChange's 0x25 command in
- * $2 across the call, while the original reserves $2 for the return value
- * and uses $3 (addiu $3,$0,0x25 at 0x00a1fd3c).
- */
-
 /* The TU-local statics are declared once in cmd.h; only pCamSetTop has no header copy. */
 static short *pCamSetTop;
 MessageTask *pMsgObj = 0;
@@ -105,8 +99,8 @@ int thinkProcessDel(int *slot)
 }
 
 /*
- * thinkProcessChk returns whether AI process slot 1-16 (matching
- * thinkProcessKindChk's sixteen-entry processBuf table) has a live entry
+ * thinkProcessChk returns whether AI process slot 1-16 (processBuf holds sixteen entries)
+ * has a live entry
  * (dataTop nonzero); an out-of-range slot returns 0.
  */
 int thinkProcessChk(int slot)
@@ -137,6 +131,7 @@ int thinkProcessKindChk(int kind)
 
 int thinkProcessExecSub(ThinkProcess *proc);
 
+/* Runs every live process once. */
 int thinkProcessExec(void)
 {
     ThinkProcess *proc;
@@ -156,6 +151,7 @@ int thinkProcessExec(void)
 extern int thinkExecSub(ThinkProcess *proc);
 extern const char cmdThinkProcessExecSubErrText[];
 
+/* Runs one process until its script returns a status other than 0. Status 1 deletes the process; statuses other than 2 are printed as errors. */
 int thinkProcessExecSub(ThinkProcess *proc)
 {
     int status;
@@ -175,7 +171,7 @@ int thinkProcessExecSub(ThinkProcess *proc)
 
 /*
  * dataThinkAdrGet returns the AI script data base, which this TU keeps as an
- * int address (pThinkTop). The TU-local int view matches the call's bytes.
+ * int address (pThinkTop).
  */
 extern int dataThinkAdrGet(void);
 extern void monsSetNoSet(int monsSetNo);
@@ -219,6 +215,7 @@ void thinkInit(void)
 extern int mapNoGet(void);
 extern void *dataMapCameraAdrGet(int mapNo);
 
+/* Selects the current map's camera table and resets the table index. */
 void camInit(void)
 {
     pCamTop = (CamTopEntry *)dataMapCameraAdrGet(mapNoGet());
@@ -227,6 +224,7 @@ void camInit(void)
     camTblIdx = 0;
 }
 
+/* Counts the monster-set entries up to the first one with a zero script_offset. */
 int thinkMonsTblNumGet(void)
 {
     MonsTblEntry *entry = pMonsSetTop;
@@ -249,6 +247,7 @@ ThinkMonsEntry *thinkMonsTblGet(int monsSetNo)
 
 static short *pCamSetTop;
 
+/* Counts the camera-table entries up to the first zero entry. */
 int thinkCamTblNumGet(void)
 {
     short *entry = pCamSetTop;
@@ -267,6 +266,7 @@ extern int camExec(short scriptOffset);
 extern int cameraFlagGet(void);
 extern const char cmdCamInitText[];
 
+/* Runs the camera init script when there is one; returns 1 when there is none. */
 int camInitExec(void)
 {
     short script = pCamTop->initScript;
@@ -334,6 +334,7 @@ int camEventExec(ThinkCamEvent *event)
 
 extern const char cmdThinkInitText[];
 
+/* Runs the monster set's init script when there is one; returns 1 when there is none. */
 int thinkInitExec(void)
 {
     short script = pMonsSetTop[monsSetNoGet()].initScript;
@@ -346,6 +347,7 @@ int thinkInitExec(void)
     return 1;
 }
 
+/* Runs the monster set's turn-start script with unit as the active unit; returns 1 when there is none. */
 int thinkTurnStartExec(BattleUnit *unit)
 {
     short script = pMonsSetTop[monsSetNoGet()].turnStartScript;
@@ -361,6 +363,7 @@ int thinkTurnStartExec(BattleUnit *unit)
     return 1;
 }
 
+/* Runs the monster set's turn-end script with unit as the active unit; returns 1 when there is none. */
 int thinkTurnEndExec(BattleUnit *unit)
 {
     short script = pMonsSetTop[monsSetNoGet()].turnEndScript;
@@ -376,6 +379,7 @@ int thinkTurnEndExec(BattleUnit *unit)
     return 1;
 }
 
+/* Runs the attack script of unit's attack table with unit as the active unit; returns 1 when there is none. */
 int thinkUnitAtkExec(BattleUnit *unit)
 {
     AtkTblEntry *atkTbl = *(AtkTblEntry **)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_ATK_TBL_OFF);
@@ -396,6 +400,7 @@ int thinkUnitAtkExec(BattleUnit *unit)
     return 1;
 }
 
+/* Runs the damage script of unit's attack table, publishing info's attacker and reg fields as script registers; returns 1 when there is none. */
 int thinkUnitDmgExec(BattleUnit *unit, UnitDmgInfo *info)
 {
     AtkTblEntry *atkTbl = *(AtkTblEntry **)((char *)calcUPGet(unit) + CALC_UNIT_PARAM_ATK_TBL_OFF);
@@ -419,6 +424,7 @@ int thinkUnitDmgExec(BattleUnit *unit, UnitDmgInfo *info)
 
 extern int thinkProcessAdd(ThinkProcess *proc);
 
+/* Queues a process that runs scriptOffset in the current data and context. Always returns 1. */
 int thinkExec(short scriptOffset)
 {
     ThinkProcess proc;
@@ -431,6 +437,7 @@ int thinkExec(short scriptOffset)
     return 1;
 }
 
+/* Queues a camera process for scriptOffset while the camera flag is set. Always returns 1. */
 int camExec(short scriptOffset)
 {
     ThinkProcess proc;
@@ -445,6 +452,7 @@ int camExec(short scriptOffset)
     return 1;
 }
 
+/* Returns 1 when no process of kind 0 is live. */
 int thinkExecChk(void)
 {
     return thinkProcessKindChk(0) == 0;
@@ -487,7 +495,10 @@ int thinkExecSub(ThinkProcess *proc)
     return result;
 }
 
-/* pc is the script position the register operand was read from; regChk does not use it. */
+/*
+ * Returns 1 when operand has the register flag; otherwise prints an error and returns 0.
+ * pc (the operand's script position) is not used.
+ */
 int regChk(int operand, int pc)
 {
     unsigned short reg = operand;
@@ -526,6 +537,7 @@ short thinkRegNo(short pc)
 /* Unit-number sentinel in a script register: the acting unit (pThinkUnit). */
 #define THINK_UNIT_SELF 0x7FFF
 
+/* Keeps the low 15 bits of value, sign-extended from bit 14. */
 int thinkValSet(int value)
 {
     value &= THINK_VALUE_MASK;
@@ -536,6 +548,7 @@ int thinkValSet(int value)
     return value;
 }
 
+/* Returns the value of a register operand, following a script offset when THINK_REG_INDIRECT is set. */
 short thinkRegGet(int regIndex)
 {
     unsigned short reg = regIndex;
@@ -550,6 +563,7 @@ short thinkRegGet(int regIndex)
     return (short)value;
 }
 
+/* Stores value in a register operand, writing through a script offset when THINK_REG_INDIRECT is set. */
 void thinkRegSet(int regOperand, int value)
 {
     unsigned short regIndex = regOperand;
@@ -579,6 +593,7 @@ short cmdReg(short pc)
     return thinkRegGet(reg);
 }
 
+/* Reads the operand at pc: a register reference (bit 0x8000) goes through cmdReg, otherwise the literal is returned. */
 short cmdNum(short pc)
 {
     short *value_address = (short *)thinkAdrGet(pc);
@@ -590,9 +605,9 @@ short cmdNum(short pc)
     }
     /*
      * thinkValSet is defined returning int: a short definition adds sll/sra
-     * after its `or` (0x00a1e064) in every spelling, while cmdNum passes the
-     * value on unextended (0x00a1e1c0..0x00a1e1d0), so the result is taken as
-     * the short the callers store (same idiom as regChk in thinkRegNo).
+     * after its `or` in every spelling, while cmdNum passes the value on
+     * unextended, so the result is taken as the short the callers store (same
+     * idiom as regChk in thinkRegNo).
      */
     return ((short (*)(int))thinkValSet)(value);
 }
@@ -608,6 +623,7 @@ int cmdGo(ThinkProcess *proc)
     return 0;
 }
 
+/* Pushes the return address and jumps to the operand; fails when the return stack is full. */
 int cmdGosub(ThinkProcess *proc)
 {
     ThinkContext *ctx = pContext;
@@ -622,6 +638,7 @@ int cmdGosub(ThinkProcess *proc)
     return 0;
 }
 
+/* Pops a return address into the script counter; fails when the return stack is empty. */
 int cmdReturn(ThinkProcess *proc)
 {
     ThinkContext *ctx = pContext;
@@ -635,6 +652,10 @@ int cmdReturn(ThinkProcess *proc)
     return 0;
 }
 
+/*
+ * Conditional branch: compares the left and right operands by relation (0 ==, 1 !=, 2 >,
+ * 3 >=, 4 <, 5 <=) and jumps to the following operand when it holds, otherwise skips it.
+ */
 int cmdBra(ThinkProcess *proc)
 {
     int left;
@@ -701,6 +722,7 @@ const char cmdRText[16] = "R%02d = %d\n";
 const char cmdCOUNTERBOOSTCHRText[32] = "** COUNTER BOOST CHR=%d\n";
 const char cmdUnitNoErrText[24] = "** unit No err -> %d\n";
 
+/* Jumps to entry index of the address table after count; fails when index is greater than count. */
 int cmdOngo(ThinkProcess *proc)
 {
     int index = cmdNum(proc->pc);
@@ -718,6 +740,7 @@ int cmdOngo(ThinkProcess *proc)
     return 0;
 }
 
+/* Like cmdOngo, but pushes the address after the table first; fails when the index is out of range or the return stack is full. */
 int cmdOngosub(ThinkProcess *proc)
 {
     int index = cmdNum(proc->pc);
@@ -757,18 +780,15 @@ int cmdRset(ThinkProcess *proc)
     return 0;
 }
 
-/*
- * cmdRmath1's opIndex values (the halfword before the operand) and what the
- * asm does for each: the beq tests at 0x00a1e670/0x00a1e688/0x00a1e698/
- * 0x00a1e6a4 select the case; the arithmetic is the instruction named.
- */
+/* Operation codes of cmdRmath1 (the halfword before the operand). */
 enum Rmath1Op {
-    RMATH1_INCREMENT = 8,   /* addiu $2,$3,0x1 at 0x00a1e6bc */
-    RMATH1_DECREMENT = 9,   /* addiu $2,$3,-0x1 at 0x00a1e674 */
-    RMATH1_COMPLEMENT = 18, /* nor $2,$0,$2 at 0x00a1e6c4 */
-    RMATH1_NEGATE = 19      /* nor $2,$0,$2 at 0x00a1e6cc, addiu $2,$2,0x1 at 0x00a1e6d0 */
+    RMATH1_INCREMENT = 8,   /* Register + 1 */
+    RMATH1_DECREMENT = 9,   /* Register - 1 */
+    RMATH1_COMPLEMENT = 18, /* Bitwise NOT of the register */
+    RMATH1_NEGATE = 19      /* Two's complement negation */
 };
 
+/* Applies the unary operation selected by the Rmath1Op operand to a register and stores the result back into it. */
 int cmdRmath1(ThinkProcess *proc)
 {
     int opIndex = *(short *)thinkAdrGet(proc->pc - 2);
@@ -951,6 +971,7 @@ int cmdRput(ThinkProcess *proc)
     return 0;
 }
 
+/* Prints the null-terminated string at the program counter and skips it, including its padding to an even length. */
 int cmdPrint(ThinkProcess *proc)
 {
     short len = 0;
@@ -1062,12 +1083,8 @@ int battleMsgEndChk(void)
 }
 
 /*
- * eBattleWinOpen2's own argument words (src/main/e_battle_win_open.c, no
- * published parameter type). The header shape (textId/
- * speaker/flags/priority/target/iconGraphic) and the flags constant
- * 0x00FFFFFD match src/ov01/menu.c's StatNameOpenParams, the same window
- * family's argument record for this same callee; battleMsgPut passes no
- * icon graphic (iconGraphic is NULL) and a fixed priority of 0x138.
+ * Argument record of eBattleWinOpen2 (its parameter type is not declared). battleMsgPut passes
+ * no icon graphic (NULL) and a priority of 0x138.
  */
 struct BattleMsgOpen2Params {
     int textId;              /* +0x00 */
@@ -1080,6 +1097,7 @@ struct BattleMsgOpen2Params {
 extern void eBattleWinOpen2(struct BattleMsgOpen2Params *params);
 extern MessageTask *objEntryPure(void (*callback)(MessageTask *));
 
+/* Opens a timed battle message window for frames frames and records its task in pMsgObj. */
 void battleMsgPut(int textId, int speaker, int target, int frames)
 {
     struct BattleMsgOpen2Params params;
@@ -1097,6 +1115,7 @@ void battleMsgPut(int textId, int speaker, int target, int frames)
     pMsgObj = task;
 }
 
+/* Message task step: counts remaining_frames down, redrawing the window until it reaches zero, then closes it and frees the task. */
 void msgObj(MessageTask *task)
 {
     task->remaining_frames--;
@@ -1110,12 +1129,9 @@ void msgObj(MessageTask *task)
 }
 
 /*
- * eBattleWinOpen4's own argument words (src/main/e_battle_win_open.c, no
- * published parameter type). battleMsgPut2 fills textId,
- * speaker and target from its own three parameters (in that order, textId
- * and speaker before the call to objEntryPure returns, target and flags
- * after); flags is always 0x00FFFFFD and priority is always zero at this
- * call site.
+ * Argument record of eBattleWinOpen4 (its parameter type is not declared). battleMsgPut2 fills
+ * textId, speaker and target from its parameters; flags is always 0x00FFFFFD and priority
+ * is always zero.
  */
 struct BattleMsgOpenParams {
     int textId;
@@ -1127,6 +1143,7 @@ struct BattleMsgOpenParams {
 extern void eBattleWinOpen4(struct BattleMsgOpenParams *params);
 
 
+/* Opens a battle message window with no timer; msgObj2 closes it once eBattleWinPageCheck4 returns nonzero. */
 void battleMsgPut2(int textId, int speaker, int target)
 {
     struct BattleMsgOpenParams params;
@@ -1142,6 +1159,7 @@ void battleMsgPut2(int textId, int speaker, int target)
     pMsgObj = task;
 }
 
+/* Message task step for battleMsgPut2: closes the window and frees the task once eBattleWinPageCheck4 returns nonzero, otherwise redraws it. */
 void msgObj2(MessageTask *task)
 {
     if (eBattleWinPageCheck4() != 0) {
@@ -1153,6 +1171,7 @@ void msgObj2(MessageTask *task)
     }
 }
 
+/* Runs cmdThinksetSub, then sends command 8 to the acting unit. */
 int cmdThinkset(ThinkProcess *proc)
 {
     int result;
@@ -1202,6 +1221,7 @@ int cmdThinksetSub(ThinkProcess *proc)
         printf(cmdTHINKSETErrTgtText, tgt);
         unit = unitPtrGet(0);
     }
+    /* Each case builds the command list for one setting command number. */
     switch (cmd) {
     case 1:
         {
@@ -1272,6 +1292,7 @@ int cmdThinksetSub(ThinkProcess *proc)
     return 0;
 }
 
+/* Returns the unit named by register reg; THINK_UNIT_SELF stands for the acting unit. */
 BattleUnit *thinkUnitPtrGetReg(int reg)
 {
     int unitNo = thinkRegGet(reg & 0xFFFF);
@@ -1285,6 +1306,7 @@ BattleUnit *thinkUnitPtrGetReg(int reg)
 extern int calcBoostChk(BattleUnit *unit, int mode);
 
 
+/* Boosts the unit in THINK_REG_UNIT when calcBoostChk allows it. */
 int cmdCounterBoost(void)
 {
     BattleUnit *unit = thinkUnitPtrGetReg(THINK_REG_UNIT);
@@ -1398,6 +1420,7 @@ CmdUnitParaValue *cmdUnitparaSub(BattleUnit *unit, short category, short *size)
     char *base = (char *)calcUPGet(unit);
     char *p;
 
+    /* Field offset and width in bytes for each category. */
     switch (c) {
     case 0:
         p = base + 0x0;
@@ -1514,9 +1537,10 @@ CmdUnitParaValue *cmdUnitparaSub(BattleUnit *unit, short category, short *size)
     return (CmdUnitParaValue *)p;
 }
 
-/* unitTblGet's table of battle units (src/ov01/unit_cmd.c, BattleUnit ***). */
+/* Returns the number of units on side and stores the unit table in *table. */
 extern int unitTblGet(int side, BattleUnit ***table);
 
+/* Writes the unit numbers of the living units on a side to script memory from outStart, and stores their count in the register. */
 int cmdUnittbl(ThinkProcess *proc)
 {
     int regNo;
@@ -1559,8 +1583,9 @@ extern BattleUnit *unitEnCreate(short *pl);
  * cmdUnitCreate creates a unit from the script's record at adr. It gathers
  * the ids in [start, hi] that no live unit occupies (posId, sign ignored),
  * picks one at random for the new unit, and queues two commands on it: 0x2A
- * with the sync value and a random unitCmdCode step. The result is the new
- * unit's slot number, or -1 when no id is free or the unit cannot be created.
+ * with the sync value, then unitCmdCode with a random argument below 8. The
+ * result is the new unit's slot number, or -1 when no id is free or the unit
+ * cannot be created.
  */
 int cmdUnitCreate(ThinkProcess *proc)
 {
@@ -1591,6 +1616,7 @@ int cmdUnitCreate(ThinkProcess *proc)
     proc->pc += 2;
     hi = cmdNum(proc->pc);
     proc->pc += 2;
+    /* Collect the ids in [start, hi] that no live unit occupies. */
     n = unitTblGet(1, &tbl);
     lo = start;
     if (lo <= hi) {
@@ -1638,6 +1664,12 @@ int cmdUnitCreate(ThinkProcess *proc)
     return 0;
 }
 
+/*
+ * Queues a 0x2B command (distance from posId, target number) and a 0x25
+ * command on the unit in THINK_REG_UNIT; stores 1 when a unit exists.
+ * Returns int although the result is always 0: with a void return the 0x25
+ * command value stays in $2 across the call instead of $3.
+ */
 int cmdUnitChange(ThinkProcess *proc)
 {
     int regNo = thinkRegNo(proc->pc);
@@ -1677,7 +1709,7 @@ int cmdUnitChange(ThinkProcess *proc)
  * slot, unit number) pair after entry 0, which finally receives the pair
  * count (also stored in the script register regNo). Eligible means: on the side
  * calcTrg2PE selects from the technique's target flags (unitTblGet's table),
- * not flagged dead (andi $2,$2,0x80 at 0x00a1fe9c) and accepted by calcAtkChk.
+ * not flagged dead, and accepted by calcAtkChk.
  */
 int cmdAtktbl(ThinkProcess *proc)
 {
@@ -1768,10 +1800,10 @@ void cmdAtktblSortRev(ThinkProcess *proc)
 /*
  * Sorts the (technique slot, unit number) pairs of the attack table at the
  * script offset of the first operand by the unit parameter the second operand
- * selects: descending (largest first) when cmdAtktblSort called (sortMode 0,
- * a larger value moves into the slot), ascending from cmdAtktblSortRev
- * (sortMode 1, a smaller one does). A sort that swaps on every improvement, over the table's own
- * script memory, every access going through thinkAdrGet.
+ * selects. cmdAtktblSort (sortMode 0) puts the largest value first;
+ * cmdAtktblSortRev (sortMode 1) puts the smallest first. Each pass swaps pair j
+ * into slot i whenever it beats the current best, reading and writing the table
+ * through thinkAdrGet.
  */
 int cmdAtktblSortSub(ThinkProcess *proc)
 {
@@ -1779,7 +1811,7 @@ int cmdAtktblSortSub(ThinkProcess *proc)
     short tableStart;
     short category;
     int count;
-    int best = 0;    /* read by the movz before any write (sw $0,0x14($29) at 0x00a200d8) */
+    int best = 0;    /* Read by a conditional move before any write, so the zero initializer stays. */
     int i;
     int j;
     int value;
@@ -1945,6 +1977,7 @@ int cmdMonsSetNoGet(ThinkProcess *proc)
     return 0;
 }
 
+/* Stores the largest sizeClass among the units on side in the register. */
 int cmdPartySizeGet(ThinkProcess *proc)
 {
     int regNo;
@@ -1970,6 +2003,7 @@ int cmdPartySizeGet(ThinkProcess *proc)
     return 0;
 }
 
+/* Sets the ambient light from three script numbers, each scaled by 0.01. */
 int cmdLightAmb(ThinkProcess *proc)
 {
     Vector4 ambient;
@@ -1993,6 +2027,7 @@ int cmdLightAmb(ThinkProcess *proc)
     return 0;
 }
 
+/* Sets the color of light index from three script numbers, each scaled by 0.01. */
 int cmdLightCol(ThinkProcess *proc)
 {
     Vector4 color;
@@ -2019,6 +2054,7 @@ int cmdLightCol(ThinkProcess *proc)
     return 0;
 }
 
+/* Sets the direction of light index from three script numbers, each scaled by 0.01. */
 int cmdLightDir(ThinkProcess *proc)
 {
     Vector4 direction;
@@ -2094,6 +2130,7 @@ struct MbankParams *mbankPtrGet(void)
     return bankMode == -4 ? &mcamBankMove : bankMode == 2 ? &mcamBank : 0;
 }
 
+/* Applies params with MCamSet for camera modes 0 and above; negative (move) modes are skipped. */
 void myMCamSet(int mode, void *params)
 {
     if (mode >= 0) {
@@ -2101,6 +2138,7 @@ void myMCamSet(int mode, void *params)
     }
 }
 
+/* Returns unitNo, or 0 after an error message when it is 8 or more. */
 int unitNoChk(int unitNo)
 {
     if (unitNo >= 8) {
@@ -2161,16 +2199,9 @@ int cmdCamBankMoveMode(void)
 extern const char cmdCamLockErrText[];
 
 /*
- * cmdCamLock locks the camera on the current camera point: it copies the
- * point's coordinate into the lock position, clears the unit-track mode and
- * the offset flag, and applies the result with myMCamSet. camMode below zero
- * prints cmdCamLockErrText and does nothing.
- */
-/*
- * Partial view of McamParams (measured: the zero fields are stored through
- * pointer-typed members, which fixes the store and load order of the emitted
- * code; the int fields of McamParams give a different order). Used only by
- * cmdCamLock.
+ * Partial view of McamParams used only by cmdCamLock. Its zero fields are pointer-typed,
+ * which fixes the store order of the emitted code; the int fields of McamParams give a
+ * different order.
  */
 typedef struct {
     void *unitTrackMode;   /* +0x00: mode selector, cleared by this function */
@@ -2180,6 +2211,12 @@ typedef struct {
     void *offsEnabled;     /* +0x70: cleared by this function */
 } McamLockView;
 
+/*
+ * cmdCamLock locks the camera on the current camera point: it copies the
+ * point's coordinate into the lock position, clears the unit-track mode and
+ * the offset flag, and applies the result with myMCamSet. camMode below zero
+ * prints cmdCamLockErrText and does nothing.
+ */
 int cmdCamLock(void)
 {
     Vector4 v;
@@ -2206,7 +2243,10 @@ int cmdCamLock(void)
     return 0;
 }
 
-/* The w store last gives the original's order of the four swc1 stores. */
+/*
+ * Copies the current camera point into the camera parameters and applies them. The w component
+ * is set to 1.0 after x, y and z.
+ */
 int cmdCamCopy(void)
 {
     Vector4 coord;
@@ -2233,6 +2273,7 @@ int cmdCamCopy(void)
     return 0;
 }
 
+/* Sets the camera lock position from three script numbers, scaled by 0.01, and applies it. */
 int cmdCamSetPos(ThinkProcess *proc)
 {
     McamParams *cam = mcamPtrGet();
@@ -2252,6 +2293,7 @@ int cmdCamSetPos(ThinkProcess *proc)
     return 0;
 }
 
+/* Tracks the actor of a unit (unitTrackMode 1) with a script actId and a 0.01-scaled offset, then applies it. */
 int cmdCamSetAct(ThinkProcess *proc)
 {
     int unitNo;
@@ -2294,6 +2336,7 @@ int cmdCamSetAct(ThinkProcess *proc)
     return 0;
 }
 
+/* Tracks two units (unitTrackMode 2), each with its actId, then applies an offset and a ratio. */
 int cmdCamSetAct2(ThinkProcess *proc)
 {
     McamParams *cam = mcamPtrGet();
@@ -2457,6 +2500,7 @@ typedef struct CamMoveArg {
 
 void MCamMove(int mode, CamMoveArg *arg);
 
+/* Starts a camera move for kind (0 camera or look-at, 1 perspective, 2 bank) with the script operands; other kinds do nothing. */
 int cmdCamMove(ThinkProcess *proc)
 {
     CamMoveArg arg;
@@ -2494,15 +2538,13 @@ int cmdCamMove(ThinkProcess *proc)
 }
 
 /*
- * MCamShake (src/ov01/m_cam.c; no C definition or other declaration exists
- * in this tree). The five unsigned int arguments are read off its code: $a0
- * is stored into the shake record (sw $4,0x0($9), 0x00a31ccc), $a3 is stored
- * raw (sw $7,0x18($9), 0x00a31d94), and $a1, $a2 and $a4 are converted from
- * unsigned to float (0x00a31cd0, 0x00a31d40, 0x00a31da8); cmdCamShake passes
- * it five script-decoded values. The parameter names below are guesses.
+ * MCamShake takes five unsigned int arguments; no other declaration exists in this tree.
+ * The first and fourth are stored as raw integers; the second, third and fifth are converted
+ * from unsigned to float. cmdCamShake passes its five script-decoded values in order.
  */
 extern void MCamShake(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 
+/* Runs MCamShake with the five script operands. */
 int cmdCamShake(ThinkProcess *proc)
 {
     int mode;
@@ -2526,6 +2568,7 @@ int cmdCamShake(ThinkProcess *proc)
     return 0;
 }
 
+/* Stores the camera center length for camMode in the register, scaled by 100; errors when camMode is negative. */
 int cmdCamCenterLength(ThinkProcess *proc)
 {
     int regNo = thinkRegNo(proc->pc);
@@ -2539,6 +2582,7 @@ int cmdCamCenterLength(ThinkProcess *proc)
     return 0;
 }
 
+/* Stores the y position of the unit's null point 13, scaled by 100, in the register. */
 int cmdCamUnitHeight(ThinkProcess *proc)
 {
     int regNo = thinkRegNo(proc->pc);
@@ -2555,6 +2599,7 @@ int cmdCamUnitHeight(ThinkProcess *proc)
     return 0;
 }
 
+/* Stores the camera x, y and z (scaled by 100) in three registers: the current camera point for camMode 0 and above, otherwise the lock position. */
 int cmdCamCoordGet(ThinkProcess *proc)
 {
     McamParams *cam = mcamPtrGet();
@@ -2596,6 +2641,7 @@ static MbankParams mcamBankMove;
 
 extern MbankParams *mbankPtrGet(void);
 
+/* Sets the bank angle from a script number in tenths of a degree, stored in radians. */
 int cmdCamBank(ThinkProcess *proc)
 {
     MbankParams *bank = mbankPtrGet();
@@ -2649,12 +2695,14 @@ int cmdCamTblSet(ThinkProcess *proc)
     return 0;
 }
 
+/* Stops the camera move; passes true unless camMode is a view mode (-1 or 0). */
 int cmdCamMoveStop(void)
 {
     MCamStopMove((unsigned int)(camMode + 1) >= 2);
     return 0;
 }
 
+/* Starts a new process at scriptOffset and stores its slot handle in the register. */
 int cmdEvent(ThinkProcess *proc)
 {
     int regNo = thinkRegNo(proc->pc);
@@ -2673,6 +2721,7 @@ int cmdEvent(ThinkProcess *proc)
     return 0;
 }
 
+/* Waits while the process in slot sortMode is still live. */
 int cmdWaitEvent(ThinkProcess *proc)
 {
     int result;
@@ -2689,6 +2738,7 @@ int cmdWaitEvent(ThinkProcess *proc)
     return result;
 }
 
+/* Waits for the frame count kept in sortMode and advances when it runs out. */
 int cmdWaitCnt(ThinkProcess *proc)
 {
     int count;
@@ -2712,6 +2762,7 @@ int cmdWaitCnt(ThinkProcess *proc)
 
 extern int MCamIsMoving(int selector);
 
+/* Waits while the camera move for the current camMode is in progress. */
 int cmdWaitCamMove(ThinkProcess *proc)
 {
     if (!proc->waitActive) {
@@ -2725,6 +2776,7 @@ int cmdWaitCamMove(ThinkProcess *proc)
     return MCamIsMoving(proc->sortMode) == 0 ? 0 : 2;
 }
 
+/* Waits while the message window (pMsgObj) is open. */
 int cmdWaitMsg(ThinkProcess *proc)
 {
     int result = 2;
@@ -2757,6 +2809,7 @@ int cmdVPadSet(ThinkProcess *proc)
     return 0;
 }
 
+/* Sets the map multiplier from four script numbers, each scaled by 0.01. */
 int cmdMapMulSet(ThinkProcess *proc)
 {
     Vector4 mul;
@@ -2781,6 +2834,7 @@ int cmdMapMulSet(ThinkProcess *proc)
     return 0;
 }
 
+/* Stores the unit's HP as a percentage of its maximum HP in the register. */
 int cmdHpPerGet(ThinkProcess *proc)
 {
     int regNo = thinkRegNo(proc->pc);
@@ -2808,6 +2862,7 @@ int cmdEventSlotGet(ThinkProcess *proc)
     return 0;
 }
 
+/* Runs a CAM_EVENT_THINK camera event with param for the acting unit, then restores the process and think context. */
 int cmdThinkCamEvent(ThinkProcess *proc)
 {
     ThinkCamEvent event;
@@ -2900,13 +2955,7 @@ int cmdStatSet(ThinkProcess *proc)
     return 0;
 }
 
-/*
- * calcStatReset (src/ov01/calc.c) resets one status
- * category's clamp for a unit; calcStatResetCha (src/ov01/calc.c) calls it
- * the same way, with the same always-zero fourth word, and names the
- * parameters this declaration reuses.
- */
-
+/* Resets one status category's clamp for a unit, calling calcStatReset with a zero fourth argument. */
 int cmdStatReset(ThinkProcess *proc)
 {
     int category;
@@ -2923,6 +2972,7 @@ int cmdStatReset(ThinkProcess *proc)
     return 0;
 }
 
+/* Sets the unit's dead-time value to the reciprocal of duration. */
 int cmdDeadTime(ThinkProcess *proc)
 {
     int unitNo;

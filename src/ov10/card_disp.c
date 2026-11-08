@@ -12,7 +12,10 @@
 #include "main/xgl_font.h"
 #include "main/xgl_sound.h"
 
-/* Void here (measured): declaring the int it returns changes the object at its call sites. */
+/*
+ * Declared void, not int as in main/nml_model_set.h: the int return changes the code
+ * generated around the calls in CardHelpProc.
+ */
 extern void nmlModelSetRenderLevel(int level);
 
 /*
@@ -88,19 +91,19 @@ enum CardHelpResource {
 #define HELP_TITLE_COLOR    12
 
 /* CardHelpFileLoad: the help files are read into one area, each file 16-byte aligned. */
-#define CARD_HELP_FILE_BUFFER   0x01720000  /* lui s0,0x172 at 0x00a1e7f0 */
-#define CARD_HELP_FILE_ALIGN    16          /* addiu 15 / and -16 at 0x00a1e884 */
-#define CARD_HELP_FILE_MAX      64          /* loop bound s6 + 256 at 0x00a1e8e4 = sizeof cardlex_tbl / 4 */
-#define CARD_HELP_NAME_COUNT    35          /* 34 names plus the NULL terminator (140-byte copy) */
+#define CARD_HELP_FILE_BUFFER   0x01720000
+#define CARD_HELP_FILE_ALIGN    16
+#define CARD_HELP_FILE_MAX      64          /* Entries in cardlex_tbl[] and cardxtx_tbl[]. */
+#define CARD_HELP_NAME_COUNT    35          /* 34 names plus the NULL terminator. */
 
 /*
  * Help-slide animation (shared by CardDispHelpSlide1/2/3): the counter ChangeCnt wraps
  * around the list length and the entry shown changes every HELP_SLIDE_ENTRY_TICKS.
  */
-#define HELP_SLIDE_ENTRY_TICKS      64                                  /* sra 6 at 0x00a1ec6c */
-#define HELP_SLIDE_CYCLE_4          (4 * HELP_SLIDE_ENTRY_TICKS)        /* 256: sra 8 / sll 8 at 0x00a1ec4c */
-#define HELP_SLIDE_CYCLE_3          (3 * HELP_SLIDE_ENTRY_TICKS)        /* 192: li a3,0xc0 at 0x00a1ec9c */
-#define HELP_SLIDE_CYCLE_6          (6 * HELP_SLIDE_ENTRY_TICKS)        /* 384: six-entry lists of CardDispHelpSlide2 */
+#define HELP_SLIDE_ENTRY_TICKS      64                                  /* Ticks each list entry is shown. */
+#define HELP_SLIDE_CYCLE_4          (4 * HELP_SLIDE_ENTRY_TICKS)        /* Full cycle of a four-entry list. */
+#define HELP_SLIDE_CYCLE_3          (3 * HELP_SLIDE_ENTRY_TICKS)        /* Full cycle of a three-entry list. */
+#define HELP_SLIDE_CYCLE_6          (6 * HELP_SLIDE_ENTRY_TICKS)        /* Full cycle of a six-entry list. */
 
 /*
  * Pulse of the lit help card: the light level is 1 + sin(ChangeCnt * 11.25 degrees) / 2
@@ -114,11 +117,8 @@ enum CardHelpResource {
 #define HELP_PHASE_ROW_STEP         0.3f
 
 /*
- * Card resource models and textures at fixed addresses (loaded by the caller). The icon
- * models are 0x400 apart from CARD_ICON_MODEL_BASE (the generation markers of
- * CardCountGeneration in card_fread.h are the same bank); CardDispAttr, CardDispNazo and
- * CardDispGuno draw them by index. The frame models and textures belong to the help menu
- * panels (letters follow the address order).
+ * Card resource models and textures at fixed addresses, loaded by the caller. The frame
+ * models and textures belong to the help menu panels (letters follow the address order).
  */
 #define CARD_HELP_STATUS_MODEL_BASE 0x01C8A800  /* page mark, indexed by PageStatusLst[3 * helpTopic] */
 #define CARD_HELP_FRAME_MODEL_A     0x01CA1000
@@ -129,36 +129,34 @@ enum CardHelpResource {
 #define CARD_HELP_FRAME_TEXTURE_A   ((const char *)0x01CB0000)
 #define CARD_HELP_FRAME_TEXTURE_B   ((const char *)0x01CC0050)
 
-#define CARD_HELP_CARD_REQUIREMENTS_A    CARD_ID_LV_10_SHION    /* first REQUIREMENTS page (its three H cards): li a1,7 at 0x00a206e0 */
-#define CARD_HELP_CARD_REQUIREMENTS_B    CARD_ID_BUNNIE    /* second REQUIREMENTS page (the any-attribute requirement): li a1,0x1D at 0x00a20700 */
+#define CARD_HELP_CARD_REQUIREMENTS_A    CARD_ID_LV_10_SHION    /* First REQUIREMENTS page (its three H cards). */
+#define CARD_HELP_CARD_REQUIREMENTS_B    CARD_ID_BUNNIE    /* Second REQUIREMENTS page (the any-attribute requirement). */
 
 /*
  * CardHelpProc states: the high nibble of CardGameWork.helpState selects the screen
- * (`andi $4,$2,0xF0` at 0x00a209ac); every other value shows a help page.
+ * (CARD_HELP_STATE_MASK); every other value shows a help page.
  */
-#define CARD_HELP_STATE_MASK    0xF0    /* 0x00a209ac */
-#define CARD_HELP_STATE_OFF     0x00    /* sb $0 at 0x00a20e34: back out of the first page, help ends */
-#define CARD_HELP_STATE_PAGE    0x01    /* sb 1 at 0x00a20a20, 0x00a20c60: show helpTopic */
-#define CARD_HELP_STATE_INDEX   0x10    /* sb at 0x00a209f4, 0x00a20b88, 0x00a20e0c: category list ("Help Index") */
-#define CARD_HELP_STATE_TOPICS  0x20    /* sb at 0x00a20abc, case at 0x00a209a8: topic list of one category */
+#define CARD_HELP_STATE_MASK    0xF0
+#define CARD_HELP_STATE_OFF     0x00    /* Backing out of the first page ends help. */
+#define CARD_HELP_STATE_PAGE    0x01    /* Shows helpTopic. */
+#define CARD_HELP_STATE_INDEX   0x10    /* Category list ("Help Index"). */
+#define CARD_HELP_STATE_TOPICS  0x20    /* Topic list of one category. */
 
 /*
  * Pad bits CardHelpProc tests (input[].pressed; the d-pad ones are input[].directions).
  * Next/previous page are R1/L1 as in CardTutorialProc; the compound masks accept the
  * d-pad direction beside the button.
  */
-#define CARD_HELP_PAD_BACK_OR_LEFT    (PAD_CROSS | PAD_LEFT)    /* andi 0x8040 at 0x00a20b70: cancel the topic list */
-#define CARD_HELP_PAD_SELECT_OR_RIGHT (PAD_CIRCLE | PAD_RIGHT)  /* andi 0x2020 at 0x00a20a5c: open the chosen category's topics */
+#define CARD_HELP_PAD_BACK_OR_LEFT    (PAD_CROSS | PAD_LEFT)    /* Cancels the topic list. */
+#define CARD_HELP_PAD_SELECT_OR_RIGHT (PAD_CIRCLE | PAD_RIGHT)  /* Opens the topics of the chosen category. */
 
-#define CARD_HELP_CATEGORY_COUNT      7     /* TitleMaxList[7]; the last category index is 6 (slti 6 at 0x00a20a68) */
-#define CARD_HELP_INDEX_ROWS          9     /* `rows` of the category list (sh 9 at 0x00a1e680) */
-#define CARD_HELP_TOPICS_PER_CATEGORY 14    /* SkipPageLst row stride, x14 at 0x00a20c3c..0x00a20c48 (7 rows, 0x62 bytes) */
-#define CARD_HELP_HISTORY_MAX       100     /* sltiu 0x64 at 0x00a20c4c, 0x00a20db4: bound of activeHelpPage */
+#define CARD_HELP_CATEGORY_COUNT      7     /* TitleMaxList[7]; the last category index is 6. */
+#define CARD_HELP_INDEX_ROWS          9     /* `rows` of the category list. */
+#define CARD_HELP_TOPICS_PER_CATEGORY 14    /* SkipPageLst row stride (7 rows, 0x62 bytes). */
+#define CARD_HELP_HISTORY_MAX       100     /* Bound of activeHelpPage. */
 #define CARD_HELP_STATUS_STRIDE     3       /* PageStatusLst bytes per page (177 = 59 pages x 3): mark, number in the category, one more */
-#define CARD_HELP_RADIX             10     /* page-number digits: addiu 0xA at 0x00a20e90 */
+#define CARD_HELP_RADIX             10      /* Radix of the page-number digits. */
 
-/* nmlModelSetRenderLevel is declared void here although main/nml_model_set.h returns int (measured: the
- * int return changes the scheduling around its calls in CardHelpProc, so the header is not included). */
 extern char *CardSkipTitleTxtLst[];
 extern char *CardBookMarkTxtLst[];
 extern char *CardTitleTxtLst[];
@@ -187,12 +185,11 @@ u32 cardlex_tbl[64] = {0};
 static int ChangeCnt = 0;
 
 /*
- * CHPTitleInitSub resets the help-title list when CardHelpProc (0x00a20908) opens a
- * help category; CHPMenuInitSub (0x00a1e640) runs immediately after it. TitleMaxList
- * (7 bytes) holds one entry-count byte per category, read here through a pointer
- * captured early and dereferenced once per field (rows and count each get their own
- * read). The help lists are CardListWindow records: the title string table is the one
- * the list draws (`rows` strings from `top`), `cursor` the selected row.
+ * Resets the help-title list for `category`: `rows` and `count` both take the entry-count
+ * byte TitleMaxList[category]. The byte is read through a pointer captured early and
+ * dereferenced once per field, so each field gets its own read.
+ * The lists are CardListWindow records: the title strings are drawn from `top`
+ * (`rows` strings), and `cursor` is the selected row.
  */
 void CHPTitleInitSub(CardListWindow *list, int category)
 {
@@ -216,39 +213,33 @@ void CHPTitleInitSub(CardListWindow *list, int category)
 }
 
 /*
- * CHPMenuInitSub (0x00a1e640, 0x64 bytes): resets the help-menu list `menu`
- * (its `rows` field is CARD_HELP_INDEX_ROWS, its `count` the seven categories), then re-initialises the
- * title list `title` for category 0 (TitleMaxList[0] = 6) by a tail jump
- * (0x00a1e69c `j CHPTitleInitSub`, a0 = 2nd argument, a1 = 0).
- * Callers: CardHelpProc 0x00a209ec and 0x00a21df0.
+ * Resets the help-menu list `menu` (`rows` is CARD_HELP_INDEX_ROWS, `count` the seven
+ * categories), then resets the title list `title` for category 0.
  */
 void CHPMenuInitSub(CardListWindow *menu, CardListWindow *title)
 {
-    menu->x = HELP_INDEX_X;         /* 0x00a1e674 sh $6,0x6 */
-    menu->y = HELP_LIST_Y;          /* 0x00a1e678 sh $7,0x8 */
-    menu->textLength = HELP_LIST_TEXT_LENGTH; /* 0x00a1e67c sh $8,0xA */
+    menu->x = HELP_INDEX_X;
+    menu->y = HELP_LIST_Y;
+    menu->textLength = HELP_LIST_TEXT_LENGTH;
     menu->active = 0;
     menu->baseColor = 0;
     menu->cursorColor = 0;
     menu->cursor = 0;
     menu->top = 0;
-    menu->rows = CARD_HELP_INDEX_ROWS;       /* 0x00a1e680 sh $9,0x10 */
-    menu->shownCount = 1;              /* 0x00a1e684 sh $10,0xE */
-    menu->count = CARD_HELP_CATEGORY_COUNT;  /* 0x00a1e670 sh $2,0x12 */
+    menu->rows = CARD_HELP_INDEX_ROWS;
+    menu->shownCount = 1;
+    menu->count = CARD_HELP_CATEGORY_COUNT;
     CHPTitleInitSub(title, 0);
 }
 
 /*
- * CardHelpFileLoad (0x00a1e6a8, 0x294 bytes): loads the help-viewer resources.
- * For every name in the NULL-terminated list it reads "<dir><name>.lex" and then
- * "<dir><name>.xtx" from the disc into consecutive 16-byte aligned areas starting
- * at 0x01720000 and records each start address in cardlex_tbl[] / cardxtx_tbl[].
- * Same shape as CardTutorialInit (ov10/tu007).
- * Caller: CardMainInit 0x00a01a9c (no arguments, result unused). xglCdReadFile
- * returns the byte count (tested with blez v0 at 0x00a1e878 / 0x00a1e8e0); memset,
- * strcpy and strcat results are not read. `dir` and `names` are initialised
- * automatics: the compiler copies them from rodata (20 bytes + memset of the rest
- * at 0x00a1e6e4..0x00a1e714, 35 words at 0x00a1e738..0x00a1e7e4).
+ * Loads the help-viewer resources. For every name in the NULL-terminated list it reads
+ * "<dir><name>.lex" and then "<dir><name>.xtx" from the disc into consecutive 16-byte
+ * aligned areas starting at 0x01720000, and records each start address in
+ * cardlex_tbl[] / cardxtx_tbl[]. Same shape as CardTutorialInit (ov10/tu007).
+ * Called from CardMainInit with no arguments. xglCdReadFile returns the byte count;
+ * memset, strcpy and strcat results are not read. `dir` and `names` are initialised
+ * automatics, copied from rodata on each call.
  */
 void CardHelpFileLoad(void)
 {
@@ -292,18 +283,17 @@ void CardHelpFileLoad(void)
 }
 
 /*
- * CHPMenuBackDispSub (0x00a1e940, 0x130 bytes): three help-menu back panels, each
- * placed with xglMatrixTrans and entered with nmlModelEntryCard after
- * nmlModelSetTexture / nmlModelSetPlace / nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL).
- * Caller: CardHelpProc 0x00a20d34 (a0 = sp). All callees void (no $v0 reads).
- * The two float locals `left` and `zero` stay in callee-saved FP registers across
- * the calls; z is assigned before y in each position block.
+ * Draws the three help-menu back panels: each is placed with xglMatrixTrans and entered
+ * with nmlModelEntryCard after nmlModelSetTexture, nmlModelSetPlace and
+ * nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL). Called from CardHelpProc.
+ * The two float locals `left` and `zero` stay in callee-saved FP registers across the
+ * calls; z is assigned before y in each position block.
  */
 static void CHPMenuBackDispSub(Matrix4 matrix)
 {
     Matrix4 transformed;
     float position[4];
-    float left = -1.4184f;     /* 0xBFB58E22 */
+    float left = -1.4184f;
     float zero = 0.0f;
 
     position[0] = left;
@@ -316,7 +306,7 @@ static void CHPMenuBackDispSub(Matrix4 matrix)
     nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
     nmlModelEntryCard(CARD_HELP_FRAME_MODEL_C);
 
-    position[0] = 1.4184f;      /* 0x3FB58E22 */
+    position[0] = 1.4184f;
     position[2] = zero;
     position[1] = zero;
     xglMatrixTrans(transformed, matrix, position);
@@ -326,7 +316,7 @@ static void CHPMenuBackDispSub(Matrix4 matrix)
     nmlModelEntryCard(CARD_HELP_FRAME_MODEL_A);
 
     position[0] = left;
-    position[1] = -1.832f;      /* 0xBFEA7EFA */
+    position[1] = -1.832f;
     xglMatrixTrans(transformed, matrix, position);
     nmlModelSetTexture(CARD_HELP_FRAME_TEXTURE_B);
     nmlModelSetPlace(&transformed);
@@ -335,12 +325,9 @@ static void CHPMenuBackDispSub(Matrix4 matrix)
 }
 
 /*
- * CardDispHelpCurrySet (0x00a1ea70, 0x140 bytes): three curry card models drawn at
- * translation (1.5143, y, 0, 1), scale (0.46, 0.46, 1, 1); y = 1.186, 0.215, -0.757
- * with the cards Lv 1 Shion (a battle card), Curry (situation) and Hilbert Effect (event) passed to
- * CardDisp(.., 1, 0).
- * Caller: CardDispHelpCard 0x00a205f8. CardDisp is void (no $v0 read after
- * 0x00a1eb08/0x00a1eb4c/0x00a1eb90).
+ * Draws three curry cards at translation (1.5143, y, 0, 1) and scale (0.46, 0.46, 1, 1),
+ * with y = 1.186, 0.215 and -0.757: Lv 1 Shion (a battle card), Curry (a situation card)
+ * and Hilbert Effect (an event card). Called from CardDispHelpCard.
  */
 void CardDispHelpCurrySet(Matrix4 matrix)
 {
@@ -348,11 +335,11 @@ void CardDispHelpCurrySet(Matrix4 matrix)
     float translation[4];
     float scale[4];
 
-    translation[0] = 1.5143f;     /* 0x3FC1D495 */
-    translation[1] = 1.186f;      /* 0x3F97CED9 */
-    translation[2] = 0.0f;        /* sw $0 */
+    translation[0] = 1.5143f;
+    translation[1] = 1.186f;
+    translation[2] = 0.0f;
     translation[3] = 1.0f;
-    scale[0] = 0.46f;             /* 0x3EEB851F */
+    scale[0] = 0.46f;
     scale[1] = 0.46f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
@@ -360,25 +347,21 @@ void CardDispHelpCurrySet(Matrix4 matrix)
     xglMatrixScale(transformed, transformed, scale);
     CardDisp(&transformed, CARD_ID_LV_1_SHION, 1, 0);
 
-    translation[1] = 0.215f;      /* 0x3E5C28F6 */
+    translation[1] = 0.215f;
     xglMatrixTrans(transformed, matrix, translation);
     xglMatrixScale(transformed, transformed, scale);
     CardDisp(&transformed, CARD_ID_CURRY, 1, 0);
 
-    translation[1] = -0.757f;     /* 0xBF41CAC1 */
+    translation[1] = -0.757f;
     xglMatrixTrans(transformed, matrix, translation);
     xglMatrixScale(transformed, transformed, scale);
     CardDisp(&transformed, CARD_ID_HILBERT_EFFECT, 1, 0);
 }
 
 /*
- * CardDispHelpSlide1 (0x00a1ebb0, 0x1e0 bytes): help pages 16..18 draw one card of a
- * short list at translation `trans`, scale (0.368, 0.368, 1, 1), picking the entry from
- * ChangeCnt. The lists (card kinds) and `trans` are the function's initialised statics
- * (list16_0 .. trans_3 at 0x00a43bd0..0x00a43bf0 in the original symbol table).
- * Callers: CardDispHelpCard 0x00a2060c, 0x00a20654, 0x00a20684 (a0 = page id from the
- * page jump table, a1 = matrix). CardDisp is void: no $v0 read after the calls at
- * 0x00a1ed00 and 0x00a1ed78.
+ * Draws one card of a short list for help pages 16..18 at translation `trans` and scale
+ * (0.368, 0.368, 1, 1). The entry is picked from ChangeCnt; the lists and `trans` are
+ * function-local statics. Called from CardDispHelpCard with the page id and the matrix.
  */
 void CardDispHelpSlide1(s8 page, Matrix4 matrix)
 {
@@ -390,12 +373,12 @@ void CardDispHelpSlide1(s8 page, Matrix4 matrix)
     float scale[4];
     int i;
 
-    scale[0] = 0.368f;     /* 0x3EBC6A7F, lui/ori at 0x00a1ebb4 */
+    scale[0] = 0.368f;
     scale[1] = 0.368f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
     switch (page) {
-    case CARD_HELP_PAGE_BATTLE_CARD:               /* body at 0x00a1ec28 */
+    case CARD_HELP_PAGE_BATTLE_CARD:
         ChangeCnt %= HELP_SLIDE_CYCLE_4;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
         xglMatrixTrans(transformed, matrix, trans);
@@ -420,14 +403,12 @@ void CardDispHelpSlide1(s8 page, Matrix4 matrix)
 }
 
 /*
- * CardDispHelpSlide2 (0x00a1ed90, 0x578 bytes): help pages 19..22, 25..28 and 45..47 draw
- * one card of a list at translation (1.397, 0.179, 0, 1), scale (0.9, 0.9, 1, 1); pages
- * 22 and 25..28 light it through CardDispLight with a colour mask. The cycle is the entry
- * count times HELP_SLIDE_ENTRY_TICKS: 192 for three entries (li 0xc0, e.g. 0x00a1ee0c),
- * 384 for six (li 0x180 at 0x00a1ef44) and 256 for four (sra/sll 8 at 0x00a1f144/48). As in
- * CardDispHelpSlide3, the place is a CardHelpVector so the copy is the doubleword
- * ld/sd pair (sd $3,0x40($29) at 0x00a1edd4). Callers: CardDispHelpCard 0x00a206bc,
- * 0x00a207f4, 0x00a2080c.
+ * Draws one card of a list for help pages 19..22, 25..28 and 45..47 at translation
+ * (1.397, 0.179, 0, 1) and scale (0.9, 0.9, 1, 1). Pages 22 and 25..28 light the card
+ * through CardDispLight with a colour mask. The cycle is the entry count times
+ * HELP_SLIDE_ENTRY_TICKS: three entries use 192 ticks, six use 384 and four use 256.
+ * As in CardDispHelpSlide3, the place is a CardHelpVector, so the copy is a doubleword
+ * ld/sd pair. Called from CardDispHelpCard.
  */
 void CardDispHelpSlide2(s8 page, Matrix4 matrix)
 {
@@ -533,15 +514,11 @@ void CardDispHelpSlide2(s8 page, Matrix4 matrix)
 }
 
 /*
- * CardDispHelpSlide3 (0x00a1f308, 0x164 bytes): help pages 23 and 24 draw one of the
- * three cards of list23/list24 (both {0, 84, 120}, the card kinds CardDispHelpCurrySet
- * draws) at a fixed place, scale (0.7, 0.7, 1, 1); the entry follows ChangeCnt like
- * CardDispHelpSlide1. The place is an automatic initialised from a constant 16-byte
- * vector; the u64 member of CardHelpVector gives the aggregate the 8-byte alignment
- * that yields the doubleword copy (ld/ld/sd/sd at 0x00a1f330..0x00a1f34c) instead of
- * ldl/ldr pairs. No caller exists in the overlay (the jal word 0x0c287cc2 does not
- * occur): CardDispHelpCard reaches pages 23/24 through CardDispFieldPoint. CardDisp is
- * void: no $v0 read after the calls at 0x00a1f3dc and 0x00a1f454.
+ * Draws one of the three cards of list23 or list24 for help pages 23 and 24 at a fixed
+ * place and scale (0.7, 0.7, 1, 1). The entry follows ChangeCnt, as in CardDispHelpSlide1.
+ * The place is an automatic initialised from a constant 16-byte vector; the Quadword
+ * member of CardHelpVector gives the aggregate its 16-byte alignment, so the copy is a
+ * doubleword ld/sd pair instead of ldl/ldr pairs. CardDisp's result is not used.
  */
 void CardDispHelpSlide3(s8 page, Matrix4 matrix)
 {
@@ -552,12 +529,12 @@ void CardDispHelpSlide3(s8 page, Matrix4 matrix)
     float scale[4];
     int i;
 
-    scale[0] = 0.7f;       /* 0x3F333333, lui/ori at 0x00a1f320 */
+    scale[0] = 0.7f;
     scale[1] = 0.7f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
     switch (page) {
-    case CARD_HELP_PAGE_REQUIREMENTS_A:               /* body at 0x00a1f378 */
+    case CARD_HELP_PAGE_REQUIREMENTS_A:
         ChangeCnt %= HELP_SLIDE_CYCLE_3;
         i = ChangeCnt / HELP_SLIDE_ENTRY_TICKS;
         xglMatrixTrans(transformed, matrix, translation.v);
@@ -641,6 +618,7 @@ void CardDispTurn(Matrix4 matrix)
     nmlModelEntry(cardlex_tbl[CARD_HELP_RES_HELP6]);
 }
 
+/* Draws one card of resource `kind` at translation and scale, lit with the pulse of ChangeCnt. */
 void CardDispFieldPointScale(Matrix4 matrix, const float translation[4],
                               const float scale[4], int kind)
 {
@@ -660,14 +638,13 @@ void CardDispFieldPointScale(Matrix4 matrix, const float translation[4],
 }
 
 /*
- * CardDispTejyun (0x00a1f780, 0x5f0 bytes): the "tejyun" (procedure) help pages
- * DRAW_PHASE..ADJUST_PHASE (CardDispHelpCard passes the phase resource CARD_HELP_RES_PHASE1..7
- * as `kind`). Every page draws the frame card CARD_HELP_RES_FIELD at
- * cardDispTejyunTranslation scaled by cardDispTejyunScale, then a column of three phase cards starting at
- * kind, placed at cardDispTejyunOffset, each 0.3 lower than the one above it, with
- * the page's own card lit by nmlModelSetLight and the extra cards the page
- * explains drawn by CardDispFieldPointScale. kind indexes a seven-entry jump
- * table (jtbl_00A4E120); an out-of-range kind draws the frame only.
+ * Draws a "tejyun" (procedure) help page for the phase resource `kind`
+ * (CARD_HELP_RES_PHASE1..7, from the CARD_HELP_PAGE_DRAW_PHASE..ADJUST_PHASE pages).
+ * Every page draws the frame card CARD_HELP_RES_FIELD at cardDispTejyunTranslation,
+ * scaled by cardDispTejyunScale, then a column of three phase cards starting at
+ * cardDispTejyunOffset, each HELP_PHASE_ROW_STEP lower than the one above it. The page's
+ * own card is lit by nmlModelSetLight, and the extra cards the page explains are drawn
+ * by CardDispFieldPointScale. An out-of-range kind draws the frame only.
  */
 void CardDispTejyun(Matrix4 matrix, int kind)
 {
@@ -694,6 +671,7 @@ void CardDispTejyun(Matrix4 matrix, int kind)
     xglMatrixTrans(transformed, matrix,
                    offset.v);
 
+    /* Each phase case draws its extra point cards, then its column of phase cards. */
     switch (kind) {
     case CARD_HELP_RES_PHASE1:
         CardDispFieldPointScale(matrix, translation.v,
@@ -816,6 +794,7 @@ void CardDispTejyun(Matrix4 matrix, int kind)
     }
 }
 
+/* Draws one card of resource `kind` at translation, lit with the pulse of ChangeCnt. */
 void CardDispFieldPoint(Matrix4 matrix, const float translation[4], int kind)
 {
     Matrix4 transformed;
@@ -833,12 +812,8 @@ void CardDispFieldPoint(Matrix4 matrix, const float translation[4], int kind)
 }
 
 /*
- * CardDispGun (0x00a1fe60, 0xb8 bytes): translation cardDispGunTranslation {1.397, 0.863, 0, 1},
- * scale cardDispGunScale {0.6, 0.6, 1, 1}; CardDisp(Handgun, 1, 0); then the model is
- * moved down by 1.33 (double: fptodp 0x00a1fecc, ld the double literal at 0x00a4e160, dpsub, dptofp,
- * stored back at sp+0x34 = transformed[3][1]) and CardDisp(Ogre, 1, 0).
- * Caller: CardDispHelpCard 0x00a207e0. CardDisp (0x00a0a2f0) is void (no $v0 read
- * at 0x00a1fec8/0x00a1ff08).
+ * Draws Handgun at the gun translation and scale (0.6, 0.6, 1, 1), then moves the
+ * placement down by 1.33 and draws Ogre. Called from CardDispHelpCard.
  */
 void CardDispGun(Matrix4 matrix)
 {
@@ -852,9 +827,9 @@ void CardDispGun(Matrix4 matrix)
                    translation.v);
     xglMatrixScale(transformed, transformed,
                    scale.v);
-    CardDisp(&transformed, CARD_ID_HANDGUN, 1, 0);      /* 0x00a1feb8 addiu a1,0x31 */
-    transformed[3][1] -= 1.33;            /* double literal at 0x00a4e160 */
-    CardDisp(&transformed, CARD_ID_OGRE, 1, 0);      /* 0x00a1fef4 addiu a1,0x44 */
+    CardDisp(&transformed, CARD_ID_HANDGUN, 1, 0);
+    transformed[3][1] -= 1.33;
+    CardDisp(&transformed, CARD_ID_OGRE, 1, 0);
 }
 
 void CardDispShineCurry(Matrix4 matrix, const float translation[4])
@@ -869,6 +844,7 @@ void CardDispShineCurry(Matrix4 matrix, const float translation[4])
     CardDispLight(&transformed, CARD_ID_CURRY, 1, CARD_LIGHT_ALL);
 }
 
+/* Draws the six attribute icon models stacked down from the translation. */
 void CardDispAttr(Matrix4 matrix)
 {
     Matrix4 transformed;
@@ -944,12 +920,10 @@ void CardDispGuno(Matrix4 matrix)
 }
 
 /*
- * CardDispOnce (0x00a201d0, 0x94 bytes): draws one card model at a fixed
- * offset (cardDispOnceTranslation = {1.397, 0.179, 0, 1}) with scale 0.9/0.9/1/1 and lights
- * it through CardDispLight(card id, enabled = 1, colour 32).
- * Callers: CardDispHelpCard 0x00a206dc (card 7) and 0x00a206fc (card 0x1D).
- * `card` is a plain int: the sll at 0x00a20210 and sra at 0x00a20240 widen it to
- * the s16 `card` parameter of CardDispLight, so the callers pass a plain int.
+ * Draws one card at the fixed once-card translation (1.397, 0.179, 0, 1) and scale 0.9,
+ * lit through CardDispLight with CARD_LIGHT_NEED. Called from CardDispHelpCard for
+ * cards 7 and 0x1D. `card` is a plain int, widened to the s16 `card` parameter of
+ * CardDispLight.
  */
 void CardDispOnce(Matrix4 matrix, int card)
 {
@@ -957,17 +931,18 @@ void CardDispOnce(Matrix4 matrix, int card)
     CardHelpFloat4 translation;
     float scale[4];
 
-    translation = cardDispOnceTranslation;      /* ld 0x00a201f8/0x00a20200, sd 0x00a20214/0x00a20218 */
-    scale[0] = 0.9f;               /* 0x3F666666 */
+    translation = cardDispOnceTranslation;
+    scale[0] = 0.9f;
     scale[1] = 0.9f;
     scale[2] = 1.0f;
     scale[3] = 1.0f;
     xglMatrixTrans(transformed, matrix,
                    translation.v);
     xglMatrixScale(transformed, transformed, scale);
-    CardDispLight(&transformed, card, 1, CARD_LIGHT_NEED);   /* 0x00a2024c: a2 = 1, a3 = 0x20 */
+    CardDispLight(&transformed, card, 1, CARD_LIGHT_NEED);
 }
 
+/* Draws one card of resource `kind` at the comm translation. */
 void CardDispComm(Matrix4 matrix, int kind)
 {
     Matrix4 transformed;
@@ -981,6 +956,7 @@ void CardDispComm(Matrix4 matrix, int kind)
     nmlModelEntry(cardlex_tbl[kind]);
 }
 
+/* Draws one phase card at the phase translation, lit with the pulse of ChangeCnt. */
 void CardDispPhase(Matrix4 matrix, int kind)
 {
     Matrix4 transformed;
@@ -1004,12 +980,9 @@ const CardHelpFloat4 cardDispHelpCardTranslationA = {{ 1.397f, 0.215f, 0.0f, 1.0
 const CardHelpFloat4 cardDispHelpCardTranslationB = {{ 1.397f, -0.188f, 0.0f, 1.0f }};
 
 /*
- * Help-card page drawer: `page` selects one of 59 page ids; `matrix` is the
- * page's world matrix. Each arm is the original call sequence for that page id,
- * grouped by the callee names; the page ids are the CardHelpPage values, i.e. the
- * index of the original jump table at 0x00a4e200 (59 entries); ids 48, 57 and out-of-range
- * values fall through to the common exit. The two vectors are copied to the
- * stack before the switch: pair[0] at sp+0, pair[1] at sp+16.
+ * Draws the help card for `page` (a CARD_HELP_PAGE id) at the world matrix `matrix`, and
+ * advances ChangeCnt. Each case is the call sequence for that page, grouped by the callee
+ * names. Ids 48 and 57 and out-of-range values draw nothing.
  */
 void CardDispHelpCard(s8 page, Matrix4 matrix)
 {
@@ -1185,6 +1158,11 @@ void CardDispHelpCard(s8 page, Matrix4 matrix)
 static CardListWindow cld0_17;
 static CardListWindow cld1_18;
 
+/*
+ * Runs one frame of the help viewer. The pad moves between the category index
+ * (CARD_HELP_STATE_INDEX), the topic list (CARD_HELP_STATE_TOPICS) and the help pages
+ * (default); each state draws its lists or its page.
+ */
 void CardHelpProc(CardGameWork *work)
 {
     Matrix4 matrix;
@@ -1320,6 +1298,7 @@ void CardHelpProc(CardGameWork *work)
                        HELP_TITLE_COLOR);
         CardDispHelpCard(work->helpTopic, matrix);
 
+        /* Status mark and page-number digits, then the frame cards. */
         translation[1] = -1.496f;
         translation[2] = 0.0f;
         translation[3] = 1.0f;
@@ -1408,10 +1387,7 @@ void CardHelpProc(CardGameWork *work)
     }
 }
 
-/*
- * CardHelpPageInit: clears the 256-byte help page history helpPage[] (+0x59c0..+0x5abf,
- * stored downwards) and then the history index activeHelpPage (+0x59be).
- */
+/* Clears all 256 helpPage[] entries, from the last down, then resets activeHelpPage. */
 void CardHelpPageInit(CardGameWork *work)
 {
     int i;

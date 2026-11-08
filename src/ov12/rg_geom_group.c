@@ -46,14 +46,14 @@ typedef struct RgGeomGroupPoly {
     unsigned char unmodeled_a4[0x0c];
 } RgGeomGroupPoly;
 
-/* A pillar is a tray tagged as a pillar. */
+/* Wrapper for trays; pillars are allocated with the same layout. */
 typedef struct RgGeomGroupTray {
     RgGeomTray tray;
     RgGeomGroup *group;
     unsigned char unmodeled_a4[0x0c];
 } RgGeomGroupTray;
 
-/* Most geometries one group can hold. */
+/* Maximum number of geometries one group can hold. */
 #define RG_GEOM_GROUP_CAPACITY 128
 
 static void RgGeomGroupRemoveElm(RgGeomGroup *group, void *element);
@@ -76,6 +76,7 @@ static void _InitGroup(RgGeomGroup *pGroup)
     pGroup->m_pList = CreateRgVector(RG_GEOM_GROUP_CAPACITY, geomGroupSourcePath, 37);
 }
 
+/* Detaches the destructor of every element and disposes the group's element list. */
 static void _DisposeGroup(RgGeomGroup *group)
 {
     unsigned int index;
@@ -98,6 +99,7 @@ static void _DisposeGroup(RgGeomGroup *group)
     group->m_pList = 0;
 }
 
+/* Allocates an empty geometry group. */
 RgGeomGroup *CreateRgGeomGroup(void)
 {
     RgGeomGroup *pGroup;
@@ -110,6 +112,7 @@ RgGeomGroup *CreateRgGeomGroup(void)
     return pGroup;
 }
 
+/* Frees a group and its element list. The elements themselves are not freed. */
 void DisposeRgGeomGroup(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {
@@ -119,6 +122,7 @@ void DisposeRgGeomGroup(RgGeomGroup *pGroup)
     RgHeapFree(InstanceOfRgHeap(), pGroup, geomGroupSourcePath, 72);
 }
 
+/* Appends pElm to the group's list; asserts that it is not already there. */
 static void RgGeomGroupAddElm(RgGeomGroup *pGroup, void *pElm)
 {
     if ((pGroup == 0) || (pElm == 0)) {
@@ -198,6 +202,7 @@ static void _DestructPillarMadeByGroup(void *pGeom)
     RgGeomGroupRemoveElm(geom->group, pGeom);
 }
 
+/* Allocates a point geometry registered in group. */
 static RgGeom *_CreatePointWithGroup(RgGeomGroup *group)
 {
     RgGeomGroupPoint *geom;
@@ -243,6 +248,7 @@ static RgGeom *_CreateRobotWithGroup(RgGeomGroup *group)
     return &geom->robot.ball.point.geom;
 }
 
+/* Allocates a polygon geometry registered in group. */
 static RgGeom *_CreatePolyWithGroup(RgGeomGroup *group)
 {
     RgGeomGroupPoly *geom;
@@ -258,6 +264,7 @@ static RgGeom *_CreatePolyWithGroup(RgGeomGroup *group)
     return &geom->poly.geom;
 }
 
+/* Allocates a tray geometry registered in group. */
 static RgGeom *_CreateTrayWithGroup(RgGeomGroup *group)
 {
     RgGeomGroupTray *geom;
@@ -273,6 +280,7 @@ static RgGeom *_CreateTrayWithGroup(RgGeomGroup *group)
     return &geom->tray.geom;
 }
 
+/* Allocates a pillar geometry registered in group. */
 static RgGeom *_CreatePillarWithGroup(RgGeomGroup *group)
 {
     RgGeomGroupTray *geom;
@@ -288,6 +296,7 @@ static RgGeom *_CreatePillarWithGroup(RgGeomGroup *group)
     return &geom->tray.geom;
 }
 
+/* Creates a point in the group and sets its parent. */
 RgGeom *RgGeomGroupCreatePoint(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
@@ -300,6 +309,7 @@ RgGeom *RgGeomGroupCreatePoint(RgGeomGroup *pGroup, void *parent)
     return geom;
 }
 
+/* Creates a ball in the group and sets its parent. */
 RgGeomBall *RgGeomGroupCreateBall(RgGeomGroup *pGroup, void *parent)
 {
     RgGeomBall *ball;
@@ -313,6 +323,8 @@ RgGeomBall *RgGeomGroupCreateBall(RgGeomGroup *pGroup, void *parent)
 }
 
 /*
+ * Creates a robot in the group and sets its parent.
+ *
  * Unlike its siblings this creator has no return statement and ends in a tail
  * jump to RgGeomSetParent. Its caller _InitRgPlayer still passes the result
  * register to RgRobotSetGeom: RgGeomSetParent leaves that register untouched
@@ -328,6 +340,7 @@ void RgGeomGroupCreateRobot(RgGeomGroup *pGroup, void *parent)
     RgGeomSetParent(_CreateRobotWithGroup(pGroup), parent);
 }
 
+/* Creates a polygon in the group, sets its parent and its collision data. */
 RgGeom *RgGeomGroupCreatePoly(RgGeomGroup *pGroup, void *parent,
                               RgColiData *coliData)
 {
@@ -342,6 +355,7 @@ RgGeom *RgGeomGroupCreatePoly(RgGeomGroup *pGroup, void *parent,
     return geom;
 }
 
+/* Creates a tray in the group and sets its parent. */
 RgGeom *RgGeomGroupCreateTray(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
@@ -354,6 +368,7 @@ RgGeom *RgGeomGroupCreateTray(RgGeomGroup *pGroup, void *parent)
     return geom;
 }
 
+/* Creates a pillar in the group and sets its parent. */
 RgGeom *RgGeomGroupCreatePiller(RgGeomGroup *pGroup, void *parent)
 {
     RgGeom *geom;
@@ -366,6 +381,7 @@ RgGeom *RgGeomGroupCreatePiller(RgGeomGroup *pGroup, void *parent)
     return geom;
 }
 
+/* Removes pElm from the group and frees it. */
 void RgGeomGroupDisposeElm(RgGeomGroup *pGroup, RgGeom *pElm)
 {
     if (pGroup == 0) {
@@ -375,16 +391,14 @@ void RgGeomGroupDisposeElm(RgGeomGroup *pGroup, RgGeom *pElm)
     RgGeomFree(pElm);
 }
 
+/* Clears the groups and the callbacks of a collision argument. */
 void InitRgGeomGroupColiArg(RgGameColiArg *pArg)
 {
     pArg->missCallback2 = 0;
     /*
-     * gcc 2.96 -O2 reorders an unbroken run of independent stores by moving
-     * the last one to the front (missCallback2 above); grouping this middle
-     * run in its own scope keeps it from being merged with the trailing
-     * hitCallback2 store and reordered again. A plain sequential rewrite of
-     * this whole function (no scope) fails the whole-file compare (6 diff
-     * ranges), confirming the scope is compiler-forced, not incidental.
+     * gcc 2.96 -O2 moves the last of an unbroken run of independent stores to the
+     * front (missCallback2 above). Grouping this middle run in its own scope keeps it
+     * from being merged with the trailing hitCallback2 store and reordered again.
      */
     do {
         pArg->m_pGroup1 = 0;
@@ -397,6 +411,10 @@ void InitRgGeomGroupColiArg(RgGameColiArg *pArg)
 
 const char geomGroupAssertArgNotNil[] = "pArg != NIL";
 
+/*
+ * Tests every geometry of group 1 against every geometry of group 2. When no pair hits,
+ * calls the miss callbacks for the geometries of both groups.
+ */
 void RgGeomGroupCollision(RgGameColiArg *pArg)
 {
     RgGeomCollisionPair pair;
@@ -446,6 +464,7 @@ void RgGeomGroupCollision(RgGameColiArg *pArg)
     }
 }
 
+/* Debug display hook; only checks pGroup. */
 void RgGeomGroupDebugDisp(RgGeomGroup *pGroup)
 {
     if (pGroup == 0) {

@@ -47,14 +47,9 @@
 #define game_mode_camera_callback (GameLoopState.camera_callback)
 
 /*
- * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h, src/main/db_light_write.h and
- * src/main/tya.c, which name the same two fields for the same reason).
- * GameDrawShadow only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the
- * in-use id ACT_create writes and ACT_update skips a slot on when it is
- * zero; the offsets between them are not evidenced by this TU and stay
- * unmodeled.
+ * The engine's actor array (`actor`). GameDrawShadow reads only the flags at
+ * +0x00 (bits 0x8 and 0x20) and the in-use id at +0x86; the other offsets are
+ * not modeled here.
  */
 /* NmlModelBlock.flags: the block's part starts hidden. */
 #define NML_BLOCK_FLAG_HIDDEN 8
@@ -139,11 +134,7 @@
 #define GAME_RADAR_RGB 0x80
 #define GAME_RADAR_ALPHA 0x60
 
-/*
- * GNU EE native TI storage/copy type. Used only for the
- * 16-byte aligned typed storage that the original clears with por+sq; no
- * wide arithmetic.
- */
+/* One organization record (0x180 bytes); the fields are not modeled. */
 typedef struct GameOrgRecord {
     u8 unmodeled_00[0x180];
 } GameOrgRecord;
@@ -221,8 +212,7 @@ typedef struct GameTestEnvironment {
 } GameTestEnvironment;
 
 
-/* Only the loaded data pointer at +4 is used by the original here.
- * No complete resource-handle extent or unknown prefix field is claimed. */
+/* Only the data pointer at +4 is modeled. */
 typedef struct GameResourceModelPrefix {
     unsigned char unmodeled_00[4];
     struct NmlModel *data;
@@ -244,6 +234,7 @@ typedef struct EnemyWorkPostTalk {
 
 
 
+/* GameRadarDraw reads x/y, RGB and four unsigned RGBA bytes at +12..15. */
 typedef struct GameRadarParams {
     int x;
     int y;
@@ -254,15 +245,12 @@ typedef struct GameRadarParams {
     u8 alpha;
 } GameRadarParams;
 
-/* The RTPS producer writes integer screen xyz and float reciprocal w.
- * Its frozen Vector4 output prototype remains an explicit nominal
- * transport boundary; this private diagnostic does not erase that type. */
+/* The RTPS producer writes integer screen x, y and z and a float reciprocal w. */
 typedef struct GameProjectedPoint {
     int x;
     int y;
     int z;
     float w;
-/* GameRadarDraw reads x/y, RGB and four unsigned RGBA bytes at+12..15. */
 } GameProjectedPoint;
 
 extern GameOrgRecord orgData[33];
@@ -289,7 +277,7 @@ extern void After_Talk(SceneObject object);
 void GameStateRestoreCameraLight(void);
 extern void GameStateRestoreKoware(void);
 
-/* Defined in src/main/act_3.c (main/tu265). */
+/* Defined in src/main/act_3.c. */
 void ACT_DrawShadowBegin(void);
 
 void ACT_DrawShadow(Actor *unit);
@@ -404,22 +392,16 @@ typedef union GameDebugMenuStorage {
 } GameDebugMenuStorage;
 
 /*
- * PARTIAL ACCESSED VIEW of GameLoopState (0x2a030-byte object at 0x338680).
- * Union of the offsets the merged handlers access:
+ * Partial view of GameLoopState (0x2a030 bytes). It names only the offsets the
+ * game mode handlers access; spans named _unmodeled_* are opaque sizing bytes.
  *  +0x0c kind u16, +0x10 flags u32, +0x28 camera_callback,
  *  +0x29f40 status u8 (read by GameModeCfEvent),
- *  +0x29f50 debug_menu 16-byte reset region (cleared with por+sq),
+ *  +0x29f50 debug_menu 16-byte reset region (cleared as one store),
  *  +0x29f60 saved_kind u16.
- * Spans named _unmodeled_* are opaque sizing bytes never accessed by these
- * bodies; the remainder of the object beyond 0x29f62 is unmodeled. The name
- * is TU-local by canon
  */
 /*
- * GameStateSave/GameStateRestore back up and restore two more GameLoopState
- * halfwords (main VA 0x00243278/0x002432f0): +0x0e kindDetail, the halfword
- * GameStateSave copies alongside +0x0c kind, and the +0xe0/+0xe2 backup slot
- * GameStateSave writes them into and GameStateRestore reads back to restore
- * kind and kindDetail.
+ * GameStateSave and GameStateRestore also copy kindDetail (+0x0e) through the
+ * restoreKind and restoreKindDetail slots (+0xe0 and +0xe2) alongside kind.
  */
 typedef struct GameLoopStateLayout {
     u8 *saved_work_end;
@@ -503,13 +485,11 @@ typedef struct GameLoopStateLayout {
 GameLoopStateLayout GameLoopState = {0};
 
 /*
- * PadData (0xd0-byte object at 0x490d90) through the shared
- * PadDataDebugLayout view (xeno/core/types.h): the merged handlers read the
- * halfwords at +0x28 (held), +0x2a (pressed) and +0x2e (debug_buttons,
- * GameModeDebugMenu). The canonical `extern PadPrefix PadData;` of
- * xeno/core/functions.h stops at +0x2c, so that header is not included and
- * the prototypes this TU needs are repeated below in their canonical
- * spelling.
+ * PadData is viewed through PadDataDebugLayout (xeno/core/types.h). The game
+ * mode handlers read the halfwords at +0x28 (held), +0x2a (pressed) and +0x2e
+ * (debug_buttons, GameModeDebugMenu). The canonical `extern PadPrefix PadData;`
+ * of xeno/core/functions.h stops at +0x2c, so that header is not included and
+ * the prototypes this file needs are declared below in their canonical form.
  */
 extern PadDataDebugLayout PadData;
 
@@ -537,6 +517,7 @@ static void GameCFSoundPurgeSub(void)
     }
 }
 
+/* Purges the sound banks and effects, then resets the sound segment allocation. */
 static void GameCFSoundPurge(void)
 {
     int bank;
@@ -551,6 +532,7 @@ static void GameCFSoundPurge(void)
     SsdSetSegmentAllocMode(0xA8000, 0x10000);
 }
 
+/* Reloads the CF sound effect and restores the sound segment allocation. */
 static void GameCFSoundReload(void)
 {
     int bank;
@@ -567,6 +549,10 @@ static void GameCFSoundReload(void)
     GameCFSoundPurgeSub();
 }
 
+/*
+ * Purges the menu sound effect banks. With mode 1 it also stops the playing
+ * sequences and remembers which channels it stopped.
+ */
 void GameCFSoundMenuPurge(int mode)
 {
     int bank;
@@ -596,6 +582,7 @@ void GameCFSoundMenuPurge(int mode)
     }
 }
 
+/* Reloads the map and enemy sound effects, and resumes the sequences that GameCFSoundMenuPurge stopped. */
 void GameCFSoundMenuReload(void)
 {
     char environment_name[64];
@@ -626,6 +613,10 @@ void GameCFSoundMenuReload(void)
     }
 }
 
+/*
+ * Saves the actor array, the game state and the hidden model parts, and purges
+ * the CF sound. Game_Data_Pop restores them.
+ */
 void Game_Data_Push(void)
 {
     short actor_index;
@@ -655,6 +646,10 @@ void Game_Data_Push(void)
     }
 }
 
+/*
+ * Restores the field state saved by Game_Data_Push: reloads the CF sound and
+ * resources, restores the actors and their motion, and hides the saved parts.
+ */
 void Game_Data_Pop(void)
 {
     unsigned short serials[64];
@@ -729,8 +724,7 @@ void Game_Data_Pop(void)
     model = GameLoopState.model->data;
     for (index = 0; index < GAME_HIDDEN_PART_WORDS; index++) {
         for (bit = 0; bit < GAME_HIDDEN_PART_BITS_PER_WORD; bit++) {
-            /* Original uses signed SRAV before selecting the one bit.
-             * This scalar interpretation does not erase an interface. */
+            /* Signed shift: the original uses SRAV before testing the bit. */
             if (((int)GameLoopState.hidden_parts[index] >> bit) & 1)
                 nmlModelSetPartsVisible(model, index * GAME_HIDDEN_PART_BITS_PER_WORD + bit, 0);
         }
@@ -757,6 +751,10 @@ void MenuGameDataPush(void)
     GameStateSave();
 }
 
+/*
+ * Restores the actors and game state saved by MenuGameDataPush. An actor whose
+ * battle id changed to the party leader's gets its model and motion reset.
+ */
 void MenuGameDataPop(void)
 {
     short i;
@@ -827,6 +825,7 @@ void GameStateRestoreCameraLight(void)
     *light = *saved_light;
 }
 
+/* Saves the kind, the controlled actor's state and the map number into GameLoopState. */
 void GameStateSave(void)
 {
     Actor *controlled_actor;
@@ -852,6 +851,10 @@ void GameStateRestore(void)
     GameStateRestoreKoware();
 }
 
+/*
+ * Copies the game state (event, parameters, actor position, organization and
+ * player records, item boxes and money) into the user save area.
+ */
 void GamePushSaveDataUser(void)
 {
     GameUserSave *save;
@@ -888,6 +891,7 @@ void GamePushSaveDataUser(void)
     save->user_longs[1] = state->user_longs[1];
 }
 
+/* Restores the game state from the user save area, then applies the saved sound, vibration and HDD options. */
 void GamePopSaveDataUser(void)
 {
     GameUserSave *save;
@@ -929,6 +933,7 @@ void GamePopSaveDataUser(void)
     xglHddActivate(SaveData[SAVE_OPTION_HDD] ^ 1);
 }
 
+/* Resets the per-scene state: font, sound, actors, map units, camera, flags, lights and hidden parts. */
 void InitCfSystem(void)
 {
     u32 flags;
@@ -989,6 +994,7 @@ void InitCfSystem(void)
     xglRenderCopyDisp2Draw();
 }
 
+/* Returns the attribute id of the actor, or 0 when its block bits are set. Also stores it in attrPrev. */
 static int checkAttr(Actor *actor)
 {
     u64 attributes;
@@ -1012,6 +1018,10 @@ int getScriptFlag(SceneObject object)
     return ((Actor *)object)->args.locator_flags;
 }
 
+/*
+ * Returns the nearest actor the player can talk to: within reach, in front of
+ * the player and with a talk message. Returns 0 while talking is blocked.
+ */
 static Actor *checkTalk(Actor *player)
 {
     int index;
@@ -1068,6 +1078,7 @@ static Actor *checkTalk(Actor *player)
     return best_actor;
 }
 
+/* Returns the nearest actor with a touch message that the player is in reach of, or 0 while touch is blocked. */
 static Actor *checkTouch(Actor *player)
 {
     int index;
@@ -1120,6 +1131,7 @@ static Actor *checkTouch(Actor *player)
     return best_actor;
 }
 
+/* Returns nonzero when CheckPointLine returns 2 for the actor's position against the line built from the item box's extent. */
 int checkItemBoxDir(Actor *actor, GameMapUnit *unit)
 {
     Vector4 start;
@@ -1140,6 +1152,7 @@ int checkItemBoxDir(Actor *actor, GameMapUnit *unit)
     return CheckPointLine(&start, &end, &actor->position) == 2;
 }
 
+/* Returns the nearest item box in reach of the actor, in front of it and facing it, or 0. */
 static GameMapUnit *checkItemBox(Actor *actor)
 {
     int index;
@@ -1186,6 +1199,10 @@ static GameMapUnit *checkItemBox(Actor *actor)
     return best_unit;
 }
 
+/*
+ * Finds the save, shop, event and return symbols the player is within reach of.
+ * Starts or stops each symbol's flag and effect.
+ */
 void CheckGameSymbol(Actor *player)
 {
     int save_unit;
@@ -1288,6 +1305,7 @@ void CheckGameSymbol(Actor *player)
     }
 }
 
+/* Draws debug name tags over the on-screen actors and map units. */
 static void GameDispTag(void)
 {
     Matrix4 matrix;
@@ -1329,17 +1347,14 @@ static void GameDispTag(void)
                 xglMatrixMul((Matrix *)matrix, (Matrix *)parent_matrices[0], (Matrix *)parent_matrices[45]);
             } else {
                 Matrix4 *root_matrix = unit->jointMatrices;
-                /* The original copies these four complete matrix rows
-                 * with the SDK quadword idiom. The scratch is confined
-                 * to this block; both bases are genuine C objects. */
+                /* The original copies these four matrix rows with the SDK quadword idiom. */
                 QuadwordCopyMatrix(matrix, root_matrix);
             }
             matrix[3][3] = 1.0f;
             xglRotTransPers((Vector4 *)&projected, 0, (Vector4 *)matrix[3], camera_id);
         }
         screen_x = projected.x;
-        /* Unsigned subtraction preserves the original SLTIU window
-         * without signed overflow for arbitrary projected coordinates. */
+        /* Unsigned subtraction keeps the original SLTIU range test without signed overflow. */
         if ((unsigned int)screen_x - GAME_GS_X_MIN >= GAME_GS_X_RANGE ||
             projected.y < GAME_GS_Y_MIN || projected.y > GAME_GS_Y_MAX ||
             projected.z <= 0)
@@ -1363,6 +1378,7 @@ static void GameDispTag(void)
                            ((screen_y >> 4) - GAME_GS_ORIGIN_Y) >> 1,
                            format, index + 0x200, depth);
     }
+    /* Map units: the same projection test, colored by the class bits of serial. */
     map_format = str_1;
     for (index = 0; index < MAP_UNIT_COUNT; index++) {
         MapUnitRecord *unit = &MapUnit[index];
@@ -1417,6 +1433,10 @@ void GameDrawShadow(void)
     ACT_DrawShadowEnd();
 }
 
+/*
+ * Draws one frame: camera and studio updates, the frame hooks, the scene draw
+ * passes (each one replaceable by a callback) and the frame countdown.
+ */
 void GameDrawSync(void)
 {
     VibrationEngine();
@@ -1425,6 +1445,7 @@ void GameDrawSync(void)
     if (GameLoopState.frame_hook != 0) {
         GameLoopState.frame_hook(GAME_HOOK_DRAW_BEGIN);
     }
+    /* Scene passes in order: clear, map, actors, shadows, units, effects, movie and sound. */
     if (GameLoopState.flags & GAME_FLAG_DRAW) {
         if (GameLoopState.clear_callback != 0) {
             GameLoopState.clear_callback();
@@ -1481,6 +1502,10 @@ void GameDrawSync(void)
     }
 }
 
+/*
+ * Per-frame update for the event tools mode. START with the debug combo quits
+ * (returns 1); plain START leaves the paused state.
+ */
 static int GameModeEvtTools(void)
 {
     if (game_mode_status == 0) {
@@ -1512,6 +1537,10 @@ static int GameModeEvtTools(void)
     return 0;
 }
 
+/*
+ * Per-frame update while paused. START resumes, or quits with the debug combo
+ * (returns 1). Otherwise the pause menu runs.
+ */
 static int GameModePause(void)
 {
     if (game_mode_status == 0) {
@@ -1547,6 +1576,7 @@ static int GameModePause(void)
     return 0;
 }
 
+/* Per-frame update for the event debug mode, with the same START handling as GameModeEvtTools. */
 static int GameModeEvtDebug(void)
 {
     if (game_mode_status == 0) {
@@ -1577,6 +1607,10 @@ static int GameModeEvtDebug(void)
     return 0;
 }
 
+/*
+ * Per-frame update of the field mode: pause and menu buttons, battle starts,
+ * then the player, actor and map updates. Returns 1 to quit, 0 otherwise.
+ */
 int GameModeCfMain(void)
 {
     VMSlot umn_arguments[2];
@@ -1595,6 +1629,7 @@ int GameModeCfMain(void)
 
     GameLoopState.flags &= ~GAME_FLAG_PAUSE;
     SCRIPT_incCfTime();
+    /* START pauses and TRIANGLE opens the main menu, when no talk, window or script blocks it. */
     if (PadData.pressed & (PAD_START | PAD_TRIANGLE)) {
         const u64 *button_words;
         u64 held_buttons;
@@ -1673,6 +1708,7 @@ int GameModeCfMain(void)
         }
     }
     GameLoopState.flags = GameLoopState.flags & ~GAME_FLAG_SCRIPT_END;
+    /* A pending event_sub_id starts a battle; the field state is pushed before it and popped after. */
     if (GameLoopState.event_sub_id != 0) {
         const char *always_method;
         EnemyWorkPostTalk *battle_enemies;
@@ -1731,6 +1767,7 @@ int GameModeCfMain(void)
         MAP_updateUnit();
         return 0;
     }
+    /* Debug: L2 held with L1 pressed cycles the controlled actor through the actor array. */
     if (FLAG_FRAME_60 != 0) {
         if ((PadData.held & PAD_L2) && (PadData.pressed & PAD_L1)) {
             for (i = 1; i < ACTOR_COUNT; i++) {
@@ -1765,6 +1802,7 @@ int GameModeCfMain(void)
         motion_player->status_flags |= 0x1000;
         ACT_setMotion2(motion_player, 0, 9);
     }
+    /* Player control: movement, or the look-at sequence while it is active. */
     flags = GameLoopState.flags;
     player = GameLoopState.controlled_actor;
     GameLoopState.base_flags = flags;
@@ -1813,6 +1851,7 @@ int GameModeCfMain(void)
     if (xglStudioGetCamera2(0)->state == STUDIO_CAMERA_STATE_GAME &&GameLoopState.camera_callback != 0) {
         GameLoopState.camera_callback();
     }
+    /* Actors update normally; while held or paused, only the enemy stiff and effect timers count down. */
     if ((GameLoopState.flags_wide & (GAME_FLAG_ACTOR_HOLD | GAME_FLAG_ACTOR_PAUSE)) == 0) {
         ACT_update();
     } else {
@@ -1847,6 +1886,10 @@ int GameModeCfMain(void)
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char eobMethodName[4] = "EOB";
 
+/*
+ * Handles CIRCLE at the player's position: opens the save, event, return or shop
+ * symbol under the player, or else starts a talk or an item box action.
+ */
 void checkTalkPoint(void)
 {
     Actor *talker;
@@ -1890,6 +1933,7 @@ void checkTalkPoint(void)
     }
 }
 
+/* Clears the actor's action sequence state and resets its animation speed and flags. */
 void actSequenceClear(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -1918,6 +1962,7 @@ void actTalkAfter(SceneObject object)
     enemy->post_talk_flags = GameLoopState.flags & GAME_FLAG_NO_TALK;
 }
 
+/* Per-frame update for the event mode. START with the debug combo quits (returns 1); otherwise the scene updates. */
 static int GameModeCfEvent(void)
 {
     int cleared = GameLoopState.flags & -2;
@@ -1939,6 +1984,7 @@ static int GameModeCfEvent(void)
     return 0;
 }
 
+/* Per-frame update for the debug menu mode. SELECT clears the menu storage and returns to the saved mode. */
 int GameModeDebugMenu(void)
 {
     if ((PadData.debug_buttons & PAD_SELECT) != 0) {
@@ -1959,6 +2005,10 @@ int GameModeDebugMenu(void)
     return 0;
 }
 
+/*
+ * Runs the field game: sets up the scene and actors, runs the mode handlers and
+ * draws each frame until the loop is left, then tears the scene down.
+ */
 void Game(void)
 {
     int i;
@@ -2032,6 +2082,7 @@ void Game(void)
     GameLoopState.controlled_actor = ACT_create(0, 1);
     Player_System_Init(GameLoopState.controlled_actor);
     GameLoopState.status = GAME_STATUS_LOCK_SHORT;
+    /* Resume a saved state (kindDetail), or start the event script from its beginning. */
     if (GameLoopState.kindDetail != 0) {
         Quadword *position_dst;
 
@@ -2044,6 +2095,7 @@ void Game(void)
     } else {
         Java_xeno_util_Runtime_jump_sub(GameLoopState.current_event_id, -1);
     }
+    /* Each frame runs the current mode, then the scheduler and the draw. */
     while (1) {
         if (GameLoopState.frame_hook != 0) {
             GameLoopState.frame_hook(GAME_HOOK_FRAME_START);

@@ -6,10 +6,10 @@
 
 #define E_NUMBER_STORE_STRING(destination, string) (*(destination) = (string))
 
-/* ENumberMainData.format: how eNumberMain lays the value out. Formats 0, 1,
- * 14 (plain digit run), 3-6 and 12-13 (two values side by side, 12/13 turning
- * the first red when it falls under a fifth of the second) and 7-8 (signed)
- * are left as numbers. */
+/* ENumberMainData.format: how eNumberMain lays the value out. Formats 0, 1
+ * and 14 (plain digit run), 3-6 and 12-13 (two values side by side; 12 and 13
+ * turn the first one red when it is under a fifth of the second) and 7-8
+ * (signed) have no named constant. */
 enum {
     ENUMBER_FORMAT_TIME = 2,        /* three two-digit fields split by separators */
     ENUMBER_FORMAT_TIME_BLANK = 11, /* the same layout with blank fields */
@@ -17,7 +17,7 @@ enum {
     ENUMBER_FORMAT_TEXT = 10        /* value is a string pointer */
 };
 
-/* Sprite ids eNumberMain draws between digits. */
+/* Sprite ids eNumberMain draws as time separators, sign prefixes and dashes. */
 enum {
     ENUMBER_SPRITE_TIME_SEPARATOR = 0x704,
     ENUMBER_SPRITE_PLUS = 0x705,
@@ -65,6 +65,10 @@ typedef struct ELineSetData {
 typedef ENumberRenderDescriptor ENumberRenderArray[4];
 
 extern void endSpriteSet(void *sprite, int mode);
+/*
+ * Draws a number during its draw phase, laying out its digits, separators
+ * or text according to ENumberMainData.format.
+ */
 void eNumberMain(ENumberMainData *number)
 {
     unsigned char byteValue[4];
@@ -263,6 +267,7 @@ void eNumberMain(ENumberMainData *number)
         }
         break;
     case 7: case 8:
+        /* Signed value: the sign sprite comes first, then the magnitude. */
         signX = number->x;
         if (number->value < 0)
             number->separators[0].spriteId = ENUMBER_SPRITE_MINUS;
@@ -325,7 +330,10 @@ void eNumberNumberChange(void)
 {
 }
 
-/* Callers pass a second argument, which this initializer does not read. */
+/*
+ * Sets a number to the neutral colour and draw phase with zero layout fields.
+ * Callers pass a second argument, which this initializer does not read.
+ */
 void eNumberSet(ENumberMainData *number, int unused)
 {
     number->color_r = number->color_g = number->color_b = number->color_a = ENUMBER_COLOR_NEUTRAL;
@@ -333,6 +341,10 @@ void eNumberSet(ENumberMainData *number, int unused)
     number->colorModeFirst = number->colorModeSecond = number->alignment = number->firstOnly = 0;
 }
 
+/*
+ * Copies the sprite's position, work and colour into its render fields and
+ * queues it for printing.
+ */
 void eSpriteMain(ESpriteMainData *sprite)
 {
     endSpriteSet(&sprite->renderX, 5);
@@ -346,6 +358,7 @@ void eSpriteMain(ESpriteMainData *sprite)
     endPrintExtFunc(sprite->work, END_PRINT_CMD_SPRITE,&sprite->renderX);
 }
 
+/* Resets a sprite's position, work and colour and stores its sprite id. */
 void eSpriteSet(ESprite *sprite, short spriteId)
 {
     sprite->x = 0;
@@ -359,6 +372,10 @@ void eSpriteSet(ESprite *sprite, short spriteId)
     sprite->spriteId = spriteId;
 }
 
+/*
+ * Advances a ribbon through its show, run and end modes and queues it for
+ * printing when it is visible.
+ */
 void eRibbonMain(ERibbonMainData *ribbon)
 {
     int right;
@@ -417,6 +434,10 @@ void eRibbonModeChange(ERibbonMainData *ribbon, signed char mode)
     ribbon->mode = mode;
 }
 
+/*
+ * Sets the ribbon style, resets its position and progress, and fills the
+ * vertex colours and alphas for that style.
+ */
 void eRibbonSet(ERibbonMainData *ribbon, int style)
 {
     int point;
@@ -476,6 +497,10 @@ void eRibbonSet(ERibbonMainData *ribbon, int style)
     }
 }
 
+/*
+ * Steps a line's progress animation, then computes the render points by
+ * interpolating between the control points.
+ */
 void eLineMain(ELineEntry *line)
 {
     int point;
@@ -532,6 +557,7 @@ void eLineMain(ELineEntry *line)
         line->state = E_MODE_RUN_STEP;
         break;
     }
+    /* The first render point copies its control point; the others are interpolated. */
     sourceX = &line->points[0].x;
     sourceY = &line->points[0].y;
     sourceWork = &line->points[0].work;
@@ -555,6 +581,10 @@ void eLineMain(ELineEntry *line)
     }
 }
 
+/*
+ * Resets a line to state 0 and a duration of seven frames, with every point
+ * at colour -1 and alpha -128.
+ */
 void eLineSet(ELineSetData *line)
 {
     int point;
@@ -570,6 +600,10 @@ void eLineSet(ELineSetData *line)
     }
 }
 
+/*
+ * Copies the tag's position and colour into its render block and prints its
+ * text when one is set. The green and blue entries are swapped.
+ */
 void eTagFontMain(ETagFontMainData *tag)
 {
     if (tag->render.text != 0) {
@@ -584,6 +618,7 @@ void eTagFontMain(ETagFontMainData *tag)
     }
 }
 
+/* Resets a tag's state and colour and sets the text it prints. */
 void eTagFontSet(ETagFontMainData *tag, const char *text)
 {
     tag->state = 0;

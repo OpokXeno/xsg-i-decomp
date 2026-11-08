@@ -45,8 +45,8 @@
 #define HDD_INSTALL_ARCHIVE_SIZE 0x1000000
 #define HDD_INSTALL_PARTITION_STEP 0x80000
 
-/* Failure codes of xglHddMcCreate(), per step (the four HDD_CREATE_* causes in
- * main/xgl_hdd.h are its capacity checks). */
+/* Failure codes of xglHddMcCreate(), one per step. The HDD_CREATE_* causes in
+ * main/xgl_hdd.h are the reasons a save cannot be created. */
 #define HDD_CREATE_ERR_MKDIR_ROOT (-10)
 #define HDD_CREATE_ERR_CLOSE_ROOT (-0x0c)
 #define HDD_CREATE_ERR_OPEN_DEVICE (-0x10)
@@ -112,7 +112,7 @@ struct HddInstallImage {
     unsigned char systemCnf[HDD_SYSTEM_CNF_SIZE];
 };
 
-/* xglHddMount removes the high bit from this stored volume identifier. */
+/* decrypt(), called by xglHddMount, clears the high bit of this stored volume identifier. */
 static char partitionname[];
 
 static char hddname[];
@@ -127,9 +127,9 @@ static unsigned char tbl_1_004A8AE0[] ;
 
 extern int strcmp(const char *left, const char *right);
 
-/* EUC-JP warning text: HDD application data cannot be read, so loading
- * continues from DVD; the final control-marked label says “Button: Continue”.
- * Preserve the embedded font controls and line breaks from the original. */
+/* EUC-JP warning text: the HDD application data cannot be read, so loading
+ * continues from the DVD. The embedded font controls and line breaks are kept
+ * as they are in the data. */
 /* JP: ハードディスクドライブにあるゼノサーガの\n\nアプリケーションデータが読み込めません。\n\nこれ以降はＤＶＤから読み込みを行います。\n\n\n\n○ボタン：続行
  * EN: Cannot load the Xenosaga\n\napplication data on the hard disk drive.\n\nData will be loaded from the DVD from now on.\n\n\n\nCircle button: Continue */
 const char hddLoadErrorText[] =
@@ -202,6 +202,10 @@ static int xglHddDummyCB(int event, int value)
     return 0;
 }
 
+/*
+ * Polls the HDD device status and flushes it. Returns 0 when ready, HDD_RESET_REQUIRED
+ * or HDD_NOT_READY, or another negative status.
+ */
 static int xglHddCheckCore(void)
 {
     long status;
@@ -235,6 +239,7 @@ static int xglHddCheckCore(void)
     return result;
 }
 
+/* Runs xglHddCheckCore. A required reset starts activation 0x103 and reports HDD_NOT_READY. */
 int xglHddCheck2(void)
 {
     int result = xglHddCheckCore();
@@ -246,6 +251,10 @@ int xglHddCheck2(void)
     return result;
 }
 
+/*
+ * Checks the HDD. A state of 3 shows the error screen first, and a required reset
+ * shows it and reactivates the HDD.
+ */
 int xglHddCheck(void)
 {
     int result;
@@ -266,6 +275,7 @@ int xglHddCheck(void)
     return HDD_NOT_READY;
 }
 
+/* Shows the HDD load error text, and returns once Circle is pressed after the wait frames. */
 void xglHddErrorScreen(void)
 {
     int waitFrames = HDD_ERROR_WAIT_FRAMES;
@@ -285,6 +295,10 @@ void xglHddErrorScreen(void)
     sRender.errorScreenActive = 0;
 }
 
+/*
+ * Checks the HDD and mounts the common area read-only. Returns 0 on success (a busy
+ * mount counts), or -1 on failure.
+ */
 int xglHddMcLoadMount(void)
 {
     int result;
@@ -304,6 +318,7 @@ int xglHddMcUmount(void)
     return result < 0 ? -2 : 0;
 }
 
+/* Writes the save-area path and the save path for card and slot to destination. Returns the end of the string. */
 static char *make_fullpath(char *destination, int card, int slot)
 {
     const char *source = yoursaves;
@@ -321,6 +336,11 @@ static char *make_fullpath(char *destination, int card, int slot)
     return destination;
 }
 
+/*
+ * Checks for saves. With card >= 0, returns 1 when that slot's file opens and 0 when not.
+ * With card < 0, marks each matching save in found[], stores the newest slot in found[100]
+ * and returns the number of matches.
+ */
 int xglHddMcExist(struct HddExistRequest *request)
 {
     char filePath[HDD_PATH_MAX];
@@ -370,6 +390,7 @@ int xglHddMcExist(struct HddExistRequest *request)
         /* The -1 card path ends in a wildcard; compare its directory stem. */
         destination[-1] = 0;
 
+        /* Clear found[0] to found[100]. */
         count = 100;
         clearPosition = &found[100];
         do {
@@ -378,6 +399,7 @@ int xglHddMcExist(struct HddExistRequest *request)
             clearPosition--;
         } while (count >= 0);
 
+        /* Scan the save area for entries whose name matches the stem. */
         count = 0;
         descriptor = sceDopen(yoursaves);
         while (descriptor >= 0 && sceDread(descriptor, &entry) > 0) {
@@ -411,6 +433,10 @@ int xglHddMcExist(struct HddExistRequest *request)
     return result;
 }
 
+/*
+ * Reads request->size bytes of the save file for request->card into request->data.
+ * Returns 0, 1 when the file does not exist, or an HDD_LOAD_ERR_* code.
+ */
 int xglHddMcLoadCore(void *save)
 {
     struct HddLoadRequest *request = save;
@@ -432,6 +458,7 @@ int xglHddMcLoadCore(void *save)
     return result;
 }
 
+/* Mounts the common area, loads the save with xglHddMcLoadCore and unmounts. Returns the first failure. */
 int xglHddMcLoad(void *save)
 {
     int result;
@@ -445,6 +472,7 @@ int xglHddMcLoad(void *save)
     return xglHddMcUmount();
 }
 
+/* Counts the save folders in the root. Returns 1 while the count is below HDD_MAX_FOLDERS, or a negative error. */
 static int Judge_MakeNewFolder(void)
 {
     struct HddDirectoryEntry entry;
@@ -487,6 +515,7 @@ static int Judge_MakeNewFolder(void)
     return directoryCount < HDD_MAX_FOLDERS;
 }
 
+/* Counts the save files in the directory, skipping folders and other entries. Returns 1 while the count is below HDD_FOLDER_ENTRY_LIMIT. */
 int Judge_MakeNewSavedata(int descriptor, int card)
 {
     extern unsigned int strlen(const char *string);
@@ -551,6 +580,10 @@ int Judge_MakeNewSavedata(int descriptor, int card)
     return directoryCount < HDD_FOLDER_ENTRY_LIMIT;
 }
 
+/*
+ * Returns 0 when the save area can take a save, 1 when its folder must be created,
+ * or an HDD_CHECK_TOO_MANY_* code.
+ */
 static int xglHddMcCheckYourSaves(int card)
 {
     int descriptor = sceDopen(yoursaves);
@@ -560,6 +593,11 @@ static int xglHddMcCheckYourSaves(int card)
     return Judge_MakeNewSavedata(descriptor, card) == 1 ? 0 : HDD_CHECK_TOO_MANY_SAVES;
 }
 
+/*
+ * Checks the save area, then whether the free zones cover the save data, the icon and the
+ * transfer. Returns 0 when they fit, HDD_CHECK_NO_SPACE on a small disk or 1 on a large one
+ * when they do not, or a negative error.
+ */
 static int xglHddMcCheckCore(struct HddCheckState *state)
 {
     int result = xglHddMcCheckYourSaves(state->status);
@@ -587,6 +625,10 @@ static int xglHddMcCheckCore(struct HddCheckState *state)
     return 0;
 }
 
+/*
+ * Checks the save area on a read-write mount of the common area, with state->status set
+ * to -1 during the check. Returns the check result, or -1 when the HDD or mount is not ready.
+ */
 int xglHddMcCheck(struct HddCheckState *state)
 {
     int previous;
@@ -607,6 +649,10 @@ int xglHddMcCheck(struct HddCheckState *state)
     return result;
 }
 
+/*
+ * Returns the free save space in KB, or the fixed HDD_LARGE_DISK_FREE_KB on a large disk.
+ * Returns a negative code when the HDD or the save area is not ready.
+ */
 int xglHddMcGetFree(void)
 {
     int result;
@@ -634,6 +680,7 @@ int xglHddMcGetFree(void)
     return result;
 }
 
+/* Writes size bytes of data to the save file for card and slot, then sets its attributes. Returns 0 or -1. */
 static int create_file(int card, int slot, const void *data, int size)
 {
     char path[HDD_PATH_MAX];
@@ -657,6 +704,10 @@ static int create_file(int card, int slot, const void *data, int size)
     return result;
 }
 
+/*
+ * Creates the save folder for state->status and writes its icon and payload files.
+ * Returns 0 or a negative failure code.
+ */
 int xglHddMcCreate(struct HddCheckState *state)
 {
     extern int sceIoctl2(int descriptor, int command, const void *input,
@@ -687,6 +738,7 @@ int xglHddMcCreate(struct HddCheckState *state)
             goto unmount_card;
         }
     } else {
+        /* Check the card; a result of 1 adds the sub-partition and remounts before the folders are created. */
         checkResult = xglHddMcCheckCore(state);
         if (checkResult < 0) {
             result = -(int)tbl_1_004A8AE0[~checkResult];
@@ -753,6 +805,7 @@ int xglHddMcCreate(struct HddCheckState *state)
         }
     }
 
+    /* Write the icon file, then the payload when the icon write succeeds. */
     result = HDD_CREATE_ERR_WRITE_ICON;
     transfer = state->transfer.image;
     xglMcWriteMapName(transfer->iconSystem, state->status);
@@ -768,6 +821,7 @@ unmount_card:
     return result;
 }
 
+/* Writes save->data to slot 0 of save->card. Returns 0 or HDD_SAVE_ERR_WRITE. */
 int xglHddMcSave(const struct HddSaveRequest *save)
 {
     int result;
@@ -782,6 +836,7 @@ int xglHddMcSave(const struct HddSaveRequest *save)
     return result;
 }
 
+/* Deactivates the HDD, unmounts it and removes the partition named by partitionname. Returns 0 or a negative code. */
 int xglHddUninstall(void)
 {
     int result;
@@ -794,6 +849,10 @@ int xglHddUninstall(void)
     return result < 0 ? -5 : 0;
 }
 
+/*
+ * Read callback for the install copy. Event 1 records the part count. Event 2 reports copy
+ * progress to the install callback and cancels the read when that callback returns nonzero.
+ */
 static int xglHddInstallReadCB(int event, int value)
 {
     HddInstallCBParam *cb;
@@ -822,6 +881,10 @@ static int xglHddInstallReadCB(int event, int value)
     return result;
 }
 
+/*
+ * Installs the game data to the HDD and reports each stage and failure through callback.
+ * Returns 0 on success and -1 on failure.
+ */
 int xglHddInstall(int (*callback)(), int param)
 {
     extern int sceFormat(char *mount_point, char *device, void *payload,
@@ -857,6 +920,7 @@ int xglHddInstall(int (*callback)(), int param)
     context.status = 0;
     callback(HDD_INSTALL_STAGE_BEGIN, 0, param);
 
+    /* Read the install image, then copy SYSTEM.CNF into it. */
     if (xglCdReadFile(hddResourcePath, image, 0, 1) < 0) {
         callback(HDD_INSTALL_FAIL_RESOURCE, 0, param);
         return -1;
@@ -867,6 +931,7 @@ int xglHddInstall(int (*callback)(), int param)
     size = (image->bodySize + image->tableSize + HDD_SECTOR_SIZE - 1) & -HDD_SECTOR_SIZE;
 
     callback(HDD_INSTALL_STAGE_RESOURCE_READ, 0, param);
+    /* Create the partition and extend it in 256M steps. */
     sprintf(path, partitionSpecFormat, partitionname);
     partition = sceOpen(path, HDD_OPEN_READ_WRITE_CREATE);
     if (partition < 0) {
@@ -895,6 +960,7 @@ int xglHddInstall(int (*callback)(), int param)
     }
 
     callback(HDD_INSTALL_STAGE_FORMAT, 0, param);
+    /* Format and mount the new partition. */
     formatSize = 0x2000;
     if ((result = sceFormat(pfsDevicePath, partitionname, &formatSize, 4)) < 0) {
         callback(HDD_INSTALL_FAIL_FORMAT, result, param);
@@ -916,6 +982,7 @@ int xglHddInstall(int (*callback)(), int param)
         return -1;
     }
 
+    /* Count the archive parts on the disc, then copy each part to the hard disk. */
     archives = 0;
     dvdname_2[10] = '0';
     while ((size = xglCdGetFileSize(dvdname_2)) >= 0) {
@@ -963,6 +1030,7 @@ int xglHddInstall(int (*callback)(), int param)
         xglHddUninstall();
         return -1;
     }
+    /* Write the check file, then remount the partition read-only. */
     callback(HDD_INSTALL_STAGE_FINISH, 0, param);
     descriptor = sceOpen(hddcheck, HDD_OPEN_WRITE_CREATE_TRUNC, HDD_MODE_RW_FILE);
     if (descriptor < 0) {
@@ -1002,6 +1070,10 @@ int xglHddInstall(int (*callback)(), int param)
     return 0;
 }
 
+/*
+ * Sets HddActive to state (0 to 3) unless it is already 2. A state of -1 only queries.
+ * Returns the previous state, or 0 when it was 2 or more.
+ */
 int xglHddActivate(int state)
 {
     int previous = HddActive;
@@ -1016,6 +1088,10 @@ int xglHddActivate(int state)
     return previous < 2 ? previous : 0;
 }
 
+/*
+ * Decodes partitionname in place (XOR 0x80) unless it is already decoded, then copies
+ * SYSTEM.CNF byte 0x1a into byte 17.
+ */
 static void decrypt(void)
 {
     u8 *source = partitionname;
@@ -1036,6 +1112,10 @@ static void decrypt(void)
     partitionname[17] = system_cnf[0x1a];
 }
 
+/*
+ * Checks the HDD and mounts the game partition read-only, comparing its check file with
+ * the disc. Returns 1 when ready, 0 when the partition is missing, or a negative code.
+ */
 int xglHddMount(void)
 {
     int mount_result;

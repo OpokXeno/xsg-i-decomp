@@ -63,6 +63,10 @@ extern const char enemyDebugMeleeLoverAutoOnText[];
 extern const char enemyDebugAllOnOffText[];
 extern const char enemyDebugCursorText[];
 
+/*
+ * Debug menu that edits the enemy type flags. Row 0 picks the level, rows 1-11 toggle
+ * one switch each and row 12 covers all of them. It returns when Select is released.
+ */
 static void _dbgThinkTool(unsigned int *pEnemyType)
 {
     unsigned int startPressed;
@@ -79,6 +83,7 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
         if (startEdge != 0) {
             armed = 1;
         }
+        /* The tool closes once Select is released, when Select was pressed on entry. */
         if (armed != 0 && (_GetPadRelease() & PAD_SELECT)) {
             break;
         }
@@ -172,6 +177,11 @@ static void _dbgThinkTool(unsigned int *pEnemyType)
     }
 }
 
+/*
+ * Returns the type flags of a weapon for _JobEnemy. A missing weapon is empty in slot 2
+ * and an attack weapon in the other slots. A shot weapon also gets bit 0 when its busy
+ * time fits within wait frames.
+ */
 static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait)
 {
     RgWeaponEssence *essence;
@@ -211,6 +221,11 @@ static unsigned int _GetWeaponTypeFlag(RgWeapon *weapon, int side, int wait)
     return typeFlags | 2;
 }
 
+/*
+ * Returns nonzero when the weapon may fire. A locked-on targeting weapon always may.
+ * With param bit 4 set, a weapon fires only when aimed closely (bit 8) or when there is
+ * no weapon.
+ */
 static int _CheckShootWeapon(RgWeapon *weapon, unsigned int param, float angle)
 {
     if (weapon != 0 && RgWeaponIsTargetting(weapon) != 0 &&
@@ -301,6 +316,11 @@ static inline float _GetCosine(RgVector first, RgVector second)
     return 0.0f;
 }
 
+/*
+ * Runs one AI step for an enemy robot. It picks the turn, move and shot commands from the
+ * enemy's position, speed and status, and applies them to the robot. Select opens the
+ * debug think tool.
+ */
 static void _JobEnemy(RgEnemyControl *pCtrl)
 {
     RgVector position;
@@ -726,6 +746,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
             move[2] = xglCos(enemyAngle - RG_PI / 4);
         }
     }
+    /* Dash, brake or accelerate with the move chosen above. */
     if (pJob->flags & 8) {
         RgRobotDash(pRobot, move);
         pJob->flags = (pJob->flags & ~9) | 0x10;
@@ -825,6 +846,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
         break;
     }
 
+    /* Pick a shot state and a weapon when no shot is pending. */
     if (state == 0 && !(status & 0x100)) {
         if (pCtrl->move.state != RG_ENEMY_MOVE_UNSTICK &&
             ((status & 2) ||
@@ -1020,6 +1042,7 @@ static void _JobEnemy(RgEnemyControl *pCtrl)
     pCtrl->shot.state = state;
     pCtrl->shot.wait = wait;
 
+    /* Releasing Select opens the debug think tool. */
     if (_GetPadRelease() & PAD_SELECT) {
         _dbgThinkTool(&pCtrl->enemyType);
     }
@@ -1033,6 +1056,10 @@ static void _DestructEnemy(RgEnemyControl *pBaka)
     }
 }
 
+/*
+ * Sets the enemy's job and destruct methods, its enemy robot and type, and clears its
+ * turn, move and shot state.
+ */
 static void _InitEnemy(RgEnemyControl *pControl, RgStatus *pRobot,
                        RgStatus *pEnemyRobot, int enemyType)
 {
@@ -1070,13 +1097,16 @@ static void _InitEnemy(RgEnemyControl *pControl, RgStatus *pRobot,
 }
 
 /*
- * _InitEnemy is defined later in this TU (a local sibling still in asm).
- * enemyType is forwarded to it untouched and unasserted; no stronger
- * evidence for its role exists within this allocation.
+ * Declared again here, after its definition above. CreateRgEnemyControl
+ * passes enemyType through without checking it.
  */
 static void _InitEnemy(RgEnemyControl *pControl, RgStatus *pRobot,
                        RgStatus *pEnemyRobot, int enemyType);
 
+/*
+ * Allocates an enemy control from the heap and initializes it for pRobot against
+ * pEnemyRobot. Returns the new control.
+ */
 RgEnemyControl *CreateRgEnemyControl(RgStatus *pRobot, RgStatus *pEnemyRobot,
                                      int enemyType)
 {

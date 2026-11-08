@@ -24,25 +24,26 @@
  * The text-window kind of TComponent (include/main/twsys_init.h). Its width
  * at +0x0C is read as a signed short: TWIN_popScene compares a signed
  * halfword there, and TW_setPos sign-extends that halfword before its
- * centering calculation. Evidence for the window fields:
- *  - +0xC/+0xE pixelWidth/pixelHeight: TW_setPos (0x0025d660) reads both as unsigned
+ * centering calculation.
+ *  - +0xC/+0xE pixelWidth/pixelHeight: TW_setPos reads both as signed
  *    halfwords for its on-screen centering math.
- *  - +0xA6 line_pitch: TWIN_drawScene2 (0x0025ec24, still assembler)
- *    multiplies the current line index (+0x185) by this halfword to place
- *    each text line, so it is the per-line vertical advance.
- *  - +0x186 layout_offset: set here and by TWIN_create2's own default
- *    (still assembler); no function recovered so far in this TU reads it
- *    back, so only that it is a byte is proven.
- *  - +0x187 line_count: TWIN_update2 and TWIN_popCF/TWIN_popScene (still
- *    assembler) loop up to this byte over the +0x17C line-pointer array.
+ *  - +0xA6 line_pitch: TWIN_drawScene2 multiplies the current line index
+ *    (+0x185) by this halfword to place each text line, so it is the
+ *    per-line vertical advance.
+ *  - +0x186 layout_offset: set here and by TWIN_create2's default; no
+ *    function in this file reads it back, so only its byte width is known.
+ *  - +0x187 line_count: TWIN_update2, TWIN_popCF and TWIN_popScene loop up
+ *    to this byte over the +0x17C line-pointer array.
  */
 
-/* TMenu belongs to main/tu143. TMENU_init initializes the pointer at +0x154
- * to its inline string workspace; TMENU_addItem advances it after each line.
- * The pointer at +0x148 retains the start of the active query text. */
 /*
- * The menu-kind component TMENU_create hands back (still assembler in this
- * TU). Only the fields this allocation touches are modeled:
+ * TMenu belongs to main/tu143. TMENU_init initializes the pointer at +0x154
+ * to its inline string workspace; TMENU_addItem advances it after each line.
+ * The pointer at +0x148 retains the start of the active query text.
+ */
+/*
+ * The menu-kind component TMENU_create returns. Only the fields this
+ * allocation touches are modeled:
  *  - +0x10 flags: TMENU_dispose clears bits 0x11 when it releases the menu.
  *  - +0x60/+0x64 msgBuffer: TMENU_dispose passes each non-zero entry to
  *    MBUF_dispose.
@@ -174,6 +175,10 @@ static unsigned char groupStatus[3];
 
 static unsigned char groupByteState;
 
+/*
+ * Clears every component slot and the group byte state, then initializes the
+ * event widget and message buffer subsystems.
+ */
 void TWSYS_init(void)
 {
     TComponent *component;
@@ -209,6 +214,11 @@ unsigned char TWSYS_getGRPStatus(int group)
     return groupStatus[group];
 }
 
+/*
+ * Returns the component at slotIndex, or the first inactive slot when
+ * slotIndex is negative (NULL when none is free). The slot index is stored in
+ * the high byte of kindAndGroup.
+ */
 TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup)
 {
     int candidateIndex;
@@ -231,6 +241,7 @@ TComponent *TWSYS_createComponent(int slotIndex, int kindAndGroup)
     return component;
 }
 
+/* Runs the per-frame update of every active component whose group allows it. */
 void TWSYS_update(void)
 {
     TComponent *component;
@@ -267,6 +278,10 @@ void TWSYS_update(void)
     } while (slotIndex < TWSYS_SLOT_COUNT);
 }
 
+/*
+ * Draws every active component whose group allows it, each after a font reset
+ * and the font setup for its kind, then draws the event widgets.
+ */
 void TWSYS_draw(void)
 {
     TComponent *component;
@@ -309,6 +324,10 @@ void TWSYS_draw(void)
     EW_draw();
 }
 
+/*
+ * Parses a signed integer in the given radix. A negative length means the
+ * string is NUL-terminated. Returns 0 when the value overflows.
+ */
 int PARSE_int(const char *text, int length, int radix)
 {
     int value = 0;
@@ -368,6 +387,10 @@ int PARSE_int(const char *text, int length, int radix)
     return -value;
 }
 
+/*
+ * Writes value as decimal text (with a leading '-' when negative) into
+ * destination, and returns a pointer past the last character written.
+ */
 unsigned char *STRING_int(unsigned char *destination, int value)
 {
     unsigned char buffer[16];
@@ -410,6 +433,10 @@ unsigned char *STRING_int(unsigned char *destination, int value)
     return destination - start + 12;
 }
 
+/*
+ * Converts an ASCII string to EUC-JP full-width letters and digits. Bytes below
+ * the first multi-byte lead are dropped; two-byte characters are copied.
+ */
 void STRING_h2zEUC(char *destination, const char *source)
 {
     int character;
@@ -435,6 +462,7 @@ void STRING_h2zEUC(char *destination, const char *source)
     *destination = 0;
 }
 
+/* Formats value into a local digit buffer in base 2^bitsPerDigit. The buffer is never read back. */
 void STRING_toUInt(void *unused, int value, int bitsPerDigit)
 {
     char buffer[32];
@@ -449,6 +477,10 @@ void STRING_toUInt(void *unused, int value, int bitsPerDigit)
     } while (value != 0);
 }
 
+/*
+ * Places a follow-owner component above its owner's position: projects the
+ * owner's anchor through the camera, then clamps the box to the screen.
+ */
 void TW_setPos(TComponent *component)
 {
     Vector4 anchorPosition;
@@ -481,6 +513,7 @@ void TW_setPos(TComponent *component)
     anchorPosition.z = ownerPosition->z;
     component->ownerPosition = ownerPosition;
     anchorPosition.w = 1.0f;
+    /* Project the anchor through the camera into screen space. */
     xglMatrixStackUnit();
     xglMatrixStackTrans(&anchorPosition.x);
     xglMatrixStackSave(savedMatrix);
@@ -504,6 +537,7 @@ void TW_setPos(TComponent *component)
     projected->z = 2.5f - projected->z;
     direction.x = 0.0f < projected->x ? -1.0f : 1.0f;
     direction.y = -1.0f;
+    /* Offset the box from the anchor, scaled by the distance term. */
     halfWidth = (short)component->pixelWidth / 2;
     halfHeight = (short)component->pixelHeight / 2;
     offsets.x = (float)(halfWidth + 16) * direction.x;
@@ -519,6 +553,7 @@ void TW_setPos(TComponent *component)
     screenShiftX = (float)(EW_SCREEN_WIDTH / 2 - halfWidth);
     projected->x += screenShiftX;
     projected->y += screenShiftY;
+    /* Keep the box on screen: x between 8 and rightEdge, y at least 8. */
     if (8.0f > projected->x)
         projected->x = 8.0f;
     rightEdge = (float)(504 - (short)component->pixelWidth);
@@ -563,6 +598,10 @@ void WIN_initScene(TComponent *window)
     window->pixelHeight = TWIN_SCENE_HEIGHT;
 }
 
+/*
+ * Resets a text window's line state, lays out its line and caption buffers,
+ * and marks it active, running, following its owner and opening.
+ */
 void TWIN_init2(TComponent *window)
 {
     unsigned int kind;
@@ -606,6 +645,7 @@ void TWIN_init2(TComponent *window)
     window->initializationWord0 = 0;
 }
 
+/* Returns 1 when an active component is in a group that is not update-disabled, else 0. */
 int WIN_checkActiveWindow(void)
 {
     TComponent *component;
@@ -625,8 +665,11 @@ int WIN_checkActiveWindow(void)
     return 0;
 }
 
-/* TWIN_create2 and TWIN_draw2 establish the label's line count at +0x14
- * and its caller-owned line pointer table at +0x24. */
+/*
+ * Creates a text window with its widget tree and message buffer. Returns 0
+ * when no component slot or message buffer is free. The label widget's
+ * textLines points at the window's line buffer pointers.
+ */
 TComponent *TWIN_create2(int index)
 {
     TComponent *window;
@@ -655,6 +698,7 @@ TComponent *TWIN_create2(int index)
         window->widgets[childIndex] = 0;
     }
 
+    /* Root container, then mask, clip, label, screen clip, frame and cursor. */
     root = (EwContainerWidget *)EW_create(-1, EW_TYPE_CONTAINER);
     root->container.children = window->widgets;
     root->container.childCapacity = TWIN_WIDGET_COUNT;
@@ -697,6 +741,7 @@ TComponent *TWIN_create2(int index)
     widget->height = 16;
     EW_addComponent(root, TWIN_WIDGET_CURSOR, widget);
 
+    /* Attach the message buffer and reset the text queue. */
     window->messageBuffer[0] = messageBuffer;
     window->queue.buffer = messageBuffer->cursor;
     window->queue.size = messageBuffer->capacity;
@@ -729,6 +774,10 @@ void TWIN_dispose(TComponent *window)
     }
 }
 
+/*
+ * Pops the next queued unit into the current line of an open, not-waiting
+ * field-conversation window, handling control codes and line wrap.
+ */
 void TWIN_popCF(TComponent *window)
 {
     MsgQueue *queue;
@@ -784,6 +833,10 @@ void TWIN_popCF(TComponent *window)
     MSG_queueReset(queue, 0);
 }
 
+/*
+ * Pops queued units into the lines of an open, not-waiting scene window,
+ * handling control codes and line wrap.
+ */
 void TWIN_popScene(TComponent *window)
 {
     TComponent *component = window;
@@ -842,6 +895,10 @@ void TWIN_popScene(TComponent *window)
     window->queue.tail = window->queue.head = 0;
 }
 
+/*
+ * Advances one text window for a frame: fades its mask in, pops queued text
+ * for its kind, and steps its wait and scroll state machine.
+ */
 void TWIN_update2(TComponent *component)
 {
     TComponent *window = component;
@@ -869,6 +926,7 @@ void TWIN_update2(TComponent *component)
             mask->mask.fix = (alpha << 8) | (alpha << 16);
         }
     }
+    /* Pop queued text for this window's kind. */
     switch (window->kindAndGroup & TCOMP_KIND_MASK) {
     case TCOMP_KIND_TEXT_FIELD:
     default:
@@ -878,6 +936,7 @@ void TWIN_update2(TComponent *component)
         TWIN_popScene(window);
         break;
     }
+    /* Not waiting: pick the wait state that the current state implies. */
     if (!(flags & TCOMP_FLAG_WAIT)) {
         switch (window->state) {
         case TCOMP_STATE_IDLE:
@@ -908,6 +967,7 @@ void TWIN_update2(TComponent *component)
     if (!(flags & TCOMP_FLAG_RUN)) {
         return;
     }
+    /* Waiting: advance on the circle button or when a timer runs out. */
     switch (window->state) {
     case TCOMP_STATE_WAIT_RESULT:
         window->waitFrames = (window->waitFrames + 1) & 31;
@@ -972,6 +1032,7 @@ void TWIN_update2(TComponent *component)
             window->state = TCOMP_STATE_SCROLL_LINE;
         }
         break;
+    /* Scroll: on the last line, shift every line up once the timer finishes. */
     case TCOMP_STATE_SCROLL_LINE:
         if (window->currentLineIndex >= window->line_count - 1) {
             window->textVerticalOffset = (int)((float)window->waitFrames * -6.0f);
@@ -1023,6 +1084,10 @@ const char twinFontParamControl[19] = "\r\002\016\002\003\030\030\030\017\000\00
 /* Text: {effect 3}{effect params}{blend}{color #808080}{char width 4}{spacing 0,0} */
 const unsigned char twinLabelStyleControl[26] = "\r\003\016\002\002\030\030\030\017\000\000\200\014\200\200\200\025\002\002\004\025\003\003\000\000";
 
+/*
+ * Draws a field-conversation text window: positions its mask, frame, clip and
+ * label, shows the cursor in the wait states, then prints the text.
+ */
 void TWIN_draw2(TComponent *window)
 {
     EwWidget *mask;
@@ -1063,7 +1128,7 @@ void TWIN_draw2(TComponent *window)
     body->label.colorScale = 0;
     widget->x = x + 12;
     widget->drawValue = EW_ORDER_TEXT;
-    /* The text window's halfword at +0x50, read as that kind's own field. */
+    /* textVerticalOffset (+0x50) is a halfword that shifts the label vertically. */
     textOffset = &window->textVerticalOffset;
     widget->y = *textOffset + (y + 4);
     body->label.textLines = window->lineBufferPointers;
@@ -1073,6 +1138,7 @@ void TWIN_draw2(TComponent *window)
     widget = window->widgets[TWIN_WIDGET_CURSOR];
     if (window->state == TCOMP_STATE_WAIT_CLEAR || window->state == TCOMP_STATE_WAIT_RESULT
         || window->state == TCOMP_STATE_WAIT_SCROLL) {
+        /* Place the cursor after the current line's text, wrapping when it does not fit. */
         x = (short)window->lineWidths[window->currentLineIndex];
         y = window->currentLineIndex * TWIN_CF_LINE_PITCH;
         if (x + 16 > window->queue.limit) {
@@ -1104,6 +1170,10 @@ void TWIN_draw2(TComponent *window)
     xglFontPrintDirectOT(EW_ORDER_FRAME, twinStyleControl);
 }
 
+/*
+ * Draws a scene message window: positions its mask, clip and label, and shows
+ * the cursor in the wait states. Draws nothing while opening or closing.
+ */
 void TWIN_drawScene2(TComponent *window)
 {
     EwWidget *mask;
@@ -1169,6 +1239,10 @@ void TWIN_drawScene2(TComponent *window)
     }
 }
 
+/*
+ * Initializes a menu component: points its item and query line arrays at its
+ * own storage, sets the default geometry and state, and builds its widget tree.
+ */
 void TMENU_init(TComponent *component)
 {
     MsgBuffer *MBUF_create(int byteSize, int messageCount);
@@ -1209,6 +1283,7 @@ void TMENU_init(TComponent *component)
         cursor[count] = 0;
         count -= 1;
     } while (count >= 0);
+    /* Query lines use queryLineStorage, filled from the message buffer's entries below. */
     menu->queryLines = slots;
     slots = (char **)slots + TMENU_QUERY_LINES;
     menu->currentQueryLine = 0;
@@ -1239,6 +1314,7 @@ void TMENU_init(TComponent *component)
         menu->widgets[count] = 0;
     }
     count = TMENU_WIDGET_COUNT;
+    /* Build the widget tree, starting with the root container. */
     root = (EwContainerWidget *)EW_create(-1, EW_TYPE_CONTAINER);
     root->container.children = menu->widgets;
     root->container.childCapacity = TMENU_WIDGET_COUNT;
@@ -1304,6 +1380,7 @@ void TMENU_init(TComponent *component)
     menu->state = TCOMP_STATE_OPENING;
 }
 
+/* Creates a menu in slotIndex (the first free slot when negative) at its default position. */
 TComponent *TMENU_create(int slotIndex)
 {
     TComponent *component;
@@ -1342,6 +1419,10 @@ void TMENU_addQuery(TMenu *menu, const char *text)
     }
 }
 
+/*
+ * Stores text as item itemIndex (the first empty slot when negative), then
+ * grows the menu's height and width to fit the item.
+ */
 void TMENU_setItem(TMenu *menu, int itemIndex, const char *text)
 {
     char output[0x400];
@@ -1374,6 +1455,10 @@ void TMENU_setItem(TMenu *menu, int itemIndex, const char *text)
     }
 }
 
+/*
+ * Converts text and adds each of its lines as a menu item, stored in the
+ * menu's inline text area. Then recounts the items and resizes the menu.
+ */
 void TMENU_addItem(int menuHandle, const char *text)
 {
     TMenu *menu = (TMenu *)menuHandle;
@@ -1425,6 +1510,10 @@ void TMENU_addItem(int menuHandle, const char *text)
     }
 }
 
+/*
+ * Advances a menu by one frame: runs its opening, reveal, wait and closing
+ * states, and moves the item selection from pad input while it is in input.
+ */
 void TMENU_updateDefault(TComponent *component)
 {
     TMenu *menu = (TMenu *)component;
@@ -1445,6 +1534,7 @@ void TMENU_updateDefault(TComponent *component)
         menu->visibleLineCount = menu->itemCount;
     }
     menu->frameCounter++;
+    /* Not waiting: enter the wait that the current state needs. */
     if (!(flags & TCOMP_FLAG_WAIT)) {
         switch (menu->state) {
         case TCOMP_STATE_REVEAL: {
@@ -1489,6 +1579,7 @@ void TMENU_updateDefault(TComponent *component)
     if (!(flags & TCOMP_FLAG_RUN)) {
         return;
     }
+    /* Waiting and running: handle the input or timer of the current state. */
     switch (menu->state) {
     case TCOMP_STATE_DONE:
         menu->flags = flags & ~TCOMP_FLAG_WAIT;
@@ -1498,6 +1589,7 @@ void TMENU_updateDefault(TComponent *component)
             menu->state = TCOMP_STATE_IDLE;
         }
         break;
+    /* Input: cross cancels, circle decides, and up/down move the selection. */
     case TCOMP_STATE_INPUT:
         if (PadData[0].direction_pressed & PAD_CROSS) {
             xglSoundEffectNormalID(SE_CANCEL, 0);
@@ -1565,7 +1657,7 @@ void TMENU_updateDefault(TComponent *component)
         TW_setPos(component);
         if (menu->waitFrames >= TCOMP_OPEN_FRAMES) {
             menu->flags |= TCOMP_FLAG_OPEN;
-            /* Both query modes enter the same waiting state. */
+            /* With or without a query, the menu goes on to the reveal state. */
             if (menu->activeQueryId != 0) {
                 menu->state = TCOMP_STATE_REVEAL;
                 menu->flags &= ~TCOMP_FLAG_WAIT;
@@ -1579,6 +1671,7 @@ void TMENU_updateDefault(TComponent *component)
             menu->selectedItem = menu->requestedSelection;
         }
         break;
+    /* Reveal: fade the mask in and print the query one character at a time. */
     case TCOMP_STATE_REVEAL:
         if (menu->waitFrames < 8) {
             alpha = (int)(128.0f - ((float)menu->waitFrames * 0.125f) * 128.0f);
@@ -1645,6 +1738,10 @@ void TMENU_updateDefault(TComponent *component)
     }
 }
 
+/*
+ * Draws a menu: its mask, frame, clip, query and item labels, scroll arrows and
+ * selection cursor. Draws nothing while opening or closing.
+ */
 void TMENU_drawDefault(TComponent *component)
 {
     TMenu *menu = (TMenu *)component;
@@ -1707,6 +1804,7 @@ void TMENU_drawDefault(TComponent *component)
     body->label.lineCount = menu->visibleLineCount + 1;
     widget->flags |= EW_FLAG_VISIBLE;
 
+    /* Scroll arrows show only when items lie outside the visible window. */
     widget = menu->widgets[TMENU_WIDGET_ARROW_UP];
     widget->x = x + menu->width - 16;
     widget->y = y;
@@ -1736,6 +1834,7 @@ void TMENU_drawDefault(TComponent *component)
     } else {
         queryHeight = 0;
     }
+    /* Place the cursor on the selected item's line, below the query lines. */
     widget = menu->widgets[TMENU_WIDGET_CURSOR];
     widget->drawValue = EW_ORDER_TEXT;
     /* Retain both floating zero-offset additions in the cursor layout. */

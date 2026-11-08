@@ -38,16 +38,16 @@
 #define RUNTIME_GAME_FLAG_MINIGAME 0x4000000         /* set while minigameExec runs */
 #define RUNTIME_PLAYER_FLAG_CONTROLLABLE 0x20        /* GameLoopState.player_flags */
 
-/* The thread blocks until the native call ends its script (see JThread.flags). */
 /* GameLoopState.shoot_control (Runtime.setShoot*) */
 #define RUNTIME_SHOOT_ENABLED 0x01
 #define RUNTIME_SHOOT_HEIGHT_CHECK 0x02
 #define RUNTIME_SHOOT_ID_CHECK 0x04
 #define RUNTIME_SHOOT_UWA_CHECK 0x08
 
+/* The thread blocks until the native call ends its script (see JThread.flags). */
 #define RUNTIME_THREAD_BLOCK_FLAGS (JTHREAD_FLAG_DONE | JTHREAD_FLAG_WAITING)
 
-/* Runtime.jump destination: bit 16 keeps the playing sound sequences, bits 16..19 carry flags. */
+/* Runtime.jump destination: bit 16 keeps the playing sound sequences; bits 16..19 are flags masked off the event id. */
 #define RUNTIME_JUMP_KEEP_SEQUENCES 0x10000
 #define RUNTIME_JUMP_FLAGS_MASK 0xF0000
 #define RUNTIME_JUMP_EVENT_BASE 0x10000000
@@ -59,7 +59,7 @@
 #define RUNTIME_PARTY_WIDTH_HALFWORD 1
 #define RUNTIME_PARTY_WIDTH_WORD 2
 #define RUNTIME_PARTY_WIDTH_DOUBLEWORD 3
-#define RUNTIME_PARTY_SELECTOR_IN_USE_ID 0x0100002C  /* halfword at +0x2C: the player's model id */
+#define RUNTIME_PARTY_SELECTOR_IN_USE_ID 0x0100002C  /* halfword at +0x2C: the player's in-use id */
 
 /* Runtime.mailFlag: mail[0] bits. */
 #define RUNTIME_MAIL_RECEIVED 0x01
@@ -78,11 +78,9 @@ typedef struct RuntimeNativeBinding {
 } RuntimeNativeBinding;
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives of this TU show
- * (a1 read as the argument block, a2 written as the result); these
- * wrappers only need the tag.
+ * The script VM's per-thread context, declared as JThread in src/main/chr.h.
+ * Every Java native receives (thread, arguments, result); these wrappers only
+ * need the tag.
  */
 typedef struct JThread JThread;
 
@@ -94,39 +92,22 @@ typedef struct {
 } IntTripleCall;
 
 /*
- * GameLoopState offsets this TU touches. GameLoopState is a TU-local
- * divergent view (config/header-canon.json "GameLoopState"): every unit
- * models only the offsets its own bytes evidence, and no shared header
- * declares it.
+ * The GameLoopState fields this TU uses. Only the offsets the runtime natives
+ * touch are modeled; the rest is unmodeled padding.
  */
 typedef struct {
     unsigned char unmodeled_00[4];
-    Actor *player;                         /* +0x04, lw at 0x002f76b0
-                                              (scriptReset_evsExit) */
-    XglTaskScheduler *task_scheduler;     /* +0x08, lw/beq at 0x002f7350
-                                              (setLocation) */
+    Actor *player;                        /* +0x04, used by scriptReset_evsExit */
+    XglTaskScheduler *task_scheduler;     /* +0x08, used by setLocation */
     unsigned short scene_kind;
-    unsigned short deferred_jump_pending; /* +0x0E, sh $0 at 0x002f767c */
-    unsigned int flags;                   /* +0x10, lw/nor/and/sw at
-                                              0x002f74a4..0x002f74bc (disable),
-                                              lw/or/sw at 0x002f74c4..0x002f74d8
-                                              (enable), lw/sw at
-                                              0x002f74e4..0x002f74ec
-                                              (getGameState) */
+    unsigned short deferred_jump_pending; /* +0x0E */
+    unsigned int flags;                   /* +0x10, RUNTIME_GAME_FLAG_* */
     unsigned char unmodeled_14[4];
     int current_event_id;
     unsigned char unmodeled_1c[4];
-    unsigned int shoot_control;           /* +0x20, lw/ori/sw and lw/and/sw at
-                                              0x002f78a0..0x002f78c8
-                                              (setShootFlag, bit 0),
-                                              0x002f78dc..0x002f7904
-                                              (setShootHeightCheck, bit 1),
-                                              0x002f791c..0x002f7944
-                                              (setShootIDCheck, bit 2),
-                                              0x002f795c..0x002f7984
-                                              (setShootUwaCheck, bit 3) */
+    unsigned int shoot_control;           /* +0x20, RUNTIME_SHOOT_* bits */
     unsigned char unmodeled_24[0x52 - 0x24];
-    short entrance;                       /* +0x52, lh at 0x002f7424 */
+    short entrance;                       /* +0x52 */
     int scene_reset_counter;
     unsigned char unmodeled_58[0xA0 - 0x58];
     float fade_red;
@@ -134,25 +115,18 @@ typedef struct {
     float fade_blue;
     float fade_frames;
     unsigned char unmodeled_b0[0xC1 - 0xB0];
-    unsigned char player_flags;           /* +0xC1, lbu/ori/sb at
-                                              0x002f7448..0x002f7460
-                                              (setPlayerControl, bit 0x20) */
+    unsigned char player_flags;           /* +0xC1, RUNTIME_PLAYER_FLAG_* */
     unsigned char unmodeled_c2[0x29F44 - 0xC2];
-    float shoot_range;                    /* +0x29F44, swc1 at 0x002f799c */
+    float shoot_range;                    /* +0x29F44 */
     unsigned char unmodeled_29f48[0x2A018 - 0x29F48];
-    int active_event_id;                  /* +0x2A018, lw at 0x002f8730 */
+    int active_event_id;                  /* +0x2A018 */
     unsigned char unmodeled_2a01c[0x2A020 - 0x2A01C];
-    AlignedVector4 saved_position;        /* +0x2A020, ld/sd at
-                                              0x002f76bc..0x002f76d8
-                                              (scriptReset_evsExit) */
+    AlignedVector4 saved_position;        /* +0x2A020, used by scriptReset_evsExit */
 } GameLoopStateRuntimeView;
 
 /*
- * A partial view of the script VM thread (JThread, fully recovered in
- * src/main/chr.h for main/tu248) for the three words evsExit touches: the
- * state word at +0x24 and the resume/frame counters at +0x3C/+0x3E chr.h
- * documents for the same object. Modeled separately here because chr.h is
- * TU-local to tu248.
+ * A partial view of the script VM thread (JThread) for the three words evsExit
+ * uses: the state word at +0x24 and the resume and frame counters at +0x3C and +0x3E.
  */
 typedef struct {
     unsigned char unmodeled_00[0x24];
@@ -162,9 +136,6 @@ typedef struct {
     unsigned short frame_depth;      /* +0x3E */
 } RuntimeThreadState;
 
-/* setLocation below touches the same three RuntimeThreadState words as
-   evsExit: resume_frames takes frame_depth and flags gains bit 0x8
-   (native-call block) and 0x1 (generic wait) (0x002f7388..0x002f739c). */
 /* The call block of a native taking two plain ints (java signature "(II)"). */
 typedef struct {
     int first;
@@ -207,9 +178,8 @@ typedef struct {
 } IntQuadCall;
 
 /*
- * A partial, TU-local view of the Java int-array object (the same object
- * fully recovered as `VMArray` in src/main/init_vm.c) for the `data` pointer
- * setDefocus below reads at +0x08 (lw at 0x002f7800).
+ * A partial view of the Java int-array object (VMArray in src/main/init_vm.c)
+ * for the `data` pointer that setDefocus reads at +0x08.
  */
 typedef struct {
     unsigned char unmodeled_00[8];
@@ -225,10 +195,9 @@ typedef struct {
 } DefocusCall;
 
 /*
- * The leader's battle id: read directly out of SaveData (lui/lhu at
- * 0x002f7bd0/0x002f7bd4, no call) rather than through PartyDataGet(), which
- * getPartyDataOfs below shows returns SaveData + 0x10078, so this offset is
- * that region's own +0x2C.
+ * The leader's battle id, read directly from SaveData rather than through
+ * PartyDataGet(). getPartyDataOfs below shows that call returns SaveData + 0x10078,
+ * so this offset is that region's own +0x2C.
  */
 typedef struct RuntimeSavedPartyPrefix {
     unsigned char unmodeled_00[0x100a4];
@@ -1515,7 +1484,7 @@ const char stageSetBgClipName[32] = "Java_xeno_Stage_setBgClip__I";
 
 const char stageClrBackBufferName[32] = "Java_xeno_Stage_clrBackBuffer__";
 
-/* Retail's local table precedes the native binding table in the data section. */
+/* Native bindings: each entry pairs a method signature with its entry point. */
 RuntimeNativeBinding default_native[] = {
     { javaSystemArraycopyName, (void (*)())Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II },
     { javaSystemSleepName, (void (*)())Java_xeno_vm_System_sleep__I },
@@ -1946,6 +1915,11 @@ static __inline__ unsigned short *runtime_party_id_table(void)
     return tbl;
 }
 
+/*
+ * Native for Runtime.execBattle(int, int): saves the game state, passes the first
+ * argument to func_00A0B728 and the second to func_00A0B708, re-initializes the
+ * scene and actors, applies the fade mask, then restores the game state.
+ */
 void Java_xeno_util_Runtime_execBattle__II(JThread *thread, int *arguments)
 {
     xglFontLoad(1, 0);
@@ -1976,6 +1950,11 @@ void Java_xeno_util_Runtime_setFlags__III(JThread *thread, FlagsSetCall *argumen
     xglFlagsSet(arguments->bit_offset, arguments->bit_count, arguments->value);
 }
 
+/*
+ * Native for Runtime.setLocation(int, int, int). With a non-zero third argument
+ * and a task scheduler present, loads the map and blocks the thread: resume_frames
+ * takes frame_depth and RUNTIME_THREAD_BLOCK_FLAGS are set. Otherwise changes the map at once.
+ */
 void Java_xeno_util_Runtime_setLocation__III(RuntimeThreadState *thread,
                                              IntTripleCall *arguments,
                                              unsigned int *result)
@@ -2012,6 +1991,10 @@ void Java_xeno_util_Runtime_getEntrance__(JThread *thread, void *arguments, int 
     *result = GameLoopState.entrance;
 }
 
+/*
+ * Native for Runtime.setPlayerControl(boolean). True clears the control-off game
+ * flag and sets the controllable player flag; false sets the control-off game flag.
+ */
 void Java_xeno_util_Runtime_setPlayerControl__Z(JThread *thread, unsigned char *arguments,
                                                 unsigned int *result)
 {
@@ -2061,6 +2044,11 @@ void Java_xeno_util_Runtime_CaptureStart__Ljava_lang_String_I(JThread *thread,
     tyaCaptureStart(arguments->string->value->bytes, arguments->value);
 }
 
+/*
+ * Common part of the script jumps: stops the stream, sound and movie, fades out
+ * the sound sequences unless RUNTIME_JUMP_KEEP_SEQUENCES is set, stores the
+ * entrance when it is non-negative, then loads the event named by destination.
+ */
 void Java_xeno_util_Runtime_jump_sub(int destination, int entrance)
 {
     int sequence;
@@ -2097,6 +2085,7 @@ static void scriptReset_jump(void)
     Java_xeno_util_Runtime_jump_sub(args_jump.destination, args_jump.argument);
 }
 
+/* Reset hook for the event exit: performs the saved jump, then places the player at the saved position. */
 static void scriptReset_evsExit(void)
 {
     GameLoopState.deferred_jump_pending = 0;
@@ -2105,6 +2094,10 @@ static void scriptReset_evsExit(void)
     GameLoopState.player->status_flags |= 0x1000;
 }
 
+/*
+ * Native for Runtime.jumpCF(int, int): schedules scriptReset_jump with the two
+ * arguments as destination and argument, then blocks the thread.
+ */
 void Java_xeno_util_Runtime_jumpCF__II(RuntimeThreadState *thread, VMSlot *arguments,
                                        unsigned int *result)
 {
@@ -2118,6 +2111,11 @@ void Java_xeno_util_Runtime_jumpCF__II(RuntimeThreadState *thread, VMSlot *argum
     thread->flags |= RUNTIME_THREAD_BLOCK_FLAGS;
 }
 
+/*
+ * Native for Runtime.jumpEvent(int, int): schedules scriptReset_jump for the event
+ * (first argument plus RUNTIME_JUMP_EVENT_BASE) with the second argument as the
+ * entrance, then blocks the thread.
+ */
 void Java_xeno_util_Runtime_jumpEvent__I(RuntimeThreadState *thread, IntPairCall *arguments,
                                          unsigned int *result)
 {
@@ -2141,6 +2139,7 @@ void Java_xeno_util_Runtime_setDefocusQuick__IIII(JThread *thread, IntQuadCall *
                         arguments->fourth);
 }
 
+/* Native for Runtime.setDefocus(int, int, int[]): the table's data pointer, or null when no table is given. */
 void Java_xeno_util_Runtime_setDefocus__IIaI(JThread *thread, DefocusCall *arguments,
                                              unsigned int *result)
 {
@@ -2240,6 +2239,7 @@ void Java_xeno_util_Runtime_checkItem__II(JThread *thread, IntPairCall *argument
     *result = dataBoxChk(arguments->first, arguments->second);
 }
 
+/* Native for Runtime.getItemName(int, int): returns a new String holding the item's name. */
 void Java_xeno_util_Runtime_getItemName__II(JThread *thread, int *arguments,
                                           int *result)
 {
@@ -2275,6 +2275,7 @@ void Java_xeno_util_Runtime_progressEffect__I(JThread *thread, int *arguments,
     sefProgressEffect(*arguments);
 }
 
+/* Native for Runtime.enterShop(int): runs the shop menu with the camera and light state saved around it. */
 void Java_xeno_util_Runtime_enterShop__I(JThread *thread, int *arguments,
                                          unsigned int *result)
 {
@@ -2288,6 +2289,10 @@ void Java_xeno_util_Runtime_getLeader__(JThread *thread, void *arguments, int *r
     *result = ((const RuntimeSavedPartyPrefix *)SaveData)->leader_battle_id;
 }
 
+/*
+ * Returns the address of a party field. The selector's bits 16..23 pick the base
+ * (0: party data, 1: +0x30, 2: +0x3C, 3: +0x140) and its low 16 bits the offset.
+ */
 static char *getPartyDataOfs(unsigned int selector)
 {
     int type = (selector >> 16) & 0xff;
@@ -2306,6 +2311,7 @@ static char *getPartyDataOfs(unsigned int selector)
     return selected + offset;
 }
 
+/* Native for Runtime.getPartyData(int): reads the selected party field at the width in selector bits 24..31. */
 void Java_xeno_util_Runtime_getPartyData__I(JThread *thread, int *arguments, int *result)
 {
     int width = (unsigned int)*arguments >> 24;
@@ -2332,6 +2338,11 @@ void Java_xeno_util_Runtime_getPartyData__I(JThread *thread, int *arguments, int
     }
 }
 
+/*
+ * Native for Runtime.setPartyData(int, int): writes the value to the selected party
+ * field at the selector's width. Setting the player's in-use id reloads the model
+ * when the id differs.
+ */
 void Java_xeno_util_Runtime_setPartyData__II(JThread *thread,
                                            IntPairCall *arguments)
 {
@@ -2369,6 +2380,7 @@ void Java_xeno_util_Runtime_setPartyData__II(JThread *thread,
     }
 }
 
+/* Maps a character id to its 1-based index in the party id table; returns 0 when it is not listed. */
 static int cid2bic(int character_id)
 {
     unsigned short *tbl = runtime_party_id_table();
@@ -2464,6 +2476,10 @@ static inline void runtimeLightVector(Vector4 *value, float x, float y, float z)
     value->w = 1.0f;
 }
 
+/*
+ * Native for Runtime.setIdLightCol(int, int, float, float, float). The slot is
+ * 1-based. Light 0 sets the ambient colour; otherwise light - 1 is the parallel light.
+ */
 void Java_xeno_util_Runtime_setIdLightCol__IIFFF(JThread *thread,
                                                VMSlot *arguments,
                                                VMSlot *result)
@@ -2483,6 +2499,10 @@ void Java_xeno_util_Runtime_setIdLightCol__IIFFF(JThread *thread,
     }
 }
 
+/*
+ * Native for Runtime.setIdLightDir(int, int, float, float, float): sets the angle of
+ * parallel light light - 1 of the id light slot (1-based) when light is non-zero.
+ */
 void Java_xeno_util_Runtime_setIdLightDir__IIFFF(JThread *thread,
                                                VMSlot *arguments,
                                                VMSlot *result)
@@ -2500,6 +2520,10 @@ void Java_xeno_util_Runtime_setIdLightDir__IIFFF(JThread *thread,
     }
 }
 
+/*
+ * Native for Runtime.setIdLightVec(int, int, float, float, float): as setIdLightDir,
+ * but sets the direction vector of parallel light light - 1.
+ */
 void Java_xeno_util_Runtime_setIdLightVec__IIFFF(JThread *thread,
                                                VMSlot *arguments,
                                                VMSlot *result)
@@ -2517,6 +2541,11 @@ void Java_xeno_util_Runtime_setIdLightVec__IIFFF(JThread *thread,
     }
 }
 
+/*
+ * Native for Runtime.setWindParam(int mode, float power, float time, float z, float w).
+ * Mode 0 stops the wind, 1 sets the shake power and time, 2 a directional wind and
+ * 3 a point wind.
+ */
 void Java_xeno_util_Runtime_setWindParam__IFFFF(JThread *thread,
                                               RuntimeWindCall *arguments)
 {
@@ -2542,6 +2571,11 @@ void Java_xeno_util_Runtime_setWindParam__IFFFF(JThread *thread,
     }
 }
 
+/*
+ * Native for Runtime.mpeg2(String): plays the movie named by the argument from the
+ * movie folder. The mode is 4 when a cross-fade was reserved, 2 while a fade is
+ * active, and 3 otherwise.
+ */
 void Java_xeno_util_Runtime_mpeg2__Ljava_lang_String_(JThread *thread,
                                                    StringRef **arguments)
 {
@@ -2575,6 +2609,7 @@ void Java_xeno_util_Runtime_mpeg2__Ljava_lang_String_(JThread *thread,
     GameMpeg2Play(path, mode);
 }
 
+/* Native for Runtime.mpeg2AfterCrossFade(int): reserves a cross-fade for the next mpeg2 call and sets its time. */
 void Java_xeno_util_Runtime_mpeg2AfterCrossFade__I(JThread *thread, int *arguments,
                                                     unsigned int *result)
 {
@@ -2584,6 +2619,11 @@ void Java_xeno_util_Runtime_mpeg2AfterCrossFade__I(JThread *thread, int *argumen
     nmlModelSetMpeg2CrossFadeTime(time);
 }
 
+/*
+ * Native for Runtime.mailFlag(int): the high byte of the argument selects a query or
+ * an action on the mail whose id is in the low 24 bits. Action 4 marks the mail as
+ * received, plays its sound and vibrates.
+ */
 void Java_xeno_util_Runtime_mailFlag__I(JThread *thread, int *arguments, int *result)
 {
     int value = 0;
@@ -2644,6 +2684,7 @@ void Java_xeno_util_Runtime_mailFlag__I(JThread *thread, int *arguments, int *re
     *result = value;
 }
 
+/* Native for Runtime.mailExec(int): runs the mail screen with culling ignored and the camera and light state saved. */
 void Java_xeno_util_Runtime_mailExec__I(JThread *thread, int *arguments,
                                         unsigned int *result)
 {
@@ -2654,6 +2695,11 @@ void Java_xeno_util_Runtime_mailExec__I(JThread *thread, int *arguments,
     GameStateRestoreCameraLight();
 }
 
+/*
+ * Native for Runtime.minigameExec(int): runs the minigame chosen by the argument
+ * (12, 13 or 14) between the game data push and pop. Sets RUNTIME_GAME_FLAG_MINIGAME
+ * while it runs.
+ */
 void Java_xeno_util_Runtime_minigameExec__I(JThread *thread, int *arguments)
 {
     GameLoopState.flags |= RUNTIME_GAME_FLAG_MINIGAME;
@@ -2683,16 +2729,17 @@ void Java_xeno_util_Runtime_minigameExec__I(JThread *thread, int *arguments)
     GameLoopState.flags &= ~RUNTIME_GAME_FLAG_MINIGAME;
 }
 
+/*
+ * Native for Runtime.setMenuLock(): arms the script scene-change timer with 62
+ * frames. SCRIPT_sceneChangeTimeDec counts it down once per game frame.
+ */
 void Java_xeno_util_Runtime_setMenuLock__(JThread *thread, void *arguments,
                                           unsigned int *result)
 {
-    /*
-     * Arms the script scene-change timer, which SCRIPT_sceneChangeTimeDec
-     * counts down once per game frame, with 62 frames.
-     */
     SCRIPT_sceneChangeTimeSet(RUNTIME_MENU_LOCK_FRAMES);
 }
 
+/* Native for Runtime.evsSetRetPoint(): records the active event id and the player's position for evsExit. */
 void Java_xeno_util_Runtime_evsSetRetPoint__(RuntimeThreadState *thread, void *arguments,
                                              unsigned int *result)
 {
@@ -2702,14 +2749,16 @@ void Java_xeno_util_Runtime_evsSetRetPoint__(RuntimeThreadState *thread, void *a
     GameLoopState.saved_position = player->position;
 }
 
+/*
+ * Native for Runtime.evsExit(): schedules scriptReset_evsExit for the saved event
+ * and blocks the calling thread: resume_frames takes the current frame_depth and
+ * flags gains 0x8 (native-call block) and 0x1 (generic wait). The updated flags word
+ * is staged before the resume_frames store and written back after it, matching the
+ * original instruction order.
+ */
 void Java_xeno_util_Runtime_evsExit__(RuntimeThreadState *thread, void *arguments,
                                       unsigned int *result)
 {
-    /* Blocks the calling thread the same way CHR_sclX/System_waitFor do
-       (chr.h): resume_frames takes the current frame_depth and flags gains
-       0x8 (native-call block) and 0x1 (generic wait). The updated flags word
-       is staged before the resume_frames store and written back after it,
-       matching the original instruction order (0x002f873c..0x002f8750). */
     unsigned int flags;
 
     args_jump.destination = GameLoopState.active_event_id;

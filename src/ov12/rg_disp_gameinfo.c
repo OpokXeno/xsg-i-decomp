@@ -23,24 +23,21 @@
 #define RG_DISP_GAME_INFO_FADE_STEP 0.1f
 /* Radius in pixels the 3D marker is clamped to around the screen center. */
 #define RG_DISP_GAME_INFO_CLAMP_RADIUS 180.0f
-/* Distance in world units over which the marker grows to full size. */
+/* Distance in world units beyond which the marker's closeness factor is zero. */
 #define RG_DISP_GAME_INFO_FAR_DISTANCE 50.0f
-/* Weapon indicator brightness, ready or busy. */
+/* Weapon indicator intensity: BRIGHT when the weapon is not busy, DIM when it is. */
 #define RG_DISP_GAME_INFO_BRIGHT 0x80
 #define RG_DISP_GAME_INFO_DIM 0x20
 #define RG_DISP_GAME_INFO_ALPHA_MAX 127
 #define RG_DISP_GAME_INFO_WEAPON_SLOTS 3
 
-/*
- * Anchored, rotated, scaled rectangle with per-frame jitter: the anchors in
- * the low four bits are both "half the extent".
- */
+/* Rectangle mode: jitter, angle, scale and picture size flags, and anchor value 5 in the low bits. */
 #define RG_DISP_GAME_INFO_COLOR_RECT_MODE                                  \
     (XRG_PAINT2D_MODE_JITTER | XRG_PAINT2D_MODE_ANGLE |                     \
      XRG_PAINT2D_MODE_SCALE | XRG_PAINT2D_MODE_PIC_SIZE | 5)
 
 
-/* Scaffold-owned strings: marker picture names and the state error. */
+/* Strings defined at the end of this file: marker picture names and the state error. */
 extern const char dispGameInfoUnknownLockOnStateFormat[];
 extern const char dispGameInfoPicture001Name[];
 extern const char dispGameInfoPicture002Name[];
@@ -56,6 +53,7 @@ extern const char dispGameInfoPictureNotFoundFormat[];
 const char dispGameInfoAssertInfoNotNil[16] = "pInfo != NIL";
 const char dispGameInfoSourcePath[32] = "../rg_disp_gameinfo.euc.c";
 
+/* Sets the default state of a marker info block and creates its paint object. */
 void _InitInfo(RgDispGameInfo *pInfo)
 {
     RgBxx *dispTex;
@@ -101,6 +99,7 @@ void _SetSubRobot(RgDispGameInfo *pInfo, RgStatus *subRobot) {
     pInfo->subRobot = subRobot;
 }
 
+/* Only checks pInfo; the sway and pulse phases advance in _DispInfo. */
 void _PassTimeInfo(RgDispGameInfo *pInfo, float deltaTime) {
     if (pInfo == 0) {
         assert_prog(dispGameInfoAssertInfoNotNil, dispGameInfoSourcePath, 122);
@@ -109,6 +108,7 @@ void _PassTimeInfo(RgDispGameInfo *pInfo, float deltaTime) {
 
 const char dispGameInfoPictureNotFoundFormat[24] = "not exist '%s' picture";
 
+/* Draws the named picture from the display texture at (x, y) with blendMode; reports an error when it is missing. */
 void _paint_one_texture_alpha(RgDispGameInfo *pInfo, const char *pictureName,
                               int x, int y, int blendMode) {
     RgBxxPic *pic;
@@ -128,6 +128,7 @@ void _paint_one_texture(RgDispGameInfo *pInfo, const char *pictureName, int x,
     _paint_one_texture_alpha(pInfo, pictureName, x, y, 0);
 }
 
+/* Binds the named picture as the paint texture and sets its blend mode; reports an error when it is missing. */
 void _paint_set_tex_alpha(RgDispGameInfo *pInfo, const char *pictureName,
                           int blendMode) {
     RgBxxPic *pic;
@@ -140,6 +141,7 @@ void _paint_set_tex_alpha(RgDispGameInfo *pInfo, const char *pictureName,
     XrgPaint2DAlpha(pInfo->paint, blendMode);
 }
 
+/* Draws a colour rectangle at (x, y) with the given angle and scale; intensity sets its red, green and blue. */
 void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, float angle, float scale,
                      int intensity)
 {
@@ -156,6 +158,10 @@ void _paint_xy_color(RgDispGameInfo *pInfo, int x, int y, float angle, float sca
     XrgPaint2DDrawRect(pInfo->paint, &rectangle);
 }
 
+/*
+ * Draws the lock-on marker of the sub robot as seen from the host robot: advances the
+ * sway and pulse phases, updates the fade state, then paints the marker and the weapon indicators.
+ */
 void _DispInfo(RgDispGameInfo *pInfo)
 {
     RgVector hostPos;
@@ -234,6 +240,7 @@ void _DispInfo(RgDispGameInfo *pInfo)
         spread = (distance - 0.5f) * XRG_HALF_PI;
         glow = 0.75f + distance * 0.6f;
 
+        /* While the host is confused, the marker jitters around the host and fades in. */
         if (confused != 0) {
             anchor[0] = hostPos[0] + XrgRand(-50.0f, 50.0f);
             anchor[1] = hostPos[1] + XrgRand(-10.0f, 10.0f);
@@ -243,6 +250,7 @@ void _DispInfo(RgDispGameInfo *pInfo)
             pInfo->alpha = alpha;
             pInfo->state = RG_DISP_GAME_INFO_FADE_IN;
         } else {
+            /* Fade the marker in or out, or track the sub robot, by its state. */
             state = pInfo->state;
             switch (state) {
             case RG_DISP_GAME_INFO_FADE_OUT:
@@ -286,6 +294,7 @@ void _DispInfo(RgDispGameInfo *pInfo)
         _paint_set_tex_alpha(pInfo, dispGameInfoPicture003Name, XRG_PAINT2D_BLEND_ADD);
         _paint_xy_color(pInfo, 0, 0, 0.0f, alpha * glow, RG_DISP_GAME_INFO_BRIGHT);
 
+        /* Put the marker on the offset arm, pulsing its length; without an offset it sways at the centre. */
         if (pInfo->state == RG_DISP_GAME_INFO_TRACKING) {
             if (confused == 0) {
                 if (offsetBlock->flag != 0) {
@@ -317,6 +326,7 @@ void _DispInfo(RgDispGameInfo *pInfo)
             }
         }
 
+        /* Show the indicators of the first three weapons once the marker is visible enough. */
         if (0.3f < pInfo->alpha) {
             sway = (int)(sinf(4.0f * pInfo->swayPhase) * 8.0f);
             weapon = RgRobotGetWeapon(hostRobot, 0);

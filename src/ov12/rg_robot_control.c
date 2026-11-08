@@ -27,6 +27,10 @@ const char robotControlAssertControlNotNil[] = "pControl != NIL";
 const char robotControlSourcePath[] = "../rg_robot_control.euc.c";
 const char robotControlAssertCameraNotNil[] = "pCam != NIL";
 
+/*
+ * Per-frame job of an input control: reads the pad, then turns the sticks into
+ * acceleration, rotation, dashes, shots, breaks, targeting and weapon drops.
+ */
 static void _jobControlInput(RgRobotControl *pControl)
 {
     RgControlInput *controlInput;
@@ -60,6 +64,7 @@ static void _jobControlInput(RgRobotControl *pControl)
     hasMovement = 0;
     rotation = 0.0f;
 
+    /* Refreshes the pad state for this frame before the sticks are read. */
     XrgInputDeviceCheck(input, RgGetFrameTime());
 
     XrgClearVector(firstStick);
@@ -81,6 +86,7 @@ static void _jobControlInput(RgRobotControl *pControl)
     movement[2] = (firstStick[2] * firstMagnitude) +
                    (secondStick[2] * secondMagnitude);
 
+    /* Combines both sticks into one movement vector and rotates it by the camera matrix. */
     if (XrgNormalizeVector(movement, movement) > 0.5f) {
         hasMovement = 1;
         RgCameraLocal(camera, cameraMatrix);
@@ -107,6 +113,7 @@ static void _jobControlInput(RgRobotControl *pControl)
         RgRobotDashContinue(robot);
     }
 
+    /* With both sticks active, a large difference between their directions sets the rotation. */
     if ((firstMagnitude > 0.0f) && (secondMagnitude > 0.0f)) {
         cosineDifference = firstStick[2] - secondStick[2];
         absoluteDifference = cosineDifference;
@@ -125,6 +132,7 @@ static void _jobControlInput(RgRobotControl *pControl)
         RgRobotAccelarateRotate(robot, rotation);
     }
 
+    /* Shoulder flags fire shots; the action bits and pair flags break, target and drop weapons. */
     if ((flags & XRG_INPUT_FLAG_LEFT_SHOULDER) != 0) {
         RgRobotShot(robot, RG_EQUIP_TYPE_LEFT);
     }
@@ -159,6 +167,7 @@ void RgRobotControlSetRobot(RgRobotControl *pControl, RgStatus *pRobot)
     pControl->robot = pRobot;
 }
 
+/* Frees the XrgInput buffer owned by an input control. */
 static void _DestructControlInput(RgRobotControl *pControl)
 {
     RgControlInput *pInput;
@@ -170,6 +179,7 @@ static void _DestructControlInput(RgRobotControl *pControl)
     RgHeapFree(InstanceOfRgHeap(), pInput->buffer, robotControlSourcePath, 186);
 }
 
+/* Sets the robot and clears the job and destruct methods. */
 void InitRgRobotControlCommon(RgRobotControl *pControl, RgStatus *pRobot)
 {
     if (pControl == 0) {
@@ -180,6 +190,7 @@ void InitRgRobotControlCommon(RgRobotControl *pControl, RgStatus *pRobot)
     pControl->destructMethod = 0;
 }
 
+/* Initializes an input control: its methods, the XrgInput buffer for padId, and the camera. */
 static void _InitControlInput(RgControlInput *pInput, RgStatus *pRobot,
                               struct RgCamera *pCamera, int padId)
 {
@@ -200,6 +211,7 @@ static void _InitControlInput(RgControlInput *pInput, RgStatus *pRobot,
     pInput->camera = pCamera;
 }
 
+/* Allocates a control that reads no input. */
 RgRobotControl *CreateRgRobotControlNul(RgStatus *pRobot)
 {
     RgRobotControl *pControl;
@@ -212,6 +224,7 @@ RgRobotControl *CreateRgRobotControlNul(RgStatus *pRobot)
     return pControl;
 }
 
+/* Allocates an input-driven control for padId that uses pCamera. */
 RgRobotControl *CreateRgRobotControlInput(RgStatus *pRobot, struct RgCamera *pCamera,
                                           int padId)
 {
@@ -226,6 +239,7 @@ RgRobotControl *CreateRgRobotControlInput(RgStatus *pRobot, struct RgCamera *pCa
     return &pInput->control;
 }
 
+/* Runs the destruct method, if set, and frees the control. */
 void DisposeRgRobotControl(RgRobotControl *pControl)
 {
     if (pControl == 0) {
@@ -237,6 +251,7 @@ void DisposeRgRobotControl(RgRobotControl *pControl)
     RgHeapFree(InstanceOfRgHeap(), pControl, robotControlSourcePath, 245);
 }
 
+/* Runs the job method, if set. */
 void RgRobotControlJob(RgRobotControl *pControl)
 {
     if (pControl == 0) {

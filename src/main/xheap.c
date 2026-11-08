@@ -25,6 +25,10 @@ struct JThread *jthreadCurrent;
 static void xmemchk() {
 }
 
+/*
+ * Resets the heap to empty. A zero keep_heap installs heap and size as the new heap first;
+ * otherwise the existing heap is cleared in place. The frame stack starts at the heap's end.
+ */
 void xheap_init(int keep_heap, xheap_block *heap, int size) {
     if (keep_heap == 0) {
         heap_top = heap;
@@ -38,6 +42,7 @@ void xheap_init(int keep_heap, xheap_block *heap, int size) {
     freeBlock->next = heap_top;
 }
 
+/* Zeroes the unused heap between the current allocation point and the frame stack. */
 void xheap_current_clear(void) {
     unsigned char *current = (unsigned char *)freeBlock->next;
     unsigned char *limit = (unsigned char *)frame_stack - 8;
@@ -53,6 +58,7 @@ void xheap_current_clear(void) {
     }
 }
 
+/* Saves the free block and current thread on the frame stack and returns the free block. */
 void *xheap_push(void) {
     frame_stack -= 1;
     frame_stack->free_block = freeBlock;
@@ -60,6 +66,10 @@ void *xheap_push(void) {
     return freeBlock;
 }
 
+/*
+ * Restores the free block and thread saved by xheap_push, calls reloadConstString and
+ * reloadClassEntry with the restored block's next pointer, and returns the free block.
+ */
 void *xheap_pop(void) {
     freeBlock = frame_stack->free_block;
     jthreadCurrent = frame_stack->thread;
@@ -69,6 +79,10 @@ void *xheap_pop(void) {
     return freeBlock;
 }
 
+/*
+ * Totals the bytes of every allocated block (payload plus header) per category into
+ * category_totals, and returns the overall total.
+ */
 int xheap_info(int *category_totals) {
     xheap_block *block;
     int total;
@@ -91,6 +105,10 @@ int xheap_info(int *category_totals) {
     return total;
 }
 
+/*
+ * Walks the heap and accumulates the size of each allocated block per category. The totals
+ * are not returned or read afterwards.
+ */
 void infoMemory(void) {
     int totals[XHEAP_CATEGORY_COUNT];
     xheap_block *block;
@@ -113,6 +131,10 @@ void infoMemory(void) {
     }
 }
 
+/*
+ * Allocates size bytes, rounded up to a whole word, from the free block and tags the block with
+ * category. Returns the payload, or 0 for size 0.
+ */
 void *xmalloc(unsigned int size, int category) {
     xheap_block *block;
     xheap_block *next;
@@ -132,6 +154,7 @@ void *xmalloc(unsigned int size, int category) {
     return block + 1;
 }
 
+/* Marks the block of payload free (category 0). A null payload is ignored. */
 void xfree(void *payload) {
     xheap_block *block = payload;
 

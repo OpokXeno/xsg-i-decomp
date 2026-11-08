@@ -12,7 +12,7 @@ typedef int s32;
 #define CULLING_VOLUME_MAX 10           /* volumes one culling map can register */
 #define CULLING_LAST_ENTRY_MAX 12       /* source[] last-entry indices, ended by a negative one */
 #define SUB_WINDOW_COUNT 4              /* studio sub windows / cameras */
-#define CLIP_ALL_VIEWS_CLIPPED 0x80     /* nmlModelCalcClipStudio: every active window clips the model */
+#define CLIP_ALL_VIEWS_CLIPPED 0x80     /* nmlModelCalcClipMat2AllCam: every tested sub window clips the model */
 
 /*
  * One registered culling volume: the three vectors xglCullingMapSet and
@@ -38,12 +38,12 @@ typedef struct CullingVolume {
  * s_inCulling is the culling map's own state: an active/ready byte at
  * offset 0, the ten registered volumes at offset 32 (the 352-byte stride
  * xglCullingCheck, xglCullingCheckSeparate, xglCullingCheckSeparateInit,
- * xglCullingMapSet and xglCullingMapCreate all index), an evidenced count
- * at 0xDE0 (compared against 10 and incremented once per registered
- * volume) and an evidenced source value at 0xDE4 (set from a caller
- * argument by xglCullingMapSet and read back by xglCullingMapLastCheck).
- * The map argument itself is retained at 0xDE8 and passed back to
- * nmlModelSetMapLastEntry when the last-entry indices are consumed.
+ * xglCullingMapSet and xglCullingMapCreate all index), a count at 0xDE0
+ * (compared against 10 and incremented once per registered volume) and a
+ * source value at 0xDE4 (set from a caller argument by xglCullingMapSet and
+ * read back by xglCullingMapLastCheck). The map argument itself is retained
+ * at 0xDE8 and passed back to nmlModelSetMapLastEntry when the last-entry
+ * indices are consumed.
  */
 typedef struct CullingMap {
     union {
@@ -56,10 +56,10 @@ typedef struct CullingMap {
     s32 cullingMap;
 } CullingMap;
 
-/* The map table stores pointers to separately scaffolded volume and index data. */
+/* The map table points to separately defined volume and index data. */
 typedef struct CullingMapEntry {
     const char *name;
-    /* The unchanged loop tests these pointer fields only for nullness. */
+    /* Null, or the 9-float box records that xglCullingMapSet reads. */
     const float *entryCount;
     const s32 *source;
     u8 unmodeled_00C[4];
@@ -613,6 +613,11 @@ void _FacePoint(Vector4 *destination, const Vector4 *lineStart, const Vector4 *l
     );
 }
 
+/*
+ * Returns the dot product of the adjusted segment direction and the vector from
+ * the adjusted start to planePoint. Both endpoints are moved by their offset
+ * points and shifted along planeNormal before use.
+ */
 float _CheckLine(const Vector4 *offsetStart, const Vector4 *offsetEnd,
                  const Vector4 *endpointStart, const Vector4 *endpointEnd,
                  const Vector4 *planePoint, const Vector4 *planeNormal)
@@ -645,6 +650,7 @@ float _CheckLine(const Vector4 *offsetStart, const Vector4 *offsetEnd,
            endpointDelta.z * pointFromStart.z;
 }
 
+/* Writes the plane through three points: unit normal in xyz, w = -dot(normal, point0). */
 static void plane_from_points(const Vector4 *point0, const Vector4 *point1,
                               const Vector4 *point2, Vector4 *plane)
 {
@@ -666,6 +672,10 @@ static void plane_from_points(const Vector4 *point0, const Vector4 *point1,
     plane->w = -(normal.x * point0->x + normal.y * point0->y + normal.z * point0->z);
 }
 
+/*
+ * Computes the volume's occlusion depth and its five occlusion planes as seen
+ * through the camera's occlusion transform.
+ */
 void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
 {
     const Matrix4 *cameraTransform = &camera->occlusionTransform;
@@ -692,6 +702,7 @@ void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
         volume->occlusionDepth = corners[3].z;
     }
     QuadwordZero(&origin);
+    /* The sign of the first plane's w selects the winding of the four side planes. */
     plane_from_points(&corners[0], &corners[1], &corners[2], &volume->occlusionPlanes[0]);
     if (0.0f < volume->occlusionPlanes[0].w) {
         plane_from_points(&origin, &corners[0], &corners[1], &volume->occlusionPlanes[1]);
@@ -707,6 +718,10 @@ void setup_occlusion(CullingVolume *volume, const StudioCamera *camera)
     }
 }
 
+/*
+ * Returns 1 when neither the depth test nor any of the five occlusion plane tests
+ * rejects the model's transformed point, otherwise 0.
+ */
 s32 check_occlusion(CullingVolume *volume, const StudioCamera *camera, const Vector4 *model)
 {
     const Matrix4 *cameraTransform = &camera->occlusionTransform;
@@ -749,6 +764,10 @@ s32 check_occlusion(CullingVolume *volume, const StudioCamera *camera, const Vec
     return result;
 }
 
+/*
+ * Checks the model against the registered culling volumes unless culling is
+ * ignored. Returns the first nonzero result, or 0.
+ */
 s32 xglCullingCheck(const StudioCamera *camera, const Vector4 *model)
 {
     s32 i = 0;
@@ -780,6 +799,7 @@ void xglCullingCheckSeparateInit(const StudioCamera *camera)
     }
 }
 
+/* Returns the first nonzero check_occlusion result, using the planes set up by xglCullingCheckSeparateInit. */
 s32 xglCullingCheckSeparate(const StudioCamera *camera, const Vector4 *model)
 {
     s32 i = 0;
@@ -798,6 +818,10 @@ s32 xglCullingExist(void) {
     return cullingExistFlag[0];
 }
 
+/*
+ * Passes the entries of the current map's source list to nmlModelSetMapLastEntry,
+ * up to the first negative entry or CULLING_LAST_ENTRY_MAX entries.
+ */
 void xglCullingMapLastCheck(void)
 {
     s32 entry;
@@ -841,6 +865,11 @@ s32 check_culling_map(const char *name) {
     return result;
 }
 
+/*
+ * Loads the culling map named by the name record at cullingMap, skipping the
+ * name's first character. Volume records are read until a negative scale value
+ * or the volume limit.
+ */
 void xglCullingMapSet(s32 cullingMap)
 {
     const CullingMapNameSource *nameSource = (const CullingMapNameSource *) cullingMap;
@@ -887,6 +916,7 @@ void xglCullingMapSet(s32 cullingMap)
     }
 }
 
+/* Appends the base volume from s_aCullingBase to the map when there is room. */
 void xglCullingMapCreate(void)
 {
     CullingVolume *volume = &s_inCulling.volumes[s_inCulling.count];
@@ -941,32 +971,12 @@ void xglCullingMapDebug(void)
 }
 
 /*
- * _ModelCalcClipInit: load the pair of 4x4 clip matrices into VU0 macro-mode
- * registers for the callees that read them without reloading.
+ * Loads the two 4x4 clip matrices of a camera into VU0 registers: clip[0]'s rows
+ * go to vf12..vf15 and clip[1]'s rows to vf16..vf19, in address order.
  *
- * Eight lqc2 loads at decimal offsets 0,16,...,112 off `clip` establish the
- * parameter as two consecutive 16-byte-aligned 4x4 matrices (128 bytes):
- * clip[0]'s four rows land in vf12..vf15 and clip[1]'s four rows land in
- * vf16..vf19, in address order.
- *
- * The registers persist in VU0 state for _ModelCalcClip, _ModelCalcClipMat1
- * and _ModelCalcClipMat2 -- the only three callees that read vf12..vf19
- * without reloading them. This function's own callers are 8 of the 10
- * nmlModelCalcClip* wrappers, which tail-call _ModelCalcClip right after
- * calling this function (nmlModelCalcClip, nmlModelCalcClipNoCulling,
- * nmlModelCalcClipMat1, nmlModelCalcClipMat2, nmlModelCalcClipCam,
- * nmlModelCalcClipStudio, nmlModelCalcClipMat1AllCam,
- * nmlModelCalcClipMat2AllCam); only nmlModelCalcClipMat1Cam and
- * nmlModelCalcClipMat2Cam instead tail-call _ModelCalcClipMat1 and
- * _ModelCalcClipMat2 respectively. All three consumers read vf16..vf19
- * before vf12..vf15 (_ModelCalcClipMat1 at 0x0023f154 then 0x0023f1c0;
- * _ModelCalcClipMat2 at 0x0023f01c then 0x0023f088; _ModelCalcClip at
- * 0x0023f260 then 0x0023f2cc): the bank order does not follow either
- * callee's own "Mat1"/"Mat2" name, so there is no mat1/mat2 register
- * nickname to derive from the consumers -- clip[0] and clip[1] are just
- * the two matrices in address order. nmlModelCalcClipMat1 corroborates the
- * 128-byte extent by passing camera+0x4F0 as this function's argument
- * (0x0023f468).
+ * The registers stay in VU0 state for _ModelCalcClip, _ModelCalcClipMat1 and
+ * _ModelCalcClipMat2, which read them without reloading. Every nmlModelCalcClip*
+ * wrapper calls this before its test.
  *
  * Eight lqc2 loads, nothing else: no branch, no stack frame, no other memory
  * access. cc1 leaves the bare `j $31` delay slot to the assembler; this object
@@ -983,12 +993,13 @@ static void _ModelCalcClipInit(const Matrix4 clip[2])
  * w radius) by `matrix1` and then `matrix2` (each with its w row cleared) and
  * test it against the clip matrices _ModelCalcClipInit left in vf12..vf19.
  * Returns 1 as soon as one plane distance is not below the radius, else 0.
- * Original hand-written VU0 assembly (labels _$mcc2_*).
+ * Hand-written VU0 assembly.
  */
 static s32 _ModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2)
 {
     s32 clipped;
 
+    /* Transforms the sphere by both matrices, then tests the clip planes. */
     __asm__ __volatile__(
         "lqc2 vf10,0(%1)\n\t"
         "lqc2 vf27,0(%2)\n\t"
@@ -1081,8 +1092,8 @@ static s32 _ModelCalcClipMat2(const Vector4 *model, const Matrix4 *matrix1, cons
 }
 
 /*
- * _ModelCalcClipMat1: the same test after one transform by `matrix`
- * (labels _$mcc1_*).
+ * _ModelCalcClipMat1: the same test after one transform by `matrix`.
+ * Hand-written VU0 assembly.
  */
 static s32 _ModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix)
 {
@@ -1155,13 +1166,14 @@ static s32 _ModelCalcClipMat1(const Vector4 *model, const Matrix4 *matrix)
 
 /*
  * _ModelCalcClip: test the untransformed bounding sphere at `model` against
- * the six planes of the clip matrices in vf16..vf19 and vf12..vf15
- * (labels _$mcc_*).
+ * the six planes of the clip matrices in vf16..vf19 and vf12..vf15.
+ * Hand-written VU0 assembly.
  */
 static s32 _ModelCalcClip(const Vector4 *model)
 {
     s32 clipped;
 
+    /* Tests the sphere against the planes in vf16..vf19, then those in vf12..vf15. */
     __asm__ __volatile__(
         "lqc2 vf10,0(%1)\n\t"
         "vaddw.x vf2x,vf0x,vf10w\n\t"
@@ -1216,6 +1228,7 @@ static s32 _ModelCalcClip(const Vector4 *model)
     return clipped;
 }
 
+/* Returns nonzero when the model is clipped by the active camera's planes or its culling volumes. */
 s32 nmlModelCalcClip(const Vector4 *model) {
     s32 clip;
     const StudioCamera *camera = xglStudioGetActiveCamera();
@@ -1284,6 +1297,7 @@ void nmlModelCalcClipMat2Cam(const Vector4 *model, const Matrix4 *matrix1, const
     _ModelCalcClipMat2(model, matrix1, matrix2);
 }
 
+/* Same test as nmlModelCalcClip, for the studio camera selected by cameraIndex. */
 s32 nmlModelCalcClipStudio(const Vector4 *model, s32 cameraIndex) {
     s32 clip = 0;
     const StudioCamera *camera = xglStudioSelectGetActiveCamera(cameraIndex);
@@ -1296,6 +1310,10 @@ s32 nmlModelCalcClipStudio(const Vector4 *model, s32 cameraIndex) {
     return clip;
 }
 
+/*
+ * Returns 1 when every active sub window clips the model transformed by matrix,
+ * 0 otherwise.
+ */
 s32 nmlModelCalcClipMat1AllCam(const Vector4 *model, const Matrix4 *matrix)
 {
     Vector4 bounds;
@@ -1323,6 +1341,10 @@ s32 nmlModelCalcClipMat1AllCam(const Vector4 *model, const Matrix4 *matrix)
     return clipped;
 }
 
+/*
+ * Returns a mask with bit i set when sub window i clips the model transformed by
+ * matrix1 and matrix2, plus CLIP_ALL_VIEWS_CLIPPED when every tested window clips it.
+ */
 s32 nmlModelCalcClipMat2AllCam(const Vector4 *model, const Matrix4 *matrix1, const Matrix4 *matrix2)
 {
     Vector4 bounds;

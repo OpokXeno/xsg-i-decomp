@@ -5,11 +5,11 @@
 #include "main/xgl_hdd.h"
 #include "main/xgl_timer0.h"
 
-/* StrList holds a single global stream slot; queue_next's stream scan below
- * walks it as a one-entry list, as xglCdStreamClose already does. */
+/* StrList holds a single global stream slot. The control thread's stream case,
+ * xglCdStreamOpen and xglCdStreamClose walk it as a one-entry list. */
 #define STR_LIST_LAST_INDEX 0
 
-/* Keep the direct state expression used by both queue loops. */
+/* The CD reader's control block (the single LW instance). */
 #define CD_READ_CONTROL (&LW)
 
 /* A CD sector is fixed at 2048 bytes on this drive/read path (see also
@@ -68,12 +68,9 @@ typedef void CdCompletionCallback(int event, int value);
 
 /*
  * The queue entries occupy 0x80 bytes; only their used prefix is named.
- * xglCdReadFilePart (0x0021DEB8..0x0021E30C, still INCLUDE_ASM) enqueues by
- * storing its own second argument (buffer, a single `sw` at 0x0021DFB4) at
- * entry+0x00 and strcpy'ing its own first argument (name, the lbu/sb loop at
- * 0x0021DF90..0x0021DFA8) into entry+0x10; queue_next below hands those two
- * fields back to it in that same order, matching xglCdReadFile's
- * (name, buffer, ...) shape in shared.h.
+ * xglCdReadFilePart stores its buffer argument at entry+0x00 and copies its
+ * name argument into entry+0x10. queue_next hands those two fields back to it
+ * as its name and buffer arguments.
  */
 typedef struct CdRequestPartial {
     void *buffer;
@@ -84,8 +81,8 @@ typedef struct CdRequestPartial {
 } CdRequestPartial;
 
 /*
- * Partial view of LW, limited to fields evidenced by this TU.
- * unmodeled_XX spans are opaque bytes between evidenced fields; naming them
+ * Partial view of LW, limited to the fields this TU uses.
+ * unmodeled_XX spans are opaque bytes between the used fields; naming them
  * `unmodeled_<offset>[<size>]` follows the convention used across the
  * project (e.g. src/main/game.c, src/main/ssd_init.h) instead of inventing
  * members to complete the struct's size.
@@ -187,8 +184,8 @@ extern int sceSifLoadElf(const char *path, void *exec_data);
 extern int sceSifAllocIopHeap(int bytes);
 extern void FlushCache(int mode);
 
-/* Defined later in this file (INCLUDE_ASM); declared here, like BCD2INT
- * below, so its LOCAL definition does not follow a non-static declaration. */
+/* Defined later in this file; declared here, like BCD2INT below, so its
+ * static definition does not follow a non-static declaration. */
 static CdFilePosition *xglCdGetFilePos(CdFilePosition *file_position, const char *path,
                            void (*callback)(int event, int value));
 
@@ -209,8 +206,7 @@ static void xglCdArcInit(void);
  */
 static int BCD2INT(unsigned char x);
 
-/* extract (below) is still INCLUDE_ASM; declare it so its callers do not see
- * an implicit declaration. */
+/* Declared before its callers, so they do not see an implicit declaration. */
 static void extract(u32 *destination, u32 *source, int byte_count);
 
 extern int sceCdStRead(int sectors, void *buffer, int mode, int *result);
@@ -320,6 +316,10 @@ void xglCdPowerOffCB(void)
     LW.power_off_pending = 1;
 }
 
+/*
+ * Copies byte_count bytes word by word from source to destination. A packed
+ * archive record at source is expanded by xglArxExtract instead.
+ */
 static void extract(u32 *destination, u32 *source, int byte_count)
 {
     if (source[0] == CD_PACKED_MAGIC && source[3] == 0) {
@@ -334,6 +334,10 @@ static void extract(u32 *destination, u32 *source, int byte_count)
     }
 }
 
+/*
+ * Reports the finished request to the completion callback, then starts the
+ * next queued request. Returns 1 when the queue is empty.
+ */
 static int queue_next(void)
 {
     CdRequestPartial *request;
@@ -353,6 +357,10 @@ static int queue_next(void)
     return 1;
 }
 
+/*
+ * Control thread loop: services the active read according to dispatch_state
+ * and read_poll_mode, and handles the power-off request.
+ */
 void xglCdControlThread(void)
 {
     u32 power_status;
@@ -386,6 +394,7 @@ void xglCdControlThread(void)
                     continue;
                 sceCdPause();
                 continue;
+            /* Host and HDD reads move at most one 64 KiB chunk per pass. */
             case CD_SOURCE_HOST:
             case CD_SOURCE_HDD:
                 requested_bytes = CD_READ_CONTROL->remaining_bytes;
@@ -430,6 +439,7 @@ void xglCdControlThread(void)
                 continue;
             }
             break;
+        /* Refill each registered stream. */
         case CD_STATE_STREAM: {
             CdStreamParam **stream_cursor;
             int stream_index;
@@ -455,6 +465,10 @@ static int BCD2INT(unsigned char x)
     return (x >> 4) * 10 + (x & 15);
 }
 
+/*
+ * Fills clock from the drive's BCD clock. The drive is queried again once
+ * every CD_CLOCK_READ_INTERVAL calls.
+ */
 void xglClockRead(XglClock *clock)
 {
     if (ReadClockInterval == 0) {
@@ -496,6 +510,7 @@ unsigned int xglClockDayTime2UInt(XglClock *clock_time)
            + ((year - 1997) >> 2) * CLOCK_SECONDS_PER_DAY);
 }
 
+/* Splits elapsed seconds since 2000-01-01 00:00:00 into clock_time's date and time. */
 void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed)
 {
     XglClock *clock;
@@ -536,6 +551,11 @@ void xglClockUInt2DayTime(XglClock *clock_time, unsigned int elapsed)
     clock->day = days + 1;
 }
 
+/*
+ * Polls the disc. Returns a CD_CHECK_* code while no usable disc is ready, 0
+ * when no disc is present, or the CD_DISC_FLAG_* bits for the archives found
+ * on a PS2 DVD.
+ */
 int xglCdDiskCheck(void)
 {
     unsigned char state;
@@ -619,6 +639,11 @@ CdCompletionCallback *xglCdSetCallback(int callback_address)
     return old_callback;
 }
 
+/*
+ * Walks one archive's directory records looking for path. On a match, fills
+ * entry's file location, stored and size byte counts, and packed flag, and
+ * returns 1.
+ */
 static int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path)
 {
     char name[CD_PATH_MAX];
@@ -704,6 +729,11 @@ static int xglCdGetFilePosSub(CdArchiveEntry *entry, const char *path)
     return 0;
 }
 
+/*
+ * Resolves name to a position on the disc, a host file or an HDD file.
+ * Archive entries are searched first. Returns position, or 0 when the file
+ * cannot be found.
+ */
 static CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *name,
                                        CdCompletionCallback *callback)
 {
@@ -755,6 +785,7 @@ static CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *nam
             }
         }
     } while (0);
+    /* Absolute names are copied as they are; others get the prefix of their source. */
     if (name[0] == '\\') {
         absolute_source = name + 1;
         absolute_destination = buffer;
@@ -806,6 +837,7 @@ static CdFilePosition *xglCdGetFilePos(CdFilePosition *position, const char *nam
         }
     }
     callback(CD_EVENT_LOOKUP, (int)path);
+    /* Fill the position from the archive entry, or from the file itself when no entry matched. */
     switch (position->source) {
     case CD_SOURCE_DISC:
         if (entry != 0) {
@@ -867,6 +899,7 @@ int xglCdGetFileData(const char *path, CdFilePosition *file_position)
     return (xglCdGetFilePos(file_position, path, xglCdDummyCallback) != 0) ? 0 : -1;
 }
 
+/* Returns the size of path in bytes, or -1 when it cannot be found. */
 int xglCdGetFileSize(const char *path)
 {
     CdFilePosition position;
@@ -884,6 +917,12 @@ int xglCdGetFileSize(const char *path)
     return position.size_bytes;
 }
 
+/*
+ * Reads length bytes of name, starting offset bytes into the file, into
+ * buffer. Bit 0 of mode makes the read asynchronous; while another read is
+ * active, asynchronous requests are queued. Returns 0 when queued, a negative
+ * value when the read cannot start, or the file size otherwise.
+ */
 int xglCdReadFilePart(const char *name, void *buffer, int mode,
                       CdCompletionCallback *notify, int offset, int length)
 {
@@ -943,6 +982,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         CD_READ_CONTROL->extract_source = (u8 *)buffer + ((position.size_bytes + CD_SECTOR_BYTES - 1) & -CD_SECTOR_BYTES)
             - CD_READ_CONTROL->extract_byte_count;
     CD_READ_CONTROL->read_poll_mode = position.source;
+    /* Start the transfer on the source the path resolved to. */
     switch (position.source) {
     case CD_SOURCE_DISC:
     retry_cd:
@@ -1007,6 +1047,7 @@ int xglCdReadFilePart(const char *name, void *buffer, int mode,
         CD_READ_CONTROL->active_file_descriptor = -1;
         break;
     }
+    /* Mode bit 1 skips the extract step and leaves the data as read. */
     if ((mode & 2) == 0)
         extract(CD_READ_CONTROL->extract_destination, CD_READ_CONTROL->extract_source,
                 CD_READ_CONTROL->extract_byte_count);
@@ -1020,6 +1061,7 @@ int xglCdReadFile(const char *name, void *buffer, int mode, int flags)
     return xglCdReadFilePart(name, buffer, mode, (CdCompletionCallback *)flags, 0, -1);
 }
 
+/* Cancels the active read and empties the request queue. */
 void xglCdReadCancel(void)
 {
     LW.queue_tail = LW.queue_cursor;
@@ -1057,6 +1099,11 @@ int xglCdSync(void)
     return LW.dispatch_state != CD_STATE_IDLE;
 }
 
+/*
+ * Opens path as the source of stream. Disc streams are started with the
+ * drive's streaming API. The stream is registered in StrList when it has a
+ * ring buffer. Returns 0, or -1 when the path cannot be found.
+ */
 int xglCdStreamOpen(CdStreamParam *stream, const char *path)
 {
     CdFilePosition position;
@@ -1107,14 +1154,19 @@ int xglCdStreamOpen(CdStreamParam *stream, const char *path)
     return 0;
 }
 
+/*
+ * Copies up to bytes of stream data into buffer through the ring. Bytes up to
+ * the next ring_size boundary are zero-filled. Returns the byte count,
+ * including that padding.
+ */
 int xglCdStreamRead(CdStreamParam *stream, unsigned char *buffer, int bytes)
 {
     int bytes_read;
     int remaining;
     int pad;
 
-    /* bytes is a byte count; StreamReadRingCoreSub takes a sector count
-     * (sll ...,0xb at the call site), matching CD_SECTOR_BYTE_SHIFT below. */
+    /* bytes is a byte count; StreamReadRingCoreSub takes a sector count, so
+     * it is divided by CD_SECTOR_BYTES (2^11) here. */
     bytes_read = StreamReadRingCoreSub(stream, buffer, bytes >> 11);
     remaining = stream->remaining - bytes_read;
     if (remaining <= 0) {
@@ -1140,8 +1192,7 @@ static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sector
 {
     /*
      * CD sectors are CD_SECTOR_BYTES bytes; CD_SECTOR_BYTE_SHIFT converts a
-     * sector count to a byte count with a left shift, matching the
-     * original sll ...,0xb.
+     * sector count to a byte count with a left shift.
      */
     enum { CD_SECTOR_BYTE_SHIFT = 11 };
     int read_error;
@@ -1162,6 +1213,11 @@ static int StreamReadRingCoreSub(CdStreamParam *stream, void *buffer, int sector
     return result;
 }
 
+/*
+ * Moves stream data from the source into the ring buffer, up to the wrap
+ * point. When the stream ends inside a sector, the rest of that ring block is
+ * zero-filled.
+ */
 static void StreamReadRingCoreNormal(CdStreamParam *stream)
 {
     /* Sectors to read: [0] up to the first boundary, [1] after the wrap. */
@@ -1195,6 +1251,7 @@ static void StreamReadRingCoreNormal(CdStreamParam *stream)
             available = CD_STREAM_FILE_SECTORS;
             break;
         }
+        /* Clamp the sector counts to what the source can deliver now. */
         if (available < sectors[0]) {
             sectors[0] = available;
             sectors[1] = 0;
@@ -1233,6 +1290,10 @@ static void StreamReadRingCoreNormal(CdStreamParam *stream)
     }
 }
 
+/*
+ * Moves XSS stream data into the main or alternate ring one sector at a time.
+ * Each bit of the source flag bytes selects which ring receives the next sector.
+ */
 static void StreamReadRingCoreXss(CdStreamParam *stream)
 {
     StreamXssBuffer *xss;
@@ -1293,6 +1354,10 @@ void xglCdStreamReadRingCore(CdStreamParam *stream)
         StreamReadRingCoreNormal(stream);
 }
 
+/*
+ * Advances the ring read position by bytes, rounded up to whole sectors, and
+ * refills the ring until the stream ends or the ring is full.
+ */
 int xglCdStreamReadRing(CdStreamParam *stream, int bytes)
 {
     int aligned;
@@ -1326,6 +1391,9 @@ int xglCdStreamRewind(CdStreamParam *stream)
     return 0;
 }
 
+/*
+ * Removes stream from StrList and releases its drive or host resources.
+ */
 int xglCdStreamClose(CdStreamParam *stream)
 {
     CdStreamParam **slot;
@@ -1371,6 +1439,11 @@ void xglCdStreamParamInit(CdStreamParam *param)
     param->ring.buffer = 0;
 }
 
+/*
+ * Reloads the file list for the directory of select from its .filelist file.
+ * Each newline in the file becomes a NUL terminator, so the list holds one
+ * entry per string.
+ */
 static void FileSelectListReload(CdFileSelect *select)
 {
     char path[CD_PATH_MAX];
@@ -1406,6 +1479,11 @@ static void FileSelectListReload(CdFileSelect *select)
     }
 }
 
+/*
+ * Advances the file selector state machine. State 0 loads the list, state 1
+ * builds the prefix for the current path and counts the entries under it, and
+ * state 3 steps back to the parent directory.
+ */
 static void FileSelectSub(CdFileSelect *select)
 {
     char prefix[CD_PATH_MAX];
@@ -1433,6 +1511,7 @@ static void FileSelectSub(CdFileSelect *select)
         select->first_row = 0;
         select->state = 1;
     case 1:
+        /* Build the prefix of the current path, then find the first list entry under it. */
         src = select->path;
         dst = prefix;
         character = *src;
@@ -1528,6 +1607,10 @@ static void FileSelectSub(CdFileSelect *select)
     }
 }
 
+/*
+ * Runs one frame of the file selector: applies pad input to the cursor and
+ * visible rows, and draws the entries. Returns 2 when Cross is pressed.
+ */
 int xglCdFileSelect(CdFileSelect *select)
 {
     int index;
@@ -1562,6 +1645,7 @@ int xglCdFileSelect(CdFileSelect *select)
         select->first_row = select->cursor - select->rows + 2;
     if ((unsigned int)(select->entry_count - select->rows) < (unsigned int)select->first_row)
         select->first_row = select->entry_count - select->rows;
+    /* Circle enters the entry under the cursor, or steps up when the cursor is on the parent row. */
     if (PadData.pressed & PAD_CIRCLE) {
         entry = (unsigned char *)select->list_position;
         if (select->path[0] != 0)
@@ -1638,6 +1722,11 @@ int xglCdFileSelect(CdFileSelect *select)
     return 0;
 }
 
+/*
+ * Loads the IOP module IRX named path from the IOP directory of cdrom0, with
+ * path upper-cased. args is a double-NUL-terminated argument list; NULL passes
+ * no arguments.
+ */
 void xglCdSifLoadModule(const char *path, const char *args)
 {
     char name[CD_PATH_MAX];
@@ -1679,6 +1768,10 @@ void xglCdSifLoadModule(const char *path, const char *args)
     sceSifLoadModule(name, args_length, args);
 }
 
+/*
+ * Loads overlay number overlay (OVnn.OVL) from the disc as an ELF, unless it
+ * is already loaded.
+ */
 void xglCdLoadOverlay(int overlay)
 {
     char exec_data[16];
@@ -1712,6 +1805,11 @@ void xglCdLoadOverlay(int overlay)
     }
 }
 
+/*
+ * Reads from the disc into destination and waits for completion. With
+ * sectors == 0 it reads the first sector at the entry LBN; otherwise it reads
+ * sectors sectors starting after that first sector.
+ */
 static void xglCdArcInitSub0(const int *archive_entry, void *destination, int sectors)
 {
     int lbn;
@@ -1733,6 +1831,11 @@ static void xglCdArcInitSub0(const int *archive_entry, void *destination, int se
         ;
 }
 
+/*
+ * Looks up path on the disc, records its location in archive_entry, and
+ * reads its header sectors into destination. Returns 0 when the file is not
+ * found, otherwise the header sector count plus one.
+ */
 static int xglCdArcInitSub1(CdArchiveEntry *archive_entry,
                             const char *path, unsigned char *destination)
 {
@@ -1746,9 +1849,8 @@ static int xglCdArcInitSub1(CdArchiveEntry *archive_entry,
     archive_entry->lbn = file_position.lbn;
     archive_entry->state = 0;
 
-    /* xglCdArcInitSub0 only reads its `archive_entry` argument's leading
-     * word as an LBN, so the file position's own lbn field (the one
-     * evidenced member of CdFilePosition) is exactly what it needs. */
+    /* xglCdArcInitSub0 reads only the leading word of its argument as an LBN,
+     * so passing the file position's lbn field is enough. */
     xglCdArcInitSub0(&file_position.lbn, destination, 0);
 
     /* Sector 0 of the file is the archive header; its first byte is the
@@ -1804,6 +1906,10 @@ static unsigned char *xglCdArcInitSub2(unsigned char *archive_data)
     return cursor;
 }
 
+/*
+ * Fills ArcHeader from the PFS0 archive header when present, otherwise from
+ * the disc, and advances WorkEnd past the archive data it locates.
+ */
 static void xglCdArcInit(void)
 {
     u8 *work = WorkEnd;
@@ -1863,6 +1969,10 @@ void xglCdArcCheck(void)
     WorkEnd = saved_work_end;
 }
 
+/*
+ * Resets the drive state, copies SYSTEM.CNF into system_cnf, and locates the
+ * archives.
+ */
 void xglCdInitial(void)
 {
     int on_dual;

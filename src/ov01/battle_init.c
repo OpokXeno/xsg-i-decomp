@@ -12,16 +12,15 @@
 #include "main/party.h"
 #include "main/sef.h"
 
-/* Define this before TU-local INCLUDE_ASM output so cc1 emits its storage
- * outside their #APP blocks. */
+/* Defined here so the compiler emits its storage outside the inline asm
+ * blocks of this TU. */
 const char s_battleCtrlBoostEnFormat[32] = "** BOOST EN=%d %d%% (%d)\n";
 
 
 /*
  * The enemy AI's own boost chance percentage: a signed byte at CalcUnitParam
- * +0x20 (`lb` at 0x00a08808 in battleCtrlBoostEn), inside calc.h's
- * unmodeled_1e span; calc.h is owned by a different TU and is not completed
- * here. The boost level both functions log is calc.h's bcValue (+0x3C).
+ * +0x20, inside calc.h's unmodeled_1e span. The boost level both functions
+ * log is calc.h's bcValue (+0x3C).
  */
 #define CALC_PARAM_BOOST_CHANCE_OFF 0x20
 
@@ -57,13 +56,10 @@ typedef struct UnitMotionHead {
 #define WEAPON_HIDDEN_BIT 0x8
 
 /*
- * The camera-event request record camEventExec (defined elsewhere, still
- * INCLUDE_ASM there) consumes: camEventTurnStartSet writes type 6, the
- * acting/target units and, in param, whether the acting unit is an enemy.
- * battleCtrlMan writes type 8 with only unit/target, leaving param at
- * whatever the record already held. Data still asm-owned; the original ELF
- * local symbol is "camEv", not yet in config/symbols/ov01.txt, so the splat
- * placeholder name is kept here.
+ * The camera-event request record camEventExec (defined elsewhere) consumes:
+ * camEventTurnStartSet writes type 6, the acting/target units and, in param,
+ * whether the acting unit is an enemy. battleCtrlMan writes type 8 with only
+ * unit/target, leaving param at whatever the record already held.
  */
 typedef struct CamEvent {
     int type;           /* +0x00 */
@@ -74,9 +70,7 @@ typedef struct CamEvent {
 
 /*
  * One argument: camEventExec reads only $4, and scenarioCam's item branch
- * calls it without loading $5; the former (event, unit) spelling added
- * `lw $5,0x0($16)` before that call (the original's `j camEventExec` at
- * 0x00a0bb10 has no $5 set-up). entry_first_init.c declares it with one
+ * calls it without setting $5. entry_first_init.c declares it with one
  * argument as well.
  */
 extern void camEventExec(CamEvent *event);
@@ -85,14 +79,10 @@ extern void camEventExec(CamEvent *event);
  * The scenario-battle exec record the scenarioBatExecPhase* handlers work on
  * (scenarioBatExecPhase20 passes the same pointer to etehrCVGet and to
  * scenarioMtd, and every unit call there loads its first word). scenarioCam
- * reads the action type (`lw $2,0x4($16)` at 0x00a0baa8, compared with 3),
- * the technique id (`lw $4,0x8($16)` at 0x00a0bab4, passed to dataTecGet;
- * `lw $2,0x8($16)` at 0x00a0bae8) and the item id (`lw $4,0xC($16)` at
- * 0x00a0bad4, passed to dataItmGet). spWepDispOn reads the same type
- * (`lw $2,0x4($16)` at 0x00a0e568, compared with 1), the technique id
- * (`lw $4,0x8($16)` at 0x00a0e578 and 0x00a0e5cc; reloaded at 0x00a0e5d4
- * and compared with 8 and 0xB) and, for a technique action, +0x0C as a
- * weapon slot (`lw $5,0xC($16)` at 0x00a0e5b4 and 0x00a0e66c).
+ * reads the action type (compared with 3), the technique id (passed to
+ * dataTecGet) and the item id (passed to dataItmGet). spWepDispOn reads the
+ * action type (compared with 1), the technique id (compared with 8 and 0xB)
+ * and, for a technique action, +0x0C as a weapon slot.
  */
 typedef struct ScenarioBatExec {
     BattleUnit *unit; /* +0x00 */
@@ -132,7 +122,7 @@ extern void transWepOutDraw(Actor *actor);
  */
 typedef struct KeyWpnData {
     unsigned char unmodeled_00[0x0F];
-    signed char apCost;          /* +0x0F: `lb $3,0xF($2)` at 0x00a0b398 */
+    signed char apCost;          /* +0x0F */
     unsigned char unmodeled_10[0x14 - 0x10];
     short tecId;                 /* +0x14: the command's technique id */
     short tecIdMultiHit;         /* +0x16: keyCmd2tid's technique for commands 3, 5, 10 */
@@ -150,15 +140,12 @@ extern int dataBoxInc(int group, int item);
 extern const char *itemNameGet(int group, int index);
 extern int sefIsHitActor(Actor *actor);
 
-/*
- * The battle AI script identifier (data still asm-owned: the extern keeps
- * its splat name until the owning data TU recovers it, docs/naming.md).
- */
+/* The battle AI script identifier. */
 static int thinkNo;
 
 /*
  * The unit currently executing a battle action / the unit that most
- * recently acted (data still asm-owned; original ELF symbol names).
+ * recently acted.
  */
 static BattleUnit *pLastUnit;
 BattleUnit **tgtUnitAdrGet(void);
@@ -170,7 +157,7 @@ static ManWork manWk;
  * battleCtrl's state (BatCtrl.field00): choose the acting unit's command,
  * pick the next actor from the action stock, or wait until the queued
  * command has run and the battle message is done. Names follow what each
- * case does (guessed from the code, not from a debug string).
+ * case does.
  */
 enum BattleCtrlState {
     BATTLE_CTRL_ACT_SELECT = 1,
@@ -180,7 +167,7 @@ enum BattleCtrlState {
 
 /*
  * battleExec's phase (BatCtrl.field04). Names follow each case's work, and
- * BatCtrl.field08 holds the phase the WAIT phases resume (guessed names).
+ * BatCtrl.field08 holds the phase the WAIT phases resume.
  */
 enum BattlePhase {
     BATTLE_PHASE_EXEC_QUEUE = 1,       /* battleExecNorm: run the next queued command */
@@ -195,8 +182,7 @@ enum BattlePhase {
 };
 
 /*
- * The battle-control record battleExec's phase machine steps through
- * (original ELF symbol name).
+ * The battle-control record battleExec's phase machine steps through.
  */
 typedef struct BatCtrl {
     int field00; /* +0x0: set to 1 by battleInit */
@@ -207,40 +193,20 @@ typedef struct BatCtrl {
 static BatCtrl batCtrl;
 
 /*
- * Scenario-battle phase-dispatch record. scenarioBatInit and every
- * scenarioBatExecPhase* handler (still INCLUDE_ASM here) call
- * scenarioPtrFuncSet to install the next phase's handler and reset its
- * frame counter; only the two words that function writes are evidenced:
- *   +0x10 nextPhase: the phase callback the caller passes in $a0;
- *   +0x14 phaseTimer: zeroed on every phase transition.
- * scenarioBatInit itself also writes +0x00, +0x04, +0x08 and +0x0c, which
- * are not modeled here (data still asm-owned; original ELF symbol name).
- */
-/*
- * scenarioBatNext (0x00a0ba30) evidences three more of this record's
- * words: it adds source->stride into index, clamps index to count once
- * their sum reaches it, and reports whether the clamp fired. +0x08 stays
- * unmodeled (scenarioBatInit writes it, but no claimed function here reads
- * it).
- */
-/*
- * Opaque object ScenarioBatState.source points to; scenarioBatNext is the
- * only reference to it in this TU and touches just the one evidenced word.
+ * Record ScenarioBatState.source points to. scenarioBatNext is the only
+ * reference to it in this TU.
  */
 typedef struct ScenarioStep {
     ScenarioBatExec exec; /* +0x00: the action record scenarioBatExecPhase40 casts this pointer to */
     int stride;           /* +0x10: added into ScenarioBatState.index by scenarioBatNext */
 } ScenarioStep;
 /*
- * Two-parameter spelling of the phase callback: a compiler-specific matching
- * workaround for scenarioBatExec's indirect call, not standards-correct
- * prototyping. That call (`jalr $3` at 0x00a0bc1c) sets $a0 to
- * scenarioSrcGet(0)'s return and $a1 to scenarioDstGet(0)'s record (`daddu
- * $5,$16,$0` at 0x00a0bc08, `daddu $4,$2,$0` at 0x00a0bc10); only this
- * parameter list makes the compiler emit that set-up. scenarioBatExecPhase10
- * reads `source` as the ScenarioBatExec record (`lw $4,0x0($17)` at
- * 0x00a0bee4, `lw $3,0x4($17)` at 0x00a0bef4) and hands `dest` to
- * scenarioCam as its target list (`daddu $5,$18,$0` at 0x00a0bef0).
+ * Two-parameter spelling of the phase callback. It is not standards-correct
+ * prototyping: scenarioBatExec's indirect call sets $a0 to scenarioSrcGet(0)'s
+ * return and $a1 to scenarioDstGet(0)'s record, and only this parameter list
+ * makes the compiler emit that set-up. scenarioBatExecPhase10 reads `source`
+ * as the ScenarioBatExec record and hands `dest` to scenarioCam as its target
+ * list.
  */
 typedef struct ScenarioDstEntry ScenarioDstEntry;
 typedef void (*ScenarioPhaseFunc)(int source, ScenarioDstEntry *dest);
@@ -270,12 +236,20 @@ struct ScenarioDstEntry {
 
 /*
  * The record limit scenarioDstSet and scenarioDstGet both test (`slti 0xD`).
- * scenarioDst itself spans 0x1E0 bytes (0x00a57978..0x00a57b58), twelve
- * records; a thirteenth accepted record would land on scenarioPtr.
+ * scenarioDst itself spans 0x1E0 bytes, twelve records; a thirteenth accepted
+ * record would land on scenarioPtr.
  */
 #define SCENARIO_DST_LIMIT 13
 
 /*
+ * Scenario-battle phase-dispatch and cursor record. scenarioBatInit and every
+ * scenarioBatExecPhase* handler call scenarioPtrFuncSet to install the next
+ * phase's handler and reset its frame counter; that function writes nextPhase
+ * (+0x10, the callback the caller passes in $a0) and zeroes phaseTimer (+0x14)
+ * on every phase transition. scenarioBatNext adds source->stride into index,
+ * clamps index to count once their sum reaches it, and reports whether the
+ * clamp fires.
+ *
  * scenarioBatInit also writes +0x08, the destination buffer scenarioBatInit
  * pairs with source: both are set from the fixed scenarioSrc/scenarioDst
  * arrays.
@@ -404,10 +378,7 @@ void battleCtrl(void);
 void battleExec(void);
 int battleEndChk(void);
 
-/*
- * Set unconditionally at the start of every battleMain tick (data still
- * asm-owned; original ELF symbol name); no other write is evidenced in this TU.
- */
+/* Runs one battle tick: sets batMainFlag, then battleCtrl, battleExec and battleEndChk. */
 void battleMain(void)
 {
     /* Separate load keeps this store in its own register. */
@@ -426,6 +397,7 @@ extern int busyUnitChk(int side);
 extern int battleRetCodeGet(void);
 void objCurRemove(void);
 
+/* Plays the end-of-battle message for the battle result and tears down the battle display. */
 int battleAfter(void)
 {
   int rv;
@@ -441,6 +413,7 @@ int battleAfter(void)
   if ((ev && ev) && ev)
   {
   }
+  /* Win: the first call queues the win event; later calls wait for input or busy units. */
   if (ret == BATTLE_RESULT_WIN)
   {
     if (batMainFlag == ret)
@@ -538,15 +511,13 @@ void camEventTurnStartSet(void);
 int thinkExecChk(void);
 int battleMsgEndChk(void);
 /*
- * The action-stock record (0x24 bytes, the span the published `int *` of
- * actStockGet indexes). actStockRemove compares the unit against the boost
- * slots (`lw $3,0x10($7)` at 0x00a085a8, `lw $2,0x14($7)` at 0x00a085c0) and
- * the first `count` (`lw $2,0x18($7)` at 0x00a085c8) stock words from +0x00.
- * The actor words are pointers: only with pointer-typed loads does the
- * scheduler hoist the +0x10 load above the `*index = -1` int store, as the
- * original does (`sw` in the first `bne` delay slot, 0x00a085b4).
- * calc.c (CalcActStock, src/ov01/calc.h) and menu.c (actStockGet()[4]/[5])
- * read the same storage through views of their own.
+ * The action-stock record (0x24 bytes, the span actStockGet indexes).
+ * actStockRemove compares the unit against the boost slots and the first
+ * `max` (+0x18) stock words from +0x00. The actor words are pointers: only
+ * with pointer-typed loads does the scheduler hoist the +0x10 load above the
+ * `*index = -1` int store, as the original does. calc.c (CalcActStock,
+ * src/ov01/calc.h) and menu.c (actStockGet()[4]/[5]) read the same storage
+ * through views of their own.
  */
 typedef struct ActStock {
     BattleUnit *stock[4]; /* +0x00 */
@@ -558,6 +529,10 @@ typedef struct ActStock {
 } ActStock;
 static ActStock actStock;
 
+/*
+ * One battle-control tick: runs the help toggle, then steps batCtrl.field00
+ * (choose a command, pick the next actor or wait for the queued command).
+ */
 void battleCtrl(void)
 {
     BatCtrl *bc;
@@ -597,6 +572,7 @@ void battleCtrl(void)
         }
         break;
     normal:
+        /* Normal turn: the AI think routine (flag 0x20) or the player command menu picks the command. */
         if (pActUnit->work->flags & 0x20) {
             ret = ((int (*)(BattleUnit *, int *))battleCtrlThink)(pActUnit, &thinkWk);
         } else {
@@ -659,6 +635,10 @@ typedef struct ConfTgt {
 } ConfTgt;
 static ConfTgt atkTbl_0[48];
 
+/*
+ * Confused unit's turn: queues an attack on a random living unit that one of
+ * its weapons or techniques can reach, then the end-of-turn command. Returns 0.
+ */
 int battleCtrlConfusion(BattleUnit *unit)
 {
     int cmd[8];
@@ -733,6 +713,7 @@ static MsgText msgWork;
 extern const MsgText battleInitUnableToMoveMsg;
 void battleMsg(int msgId);
 
+/* Shows the unable-to-move message and queues an end-of-turn command for the unit. */
 int battleCtrlJunk(BattleUnit *unit)
 {
     int cmd[8];
@@ -946,19 +927,15 @@ int actStockRemove(BattleUnit *unit, int *index)
 }
 
 /*
- * The action-stock record actStockInit/actStockMake/actStockPick (still
- * INCLUDE_ASM here) and actStockRemove work on; menu.c and calc.c declare
- * this as returning `int *`, so that published type is kept.
+ * Returns the action-stock array. calc.c and menu.c read the same storage
+ * through their own declarations.
  */
 BattleUnit **actStockGet(void)
 {
     return actStock.stock;
 }
 
-/*
- * The battle help page index, cycled 0..2 (data still asm-owned, splat
- * name kept).
- */
+/* Number of battle help pages; battleCtrlHelp cycles helpFlag through them. */
 #define BATTLE_HELP_PAGE_COUNT 3
 
 int battleCtrlHelp(void)
@@ -975,12 +952,17 @@ int battleCtrlHelpGet(void)
 extern int unitTblGet(int side, BattleUnit ***table);
 extern int calcBoostChk(BattleUnit *unit, int mode);
 
-/* "** BOOST PL=%d (%d)\n" (data still asm-owned; original ELF symbol name). */
+/* Text: "** BOOST PL=%d (%d)\n" */
 extern const char battleInitBOOSTPLText[];
 
 extern int dataPadRead(int padNo);
 extern void menuBoostDisp(int enabled);
 
+/*
+ * Player boost: while R1 or R2 is held, shows the boost menu; a face button
+ * (square, triangle or circle) picks a unit whose boost check passes and boosts
+ * it. Returns 1 when a boost was applied, 0 otherwise.
+ */
 int battleCtrlBoostPl(void)
 {
     BattleUnit **table;
@@ -1016,6 +998,11 @@ int battleCtrlBoostPl(void)
 
 extern int rnd(int max);
 
+/*
+ * Enemy AI boost pass: boosts the first unit on side 1 whose boost check passes
+ * and whose random roll falls under its boost chance. Returns 1 when a unit was
+ * boosted, 0 otherwise.
+ */
 int battleCtrlBoostEn(void)
 {
     BattleUnit **table;
@@ -1039,8 +1026,8 @@ int battleCtrlBoostEn(void)
 }
 
 /*
- * The ether record dataEthGet returns (src/ov01/data_unit_org_get.c, still
- * asm there), as far as convKey2unit reads it: the technique id at +6.
+ * The ether record dataEthGet returns (src/ov01/data_unit_org_get.c), as far as
+ * convKey2unit reads it: the technique id at +6.
  */
 typedef struct EtherView {
     unsigned char unmodeled_00[6];
@@ -1051,39 +1038,34 @@ extern EtherView *dataEthGet(int etherId);
 /*
  * dataTecGet's return, as far as this TU reads it: a byte at +0x00 whose
  * bit 0x10 selects between the selector-0x2C and selector-0xF commands in
- * syoukan1Sub and ends scenarioCam (`andi $3,$3,0x10` at 0x00a0bb40), and
- * whose low two bits are scenarioCam's range class (`andi $3,$3,0x3` at
- * 0x00a0bb58); +0x11 is the signed byte data_unit_org_get.c's TecRecord
- * names `kind` (`lb $3,0x11($2)` at 0x00a0bb20). data_unit_org_get.c,
- * dataTecGet's own TU, owns the layout.
+ * syoukan1Sub and ends scenarioCam, and whose low two bits are scenarioCam's
+ * range class; +0x11 is the signed byte data_unit_org_get.c's TecRecord names
+ * `kind`. data_unit_org_get.c, dataTecGet's own TU, owns the layout.
  */
 typedef struct TecFlagView {
     unsigned char flags;                      /* +0x00 */
     unsigned char unmodeled_01[0x02 - 0x01];
     u16 procFlags; /* +0x02: with bit 0x20 (TEC_PROC_FLOW_SPEC) set,
-                    * scenarioSrcEndChk returns the caller's result (`lhu
-                    * $3,0x2($2)`/`andi $3,$3,0x20` at 0x00a0ea54); calc.c's
+                    * scenarioSrcEndChk returns the caller's result; calc.c's
                     * TecKindView names the same u16 flags */
     unsigned char unmodeled_04[0x11 - 0x04];
     signed char kind;                         /* +0x11 */
     unsigned char unmodeled_12[0x16 - 0x12];
-    short effectNo; /* +0x16: scenarioBatExecPhase50 waits on this effect
-                     * (`lh $4,0x16($2)` at 0x00a0cb8c into sefIsFinishEffect) */
+    short effectNo; /* +0x16: scenarioBatExecPhase50 waits on this effect,
+                     * passed to sefIsFinishEffect */
 } TecFlagView;
 
 extern TecFlagView *dataTecGet(int tecId);
 
 /*
  * dataItmGet's return as far as scenarioCam reads it: the item's
- * target-selection flags byte (`lbu $3,0x8($2)` at 0x00a0bae0); calc.c's
- * ItmTrgView names the same member.
+ * target-selection flags byte; calc.c's ItmTrgView names the same member.
  */
 typedef struct ItmTrgView {
     unsigned char unmodeled_00[0x08];
     u8 trgFlags; /* +0x08 */
     unsigned char unmodeled_09[0x10 - 0x09];
-    short effectNo; /* +0x10: the item's effect (`lh $4,0x10($2)` at
-                     * 0x00a0cb98 into sefIsFinishEffect) */
+    short effectNo; /* +0x10: the item's effect, passed to sefIsFinishEffect */
 } ItmTrgView;
 
 extern ItmTrgView *dataItmGet(int itmId);
@@ -1091,9 +1073,8 @@ extern ItmTrgView *dataItmGet(int itmId);
 extern void camEventExec(CamEvent *event);
 /*
  * The unit's actor record read from ObjectTask.work as an int-sized word,
- * menu.c's menuStockWorkGet idiom: unitCmdListSet reloads the slot after
- * the int store that sets bit 0x100 (`lw $4,0x10($16)` at 0x00a098a8 after
- * `sw $2,0x0($3)`); read as the pointer, gcc keeps the first load.
+ * menu.c's menuStockWorkGet idiom: unitCmdListSet reloads the slot after the
+ * int store that sets bit 0x100; read as the pointer, gcc keeps the first load.
  */
 static __inline__ Actor *unitActorGet(ObjectTask *task)
 {
@@ -1105,27 +1086,26 @@ static __inline__ Actor *unitActorGet(ObjectTask *task)
  * and the value keyCmdApGet/keyCmdChk take. convKey2unit decodes 0..19 as
  * weapon slots (ATK through keyCmd2wno), 20..25 as the command kinds below
  * and 26 as END. The names follow those decodes and the manInput states that
- * produce them; KEY_CMD_ATTACK and KEY_CMD_ITEM_WIDE and KEY_CMD_CANCEL are
- * guesses from the same states (no debug string names them).
+ * produce them; no debug string names them.
  */
 enum BattleKeyCommand {
     KEY_CMD_NONE = 0,
     KEY_CMD_WEAPON_LIMIT = 20,     /* ids below this are weapon slots */
-    KEY_CMD_ATTACK = 0x13,         /* guessed: the battle menu's attack entry */
+    KEY_CMD_ATTACK = 0x13,         /* the battle menu's attack entry */
     KEY_CMD_ETHER = 0x14,
     KEY_CMD_ITEM = 0x15,
     KEY_CMD_GUARD = 0x16,
     KEY_CMD_AGWS = 0x17,
     KEY_CMD_MOVE = 0x18,
-    KEY_CMD_ITEM_WIDE = 0x19,      /* guessed: item on the wide target (two box uses) */
+    KEY_CMD_ITEM_WIDE = 0x19,      /* item on the wide target (two box uses) */
     KEY_CMD_END = 0x1A,
-    KEY_CMD_CANCEL = 0x1B          /* guessed: no command this frame (also tested as 0) */
+    KEY_CMD_CANCEL = 0x1B          /* no command this frame (also tested as 0) */
 };
 
 /*
  * ManWork.tgtSelect, the input state manInput switches on. Names follow what
  * each state does; the battle-menu entries map menuResultBat's results 1..6
- * to ETH, ITEM, GUARD, AGWS, MOVE and ATTACK targeting. Guessed names.
+ * to ETH, ITEM, GUARD, AGWS, MOVE and ATTACK targeting.
  */
 enum ManSelectState {
     MAN_SELECT_ROOT = 0,           /* no menu: CROSS opens the battle menu, a key picks a command */
@@ -1177,6 +1157,11 @@ void tgtUnitSet(BattleUnit *unit);
 int convKey2unit(BattleUnit *unit, int *command, int *input, int target);
 void keyBuffClear(void);
 
+/*
+ * Player command input for one unit: runs manInput for the menu state and,
+ * when a key command is chosen, queues it on the unit and charges its AP.
+ * Returns 0 when the turn ends with the END command, 1 otherwise.
+ */
 int battleCtrlMan(BattleUnit *unit, int *inp)
 {
   int bit;
@@ -1230,6 +1215,11 @@ int battleCtrlMan(BattleUnit *unit, int *inp)
   return 1;
 }
 
+/*
+ * Input state machine for one unit's command: steps work->tgtSelect through the
+ * key, battle, ether, item, target and position menus. Stores the chosen key in
+ * work->field04 and returns the AP the command costs.
+ */
 int manInput(BattleUnit *unit, ManWork *work)
 {
   int pad;
@@ -1252,6 +1242,7 @@ int manInput(BattleUnit *unit, ManWork *work)
   {
     work->controlPhase = work->field04;
   }
+  /* One case per ManWork.tgtSelect state (see enum ManSelectState). */
   switch (work->tgtSelect)
   {
   case MAN_SELECT_ROOT:
@@ -1604,10 +1595,9 @@ void camEventTurnStartSet(void)
 }
 
 /*
- * The two command-list buffers cmdListSet/cmdListChange/unitCmdListSet/
- * cmdListCansel (still INCLUDE_ASM here) operate on (data still asm-owned,
- * original ELF symbol names); cmdListPtrGet is the only place both addresses are
- * taken together.
+ * The two command-list buffers (fifoCmd and cmdList) that cmdListSet,
+ * cmdListChange, unitCmdListSet and cmdListCansel operate on. cmdListPtrGet is
+ * the only place both addresses are taken together.
  */
 /*
  * The command-list record (0x14 bytes: five words) and its queue entry
@@ -1748,7 +1738,7 @@ int convKey2unit(BattleUnit *unit, int *command, int *input, int target)
 }
 
 
-/* Queues one 0x14-byte command record on the unit (still asm here). */
+/* Queues one 0x14-byte command record on the unit (defined below). */
 void cmdListSet(BattleUnit *unit, int *command);
 
 
@@ -1860,6 +1850,10 @@ extern int battleExecDead(void);
 extern void sndInit2(void);
 extern int battleExecNorm(void);
 
+/*
+ * Steps the batCtrl.field04 phase machine: runs queued commands, scenario
+ * batches, the status and death passes and the waits on busy units.
+ */
 void battleExec(void)
 {
     CmdEntry cmd;
@@ -1896,6 +1890,7 @@ void battleExec(void)
             }
         }
         break;
+    /* Status and death handling after a command: stat1Proc, the dead-unit pass, then stat2Proc. */
     case BATTLE_PHASE_STAT_PROC_1:
         sndInit2();
         if (stat1Proc(&statUnit) != 0)
@@ -1955,6 +1950,10 @@ extern int unitMotGet(BattleUnit *unit);
 extern void thinkTurnEndExec(BattleUnit *unit);
 extern void calcTurnEnd(BattleUnit *unit);
 
+/*
+ * Dispatches the command at the head of the command queue to its unit and pops
+ * it. Returns 0 when the queue is empty or the unit is still moving, else 1.
+ */
 int battleExecNorm(void)
 {
     CmdFifo *fifo;
@@ -2025,6 +2024,11 @@ extern int menuTimeGet(void);
 extern int menuTimeXGet(void);
 extern void menuCritDispOn(int mode);
 
+/*
+ * Handles the units that died this turn: removes them from the action stock,
+ * runs their death effect and camera event, and updates the enemy gain and
+ * database records. Returns 1 when any unit died, 0 otherwise.
+ */
 int battleExecDead(void)
 {
   BattleUnit **table;
@@ -2139,6 +2143,11 @@ extern const char battleInitStatDmgSAFEText[];
  * by the unit-damage path below; calc.h's unmodeled_14e span covers it. */
 #define CALC_PARAM_SPEC_PTR_OFF 0x150
 
+/*
+ * Applies one unit's status-driven HP and EP changes for the stat record's
+ * command number, queues the matching command and records the damage. Returns 1
+ * when the unit's HP, EP or form changed, 0 otherwise.
+ */
 int stat1Proc(StatUnit *stat)
 {
     BattleUnit *unit = stat->unit;
@@ -2210,6 +2219,7 @@ int stat1Proc(StatUnit *stat)
                 calcStatReset(unit, 5, 0x7FFF, 0);
             }
         }
+        /* A nonzero HP change is queued as one damage or recovery command. */
         if (hp != 0)
         {
             unitCmdClear(unit);
@@ -2265,6 +2275,7 @@ int stat1Proc(StatUnit *stat)
             rec.dmg = ep;
             dmgValPut(0, &rec.unit);
         }
+        /* Motion 20 or 21 without its status flag queues a unit change. */
         if ((((UnitMotionHead *)unit->actor)->motionId == 20 && calcStatGet(unit, 7, 2) == 0)
             || (((UnitMotionHead *)unit->actor)->motionId == 21 && calcStatGet(unit, 7, 1) == 0))
         {
@@ -2296,6 +2307,10 @@ extern const char battleInitItemChangeText[];
 extern const char battleInitChangedToText[];
 extern const char battleInitJpText2[];
 
+/*
+ * Second status pass over the side-2 units: applies the pending HP changes and
+ * the item-change steps. Returns 1 when any unit took an HP change, 0 otherwise.
+ */
 int stat2Proc(void)
 {
   CmdEntry cmd;
@@ -2429,8 +2444,8 @@ int stat2Proc(void)
 }
 
 /*
- * sndSysSePlay is defined by ov01/tu013 snd.c (still asm); other TUs already
- * redeclare it the same way to call it from a different TU.
+ * sndSysSePlay is defined by ov01/tu013 snd.c; other TUs already redeclare it
+ * the same way to call it from a different TU.
  */
 extern int sndSysSePlay(int soundId);
 
@@ -2439,16 +2454,15 @@ extern int calcTuigekiChk(BattleUnit *unit);
 void keyBuffClear(void);
 int keyBuffSet(BattleUnit *unit, unsigned short key);
 int keyBuffChk(BattleUnit *unit, int *apCost);
-/* Still asm here: nonzero when command cannot be used on target (1 with
- * the refusal sound). */
+/* Nonzero when the command cannot be used on the target; 1 also plays the refusal sound. */
 extern int keyCmdChk(BattleUnit *unit, BattleUnit *target, int command);
 
 /*
- * One frame of command-key input for unit: 0x1A when it cannot act (too
- * few action points by dblActKind, or a pursuit it cannot follow) or key
- * 0x40 cancels, 0 while pad bits 0xA are held or nothing new is pressed,
- * 0x1B while the buffered keys
- * form no usable command (the rejected key is dropped again), else the
+ * One frame of command-key input for unit. Returns 0x1A (KEY_CMD_END) when the
+ * unit cannot act (too few action points by dblActKind, or a pursuit it cannot
+ * follow) or when cross is pressed. Returns 0 while R1 or R2 is held or when no
+ * new key is pressed. Returns 0x1B (KEY_CMD_CANCEL) when the buffered keys form
+ * no usable command; the rejected key is dropped again. Otherwise returns the
  * command keyBuffChk matched.
  */
 int keyCmdGet(BattleUnit *unit)
@@ -2508,12 +2522,10 @@ int keyCmdGet(BattleUnit *unit)
 }
 
 /*
- * One entry of the sentinel-terminated (null sequence) key-command tables
- * keyBuffChk walks in 0xC-byte steps (`addiu $16,$16,0xC` at 0x00a0b3b8):
- * sequence[0] is the key count (`lhu $6,0x0($4)` at 0x00a0b2ec, compared
- * with keyBuffIdx), the keys follow; apCost (+0x4) is stored for a
- * character, command (+0x8) is returned. Data still asm-owned; original
- * ELF symbol names.
+ * One entry of the sentinel-terminated (null sequence) key-command tables that
+ * keyBuffChk walks in 0xC-byte steps. The sequence's first halfword is the key
+ * count (compared with keyBuffIdx) and the keys follow; apCost (+0x4) is stored
+ * for a character, command (+0x8) is returned.
  */
 typedef struct KeyCmd {
     const unsigned short *sequence; /* +0x0 */
@@ -2522,9 +2534,6 @@ typedef struct KeyCmd {
 } KeyCmd;
 static KeyCmd keyCmdTblCha[16];
 static KeyCmd keyCmdTblAgws[13];
-
-/* The weapon slot a key command selects for a unit (-1: none); still
- * asm here, menu.c declares it the same way. */
 
 /*
  * Halfword tables in the unit's CalcUnitParam block that keyCmd2tid indexes
@@ -2790,10 +2799,7 @@ int keyCmd2wno(BattleUnit *unit, int key)
     return slot;
 }
 
-/*
- * Buffered battle-input queue (data still asm-owned; original ELF symbol names):
- * keyBuffIdx is the current insertion index into the keyBuff queue.
- */
+/* Clears the buffered command-key queue keyBuff and its insertion index keyBuffIdx. */
 void keyBuffClear(void)
 {
     memset(keyBuff, 0, sizeof(keyBuff));
@@ -2806,14 +2812,14 @@ int keyBuffIdxGet(void)
 }
 
 /*
- * Sentinel-terminated (0) command-key tables, one per calcUPGet() flags bit
- * 0x40 (the enemy-side bit objEnCurCreate/objCurDraw already read): data
- * still asm-owned, original ELF symbol names.
+ * Sentinel-terminated (0) key tables for keyBuffSet, one per calcUPGet() flags
+ * bit 0x40 (CALC_UNIT_FLAG_IS_AGWS): the first serves units with the bit set,
+ * the second the others.
  */
 static unsigned short keyItemTblAgws[4];
 static unsigned short keyItemTblCha[4];
 
-/* "** keyBuffSet: buff full\n"-style diagnostic; data still asm-owned. */
+/* Error text printed by keyBuffSet when the key buffer is full. */
 extern const char battleInitKeyBuffSetErrorText[];
 
 /*
@@ -2977,8 +2983,6 @@ int actUnitTblMake(int side, BattleUnit **actUnits)
     return made;
 }
 
-/* Defined by ov01/tu004 (src/ov01/calc.c). */
-
 BattleUnit *tgtUnitPick(BattleUnit **table, int count)
 {
     if (count > 0) {
@@ -3033,10 +3037,7 @@ int battleEndChk(void)
     return 1;
 }
 
-/*
- * The battle result code consumed by phase transitions and shutdown
- * processing (data still asm-owned; original ELF symbol name).
- */
+/* Returns the battle result code (batRetCode) that battleEndChk stores. */
 int battleRetCodeGet(void)
 {
     return batRetCode;
@@ -3058,8 +3059,7 @@ void thinkNoSet(int no)
 }
 
 /*
- * plTbl (data still asm-owned; original ELF symbol name): three 8-byte
- * entries. plUnitTblGet and plUnitTblSet write only the first two fields of
+ * plTbl: three 8-byte entries. plUnitTblGet and plUnitTblSet write only the first two fields of
  * each; nothing in this TU's C touches the remaining four bytes.
  */
 typedef struct PlUnitEntry {
@@ -3085,11 +3085,10 @@ PlUnitEntry *plUnitTblGet(void) {
     return plTbl;
 }
 
-/* Assign a party member and its attack position to slot `index`, both in the
- * party record (attack_slots at +0x30, so index*4 + 0x30 is added before the
- * record base: `addiu $4,$4,0x30` at 0x00a0b6b8, `addu $2,$2,$4` at
- * 0x00a0b6c0; partyId is stored first, `sb` at 0x00a0b6cc ahead of the `sh`)
- * and in plTbl. */
+/*
+ * Assigns a party member and its attack position to slot `index`, both in the
+ * party record's attack_slots and in plTbl.
+ */
 void plUnitTblSet(int index, int partyId, int attackPosition)
 {
     PartyDataPrefix *party;
@@ -3102,11 +3101,10 @@ void plUnitTblSet(int index, int partyId, int attackPosition)
 }
 
 /*
- * GameLoopState (config/symbols/main.txt, data still asm-owned) is a
- * 0x2A030-byte record several TUs each model only where they touch it (for
- * example src/main/script.h's GameLoopState+0x29F40 event byte); the active
- * monster-set number monsSetNoGet/monsSetNoSet share lives at +0x29F90 as a
- * signed halfword. The rest of the record is not recovered here.
+ * GameLoopState is a 0x2A030-byte record that several TUs each model only where
+ * they touch it (for example src/main/script.h's event byte at +0x29F40). The
+ * active monster-set number, read by monsSetNoGet and monsSetNoSet, is a signed
+ * halfword at +0x29F90. The rest of the record is not recovered here.
  */
 typedef struct GameLoopMonsSetView {
     unsigned char unmodeled_00[0x29F90];
@@ -3126,10 +3124,9 @@ void monsSetNoSet(int monsSetNo)
 
 /*
  * GameLoopState also carries the current map number at +0x29F92, directly
- * after the monster-set number above; the published GameLoopMonsSetView
- * cannot be extended to reach it, so this TU models it through its own
- * prefix view of the same object; the rest of the record is not recovered
- * here.
+ * after the monster-set number above. GameLoopMonsSetView ends at that
+ * monster-set number, so this TU models the map number through its own prefix
+ * view of the same object.
  */
 typedef struct GameLoopMapNoPrefix {
     unsigned char unmodeled_00[0x29F92];
@@ -3149,12 +3146,10 @@ void mapNoSet(int mapNo)
 }
 
 /*
- * GameLoopState also carries the encounter/event configuration bytes at
- * +0x29F96 and +0x29F97 (lbu/sb against 0x00362616/0x00362617, base
- * 0x338680 + 0x29F96/+0x29F97, the same base the monster-set view above
- * uses). The published GameLoopMonsSetView above cannot be extended to
- * reach these bytes, so this TU models them through their own prefix view
- * of the same object; the rest of the record is not recovered here.
+ * GameLoopState also carries the encounter and event configuration bytes at
+ * +0x29F96 and +0x29F97. GameLoopMonsSetView ends at the monster-set number, so
+ * this TU models these bytes through its own prefix view of the same object.
+ * The rest of the record is not recovered here.
  */
 typedef struct GameLoopCfConfigPrefix {
     unsigned char unmodeled_00[0x29F96];
@@ -3281,10 +3276,7 @@ int scenarioDstSet(const ScenarioDstEntry *entry)
     return 1;
 }
 
-/*
- * The scenario source index (data still asm-owned, splat name kept); a
- * different object from the ScenarioBatState record above.
- */
+/* Returns scenarioPtr.source as an int; scenarioBatExec passes it to the phase callback. */
 int scenarioSrcGet(int unused)
 {
     return (int)scenarioPtr.source;
@@ -3301,6 +3293,7 @@ ScenarioDstEntry *scenarioDstGet(int offset)
     return &scenarioPtr.dest[index];
 }
 
+/* Advances the source index by its record's stride, clamped to count; returns 1 once clamped. */
 int scenarioBatNext(void)
 {
     int index;
@@ -3320,8 +3313,7 @@ int scenarioBatNext(void)
  * event 0x14 with the item's target-selection flags (bit 0x10 added when
  * tecId is set); techniques of kind 2 or 6, or with flag bit 0x10, get
  * none, the rest use event 2 or 3 by their range class. The CalcUnitParam
- * bit tested first (`lhu $3,0x1C($2)`/`andi $3,$3,0x40` at
- * 0x00a0ba98..0x00a0ba9c) is CALC_UNIT_FLAG_IS_AGWS (include/ov01/calc.h).
+ * bit tested first is CALC_UNIT_FLAG_IS_AGWS (include/ov01/calc.h).
  */
 void scenarioCam(ScenarioBatExec *exec, BattleUnit **targets)
 {
@@ -3549,6 +3541,11 @@ extern void dataUnitFileLoadMotSp(BattleUnit *unit, int tecId, int animGroup);
 extern void dataFileLoadWepSp(int unit, int tecId);
 extern void scenarioBatExecPhase25(int source, ScenarioDstEntry *dest);
 
+/*
+ * Second phase of a scenario action: sets the motion, face and sound cues for
+ * the action type and waits for the data load, then hands over to
+ * scenarioBatExecPhase25. Type 1 is a technique, type 3 an item.
+ */
 void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest) {
     ScenarioBatExec *arg0 = (ScenarioBatExec *)source;
     int *ap = (int *)dest;
@@ -3559,8 +3556,8 @@ void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest) {
     int temp_4_2;
 
     int state = arg0->type;
+    /* Type 2: start the motion and wind, wait for the data, then end the wind. */
     if (state == 2) {
-        /* phase 2 */
         switch (scenarioPtr.phaseTimer) {
         case 0:
             unitMotSet(arg0->unit, 0x1F);
@@ -3595,6 +3592,7 @@ void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest) {
             return;
         }
     }
+    /* Type 3: play the transition sound once the data is loaded. */
     if (state == 3) {
         switch (scenarioPtr.phaseTimer) {
         case 0:
@@ -3611,6 +3609,7 @@ void scenarioBatExecPhase20(int source, ScenarioDstEntry *dest) {
         }
         return;
     }
+    /* Type 1 (technique): load the technique's motion and weapon files, then its sound effects. */
     if (state == 1) {
         switch (scenarioPtr.phaseTimer) {
         case 0:
@@ -3691,6 +3690,11 @@ static int loadNum[1];
 static const char *mvFname[5];
 void scenarioBatExecPhase30(int source, ScenarioDstEntry *dest);
 
+/*
+ * Scenario phase for the movie actions (types 0x38, 0x235 and 0x239): hides the
+ * map and units, plays the movie, reloads the map and shows it again, then
+ * hands over to scenarioBatExecPhase30. Other actions go straight there.
+ */
 void scenarioBatExecPhase25(int source, ScenarioDstEntry *dest) {
     int type = *(int *)((char *)source + 0x8);
     if (type == 0x38 || type == 0x235 || type == 0x239) {
@@ -3749,6 +3753,12 @@ extern const char battleInitMotPackMotActText[];
 extern int scenarioEffCall(ScenarioBatExec *arg0p, u8 *arg1p);
 void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest);
 
+/*
+ * Third phase of a scenario action: sets the actor's motion and weapon motion
+ * for the action type (type 1 is a technique), plays the action sound, runs
+ * scenarioEffCall on each destination record, then hands over to
+ * scenarioBatExecPhase40.
+ */
 void scenarioBatExecPhase30(int source, ScenarioDstEntry *dest) {
     ScenarioBatExec *arg0 = (ScenarioBatExec *)source;
     s16 temp_20;
@@ -3828,8 +3838,7 @@ void scenarioBatExecPhase30(int source, ScenarioDstEntry *dest) {
 }
 
 #define TEC_PROC_FLOW_SPEC 0x20
-/* Actor.moveFlags bit 0x1000 (`andi $2,$2,0x1000` at 0x00a0eab0 and
- * 0x00a0eae0): set, the unit is still held in its action motion. */
+/* Actor.moveFlags bit 0x1000: set while the unit is still held in its action motion. */
 #define ACTOR_MOTION_HOLD_BIT 0x1000
 
 int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done);
@@ -3838,30 +3847,24 @@ int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done);
  * first (the extra argument registers are passed through unchanged). */
 void scenarioBatExecMain();
 void scenarioBatExecPhase50(int source, ScenarioDstEntry *dest);
-/* The special-flow technique handlers (both still asm here): nonzero once
- * the flow is done. */
+/* The special-flow technique handlers: nonzero once the flow is done. */
 int flowSpecProcInit(ScenarioBatExec *exec, ScenarioDstEntry *dest);
 int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest);
-/*
- * Defined by ov01/tu004 calc.c (still asm there); takes the unit: the call
- * at 0x00a0c9c8 reuses the `lw $4,0x0($16)` of 0x00a0c9b0 (the preceding
- * bnel's delay slot runs only on the taken path).
- */
+/* Defined by ov01/tu004 calc.c; takes the unit. */
 extern int calcHitMotChk(BattleUnit *unit);
-/* Defined by ov01/tu005 data_unit_org_get.c (still asm there). */
+/* Defined by ov01/tu005 data_unit_org_get.c. */
 extern void dataFileLoadWepSpEnd(BattleUnit *unit, int tecId);
 /*
- * Four-argument call: the original loads the target, the action type and
- * the technique id into $5..$7 (0x00a0cb14..0x00a0cb24) around
- * `jal unitCmdAtkEnd`; unit_cmd.c's definition reads only the unit.
+ * Four-argument call: the target, the action type and the technique id are
+ * passed in $5..$7; unit_cmd.c's definition reads only the unit.
  */
 extern void unitCmdAtkEnd(BattleUnit *unit, BattleUnit *target, int type, int tecId);
 
 /*
  * Install the next phase handler and run it within the same frame. The
  * do { } while (0) keeps the handler a plain call: the original returns
- * through its own epilogue after `jal scenarioBatExecPhase50` (0x00a0cb38)
- * instead of jumping to it.
+ * through its own epilogue after `jal scenarioBatExecPhase50` instead of
+ * jumping to it.
  */
 #define SCENARIO_PHASE_ENTER(phase) \
     do { \
@@ -3916,9 +3919,8 @@ void scenarioBatExecPhase40(int source, ScenarioDstEntry *dest)
                     }
                     target = dest->unit;
                 } else {
-                    /* Read at the end of each branch: `lw $5,0x0($19)` sits in
-                     * both predecessors of the call's block (0x00a0cac8,
-                     * 0x00a0cb14). */
+                    /* dest->unit is read at the end of each branch, which keeps the
+                     * load in both predecessors of the call's block. */
                     int i;
 
                     for (i = 0; i < 3; i++) {
@@ -3970,6 +3972,10 @@ extern void sefHitEffect(void);
 extern void menuCritDispOn(int mode);
 extern int scenarioBatExecDst(int *arg0, int *arg1);
 
+/*
+ * Applies the action's hits to each destination record: plays the hit sound,
+ * runs the damage record and sets bit 0x4000 on the target's work word.
+ */
 void scenarioBatExecMain(ScenarioStep *rec, int arg1, int arg2)
 {
     int *rw = (int *)rec;
@@ -4024,10 +4030,7 @@ dmg:
     }
 }
 
-/*
- * The stolen-item state nusumeSet/nusumeGet share (data still asm-owned;
- * original ELF symbol name).
- */
+/* The stolen-item state that nusumeSet and nusumeGet share. */
 static int nusumuFlag;
 
 void nusumeSet(int value)
@@ -4046,6 +4049,11 @@ extern void specAnalyzeProc(BattleUnit *unit);
 extern void specEscapeProc(void);
 extern int specNusumuProc(void *exec, BattleUnit **dest);
 
+/*
+ * Starts the special-flow technique exec->tecId on the target: runs its one-time
+ * effect (analysis, escape, calcBc, status resets or the nusume check). Always
+ * returns 0.
+ */
 int flowSpecProcInit(ScenarioBatExec *exec, ScenarioDstEntry *dest)
 {
     jtypeIdx = 0;
@@ -4105,6 +4113,10 @@ int specHensinProc(void *arg0, int arg1, unsigned int *arg2);
 void specInoriProc(void);
 int specNusumuProc(void *arg0, BattleUnit **arg1);
 
+/*
+ * Per-frame step of the special-flow technique exec->tecId: waits for its
+ * effect, summon or battle message. Returns nonzero once the flow is done.
+ */
 int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest)
 {
     int summonId;
@@ -4189,16 +4201,8 @@ int flowSpecProc(ScenarioBatExec *exec, ScenarioDstEntry *dest)
 }
 
 /*
- * The queued-command record unitCmdSet writes (src/ov01/unit_cmd.c, still
- * asm there); src/ov01/calc.c restates the same layout as CalcCmdEntry for
- * its own call into unitCmdSet, defined in that TU.
- */
-
-
-/*
- * syoukanFadeOut clears and re-queues (selector 0x30) every live side-0
- * unit except the acting unit itself; syoukanFadeIn (next) is its
- * counterpart with a different selector.
+ * syoukanFadeOut clears and re-queues a CMD_FADEOUT command on every side-0
+ * unit except the acting unit itself.
  */
 void syoukanFadeOut(BattleUnit *unit)
 {
@@ -4218,10 +4222,7 @@ void syoukanFadeOut(BattleUnit *unit)
     }
 }
 
-/*
- * syoukanFadeIn is syoukanFadeOut's counterpart (selector 0x2F instead of
- * 0x30, same loop shape).
- */
+/* syoukanFadeIn is syoukanFadeOut's counterpart with the CMD_FADEIN command. */
 void syoukanFadeIn(BattleUnit *unit)
 {
     BattleUnit **table;
@@ -4241,9 +4242,9 @@ void syoukanFadeIn(BattleUnit *unit)
 }
 
 /*
- * syoukan1Sub's first argument: the two words the body touches (src/ov01/
- * data_unit_org_get.c owns the rest of whatever record this comes from,
- * still asm there). The second argument is never read by this body; the
+ * syoukan1Sub's first argument: the two words the body touches
+ * (src/ov01/data_unit_org_get.c owns the rest of whatever record this comes
+ * from). The second argument is never read by this body; the
  * third is the character id of the unit the summon replaces, carried in the
  * 0x2B command's extra word (syoukan2Sub fills the same word from
  * linkedUnit->charaId).
@@ -4305,6 +4306,12 @@ void syoukan2Sub(BattleUnit **unit)
 }
 
 
+/*
+ * Summon sequence of a special-flow technique, stepped by *state: fades the
+ * other units out, teleports the unit out, changes it, applies the hits,
+ * changes it back and fades the others in. Returns 1 once the sequence is
+ * finished.
+ */
 int specSyoukanProc(ScenarioStep *rec, int arg1, unsigned int *state, int arg3)
 {
     int ret;
@@ -4374,6 +4381,11 @@ extern int MMv2Play(const char *filename);
 static int loadNum[1];
 static const char *mvFname[5];
 
+/*
+ * Transformation sequence of a special-flow technique, stepped by *arg2:
+ * teleports the unit out and changes it; for character 6 it also hides the map,
+ * plays a movie and reloads the map. Returns 1 once the sequence is finished.
+ */
 int specHensinProc(void *arg0, int arg1, unsigned int *arg2)
 {
     int cmd[8];
@@ -4475,6 +4487,10 @@ extern void UmnDataBaseAnalisisSet(int charaId);
 extern const char **dataEnemyNameGet(int index);
 extern void eBattleWinOpen3(SpecAnalyzeWin *win);
 
+/*
+ * Records the unit in the monster database and opens the analysis window with
+ * its name and data-record fields.
+ */
 void specAnalyzeProc(BattleUnit *arg0)
 {
     SpecAnalyzeWin w;
@@ -4520,6 +4536,10 @@ extern const char battleInitJpText2[];
 extern char *strcat(char *dst, const char *src);
 static InoriEnt inoriTbl[4];
 
+/*
+ * Picks a random item from the inori table, shows the acquired-item message and
+ * adds the item to the item box.
+ */
 void specInoriProc(void)
 {
     int roll;
@@ -4549,6 +4569,11 @@ typedef struct { signed char s[25]; } NusumuNone;
 extern int itemGrpChk(int group, int item);
 extern const char *itemNameGet(int group, int index);
 
+/*
+ * Steal attempt by a unit: picks one of its two stealable items, subject to a
+ * random roll, shows the result message and adds a stolen item to the item box.
+ * Returns 1 when an item was stolen, 0 otherwise.
+ */
 int specNusumuProc(void *arg0, BattleUnit **arg1)
 {
     unsigned char *temp;
@@ -4594,6 +4619,10 @@ int specNusumuProc(void *arg0, BattleUnit **arg1)
     return 0;
 }
 
+/*
+ * Returns the name of an item in a group: 0 items, 1 weapons, 2 the dataBltNameGet
+ * table, 3 accessories; 0 for other groups.
+ */
 const char *itemNameGet(int group, int index)
 {
     const char *name;
@@ -4627,6 +4656,10 @@ void battleMsg(int msgId)
 extern const char battleInitScenarioBatExecDstErrText[];
 
 
+/*
+ * Queues the command for one destination record's type on its unit: damage,
+ * guard, evade, recovery, wake or status. Returns 1, or 0 for an unknown type.
+ */
 int scenarioBatExecDst(int *arg0, int *arg1)
 {
     CmdEntry cmd;
@@ -4685,6 +4718,11 @@ typedef struct DecoEffEntry {
 static DecoEffEntry decoEff[8];
 void decoEffCallSub(BattleUnit *unit, int subId);
 
+/*
+ * Starts the decoration effect of the given type on a unit. Types 0x64 to 0x68
+ * select a fixed effect (0x64 by size class); other types look the effect up by
+ * the unit's character id in decoEff.
+ */
 void decoEffCall(BattleUnit *unit, int type)
 {
     short charaId;
@@ -4745,10 +4783,7 @@ void decoEffCall(BattleUnit *unit, int type)
     }
 }
 
-/*
- * decoEffCallSub's own signed byte inside calc.h's unmodeled_10 span (that
- * header is owned by ov01/tu004 and not completed here); shared-header need.
- */
+/* decoEffCallSub's own signed byte inside calc.h's unmodeled_10 span. */
 #define CALC_PARAM_DECO_EFF_OFF 0x15
 
 /*
@@ -4762,8 +4797,8 @@ void decoEffCall(BattleUnit *unit, int type)
 extern void sefCreateEffect(int *params);
 
 /*
- * The local effect-request block sefCreateEffect reads (evidenced only by
- * this call: only the fields decoEffCallSub itself stores are named).
+ * The local effect-request block sefCreateEffect reads. Only the fields
+ * decoEffCallSub stores are named.
  */
 typedef struct DecoEffParams {
     Actor *actor;              /* +0x00 */
@@ -4821,6 +4856,11 @@ typedef struct ScnEffParams {
     short var20;                 /* +0x20 */
 } ScnEffParams;
 
+/*
+ * Builds the effect request for one scenario action on one destination record
+ * and creates it; kind 5 techniques also create a second effect with the second
+ * weapon.
+ */
 int scenarioEffCall(ScenarioBatExec *arg0p, u8 *arg1p)
 {
   ScnEffArg *arg0 = (ScnEffArg *)arg0p;
@@ -4907,6 +4947,10 @@ int scenarioEffCall(ScenarioBatExec *arg0p, u8 *arg1p)
   }
 }
 
+/*
+ * Applies the motion, weapon, hand and hair-wind changes that dataMtdRead
+ * reports for the unit (triggers 2 to 9).
+ */
 void scenarioMtd(ScenarioBatExec *exec)
 {
     if (dataMtdRead(exec->unit, 2) == 1) {
@@ -4936,12 +4980,10 @@ void scenarioMtd(ScenarioBatExec *exec)
 }
 
 /*
- * The weapon ids 0xD..0x10 (`addiu $2,$2,-0xD`/`sltiu $2,$2,0x4` at
- * 0x00a0e5e4..0x00a0e5e8, on weaponId[2], `lh $2,0x62($2)` at 0x00a0e5e0)
- * and 0xC (`addiu $4,$0,0xC` at 0x00a0e670), the accessory id 0x108
- * ACT_setArms gets (`addiu $6,$0,0x108` at 0x00a0e620) and the technique
- * ids 8 and 0xB (0x00a0e650/0x00a0e658) are compared as the original does;
- * what each id is, is not established here.
+ * Shows the special weapon for a scenario action. The weapon ids 0xD to 0x10
+ * and 0xC, the accessory id 0x108 passed to ACT_setArms and the technique ids 8
+ * and 0xB are compared as the original does; what each id is, is not
+ * established here.
  */
 void spWepDispOn(ScenarioBatExec *exec, int weapon)
 {
@@ -4966,7 +5008,7 @@ void spWepDispOn(ScenarioBatExec *exec, int weapon)
             if ((unsigned int)(weaponId - 0xD) >= 4) {
                 weaponActor = exec->unit->weapon[weapon & 3];
                 if (weaponActor != 0) {
-                    /* `ori $2,$2,0x8` at 0x00a0e614: the same bit spWepDispOffSub sets. */
+                    /* The same bit spWepDispOffSub sets. */
                     weaponActor->flags |= WEAPON_HIDDEN_BIT;
                 }
             } else {
@@ -5107,15 +5149,14 @@ void transWepOutDraw(Actor *actor) {
 }
 
 
-/*
- * Whether the scenario action has finished: a special-flow technique
- * reports `done` as its flow handler left it; techniques and items of
- * types 2 and 3 wait for their effect (an item also returns its unit to
- * the standing motion while it is held); anything else waits for the
- * motion hold to be set.
- */
 extern void unitMotStandSet(BattleUnit *unit);
 
+/*
+ * Reports whether a scenario action has finished. Special-flow techniques
+ * return `done`. Actions of types 2 and 3 wait for their effect; an item
+ * (type 3) also returns its unit to standing motion while held. Others wait
+ * for the motion hold.
+ */
 int scenarioSrcEndChk(ScenarioBatExec *exec, ScenarioDstEntry *dest, int done)
 {
     int effectNo;
@@ -5147,6 +5188,11 @@ extern void calcStatResetCha(BattleUnit *unit);
 extern void thinkUnitDmgExec(BattleUnit *unit, BattleUnit *src);
 extern const char battleInitDmgSAFEText[];
 
+/*
+ * Applies the result of a finished scenario action to each target in the
+ * destination list: damage or item use, stat changes and resets, and
+ * counter attacks.
+ */
 void scenarioBatEnd(void)
 {
     int *src;
@@ -5235,6 +5281,11 @@ extern int calcCounter(BattleUnit *unit, int tecId);
 extern int unitNoGet(BattleUnit *unit);
 extern const char battleInitCounterText[];
 
+/*
+ * Runs the counter check of the target *arg1 against the technique arg0[2]
+ * of the attacker arg0[0]. Returns 0 when the technique's flag byte has 0x80
+ * clear, otherwise 1; pCounterUnit is set to the attacker on a hit.
+ */
 int counterProc(int *arg0, BattleUnit **arg1)
 {
     BattleUnit *unit;
@@ -5295,6 +5346,12 @@ extern const char battleInitEPDRAINText[];
 extern const char battleInitEPDRAIN2Text[];
 extern const char battleInitDmgTypeErrText[];
 
+/*
+ * Creates the damage-number objects for one hit and prints its result text.
+ * arg0 points at a pointer to the target that gets a second number object for
+ * some result types; arg1 holds the target at +0x0, the value at +0x8 and the
+ * flags word at +0xC (low byte: result kind).
+ */
 int dmgValPut(int arg0, BattleUnit **arg1) {
     int *d = (int *)arg1;
     int flags;
@@ -5330,6 +5387,7 @@ int dmgValPut(int arg0, BattleUnit **arg1) {
         } else if (bits & 8) {
             printf(battleInitWAKEText);
         }
+        /* Result text for the kind byte at +0xC. */
         switch (*(unsigned char *)((char *)arg1 + 0xC)) {
         case 0:
             printf(battleInitMISSText);
@@ -5372,8 +5430,8 @@ int dmgValPut(int arg0, BattleUnit **arg1) {
 }
 
 /*
- * Battle monster-gain tallies (original ELF symbol name; only its total size is
- * evidenced, by monsGainInit's own memset call).
+ * Battle monster-gain tallies. Only the total size is known (0x58 bytes,
+ * cleared by monsGainInit).
  */
 typedef struct MonsGain {
     unsigned char unmodeled_00[0x58];
@@ -5396,6 +5454,11 @@ extern int menuTimeGet(void);
 extern int menuTimeXGet(void);
 extern int itemGrpChk(int group, int item);
 
+/*
+ * Adds one monster's gain values to monsGain. On a random roll it also
+ * records the won item group and id in the list counted at +0x54. Does nothing
+ * when the unit's +0x150 pointer is null.
+ */
 void monsGainSet(BattleUnit *unit)
 {
   BattleUnit *arg0 = unit;
@@ -5502,10 +5565,9 @@ extern SchedulerState *sefCreateEffect2(SefEffectRequest *request);
 extern void sefDeleteEffect2(SchedulerState *scheduler);
 
 /*
- * The status-effect table statEffProc walks (data still asm-owned;
- * original ELF symbol names): effTbl[category][statIdx] is the effect slot
- * a status shows in (`lb $2,0x0($16)` at 0x00a0f45c, -1 for none), effId
- * each slot's effect number (`lhu $3,0x0($2)` at 0x00a0f50c).
+ * The status-effect table statEffProc walks. effTbl[category][statIdx] is
+ * the effect slot a status shows in (-1 for none); effId[slot] is that
+ * slot's effect number.
  */
 static signed char effTbl[8][16];
 static int effId[7];
@@ -5515,10 +5577,7 @@ static int effId[7];
 #define ACTOR_MOTION_STOPPED_BIT 0x80000
 
 /*
- * The unit's actor record read from BattleUnit.actor as an int-sized word,
- * menu.c's menuStockWorkGet idiom: statEffProc reloads the slot after the
- * int store to moveFlags (`lw $3,0x14($18)` at 0x00a0f558 after `sw
- * $2,0x6F0($4)`).
+ * Reads BattleUnit.actor as a 32-bit word, so the pointer is loaded as an int.
  */
 static __inline__ Actor *unitStatActorGet(BattleUnit *unit)
 {
@@ -5578,28 +5637,18 @@ void statEffProc(BattleUnit *unit)
     }
 }
 
-/*
- * calcUPGet's return type comes from its definer, ov01/tu004 calc.c
- * (published in include/ov01/calc.h); calcUPGet itself is still asm there.
- */
+/* calcUPGet's return type comes from include/ov01/calc.h. */
 
 #define UNIT_WORK_TABLE_COUNT 8
 #define UNIT_WORK_STATUS_BLOCKED 0x100u
-/* CalcUnitParam's own UnitWork* table base and per-slot pointer offset
- * (see the comment below); named as the cursor's state record
- * convention instead of leaving the offsets as bare literals. */
+/* Table base in CalcUnitParam (+0x150) and the +0xC that reaches its first entry. */
 #define UNIT_WORK_TABLE_BASE_OFF 0x150
 #define UNIT_WORK_PTR_OFF 0xC
 
 /*
- * calcUPGet's own CalcUnitParam (ov01/tu004 calc.c, still asm there, not
- * yet published to add this member -- reported as a shared-header need)
- * carries an 8-entry UnitWork* table at +0x15C. statEffOn/statEffOff each
- * re-read calcUPGet(unit)'s table slot for the current offset twice (once
- * to test it, once to use it) rather than caching it in a local: the
- * original calls calcUPGet a second time inside the body instead of
- * keeping the first call's result. The offset walks the table forward
- * (+4 each pass) while a separate trip counter counts the 8 passes down.
+ * statEffOn clears and statEffOff sets UNIT_WORK_STATUS_BLOCKED on each of the
+ * unit's eight UnitWork entries at CalcUnitParam +0x15C. Each pass calls
+ * calcUPGet twice, once to test the slot and once to use it.
  */
 void statEffOn(BattleUnit *unit)
 {
@@ -5632,9 +5681,8 @@ void statEffOff(BattleUnit *unit)
 }
 
 /*
- * objEntry2 and objStdInit are defined by ov01/tu001 obj.c (src/ov01/obj.h
- * is that TU-local header and is not includable here);
- * src/ov01/entry_first_init.c already redeclares them the same way.
+ * objEntry2 and objStdInit are defined in ov01/tu001 obj.c. They are declared
+ * here because that TU's private header cannot be included.
  */
 extern ObjectTask *objEntry2(void *argument, void (*callback)(ObjectTask *task));
 extern void objStdInit(ObjectTask *task);
@@ -5657,7 +5705,8 @@ void objCurDraw(CursorObject *cursor);
 #define CURSOR_STATE_FLAG_ENEMY 0x40
 
 /*
- * state + 0x04 is cleared at creation and read nowhere else in this TU.
+ * Creates the enemy-side cursor task at (x, y, z). state + 0x04 is cleared
+ * here.
  */
 
 ObjectTask *objEnCurCreate(float x, float y, float z)
@@ -5681,9 +5730,8 @@ ObjectTask *objEnCurCreate(float x, float y, float z)
 }
 
 /*
- * objRemove is defined by ov01/tu001 obj.c; menu.c already redeclares it
- * the same way to call it from a different TU (src/ov01/obj.h is that
- * TU-local header and is not includable here).
+ * objRemove is defined in ov01/tu001 obj.c. It is declared here because that
+ * TU's private header cannot be included.
  */
 extern void objRemove(ObjectTask *task);
 void objCurRemove(void)
@@ -5694,11 +5742,11 @@ void objCurRemove(void)
     }
 }
 
-/* src/ov01/obj.c; menu.c redeclares them the same way. */
+/* Defined in src/ov01/obj.c. */
 extern void *objCmdPtrGet(ObjectTask *task);
 extern void objHatoVec(ObjectTask *task, int steps);
 extern int objStdMove(ObjectTask *task);
-/* src/main/sef.c, spelled as src/ov01/menu.c and src/ov01/m_cam.c do. */
+/* Defined in src/main/sef.c. */
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
 
 /*
@@ -5740,11 +5788,9 @@ extern void objDispPlCur(void);
 extern void objDispEnCur(CursorObject *cursor);
 
 /*
- * cursor + 0x10 reaches the same state record curCmdSet
- * writes; this function reads back state + 0x00 (flags) and
- * returns without drawing when bit 0x4 is set, otherwise dispatches to the
- * enemy-side draw callee (bit 0x40 set) or the player-side one (objDispPlCur,
- * which takes no argument).
+ * Draws the cursor. Returns without drawing when the hidden bit (0x4) is set;
+ * otherwise calls objDispEnCur for the enemy side (bit 0x40) or objDispPlCur
+ * for the player side.
  */
 void objCurDraw(CursorObject *cursor)
 {
@@ -5764,17 +5810,10 @@ void objCurDraw(CursorObject *cursor)
 }
 
 /*
- * Evidenced word offsets on the opaque state/cursor handles. Each offset is
- * observed directly in the original body; the labels stay neutral because
- * the historical member names are unresolved:
- *   cursor + 0x10 : state pointer (lw s1,16(a0) in the callee delay slot);
- *   state  + 0x00 : flags word (read, OR mask 0x2, written back);
- *   state  + 0x70 : word zeroed on entry (sw zero,112(s1));
- *   state  + 0x74 : word zeroed on entry (sw zero,116(s1)).
- * Accesses are written inline (no helper calls) so the candidate emits only
- * the single curCmdSet extent; the macros keep the offsets reviewable.
+ * Queues a command on the cursor: clears the state words at +0x70 and +0x74,
+ * copies the command into the tail slot, and sets the queued flag when the
+ * selector is nonzero.
  */
-
 void curCmdSet(CursorObject *cursor, const CursorCommand *command)
 {
     CursorCommandState *state;
@@ -5802,31 +5841,27 @@ void curCmdSet(CursorObject *cursor, const CursorCommand *command)
  */
 typedef struct CursorSelectList {
     BattleUnit *units[9]; /* +0x00..+0x23: the selectable units;
-                           * curMove2Pos reads units[curIdx]->actor (`lw
-                           * $3,0x0($2)`/`lw $5,0x14($3)` at 0x00a0fb48) */
+                           * curMove2Pos reads units[curIdx]->actor */
     int entries[9]; /* +0x24..+0x47: each unit's CalcUnitParam.posId, stored
-                     * by curEnProcInit (`lw $4,0x44($2)`, `sw $4,0x20($3)`
-                     * with $3 = list + 4 + 4 * i); curMove2Pos uses it as
-                     * the dataPosTblGet index when posMode is set */
+                     * by curEnProcInit; curMove2Pos uses it as the
+                     * dataPosTblGet index when posMode is set */
     int count;         /* +0x48 */
     int curIdx;         /* +0x4C */
     int prevIdx;         /* +0x50 */
     int posMode;         /* +0x54: nonzero, curMove2Pos targets a field
-                          * position from entries[] instead of a unit
-                          * (`lw $2,0x54($16)` at 0x00a0fb24) */
+                          * position from entries[] instead of a unit */
     int groupFlag;       /* +0x58: toggled by curGrpSel, set by curSelGrpSet */
 } CursorSelectList;
 
 /*
- * The battle cursor's selection record (original ELF symbol name):
- * curSel/curMove2Pos work on it and curSelGrpSet/curSelGrpGet
- * own its group word.
+ * The battle cursor's selection record. curSel and curMove2Pos work on it;
+ * curSelGrpSet and curSelGrpGet access its group word.
  */
 static CursorSelectList curMove;
 
 /*
- * dataPadRead is defined by ov01/tu005 data_unit_org_get.c (still asm);
- * declared here to call it from this TU.
+ * dataPadRead is defined in src/ov01/data_unit_org_get.c. It is declared
+ * here to call it from this TU.
  */
 extern int dataPadRead(int padNo);
 
@@ -5835,6 +5870,12 @@ extern int dataPadRead(int padNo);
  */
 extern void curMove2Pos(CursorObject *cursor, CursorSelectList *list);
 
+/*
+ * Steps the selection in curMove by one entry for nextMask or prevMask,
+ * wrapping at both ends. When the entry's position id differs from the cursor's
+ * target, the cursor moves there and, if the index changed, a sound plays.
+ * Returns the new index.
+ */
 int curSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int prevMask)
 {
     CursorCommandState *state;
@@ -5865,6 +5906,10 @@ int curSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int prevM
     return list->curIdx;
 }
 
+/*
+ * Toggles curMove's group flag when either mask is pressed and plays a sound.
+ * Returns 1 when it toggled, 0 otherwise.
+ */
 int curGrpSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int prevMask)
 {
     if (!(dataPadRead(1) & nextMask) && !(dataPadRead(1) & prevMask)) {
@@ -5879,7 +5924,7 @@ int curGrpSel(CursorObject *cursor, CursorSelectList *list, int nextMask, int pr
     return 1;
 }
 
-/* src/ov01/data_unit_org_get.c, spelled as src/ov01/unit_cmd.h does. */
+/* Defined in src/ov01/data_unit_org_get.c. */
 extern Vector4 *dataPosTblGet(int index);
 
 /*
@@ -5980,11 +6025,7 @@ int curEnProcInit(BattleUnit **target, int side)
 }
 
 /*
- * The cursor's state record read from CursorObject.state as an int-sized
- * word, menu.c's menuStockWorkGet idiom: curTgtProc reloads the slot after
- * each int store (`lw $3,0x10($17)` after `sw $0,0x54($18)` at 0x00a10338,
- * `lw $6,0x10($17)` after `sw $2,0x0($4)` at 0x00a103b8); read as the
- * pointer, gcc keeps the first load across those stores.
+ * Reads CursorObject.state as a 32-bit word, so the pointer is loaded as an int.
  */
 static __inline__ CursorCommandState *curStateGet(CursorObject *cursor)
 {
@@ -6024,6 +6065,12 @@ static char agwsTbl_00A3D800[16];
 extern const char battleInitCurPosProcNoTgtText[];
 extern int calcMoveChk(BattleUnit *unit, int move);
 
+/*
+ * Fills curMove with the field-position ids the cursor can pick for arg0: the
+ * chaTbl or agwsTbl list, chosen by arg0's AGWS flag and arg1. Ids occupied by
+ * a unit are skipped, and so are ids calcMoveChk rejects unless arg1 is 5.
+ * Returns 1 when an entry was found.
+ */
 int curPosProcInit(BattleUnit *arg0, int arg1)
 {
     ObjectTask *task = pTaskEnCur;
@@ -6115,6 +6162,11 @@ int curPosProc(BattleUnit *unit, int *posId)
 
 extern int calcTgtUnitTbl(BattleUnit *self, int flags, BattleUnit **table);
 
+/*
+ * Fills curMove with the targets calcTgtUnitTbl returns for self, on the player
+ * side or the enemy side as curMove's group flag selects, and points *target at
+ * the matching unit. Returns 1 when a target was found.
+ */
 int curTgtProcInit(BattleUnit **target, BattleUnit *self, int flags)
 {
     ObjectTask *task = pTaskEnCur;
@@ -6240,9 +6292,9 @@ int curTgtProc(BattleUnit **target, int targetFlags)
 }
 
 /*
- * Written -1 whenever curSelGrpSet derives the group from flags instead of
- * receiving it directly (data still asm-owned; original ELF symbol name); no other
- * reference is evidenced in this TU.
+ * Sets the selection group. A group of 0 or 1 is stored as is and the call
+ * returns. Otherwise the group is derived from flags (bit 0x8 or 0x40 selects
+ * group 0, else group 1) and oldCurGrp is reset to -1.
  */
 void curSelGrpSet(u32 group, int flags)
 {
@@ -6318,11 +6370,7 @@ void objDispEnCur(CursorObject *cursor)
     grPacketSend(&packet);
 }
 
-/*
- * objDispCur calls it with $a0 = packet (`daddu $4,$29,$0` at 0x00a1072c, the
- * delay slot of the `jal` at 0x00a10728) and $a1 = cursor (`daddu $5,$17,$0`
- * at 0x00a10698); the original body is empty, so neither is read.
- */
+/* The body is empty, so neither argument is read. */
 void objDispCurSubPl(void *packet, CursorObject *cursor);
 /* objDispCur's callees, declared ahead of their definitions further down in
  * this TU; without them gcc 2.96 reports "type mismatch with previous implicit
@@ -6345,7 +6393,7 @@ void objDispCur(CursorObject *cursor, int isPlayer)
 
     grGpInit(&packet);
     if (!isPlayer) {
-        /* The original calls it (0x00a1069c) and ignores the result. */
+        /* The result is ignored. */
         objCmdPtrGet((ObjectTask *)cursor);
         if ((cursor->state->flags & CURSOR_STATE_FLAG_UNIT_SELECT) &&
             tgtUnitGet() != 0 && calcLineChk(tgtUnitGet()) == 0) {
@@ -6355,12 +6403,7 @@ void objDispCur(CursorObject *cursor, int isPlayer)
             unsigned int isEnemy;
 
             outOfLine = 0;
-            /*
-             * The original performs an unguarded read through tgtUnitGet()'s
-             * return here (`lw $3,0x10($2)` at 0x00a106e8 straight after the
-             * `jal tgtUnitGet` at 0x00a106e0): no null test exists on this
-             * path, so none is written.
-             */
+            /* No null test is made on the target here. */
             isEnemy = tgtUnitGet()->work->flags & ACTOR_FLAG_ENEMY;
             isAlly = isEnemy == 0;
         }
@@ -6438,8 +6481,8 @@ void objDispCurSubEn(void *packet, CursorObject *cursor, int outOfLine)
 }
 
 /*
- * grPutFT4STQ's quad record (src/ov01/gr_gp_init.c, TU-local there: four
- * corners, one shared RGBA, per-corner S/T); restated for the cursor quad.
+ * Quad record that grPutFT4STQ takes (defined in src/ov01/gr_gp_init.c):
+ * four corners, one shared RGBA and per-corner S/T. Restated for the cursor quad.
  */
 typedef struct CursorQuad {
     AlignedVector4 points[4]; /* +0x00 */
@@ -6447,7 +6490,7 @@ typedef struct CursorQuad {
     float s[4];              /* +0x44 */
     float t[4];              /* +0x54 */
 } CursorQuad;
-/* The enemy-target cursor quad (data still asm-owned; original ELF symbol name). */
+/* The enemy-target cursor quad. */
 static CursorQuad cur1;
 
 extern void grCalcMatrix(CursorObject *cursor, Matrix4 matrix);
@@ -6487,16 +6530,8 @@ void curPutSub(void *packet, CursorObject *cursor)
 }
 
 /*
- * grGpInit's own record (src/ov01/gr_gp_init.c, still asm there; that TU
- * owns the layout and has not published it through a header yet -- shared-
- * header need). curTexTrans only ever takes this local's address and never
- * reads it back, so the storage is left untyped here rather than restating
- * the owner's struct.
- */
-
-/*
- * dataXtxFileGet's own table entry (src/ov01/data_unit_org_get.c, still
- * asm); only the word at +0x4 is evidenced here, forwarded unchanged to
+ * Table entry returned by dataXtxFileGet (defined in src/ov01/data_unit_org_get.c).
+ * Only textureId, at +0x4, is used here; it is forwarded unchanged to
  * xglPacketTextureTrans.
  */
 typedef struct XtxFile {
@@ -6513,13 +6548,11 @@ extern void xglPacketTextureTrans(int textureId);
 #define GS_REG_TEXFLUSH 0x3F
 
 /*
- * objDispEnCur, the only caller, passes 0 (`daddu $4,$0,$0` at 0x00a10538,
- * the delay slot of `jal curTexTrans`); the body never reads $a0.
+ * Called with 0 by objDispEnCur. The argument is not read.
  */
 void curTexTrans(int unused)
 {
-    GrPacket packet; /* grGpInit's own record: a data pointer and an element
-                      * count (this call site's own evidence for the size). */
+    GrPacket packet; /* grGpInit's record: a data pointer and an element count. */
 
     xglPacketTextureTrans(dataXtxFileGet(CURSOR_XTX_SLOT)->textureId);
     grGpInit(&packet);
@@ -6528,15 +6561,17 @@ void curTexTrans(int unused)
 }
 
 /*
- * Local compatibility spelling of GS_REG_SET: the definition
- * (src/ov01/gr_gp_init.c) takes (GrPacket *, long long, long long); `void *`
- * stands in for GrPacket here because this file passes the `int packet[]`
- * record grGpInit fills, the same spelling src/ov01/entry_first_init.c's
- * encEnvMake already uses for that idiom.
+ * Local spelling of GS_REG_SET. The definition in src/ov01/gr_gp_init.c
+ * takes a GrPacket *; `void *` is used here because this file passes the
+ * `int packet[]` record that grGpInit fills.
  */
 extern void GS_REG_SET(void *packet, long long register_id, long long control);
 extern unsigned short dataXtxAdrGet(int index);
 
+/*
+ * Sets the GS environment for the cursor texture. The second texture base is
+ * dataXtxAdrGet entry 0x10 for enemy targets and 0x12 for allies.
+ */
 void curEnvMake(void *packet, int isAlly)
 {
     unsigned short tbp0, tbp1;

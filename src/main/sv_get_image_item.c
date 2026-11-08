@@ -135,16 +135,16 @@ typedef struct SvParticleDrawContext {
 
 /*
  * One 0x24-byte entry of the working image list svImageListCreate clears
- * and svGetImageItem indexes; only its address is ever taken in this
- * allocation, so its fields stay unmodeled.
+ * and svGetImageItem indexes; only its address is taken in this file, so its
+ * fields stay unmodeled.
  */
 typedef struct SvImageItem {
     unsigned char unmodeled_00[0x24];
 } SvImageItem;
 
 /*
- * The single working image list: a 0x1C-byte header (untouched by this
- * allocation) followed by 0x100 SvImageItem entries (0x1C + 0x100*0x24 =
+ * The single working image list: a 0x1C-byte header (not accessed in this
+ * file) followed by 0x100 SvImageItem entries (0x1C + 0x100*0x24 =
  * 0x241C, svImageListCreate's own clear size).
  */
 typedef struct SvImageList {
@@ -154,9 +154,8 @@ typedef struct SvImageList {
 
 /*
  * The image-mapper table has a 0x1C-byte header followed by 0x100 entries
- * of 0x24 bytes. These entry fields are evidenced by the lookup routines:
- * the active word is at +0x08, the type byte at +0x0E, and the resource
- * name pointer at +0x20.
+ * of 0x24 bytes. The lookup routines read these fields: the active word is
+ * at +0x08, the type byte at +0x0E, and the resource name pointer at +0x20.
  */
 typedef struct SvTypeListEntry {
     const void *data;
@@ -194,8 +193,7 @@ typedef struct SvReferenceImageSlot {
     unsigned int words[2];
 } SvReferenceImageSlot;
 
-/* _imageMapper's symbol-table size is 40 mapper records followed by these
- * forty two-word reference-image slots. */
+/* 40 mapper records (type lists) followed by 40 two-word reference-image slots. */
 typedef struct SvImageMapperStorage {
     SvTypeList typeLists[SV_TYPE_LIST_COUNT];
     SvReferenceImageSlot referenceImages[SV_TYPE_LIST_COUNT];
@@ -204,15 +202,13 @@ typedef struct SvImageMapperStorage {
 
 /*
  * One svAddScript2 sub-record, at +0x1C of a 0x24-byte slot of the type
- * list's item array. Only the fields this function itself writes are
- * modeled, at their byte offset from this sub-record's own base: `codePtr`
- * (+0x00, the script's own +0xC0 address), `active` (+0x08, always 1),
- * `kind` (+0x0C, always 5, matching this function's own "script" name),
- * `id` (+0x0E, the script's own +0xA halfword), two cleared halfwords
- * (+0x18/+0x1A) and `dataPtr` (+0x20, the script's own +0x14 address).
- * +0x20 (slot +0x3C) lands past the slot's own 0x24-byte stride, into the
- * next slot's leading bytes -- evidenced by the original bytes, not
- * treated as a bug.
+ * list's item array. Only the fields svAddScript2 writes are modeled, at
+ * their byte offset from this sub-record's own base: `codePtr` (+0x00, the
+ * script's +0xC0 address), `active` (+0x08, always 1), `kind` (+0x0C, always
+ * 5, the SV_RES_SCRIPT kind), `id` (+0x0E, the script's +0xA halfword), two
+ * cleared halfwords (+0x18/+0x1A) and `dataPtr` (+0x20, the script's +0x14
+ * address). That +0x20 lands at slot offset 0x3C, past the 0x24-byte stride,
+ * in the next slot's leading bytes.
  */
 typedef struct SvScriptSlot {
     void *codePtr;                  /* 0x00 */
@@ -305,7 +301,7 @@ extern Matrix4 _invView;
 extern int _scMslCate;
 extern const char imageBmpNameFormat[];
 extern const char imageClutNameFormat[];
-/* Original storage of this TU without a C reader; typed from its original bytes. */
+/* No code in this file reads or writes this matrix. */
 extern Matrix4 _svViewMtx;
 
 extern Matrix4 _svScreenMtx;
@@ -315,10 +311,9 @@ extern float sefAtanTbl[1025];
 int strcmp(const char *, const char *);
 
 /*
- * Parameter roles as the SDK body (main 0x0020b208) packs them: GS
- * BITBLTBUF DBP/DPSM/DBW from basePointer/pixelFormat/bufferWidth, TRXPOS
- * DSAX/DSAY from x/y, TRXREG RRW/RRH from width/height, then `qwc`
- * quadwords of `image` sent by reference.
+ * Parameter roles as the SDK body packs them: GS BITBLTBUF DBP/DPSM/DBW from
+ * basePointer/pixelFormat/bufferWidth, TRXPOS DSAX/DSAY from x/y, TRXREG
+ * RRW/RRH from width/height, then `qwc` quadwords of `image` sent by reference.
  */
 extern void sceVif1PkRefLoadImage(XglPacket *packet,
                                   unsigned short basePointer,
@@ -344,10 +339,10 @@ extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 extern void sceVif1PkTerminate(XglPacket *packet);
 
 /*
- * sefDrawSchedulerEffect (still INCLUDE_ASM here) calls sefClipViewVolume and
- * branches on the returned v0, and sefClipViewVolume itself ends in a tail
- * jump to sefClipViewVolumeA (no jal, so its result is whatever
- * sefClipViewVolumeA returns): both are declared non-void here.
+ * sefDrawSchedulerEffect calls sefClipViewVolume and branches on its result.
+ * sefClipViewVolume itself ends in a tail jump to sefClipViewVolumeA (no jal,
+ * so its result is whatever sefClipViewVolumeA returns): both are declared
+ * non-void here.
  */
 static int sefClipViewVolumeA(void *scheduler);
 
@@ -429,6 +424,10 @@ static const SGsGifRecord _svRegData;
 
 static const unsigned long long alphaTbl_004CBE78[4];
 
+/*
+ * Fills the particle's GIF header records with its texture and alpha registers
+ * and packed color, and returns its image.
+ */
 static inline const SvDrawItemImage *svPrepareParticleImage(
     SGsGifRecord *header, SvModelDrawItem *particle, Quadword gifRegisters,
     unsigned int textureRegister, unsigned int alphaRegister)
@@ -452,6 +451,10 @@ static inline float svSpriteExtentPixels(float extent, float scale)
     return scaledExtent * 100.0f;
 }
 
+/*
+ * Appends a sprite vertex as two GIF records: its texture coordinate, then the
+ * screen position in 1/16 pixel units, offset by 0x7000 and 0x7200.
+ */
 static inline void svAppendSpriteVertex(SGsPacket *packet,
                                          const Quadword *textureCoordinate,
                                          const SvSpriteVertex *vertex,
@@ -479,6 +482,7 @@ void svImageListCreate(void) {
     memset(&_imageList, 0, sizeof(SvImageList));
 }
 
+/* Clears the used flag of every entry, saves the list size as savedSize and resets its counters. */
 void svImageListDestroy(SvTypeList *typeList)
 {
   SvTypeList *header = typeList;
@@ -503,6 +507,7 @@ void svImageListDestroy(SvTypeList *typeList)
   header->entryCount = 0;
 }
 
+/* Returns the index of the first unused entry of the type list, or -1 when all are used. */
 static int svImageListAlloc(int typeListAddr)
 {
     SvTypeList *typeList;
@@ -521,6 +526,7 @@ static SvTypeList * svGetTypeList(int type) {
     return &_imageMapper.typeLists[type];
 }
 
+/* Returns the first used entry of the type list whose type byte equals the low byte of flags, or 0. */
 static void *svGetImageListItemSub(int type, unsigned int flags)
 {
     SvTypeList *typeList;
@@ -542,6 +548,11 @@ static void *svGetImageListItemSub(int type, unsigned int flags)
     return 0;
 }
 
+/*
+ * Looks up an item by flags, choosing the type list from the flag bits: 0x100
+ * uses list 0, 0x800 uses list 15, 0x200, 0x400 and 0x1000 use `type`, and any
+ * other value uses list 14.
+ */
 void *svGetImageListItem(int type, unsigned int flags)
 {
     int typeIndex;
@@ -562,6 +573,7 @@ void *svGetImageListItem(int type, unsigned int flags)
     return svGetImageListItemSub(typeIndex, flags);
 }
 
+/* Returns the first used entry of list 0 whose name equals `name`, or 0. */
 static SvTypeListEntry *svGetResFromName(const char *name)
 {
     SvTypeList *typeList;
@@ -583,6 +595,10 @@ static SvTypeListEntry *svGetResFromName(const char *name)
     return 0;
 }
 
+/*
+ * Builds the texture parameter from the bitmap and CLUT resources named by
+ * `baseName`. Returns `parameter`, or 0 with it zeroed when either is missing.
+ */
 SvImageParameter *svGetPrmFromName(const char *baseName,
                                    SvImageParameter *parameter)
 {
@@ -636,6 +652,7 @@ SvImageParameter *svGetPrmFromName(const char *baseName,
     return 0;
 }
 
+/* Uploads an image entry to the VIF as a reference load, with 8 or 4 bits per pixel. */
 void svLoadTexture(SvTypeListEntry *image)
 {
     XglPacket *packet;
@@ -677,6 +694,7 @@ void svLoadTexture(SvTypeListEntry *image)
     }
 }
 
+/* Uploads a CLUT entry: a 16x16 block for 8-bit palettes, 8x2 for 4-bit. */
 void svLoadClut(SvTypeListEntry *clut)
 {
     XglPacket *packet = xglPacketGetCurrent();
@@ -690,6 +708,7 @@ void svLoadClut(SvTypeListEntry *clut)
     }
 }
 
+/* Uploads every image and CLUT entry of the list; returns the number of images. */
 int svLoadImageList(SvTypeList *typeList)
 {
     int textureCount = 0;
@@ -714,6 +733,7 @@ int svLoadImageList(SvTypeList *typeList)
     return textureCount;
 }
 
+/* Uploads the image and CLUT entries of each type list that has entries. */
 int svLoadMapperList(void)
 {
     int result;
@@ -721,7 +741,7 @@ int svLoadMapperList(void)
     SvTypeList *typeLists = _imageMapper.typeLists;
 
     for (type = 0; type < SV_TYPE_LIST_COUNT; type++) {
-        /* Preserve the original loop's separate entry-count pointer. */
+        /* Reads entryCount through its own pointer, the way the original loop does. */
         const s16 *entryCount = &typeLists[type].entryCount;
         result = *entryCount;
         if (result > 0) {
@@ -731,6 +751,7 @@ int svLoadMapperList(void)
     return result;
 }
 
+/* Returns the index of the lowest set bit of value from bit 1 up, or 0 when there is none. */
 static int svGetSizeBit(unsigned int value)
 {
     unsigned int mask;
@@ -748,6 +769,10 @@ static int svGetSizeBit(unsigned int value)
     return 0;
 }
 
+/*
+ * Adds an image chunk as a list entry, places its data in the list's storage
+ * and advances savedSize. Returns the entry index, or -1 when the list is full.
+ */
 static int svAddImage(SvTypeList *typeList, void *chunk)
 {
     int index;
@@ -792,6 +817,7 @@ static int svAddImage(SvTypeList *typeList, void *chunk)
     return index;
 }
 
+/* Adds a CLUT chunk as a list entry and advances savedSize by 256 (8 bits per pixel) or 128 bytes. */
 static int svAddClut(SvTypeList *typeList, void *const chunkData)
 {
     const SvClutChunk *const chunk = chunkData;
@@ -826,6 +852,7 @@ static int svAddClut(SvTypeList *typeList, void *const chunkData)
     return index;
 }
 
+/* Adds a model chunk as a list entry: its name is at payload offset 8 and its data follows the payload. */
 static int svAddModel(SvTypeList *typeList, SvResourceChunk *chunk)
 {
     SvTypeListEntry *entry;
@@ -848,6 +875,7 @@ static int svAddModel(SvTypeList *typeList, SvResourceChunk *chunk)
     return index;
 }
 
+/* Adds a script chunk as a list entry, laid out like svAddModel but without the 0x2000 type flag. */
 static int svAddScript(SvTypeList *typeList, SvResourceChunk *chunk)
 {
     SvTypeListEntry *entry;
@@ -870,6 +898,10 @@ static int svAddScript(SvTypeList *typeList, SvResourceChunk *chunk)
     return index;
 }
 
+/*
+ * Adds a script chunk as a sub-record at slot offset 0x1C: the code pointer from
+ * chunk+0xC0, the data pointer from chunk+0x14 and the id from the halfword at chunk+0xA.
+ */
 static int svAddScript2(int typeListAddr, void *script)
 {
   int index;
@@ -897,6 +929,10 @@ static int svAddScript2(int typeListAddr, void *script)
   return index;
 }
 
+/*
+ * Walks the resource chunks of a file and adds each one to the type list by its
+ * kind, until SV_CHUNK_END or an unknown kind. Kinds 1 and 2 are skipped.
+ */
 static void svAnalyzeChunk(SvTypeList *typeList, void *chunkFile)
 {
     SvResourceChunkFile *file = chunkFile;
@@ -939,6 +975,7 @@ static void svAnalyzeChunk(SvTypeList *typeList, void *chunkFile)
     }
 }
 
+/* Clears the image mapper and sets each type list's initial size, capacity and saved size. */
 void svInitImageMapper(void)
 {
     int index;
@@ -970,6 +1007,10 @@ static void svInitRefImage(void)
     }
 }
 
+/*
+ * Adds a chunk to type list `type`. A list that already has entries is cleared
+ * first, and `width` and `height` are stored in the list header.
+ */
 void svAddImageMapper(int type, int width, void *chunk, int height) {
     SvTypeList *typeList;
     SvTypeList *header;
@@ -994,6 +1035,7 @@ void svDeleteImageMapper(int type)
     }
 }
 
+/* Clears the first list among 2 to 13 whose width equals `id`. */
 void svDeleteImageMapperID(int id)
 {
     int index;
@@ -1006,6 +1048,7 @@ void svDeleteImageMapperID(int id)
     }
 }
 
+/* Clears the first list among 2 to 13 whose height equals `data`. */
 void svDeleteImageMapperData(int data)
 {
     int index;
@@ -1018,6 +1061,11 @@ void svDeleteImageMapperData(int data)
     }
 }
 
+/*
+ * Loads effect `effectNo`: effect files go through srsFileLoadCf, battle images
+ * into the battle image buffer. Returns the resource kind, or -1 when the load
+ * is queued or fails.
+ */
 int svFileLoadScript(int cfId, int effectNo)
 {
     int charNo;
@@ -1065,6 +1113,11 @@ int svFileLoadScript(int cfId, int effectNo)
     return result;
 }
 
+/*
+ * Returns the script entry for `effectId`: list 14's first entry when it is in
+ * use, otherwise the first script entry whose name starts with the effect's
+ * resource name, or 0.
+ */
 SvTypeListEntry *svGetScript(int effectId)
 {
     const char *resourceName = srsGetEsdData(effectId);
@@ -1095,6 +1148,7 @@ SvTypeListEntry *svGetScript(int effectId)
     return 0;
 }
 
+/* Sends the packet's GIF data as a VIF direct transfer, then resets the packet to the scratchpad. */
 void SGsSendPacket(SGsPacket *packet)
 {
     XglPacket *vifPacket;
@@ -1191,6 +1245,7 @@ static inline unsigned long long svPackModelAlpha(unsigned char blendMode,
     return alphaTbl_2[blendMode] | alphaHigh;
 }
 
+/* Sends a GIF packet that writes 1 to GS register 63 (TEXFLUSH). */
 void SGsTexFlush(void)
 {
     SGsPacket *packet = &_packet;
@@ -1205,6 +1260,11 @@ void SGsTexFlush(void)
     SGsSendPacket(packet);
 }
 
+/*
+ * Sends the initial GS register setup, copies the light's color-modifier and
+ * normal matrices into the default light matrices, and zeroes the upper-left
+ * 3x3 of _defMatLc.
+ */
 void SGsInitEnv(void)
 {
     SGsGifRecord *scratchpad = (SGsGifRecord *)SCRATCHPAD_BASE;
@@ -1249,6 +1309,7 @@ void SGsInitEnv(void)
     }
 }
 
+/* Sends a GIF packet that writes GS register 71 (TEST_1) with the Z test enabled (0x5000d) or disabled (0x2000d). */
 void SGsSetZTestEnv(int enable)
 {
     SGsPacket *packet = &_packet;
@@ -1267,6 +1328,7 @@ void SGsSetZTestEnv(int enable)
     SGsSendPacket(&_packet);
 }
 
+/* Sends the register restore packet, then sets the NML model light matrices from the default ones. */
 void SGsRestoreEnv(void)
 {
     SGsGifRecord *scratchpad = (SGsGifRecord *)SCRATCHPAD_BASE;
@@ -1283,6 +1345,10 @@ static void sefInitClipViewVolume(void *view) {
     Vu0SetClipMatrices(view);
 }
 
+/*
+ * VU0 clip test on the vector at `scheduler`. Returns 1 when a lane comparison
+ * fails, 0 when all of them pass.
+ */
 int sefClipViewVolumeA(void *scheduler)
 {
     int outside;
@@ -1348,12 +1414,20 @@ int sefClipViewVolumeA(void *scheduler)
     return outside;
 }
 
+/*
+ * Installs the clip matrices from the effect's view block at +0x4F0, then
+ * returns sefClipViewVolumeA's result for `scheduler`.
+ */
 int sefClipViewVolume(void *scheduler, void *effect)
 {
     sefInitClipViewVolume((unsigned char *)effect + SEF_CLIP_VIEW_VOLUME_OFFSET);
     return sefClipViewVolumeA(scheduler);
 }
 
+/*
+ * Appends a 2D sprite for the particle: its GIF header records, then four corner
+ * vertices rotated by its angle and offset from its origin.
+ */
 void sefDrawParticle2D(SvModelDrawItem *particle, SGsPacket *packet,
                       const SGsGifRecord textureCoordinates[4])
 {
@@ -1431,6 +1505,10 @@ void sefDrawParticle2D(SvModelDrawItem *particle, SGsPacket *packet,
     packet->base[packet->tagIndex].dword[0] |= packet->loopCount;
 }
 
+/*
+ * VU0 helper: transforms the four rows at src by the matrix held in vf13-vf15
+ * and stores them at dst, using the vectors at src+0xC0 and src+0x100.
+ */
 static void svRotMatrixScale(void *dst, const void *src)
 {
     const char *base = (const char *)src;
@@ -1471,6 +1549,11 @@ static void svRotMatrixScale(void *dst, const void *src)
         : : "r"(dst), "r"(base), "r"(contrib), "r"(scale) : "memory");
 }
 
+/*
+ * Draws a model item: copies the light matrix for its blend mode, writes its
+ * position into the last row, and sets alpha, texture and place before entering
+ * the model.
+ */
 void svDrawModel(SvModelDrawItem *item, void *place)
 {
     Matrix4 lightMatrix;
@@ -1527,6 +1610,11 @@ void svDrawModel(SvModelDrawItem *item, void *place)
     nmlModelEntryEffect(item->image.model);
 }
 
+/*
+ * Appends a projected particle with four corner vertices computed on VU0 from its
+ * orientation and `position`. The packet tag is set only when VU0 reports no
+ * clipped corner.
+ */
 void sefDrawParticle2(SvModelDrawItem *particle, const Vector4 *position,
                       SGsPacket *packet, SvParticleDrawContext *context)
 {
@@ -1701,6 +1789,10 @@ void sefDrawParticle2(SvModelDrawItem *particle, const Vector4 *position,
     }
 }
 
+/*
+ * Appends a projected particle as XYZ vertices with texture coordinates and packed
+ * colors. The packet tag is set only when VU0 reports no clipped corner.
+ */
 void sefDrawParticle(SvModelDrawItem *particle, const Vector4 *position,
                      SGsPacket *packet, SvParticleDrawContext *context)
 {
@@ -1833,6 +1925,11 @@ void sefDrawParticle(SvModelDrawItem *particle, const Vector4 *position,
     }
 }
 
+/*
+ * Draws the particles of one effect line. Mode 1 draws only 2D effects (render
+ * domain 3) as sprites. Other modes draw 3D quads (mode 0) or models (mode 2),
+ * and count 2D effects instead of drawing them.
+ */
 void sefDrawParticleList(SvParticleEffect *effect)
 {
     Matrix4 modelPlace;
@@ -1931,6 +2028,12 @@ void sefDrawParticleList(SvParticleEffect *effect)
     }
 }
 
+/*
+ * Draws the particles of one effect line with the scheduler's transform. Model
+ * items (type 6) are drawn in mode 2, quad items (type 4) are projected in the
+ * other modes. Each particle is placed with the scheduler matrix when the effect
+ * or the scheduler flags ask for it.
+ */
 void sefDrawParticleListCf(SvParticleEffect *effect,
                            SvParticleListCfContext *context,
                            SchedulerState *scheduler)
@@ -2026,6 +2129,11 @@ void sefDrawParticleListCf(SvParticleEffect *effect,
     SGsSendPacket(&_packet);
 }
 
+/*
+ * Draws the effects of one scheduler slot; unused or hidden slots are skipped.
+ * Slots with flag 0x2 set take the transformed path outside the 2D pass, which
+ * can cull effects against the view volume.
+ */
 void sefDrawSchedulerEffect(int schedulerIndex)
 {
     SchedulerState *scheduler =
@@ -2051,6 +2159,7 @@ void sefDrawSchedulerEffect(int schedulerIndex)
 
     battleData->flags = scheduler->flags;
     battleData->partialFlags = scheduler->flags & 2;
+    /* Plain path: each effect line is drawn in place. */
     if ((scheduler->flags & 2) == 0 || (drawMode = _draw3D) == 1) {
         QuadwordCopyT0(&battleData->packetInfo, &scheduler->position);
         for (groupIndex = 0; groupIndex < 32; groupIndex++) {
@@ -2074,6 +2183,7 @@ void sefDrawSchedulerEffect(int schedulerIndex)
         float matrixScale;
         const SGsGifRecord *gifRegisters;
 
+        /* Transformed path: effects are placed with the scheduler matrix. */
         context.draw.textureCoordinates = stqTbl_004CBEA0;
         gifRegisters = &_svRegData;
         context.schedulerVariant = (unsigned short)scheduler->flags & 0x10;
@@ -2131,6 +2241,10 @@ void sefDrawSchedulerEffect(int schedulerIndex)
     }
 }
 
+/*
+ * Draws the in-use scheduler slots of effect category `eftCate`. `eftNo` 0
+ * accepts any effect; otherwise the effect must match the cached effect number.
+ */
 static void svDrawSchedulerBlk(int eftCate, int eftNo)
 {
     short effectId;
@@ -2175,6 +2289,11 @@ static void svDrawMissile(int category)
     }
 }
 
+/*
+ * Draws the particle groups in order: image, weapon, combo, battle image, CF
+ * image, then effects. In the 2D pass the weapon, combo, battle and effect
+ * groups are drawn only when reference images were counted.
+ */
 static void svDrawSchedulerParticle(void)
 {
     int drawMode = _draw3D;
@@ -2250,6 +2369,7 @@ static void svDrawSchedulerParticle(void)
         svDrawSchedulerBlk(SRS_RES_CF_IMAGE, 0);
     }
 
+    /* Effect types: each one is drawn with the effect number loaded for it. */
     for (resourceType = SRS_RES_EFFECT;
          resourceType < SRS_RES_COUNT;
          resourceType++) {
@@ -2269,6 +2389,7 @@ static void svDrawSchedulerParticle(void)
     SGsRestoreEnv();
 }
 
+/* Runs the 2D particle pass when 2D effects were counted. */
 void svDrawScheduler2D(void)
 {
     if (_nEffect2D != 0) {
@@ -2286,6 +2407,10 @@ void svDrawScheduler(void)
     svDrawSchedulerParticle();
 }
 
+/*
+ * Runs the 3D particle pass: clears the reference-image slots, draws each
+ * resource group with its reference image index (_nowImage), then runs MEfObjExec1st.
+ */
 void svDrawScheduler3D(void)
 {
     int type;
@@ -2326,6 +2451,10 @@ void SGsInitGifPacket(SGsPacket *packet)
     packet->count = 0;
 }
 
+/*
+ * Opens a GIF tag for `nreg` registers with the PRIM value `prim` and the register
+ * list `registers`. SGsCloseGifPacket sets the loop count afterwards.
+ */
 void SGsOpenGifPacket(SGsPacket *packet, int prim, unsigned long long registers,
                       unsigned int nreg)
 {
@@ -2359,8 +2488,8 @@ void SGsAddGifRGBA(SGsPacket *packet, Quadword rgba)
 }
 
 /*
- * GS XYZF2 vertex: X/Y are (value*16 + screen offset), Z and F are the
- * raw depth and fog values -- the PS2 SDK's own XYZ2/XYZF2 naming.
+ * Adds an XYZF2 vertex: x and y are scaled by 16 and offset by 0x7000 and
+ * 0x7200; z and fog are stored unchanged.
  */
 void SGsAddGifXYZ2(SGsPacket *packet, int x, int y, int z, int fog)
 {

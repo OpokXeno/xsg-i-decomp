@@ -11,6 +11,10 @@ const char errorSourcePath[] = "../rg_error.euc.c";
 const char errorFatalBanner[] = "RG : FATAL-ERROR\n";
 const char errorFatalLocationFormat[] = "\n\nerror in %s at %d\n";
 
+/*
+ * Prints a fatal error banner, the formatted message and the source location,
+ * then exits with status 1.
+ */
 void RgError(const char *format, const char *source_file, int line, ...)
 {
     va_list ap;
@@ -30,6 +34,7 @@ void RgError(const char *format, const char *source_file, int line, ...)
 const char errorWarningBanner[] = "RG : WARNING!\n";
 const char errorWarningLocationFormat[] = "\n\nwarning in %s at %d\n";
 
+/* Prints a warning banner, the formatted message and the source location. */
 void RgWarn(const char *format, const char *source_file, int line, ...)
 {
     va_list ap;

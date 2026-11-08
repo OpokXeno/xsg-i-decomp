@@ -12,12 +12,9 @@
 #define FCV2_SEGMENT_FRAME_TIME (0.033333335071802139f)
 
 /*
- * FCVKeyData is the per-key-set source record FCV_resetPack reads: a packed
- * 2-bit key-type table (4 keys per byte, FCV_getFKeyType) at +0x10, 16 key
- * frames at +0x14 and the key-value stream from +0x34. FCV_getPackValue
- * (still ASM in this TU) indexes the type table by the pack's key_index and
- * walks the frame and value streams through the pack's advancing pointers.
- * key_values is declared with one element only to name where the value
+ * Per-key-set source record read by FCV_resetPack: a packed 2-bit key-type
+ * table (4 keys per byte) at +0x10, 16 key frames at +0x14 and the key-value
+ * stream from +0x34. key_values has one element only to name where the value
  * stream starts; its length is not evidenced here.
  */
 typedef struct FCVKeyData {
@@ -28,13 +25,10 @@ typedef struct FCVKeyData {
 } FCVKeyData;
 
 /*
- * FCVPack is the destination FCV_resetPack initializes and the state
- * FCV_getPackValue/FCV_getPackVal2f/FCV_getPackVal2s/FCV_skipPack (still ASM
- * in this TU) consume: pointers into a FCVKeyData's three streams, plus a
- * key cursor. FCV_getPackValue passes +4 to FCV_getFKeyType as the packed
- * key-type table, reads a halfword through +8 advancing it by 2, reads a
- * float through +0xC advancing it by 4, and reads/writes +0x10 as the key
- * index; the leading word it never touches stays unmodeled.
+ * Read state for a FCVKeyData, set by FCV_resetPack and used by
+ * FCV_getPackValue, FCV_getPackVal2f, FCV_getPackVal2s and FCV_skipPack:
+ * pointers into the key-type, key-frame and key-value streams, plus the
+ * index of the next key. The leading word is not modeled.
  */
 struct FCVPack {
     unsigned char unmodeled_00[4];
@@ -123,8 +117,7 @@ static f32 FCV2_getVal(void *output, void *data, s32 key, f32 frame);
 static f32 FCV_getPackVal2s(FCVPack *pack, u32 keyCount, f32 frame);
 /*
  * types is a packed array of 2-bit interpolation-type codes, four keys per
- * byte, stored in reverse bit order within each byte (FCV_getFKeyType,
- * VA 0x0030d060).
+ * byte. Key 0 of each byte is in the two high bits.
  */
 static u32 FCV_getFKeyType(u32 keyIndex, u8 *types);
 static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 frame);
@@ -135,6 +128,12 @@ static FCV2Attribute defaultAttr;
 
 static FCV2Attribute defaultAttr = { .size = 0, .type = 0, .payload = { 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
 
+/*
+ * Evaluates a key-frame curve at frame. The low nibble of interpolation_modes
+ * selects the segment interpolation (0 step, 1 linear, 2 cubic Hermite); the
+ * nibbles at bits 4-7 and 8-11 select the behaviour after the last key and
+ * before the first (0 hold, 1 repeat).
+ */
 f32 FCV_getValue(FCVCurve *curve, f32 frame)
 {
     FCVKeyFrame *key;
@@ -148,6 +147,7 @@ f32 FCV_getValue(FCVCurve *curve, f32 frame)
     f32 next_value;
     f32 next_in_tangent;
 
+    /* Before the first key: hold its value, or repeat the curve. */
     if (frame < first_frame) {
         switch ((curve->interpolation_modes >> 8) & 0xF) {
         case 0:
@@ -184,6 +184,7 @@ f32 FCV_getValue(FCVCurve *curve, f32 frame)
         key = &curve->keys[1];
     }
 
+    /* Find the segment that contains frame. */
     while (key->frame <= frame) {
         if (frame == key->frame) {
             return key->value;
@@ -257,6 +258,11 @@ void FCV_skipPack(FCVPack *pack, s32 keyCount)
     FCV_getPackVal2f(pack, keyCount, 0.0f);
 }
 
+/*
+ * Returns the value of the next key in a pack and advances the key index.
+ * Key type 1 reads a stored value, type 3 decodes a run of keys, and the
+ * other types give 0.
+ */
 f32 FCV_getPackValue(FCVPack *pack, f32 frame)
 {
     u32 keyType = FCV_getFKeyType((u32)pack->key_index, pack->key_types);
@@ -284,6 +290,10 @@ f32 FCV_getPackValue(FCVPack *pack, f32 frame)
     return value;
 }
 
+/*
+ * Evaluates a run of key_count float-keyed values at frame, then moves
+ * pack->key_values past the run.
+ */
 static f32 FCV_getPackVal2f(FCVPack *pack, s32 key_count, f32 frame)
 {
     FCVFloatSample *previous = (FCVFloatSample *)pack->key_values;
@@ -461,6 +471,10 @@ static f32 FCV_getPackVal2f(FCVPack *pack, s32 key_count, f32 frame)
     }
 }
 
+/*
+ * Evaluates a run of key_count keys with 16-bit frame times (scaled by 1/30)
+ * at frame, then moves pack->key_values past the run.
+ */
 static f32 FCV_getPackVal2s(FCVPack *pack, u32 key_count, f32 frame)
 {
     FCV2Sample *previous = (FCV2Sample *)pack->key_values;
@@ -630,6 +644,12 @@ static u32 FCV_getFKeyType(u32 keyIndex, u8 *types)
     return (packed >> ((3 - (keyIndex & 3)) * 2)) & 3;
 }
 
+/*
+ * Evaluates a compact spline at frame. A key within half of pack->step of
+ * frame is returned as is. Otherwise the value interpolates between the keys
+ * on each side of frame, by the type of the earlier key. pack->cursor
+ * receives the key after the scanned run.
+ */
 static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 frame)
 {
     FCV2Sample *keys = key_data;
@@ -669,7 +689,7 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
     frame_scale = pack->frame_scale;
     frame += pack->frame_offset;
     first_frame = (f32)keys->frame * frame_scale;
-    /* A selected bracket replaces this initial endpoint measure. */
+    /* near_distance starts at the first key's time; a key within pack->step replaces it. */
     near_distance = first_frame;
     if (frame <= first_frame) {
         values = &keys->values;
@@ -694,6 +714,7 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
         return values->value;
     }
 
+    /* Scan the keys for one within pack->step of frame. */
     near_previous = 0;
     near_next = 0;
     for (index = 1; index < key_count; index++) {
@@ -817,6 +838,10 @@ static f32 FCV2_getPackVal(FCV2Pack *pack, void *key_data, s32 key_count, f32 fr
     }
 }
 
+/*
+ * Evaluates a compact spline at frame. When output is not null, it receives
+ * the key that frame lands on (within FCV2_KEY_FRAME_TIME) or null.
+ */
 static f32 FCV2_getVal(void *output, void *data, s32 key_count, f32 frame)
 {
     FCV2Sample **key_output = output;
@@ -998,6 +1023,11 @@ f32 FCV2_getValueAndKey(s32 *key, FCV2Value *curve, f32 frame)
     return 0.0f;
 }
 
+/*
+ * Scans an attribute stream into the pack: the hash from a type 1 record,
+ * the curve attribute from a type 3 record, and the type 2 records whose
+ * id matches attribute_id (split by their flag bit).
+ */
 void FCV2_readAttribute(FCV2Pack *pack, FCV2AttributeStream *attributes)
 {
     FCV2AttributeStream *stream = attributes;
@@ -1051,6 +1081,7 @@ void FCV2_readAttribute(FCV2Pack *pack, FCV2AttributeStream *attributes)
     }
 }
 
+/* Returns 0 when data starts with the "FCV" signature, 1 for null and 2 otherwise. */
 int FCV2_checkData(void *data)
 {
     FCV2DataHeader *header;
@@ -1071,6 +1102,11 @@ void FCV2_setStep(f32 step)
     fcv2Step = __builtin_fabsf(step) * 0.5f;
 }
 
+/*
+ * Initializes a pack for a curve: frame scale and offset, the default step,
+ * and the cursor at the first key. Format 2 and later read their attribute
+ * stream first and start the keys after it.
+ */
 void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
 {
     f32 frame_scale;
@@ -1111,6 +1147,10 @@ void FCV2_resetPack(FCV2Pack *pack, FCV2CurveData *curve)
     pack->step = fcv2Step;
 }
 
+/*
+ * Returns the type 4 attribute at *cursor and advances the cursor past it.
+ * Any other record yields defaultAttr and leaves the cursor in place.
+ */
 FCV2Attribute *FCV2_getPackAttribute(void **cursor)
 {
     FCV2Attribute *attribute = *cursor;
@@ -1125,6 +1165,10 @@ FCV2Attribute *FCV2_getPackAttribute(void **cursor)
     return result;
 }
 
+/*
+ * Returns the next key's value from a compact pack and advances the cursor.
+ * Type 1 is a constant, type 3 a spline run, and type 0 or others give 0.
+ */
 f32 FCV2_getPackValue(FCV2Pack *pack, f32 frame)
 {
     FCV2KeyHeader *key = pack->cursor;
@@ -1151,6 +1195,10 @@ f32 FCV2_getPackValue(FCV2Pack *pack, f32 frame)
     return value;
 }
 
+/*
+ * Returns the first key of a type 3 key stream whose frame is at or after
+ * frame, or the last key when none is. Returns 0 for other streams.
+ */
 u16 *FCV2_getKey(u16 *cursor, f32 frame)
 {
     s32 last_key;
@@ -1194,6 +1242,7 @@ u16 *FCV2_getKey(u16 *cursor, f32 frame)
     return 0;
 }
 
+/* Steps through the keys of a type 3 stream. It computes and returns nothing. */
 void FCV2_dump(u16 *data)
 {
     u16 key_count;

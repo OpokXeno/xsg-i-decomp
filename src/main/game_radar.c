@@ -16,7 +16,7 @@
 
 /* Radar: markers for the first RADAR_ACTOR_COUNT actors are placed with
  * RADAR_WORLD_SCALE units per world unit, and only shown within
- * RADAR_RANGE_X / RADAR_RANGE_Z of the player. radarRate is the fade-in
+ * RADAR_RANGE_X / RADAR_RANGE_Z of the player. radarRate is the fade
  * alpha, 0..RADAR_RATE_MAX; the ping ring is drawn as RADAR_PING_SEGMENTS
  * quads and grows RADAR_PING_RING_WIDTH wide. */
 #define RADAR_ACTOR_COUNT 64
@@ -114,6 +114,11 @@ static inline void RadarSpritePacketInit(RadarSpritePacket **packet)
     *packet = (RadarSpritePacket *)SCRATCHPAD_BASE;
 }
 
+/*
+ * Draws the radar overlay. `rate` fades out while the radar is hidden (a save
+ * flag or a GameLoopState bit is clear, or a window is active) and fades in
+ * otherwise; nothing is drawn once it reaches zero.
+ */
 void GameRadarDraw(RadarOrigin *origin)
 {
     static u32 TestEnv[28] = { 0x00000000U, 0x00000000U, 0x00000000U, 0x51000006U, 0x00008001U, 0x50000000U, 0x000eeeeeU, 0x00000000U, 0x00000000U, 0x00000000U, 0x0000003fU, 0x00000000U, 0x00070000U, 0x00000000U, 0x00000047U, 0x00000000U, 0x00000000U, 0x00000000U, 0x00000014U, 0x00000000U, 0x00000044U, 0x00000000U, 0x00000042U, 0x00000000U, 0x003fc000U, 0x000003fcU, 0x00000008U, 0x00000000U };
@@ -195,6 +200,10 @@ void GameRadarDraw(RadarOrigin *origin)
     DrawRadarInfo(&origin->x);
 }
 
+/*
+ * Draws the expanding ping ring around the radar centre, then advances `ping`
+ * by 8 unless GameLoopState[4] bit 0 is set.
+ */
 static void DrawRadarPing(int *origin)
 {
     static u32 TestEnv[16] = { 0U, 0U, 0U, 1358954499U, 32769U, 536870912U, 238U, 0U, 458752U, 0U, 71U, 0U, 68U, 0U, 66U, 0U };
@@ -248,6 +257,7 @@ static void DrawRadarPing(int *origin)
         packet[1].vertex.position[2] = origin[2] + 1; packet[1].vertex.position[3] = 0;
         packet += 2;
     } while (segment < RADAR_PING_SEGMENTS + 1);
+    /* End-of-list tags and the scissor for the ping primitive. */
     end = &packet->end;
     end->tag[0] = 0x8001;
     end->tag[1] = 0x10000000; end->tag[2] = 14;
@@ -256,6 +266,12 @@ static void DrawRadarPing(int *origin)
     if (!(GameLoopState[4] & 1)) ping += 8;
 }
 
+/*
+ * Draws a marker for each live actor within the radar range of the player,
+ * then the player's own red marker at the radar centre. Actors with an enemy
+ * record (state_flags bit 0) are yellow, or red-cycling for action types 6
+ * and 10; other actors are green.
+ */
 static void DrawRadarInfo(int *origin)
 {
     static u32 cnt;
@@ -275,6 +291,7 @@ static void DrawRadarInfo(int *origin)
 
     xOrigin = origin[0] * 16 + 0x7498;
     yOrigin = origin[1] * 16 + 0x7680;
+    /* Other actors inside the range box. */
     for (actorIndex = 0; actorIndex < RADAR_ACTOR_COUNT; actorIndex++) {
         if (CheckActorExist(&actor[actorIndex]) != 0 && actorIndex != player->number) {
             current = &actor[actorIndex];
@@ -316,6 +333,7 @@ static void DrawRadarInfo(int *origin)
         }
     }
 
+    /* The player's own marker at the radar centre. */
     color.red = 0xFF;
     color.green = 0;
     color.blue = 0;
@@ -328,6 +346,10 @@ static void DrawRadarInfo(int *origin)
     cnt = (cnt + 0x10) & 0xFF;
 }
 
+/*
+ * Sends a three-vertex marker centred on `position`, rotated by `angle`, with
+ * the RGBA words in `color`. Does nothing when `angle` is outside +/-2*pi.
+ */
 static void DrawActorPoint(float angle, int *position, u32 *color)
 {
     static u32 sPoint[28] = {
@@ -368,6 +390,7 @@ static void DrawActorPoint(float angle, int *position, u32 *color)
     nmlModelDirectSend(5, sPoint, 7);
 }
 
+/* Returns nonzero when the actor is in use, not flagged 0x08, and has no parent. */
 int CheckActorExist(Actor *actor)
 {
     if (actor->inUseId <= 0) {

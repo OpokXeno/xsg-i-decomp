@@ -109,7 +109,7 @@
           }
         ],
         "source": "src/audio/rssd/rssdinit.c",
-        "source_sha256": "310e5614c4726d2c808092547181b75fe68d2ffc0d0d82eb8e9829219c146878"
+        "source_sha256": "32591ba2d10992d2c5e5072b70ce9f489b0134267836d600d6be82302e6dbc8c"
       },
       {
         "fdr_filename": "rssdfunc.c",
@@ -206,7 +206,7 @@
           }
         ],
         "source": "src/audio/rssd/rssdfunc.c",
-        "source_sha256": "c751f87a55a0a1fc6c4734d83116b453d5968f432d8e05abea0b1b820e2b07b7"
+        "source_sha256": "f188f7841d2332d63ea636a3a229a0b0a8c52db4255fe70ddfd1ad9e8c099123"
       },
       {
         "fdr_filename": "rssdstrm.c",
@@ -312,7 +312,7 @@
           }
         ],
         "source": "src/audio/rssd/rssdstrm.c",
-        "source_sha256": "17376d2ca5d9bcab78485aaf09475e4cb595ba1b323bea06f361c46b87ff6002"
+        "source_sha256": "f54fc181e7f9b99e237fa89173fc5b3ef6059ca20226b1a7c486d84ef13e5770"
       },
       {
         "fdr_filename": "rssdring.c",
@@ -369,7 +369,7 @@
           }
         ],
         "source": "src/audio/rssd/rssdring.c",
-        "source_sha256": "4190b203fcff0c49908ba2de505b11caa0f4686c15b7ca81d0e33fe1638979d8"
+        "source_sha256": "8a6a3e03597f10b52af9e52f6dbea325326c869185310f277d648cec335fcb10"
       }
     ],
     "iop_ssd": [
@@ -479,7 +479,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_init.c",
-        "source_sha256": "50ae9646a9d8958049dda9288d61ff817f4a503bd57cbd81b3393fba32bed5a8"
+        "source_sha256": "eda51e44ceb85cafe6ef7a8febe7cca3f2cd3ac1b241954e9742625b196e7fda"
       },
       {
         "fdr_filename": "ssd_mem.c",
@@ -599,7 +599,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_mem.c",
-        "source_sha256": "09d33f51f18b554e463ebeb8a32cf087be961b305b59b90a184318f861f565b6"
+        "source_sha256": "46c037f75be52c6ab449d5a14a4988fe7ab1930a3b6f76918d58c4073a59ffe0"
       },
       {
         "fdr_filename": "ssd_dma.c",
@@ -679,7 +679,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_dma.c",
-        "source_sha256": "686550bdbb04840f1c1b2b1b165bd90984193ebbb78e926de67d9ebf549097ab"
+        "source_sha256": "29c3fd9139f45ecfcb864f6a1a1895a3fdbdd139e2e465bf3d54683fd5d07628"
       },
       {
         "fdr_filename": "ssd_out.c",
@@ -769,7 +769,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_out.c",
-        "source_sha256": "a60ea1a97eb1d9bfda4251f81720c3f9eb47d3d782304c94f241b5c1e99039fb"
+        "source_sha256": "6180273021438919025de1f8c6b207567a04fb8b73273be8eddd0e5df99a0540"
       },
       {
         "fdr_filename": "ssd_wave.c",
@@ -829,7 +829,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_wave.c",
-        "source_sha256": "52b52d380e6d4820d96e75dc0e76afa55d7cbdb074cbc8a646549c828d02cf72"
+        "source_sha256": "2d6644ea64938a87749843be42bc2b59d2be4e58ece163e489a1996de37f047a"
       },
       {
         "fdr_filename": "ssd_seq.c",
@@ -974,7 +974,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_seq.c",
-        "source_sha256": "3752d7759bc490233c74a749f7cbeb333fd301d6889c0a489fdbc6b71faa151d"
+        "source_sha256": "24fec824967ab849b40d3627668654b898dee55e59265037edd107322d1ab056"
       },
       {
         "fdr_filename": "ssd_musc.c",
@@ -1049,7 +1049,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_musc.c",
-        "source_sha256": "f71f94dc93990c69a313e7459af3940587fca83a65bdb1864780b522d7c642ef"
+        "source_sha256": "e889aaf0524f07c5005d54023e74e96204f4bff1992da273ebdd63ab63d937f5"
       },
       {
         "fdr_filename": "ssd_sec.c",
@@ -1194,7 +1194,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_sec.c",
-        "source_sha256": "d84d5159db63df886d8459a8627d4fb3beb7cfbc5ceebdeee86469b1ed4dc99e"
+        "source_sha256": "3f9521f5a4dfbdbfcc74a3f817f3e8ea01fd864d081c87039311a917ddc4d70a"
       },
       {
         "fdr_filename": "ssd_smpl.c",
@@ -1281,7 +1281,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_smpl.c",
-        "source_sha256": "afbd1736d6b10df40868d02cda33763197b06d4aeca10a61190eac2a020adb4e"
+        "source_sha256": "d36e4ef2ee2937ee3b201114071de0623ae107b675e89de53ed20dcf923b0001"
       },
       {
         "fdr_filename": "ssd_main.c",
@@ -1351,7 +1351,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_main.c",
-        "source_sha256": "8da62497798923dd190d31dcc61f5c7e49b31524bba8b27ec788297e0137534f"
+        "source_sha256": "cc9ccde0067985151564ab2a7cd26cef8d00ae7663399076dac1f74f83107aba"
       },
       {
         "fdr_filename": "ssd_trap.c",
@@ -1879,7 +1879,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_trap.c",
-        "source_sha256": "63196f092904bca486dfd399ea0c412c17e580cbb9349d3167ef6a7efabfcfbb"
+        "source_sha256": "88f3a71ee70341f2a4864e9614f01cab2a61fbe89a18108b25e712b5a1ad2e43"
       },
       {
         "fdr_filename": "ssd_chan.c",
@@ -2109,7 +2109,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_chan.c",
-        "source_sha256": "3687321387b954d21387a342a741d509f13e44667ed6e50bde6858a6d78d5f5b"
+        "source_sha256": "18f7a7b3a7901cbd5951f9c31faa700ee37d2c36b202a2eed2412e49ccea4e06"
       },
       {
         "fdr_filename": "ssd_lfo.c",
@@ -2196,7 +2196,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_lfo.c",
-        "source_sha256": "f3689c5081376d2be1db73e18b82237fef972b244908e9e6c84f5634c8d74d9b"
+        "source_sha256": "b632e6b991eb57e6f041571c63f22849de6790c0e085444583396c8f294c1bb0"
       },
       {
         "fdr_filename": "ssd_voic.c",
@@ -2266,7 +2266,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_voic.c",
-        "source_sha256": "f4fee7cbad3b55bda6e65a56893b7ee2a9a8fd1eeac0ad02972fed3c325aa5c9"
+        "source_sha256": "ca42416cf907424fdcda1470859e0d81142b6c0d0e1945951d3b77b866387391"
       },
       {
         "fdr_filename": "ssd_dev.c",
@@ -2371,7 +2371,7 @@
         ],
         "generated_data": [],
         "source": "src/audio/ssd/ssd_dev.c",
-        "source_sha256": "1f7d2e91c3b05c87f800d22c720b833f0f4270675b351b75954b27c1396b3d0a"
+        "source_sha256": "597c7576f3f5626455f3e0281b1956032924c20bfcbd1e34ffcdb5b51b0eb5a4"
       },
       {
         "fdr_filename": "ssd_err.c",
@@ -2428,7 +2428,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_err.c",
-        "source_sha256": "3c6691ec088e6876d3525abae2225833a4651cdd5d4121b35b5abd40ec1fc222"
+        "source_sha256": "c4cb9a58c29b0dee211a345401567a0e18864a0f32ccd3f0933544dc83c74d9c"
       },
       {
         "fdr_filename": "ssd_midi.c",
@@ -2546,7 +2546,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_midi.c",
-        "source_sha256": "170ff013af4fa0152321005d7ee5ec8c09e3f8b1a12245270f62b5f15ebbe75a"
+        "source_sha256": "754cc57def7023f6c6d9efde768270d526bc2fd1638e9cdca5cd1d217e10afaf"
       },
       {
         "fdr_filename": "ssd_dbg.c",
@@ -2629,7 +2629,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_dbg.c",
-        "source_sha256": "69a472d654785aef3c93008558ff9efe3990ded1b2b6ac3ab27aa6ae3fe8700a"
+        "source_sha256": "b96710c93f24953ec33801a32a7b0d9ad06162d4ebffeb5bcdbe7ff7c038cb3e"
       },
       {
         "fdr_filename": "ssd_pcm.c",
@@ -2721,7 +2721,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_pcm.c",
-        "source_sha256": "8cf1816e4549654017e34734c0bf0cba3c52ed9308138c38642f9a260ea0f1bd"
+        "source_sha256": "42e2f510a6de05df231e12810e03f1d3b2265904dedc3ae618185433904b9b40"
       },
       {
         "fdr_filename": "ssd_vag.c",
@@ -2898,7 +2898,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_vag.c",
-        "source_sha256": "b823889cd7c6689383b83df87e380877a753d88837256a3dd8a1863a23f927da"
+        "source_sha256": "6572822fc035b288e3c425369b960f8f29dd0adc3ddf6bf0d48709ab0f669378"
       },
       {
         "fdr_filename": "ssd_data.c",

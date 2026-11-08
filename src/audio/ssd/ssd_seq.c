@@ -21,6 +21,7 @@ void SsdGetPlayMeasure(int sequence_id);
 void SsdSetSeqNoteFader(int id, int track, short fader);
 int SsdGetSeqCuePoint(void);
 
+/* Resets a sequence to its defaults, taking the settings from its music data when present, and resets the device and its channels. */
 void SsdInitSequence(SsdSequence *sequence)
 {
     SsdMusicData *data = sequence->data;
@@ -77,6 +78,7 @@ void SsdInitSequence(SsdSequence *sequence)
     sequence->random_state = SsdGetRSRandom();
 }
 
+/* Adds the sequence to the front of the sequence list with interrupts disabled. */
 void SsdLinkSequence(SsdSequence *sequence)
 {
     CpuDisableIntr();
@@ -85,6 +87,7 @@ void SsdLinkSequence(SsdSequence *sequence)
     CpuEnableIntr();
 }
 
+/* Removes the sequence from the list and returns 0. Reports and returns SSD_ERROR_SEQUENCE_NOT_FOUND when it is not listed. */
 int SsdUnlinkSequence(SsdSequence *sequence)
 {
     SsdSequence *current;
@@ -114,6 +117,7 @@ int SsdUnlinkSequence(SsdSequence *sequence)
     return 0;
 }
 
+/* Frees the sequence's track, data and device buffers, then the sequence itself. */
 void SsdDisposeSequenceBuffer(SsdSequence *sequence)
 {
     if (sequence->tracks != 0)
@@ -125,6 +129,7 @@ void SsdDisposeSequenceBuffer(SsdSequence *sequence)
     SsdDisposePtr(sequence);
 }
 
+/* Returns the SSD_SEQ_STATUS flags of a sequence, or SSD_ERROR_SEQUENCE_NOT_FOUND. */
 int SsdGetSeqPlayStatus(int sequenceId)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -152,6 +157,7 @@ int SsdGetSeqPlayStatus(int sequenceId)
     return flags;
 }
 
+/* Sets the master tempo to bpm: at once when ticks is 0, otherwise as a ramp over ticks. bpm 0 means the normal tempo. */
 void SsdSetSeqMasterTempo(int id, int bpm, int ticks)
 {
     SsdSequence *sequence = SsdGetSequencePtr(id);
@@ -177,6 +183,7 @@ void SsdSetSeqMasterTempo(int id, int bpm, int ticks)
     CpuEnableIntr();
 }
 
+/* Sets the master note at once when duration is 0, otherwise as a ramp over duration ticks. */
 void SsdSetSeqMasterNote(int sequenceId, int note, int duration)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -197,6 +204,7 @@ void SsdSetSeqMasterNote(int sequenceId, int note, int duration)
     }
 }
 
+/* Sets the master volume at once or as a ramp over ticks. A volume of 0 marks the sequence to stop. */
 void SsdSetSeqMasterVolume(int id, int volume, int ticks)
 {
     SsdSequence *sequence = SsdGetSequencePtr(id);
@@ -228,6 +236,7 @@ void SsdSetSeqMasterVolume(int id, int volume, int ticks)
     }
 }
 
+/* Sets the master pan at once when duration is 0, otherwise as a ramp over duration ticks. */
 void SsdSetSeqMasterPanpot(int sequenceId, int pan, int duration)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -248,6 +257,7 @@ void SsdSetSeqMasterPanpot(int sequenceId, int pan, int duration)
     }
 }
 
+/* Programs the reverb of each core that the sequence's options select, then enables it. */
 void SsdSetSeqReverb(SsdSequence *sequence)
 {
     int first;
@@ -273,6 +283,7 @@ void SsdSetSeqReverb(SsdSequence *sequence)
     }
 }
 
+/* Applies muteMask to the tracks after the first, muting or unmuting each one. */
 void SsdSetSeqMute(int sequenceId, int muteMask)
 {
     SsdSequence *sequence;
@@ -325,6 +336,7 @@ void SsdSetSeqNoteFader(int id, int track, short fader)
     }
 }
 
+/* Sets a track's volume fader and recomputes its channel volume from the channel volume and expression. */
 void SsdSetSeqVolumeFader(int sequenceId, int trackIndex, int volume)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -352,6 +364,7 @@ void SsdSetSeqPanpotFader(int id, int track, signed char fader)
     }
 }
 
+/* Applies patch set patchNumber of the sequence's patch chunk to its tracks. A negative number applies none. */
 void SsdSetSeqPatchNumber(int sequenceId, int patchNumber)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -379,6 +392,7 @@ void SsdSetSeqPatchNumber(int sequenceId, int patchNumber)
     }
 }
 
+/* Resets the track faders, then applies the note, volume and panpot of each entry of patches when it is not null. */
 void SsdSetTrackPatchSet(int id, const SsdTrackPatchSet *patches)
 {
     SsdSequence *sequence = SsdGetSequencePtr(id);
@@ -416,6 +430,7 @@ struct SsdSequence *SsdSetSeqABRepeat(int sequenceId)
     return SsdGetSequencePtr(sequenceId);
 }
 
+/* Writes the sequence's play time to out as a time code. */
 void SsdGetSeqPlayTime(int sequence_id, SsdTimeCode *out)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequence_id);
@@ -425,6 +440,7 @@ void SsdGetSeqPlayTime(int sequence_id, SsdTimeCode *out)
     }
 }
 
+/* Converts ticks to hours, minutes, seconds and SMPTE frames. */
 void SsdGetTimeCode(unsigned int ticks, SsdTimeCode *timeCode)
 {
     unsigned int seconds = ticks / SSD_TICKS_PER_SECOND;
@@ -475,6 +491,7 @@ void SsdSetSeqStopCallback(int sequence_id, SsdSequenceStopCallback callback)
     }
 }
 
+/* Returns the listed sequence with sequenceId, or 0 when there is none. */
 SsdSequence *SsdGetSequencePtr(int sequenceId)
 {
     SsdSequence *sequence = SsdWork.sequences;
@@ -487,6 +504,7 @@ SsdSequence *SsdGetSequencePtr(int sequenceId)
     return sequence;
 }
 
+/* Starts a sequence that is not playing: sets up its reverb and marks it playing. */
 void SsdStartingSequence(SsdSequence *sequence)
 {
     if ((sequence->flags & SSD_SEQUENCE_PLAYING) == 0) {
@@ -496,6 +514,7 @@ void SsdStartingSequence(SsdSequence *sequence)
     }
 }
 
+/* Cuts off the device of a playing sequence and marks it stopped. */
 void SsdStoppingSequence(SsdSequence *sequence)
 {
     if (sequence->flags & SSD_SEQUENCE_PLAYING) {

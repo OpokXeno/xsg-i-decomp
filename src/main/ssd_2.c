@@ -1,10 +1,9 @@
 #include "common.h"
 
 /*
- * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
- * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
- * carry RssdWork's type yet, so that
- * header is included directly.
+ * RssdWork, RssdRequest and RssdCallFunc are declared in src/main/ssd_init.h.
+ * That header is included directly because include/main/ssd_init.h does not
+ * yet carry RssdWork's type.
  */
 #include "ssd_init.h"
 #include "main/ssd_2.h"
@@ -278,6 +277,7 @@ void SsdSetSeqMute(int sequence, int mute)
     RssdCallFunc(RSSD_CMD_SET_SEQ_MUTE,&request, 0, 0);
 }
 
+/* Converts a sample position into hours, minutes, seconds and frames, using RssdWork.sample_rate. */
 void SsdGetTimeCode(unsigned int sample_position, SsdTimeCode *time_code)
 {
     unsigned int total_units;

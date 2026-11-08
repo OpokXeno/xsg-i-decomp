@@ -10,7 +10,7 @@
 #include "ov12/xrg_rand_int.h"
 #include "ov12/create_rg.h"
 
-/* Seconds a camera-blocking object takes to fade out and back in. */
+/* Seconds that one fade-out or fade-in of a hidden background object takes. */
 #define RG_BGOBJ_FADE_TIME 0.3f
 
 /* A body attack breaks the object at this energy or more. */
@@ -34,6 +34,7 @@ static void _Destruct(RgChar *pChar);
 
 const char bgObjBreakHitEffectName[16] = "eff12.ptcl";
 
+/* Installs the char methods on a background object, sets its defaults and attaches its geom tray. */
 static void _InitRgBgObj(RgBgObj *pObj, RgDispModel *dispModel, RgGeom *geomTray)
 {
     if (pObj == 0) {
@@ -86,6 +87,7 @@ static void _Destruct(RgChar *pChar)
     }
 }
 
+/* Advances the hide state machine by deltaTime and updates the transparency to match. */
 static void _PassTime(RgChar *pChar, float deltaTime)
 {
     RgBgObj *pObj = (RgBgObj *)pChar;
@@ -130,9 +132,10 @@ static void _PassTime(RgChar *pChar, float deltaTime)
 }
 
 /*
- * InstanceOfRgDebugFlags()->flags[1] is one of the individual debug toggles
- * _InitRgDebugFlags enables by default (include/ov12/rg_debug_flags.h), so
- * background objects draw normally unless a developer disables it.
+ * Draws the object's display model unless it is hidden. The draw is gated by
+ * InstanceOfRgDebugFlags()->flags[1], which _InitRgDebugFlags enables by default
+ * (include/ov12/rg_debug_flags.h), so background objects draw normally unless a
+ * developer disables it.
  */
 static void _Draw(RgChar *pChar)
 {
@@ -180,6 +183,10 @@ void RgBgObjSetHardness(RgBgObj *pObj, float hardness)
     pObj->hardness = hardness;
 }
 
+/*
+ * Hides the object for duration seconds: it fades out, unless it is already hidden
+ * or ignores hiding.
+ */
 void RgBgObjSetHide(RgBgObj *pObj, float duration)
 {
     if (pObj == 0) {
@@ -249,6 +256,10 @@ RgDispModel *RgBgObjGetDispModel(RgBgObj *pObj)
     return pObj->dispModel;
 }
 
+/*
+ * Applies damage: the object breaks, with a break effect, when the damage exceeds its
+ * hardness, and otherwise loses that much hardness. Returns 0 when hardness is unset.
+ */
 int RgBgObjTryToBreak(RgBgObj *pObj, float damage)
 {
     RgMatrix local;
@@ -272,6 +283,7 @@ int RgBgObjTryToBreak(RgBgObj *pObj, float damage)
     return 1;
 }
 
+/* Breaks the object on a body attack of enough energy, if body attacks are enabled for it. */
 void RgBgObjTryToBodyAttack(RgBgObj *pObj, float energy)
 {
     RgMatrix local;
@@ -298,6 +310,7 @@ float StaticRgBgObjGetBlight(void)
     return s_fBgObjBlight;
 }
 
+/* Sets the blight level, clamped to the range 0 to 1. */
 void StaticRgBgObjSetBlight(float blight)
 {
     if (blight < 0.0f) {

@@ -157,6 +157,10 @@ extern void SetContainerParam(MapUnitRecordTrapView *unit);
 void MAP_updateUnitTrap(MapUnitRecordTrapView *unit);
 int GivesEnemyDamage(MapUnitRecordTrapView *unit);
 
+/*
+ * Initializes a trap unit: takes its flags, dimensions and effect from TrapKind_t (or the
+ * container and breakable paths), applies the size overrides and builds its transform.
+ */
 void InitMapTrap(MapUnitRecordTrapView *unit)
 {
     static TrapKindEntry TrapKind_t[5] = { { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 4194304U, .effectId = 730, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 1, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 8388608U, .effectId = 731, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.25f, 1.0f, 0.25f, 0.0f }, .flags = 67108864U, .effectId = 732, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 0.8f, 0.5f, 0.0f }, .flags = 33554432U, .effectId = 733, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } }, { .windState = 2, .unmodeled_01 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, .dimensions = { 0.5f, 1.0f, 0.5f, 0.0f }, .flags = 2097152U, .effectId = 601, .unmodeled_28 = { 0, 0, 0, 0, 0, 0, 0, 0 } } };
@@ -250,6 +254,10 @@ void InitMapTrap(MapUnitRecordTrapView *unit)
     }
 }
 
+/*
+ * Per-frame update of a trap unit: follows its linked object, plays the trigger and break
+ * sound and effect, and ends the wind after TRAP_END_FRAMES.
+ */
 void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
 {
     TrapDamageProperties *trap = &unit->trap;
@@ -258,6 +266,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
         DrawActiveCursol(unit);
     }
     UwamonoCommonFunc(unit);
+    /* State 0 waits for trap->state: 1 fires the trap, 2 breaks it. */
     switch (unit->trapState) {
     case 0: {
         if (unit->linkedObject != 0 && !(unit->flags & TRAP_FLAG_BREAKABLE)) {
@@ -333,6 +342,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
         break;
     }
 
+    /* State 3: the wind runs until the timer passes trap->activeDuration. */
     case 3: {
         unit->trapTimer = unit->trapTimer + 1;
         if (unit->trapTimer >= TRAP_END_FRAMES) {
@@ -352,6 +362,7 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
         break;
     }
 
+    /* State 1: counts the timer up to TRAP_END_FRAMES, then deletes the unit. */
     case 1: {
         s16 elapsed;
 
@@ -370,10 +381,10 @@ void MAP_updateUnitTrap(MapUnitRecordTrapView *unit)
     }
 }
 
+/* Applies the trap's damage to each actor inside its radius and sets the hit and damage-kind flags. Returns 0. */
 int GivesEnemyDamage(MapUnitRecordTrapView *unit)
 {
-    /* Prepare the collision sphere and its display color when collision
-     * display is enabled. No reader of this local record is evidenced here. */
+    /* Fills collisionRecord when collision display is enabled; the record is not read later in this function. */
     TrapCollisionRecord collisionRecord;
     int actorIndex;
     TrapDamageActor *target;

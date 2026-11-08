@@ -105,6 +105,11 @@ const char doorHitSizeFormat[32] = "hitsize[X]=%f Y=%f Z=%f\n";
 
 const char doorRangeFormat[40] = "range=%f scope=%f spd=%d\n";
 
+/*
+ * Initializes one door unit: places its parts, copies its parameters to the
+ * linked door (if any), sets the starting open phase and marks it initialized.
+ * Prints the setup when printflg is set.
+ */
 void InitMapDoor(DoorUnit *door)
 {
     DoorParams *params = &door->params;
@@ -160,6 +165,10 @@ void InitMapDoor(DoorUnit *door)
            params->trigger_distance, params->open_limit);
 }
 
+/*
+ * Per-frame update of a door unit: runs the phase function for its door type,
+ * copies the model position back, and updates the model lanes of the linked door.
+ */
 void MAP_updateUnitDoor(DoorUnit *door)
 {
     DoorParams *params = &door->params;
@@ -198,6 +207,7 @@ void MAP_updateUnitDoor(DoorUnit *door)
     }
 }
 
+/* Runs the auto door phase function for the door's open_phase. */
 void AutoDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
@@ -220,6 +230,7 @@ void AutoDoorFunc(DoorUnit *door)
     }
 }
 
+/* Runs the event door phase function for the door's open_phase. */
 int EventDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
@@ -242,6 +253,7 @@ int EventDoorFunc(DoorUnit *door)
     }
 }
 
+/* Runs the half-auto door phase function for the door's open_phase. */
 int HalfAutoDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
@@ -264,6 +276,7 @@ int HalfAutoDoorFunc(DoorUnit *door)
     }
 }
 
+/* Runs the Mj door phase function for the door's open_phase. */
 int MjDoorFunc(DoorUnit *door)
 {
     switch (door->open_phase) {
@@ -290,6 +303,10 @@ void DoubleDoorFunc(void)
 {
 }
 
+/*
+ * Waits while the door is closed. When the player comes within trigger_distance,
+ * the door starts opening and plays its move sound.
+ */
 void AutoDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -311,6 +328,7 @@ void AutoDoorStanbyFunc(DoorUnit *door)
     }
 }
 
+/* Runs the opening motion: open_timer counts up each frame until it reaches open_limit, then the door is open. */
 void AutoDoorOpenOpeFunc(DoorUnit *door)
 {
     int position;
@@ -326,6 +344,7 @@ void AutoDoorOpenOpeFunc(DoorUnit *door)
     }
 }
 
+/* Steps the door model by its direction vector: forward for slide-forward doors, back for slide-back doors. */
 void AutoDoorOpenFuncSub(DoorUnit *door)
 {
     signed char direction;
@@ -344,6 +363,10 @@ void AutoDoorOpenFuncSub(DoorUnit *door)
     }
 }
 
+/*
+ * Holds an open auto door for DOOR_AUTO_HOLD_FRAMES frames, then starts closing
+ * once the player is beyond trigger_distance.
+ */
 void AutoDoorOpenNowFunc(DoorUnit *door)
 {
     int position[4];
@@ -370,6 +393,10 @@ void AutoDoorOpenNowFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Runs the closing motion: open_timer counts down each frame. The door reopens
+ * when the player comes back within trigger_distance, or closes when open_timer reaches 0.
+ */
 int AutoDoorCloseOpeFunc(DoorUnit *door)
 {
     Vector4 closing_position;
@@ -404,6 +431,7 @@ const char doorOpenFormat[16] = "id=%d DoorOpen\n";
 
 const char doorCloseFormat[24] = "id=%d DoorClose\n";
 
+/* Starts opening an event door once its event_signal is 1, printing the open message when printflg is set. */
 void EventDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -430,6 +458,7 @@ void EventDoorStanbyFunc(DoorUnit *door)
     }
 }
 
+/* Runs the opening motion of an event door: open_timer counts up until it reaches open_limit. */
 void EventDoorOpenOpeFunc(DoorUnit *door)
 {
     int position;
@@ -445,6 +474,10 @@ void EventDoorOpenOpeFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Holds an open event door until its event_signal drops to 0, then starts
+ * closing and plays the close sound.
+ */
 void EventDoorOpenNowFunc(DoorUnit *door)
 {
     int position;
@@ -467,6 +500,7 @@ void EventDoorOpenNowFunc(DoorUnit *door)
     }
 }
 
+/* Runs the closing motion of an event door: open_timer counts down and the door is closed at 0. */
 void EventDoorCloseOpeFunc(DoorUnit *door)
 {
     int position;
@@ -481,6 +515,10 @@ void EventDoorCloseOpeFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Waits while the door is closed. It starts opening when the player is within
+ * trigger_distance and CheckDoorSwitch reports the switch press.
+ */
 void MjDoorStanbyFunc(DoorUnit *door)
 {
     int position;
@@ -502,6 +540,11 @@ void MjDoorStanbyFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Holds an open half-auto door for DOOR_HALF_AUTO_HOLD_FRAMES frames, then starts
+ * closing once the player is beyond trigger_distance and event_signal is 0.
+ * An event_signal of 1 is cleared while the player is within trigger_distance.
+ */
 void HalfAutoDoorOpenNowFunc(DoorUnit *door)
 {
     int position[4];
@@ -532,6 +575,10 @@ void HalfAutoDoorOpenNowFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Moves the door model along its motion_axis in proportion to open_timer and
+ * open_limit, then copies the model position to model_x, model_y and model_z.
+ */
 void DoorCommonFunc(DoorUnit *door)
 {
     AlignedVector4 resting = door->resting_position;
@@ -580,6 +627,7 @@ void DoorCommonFunc(DoorUnit *door)
     door->model_z = door->model->z;
 }
 
+/* Sets the model position for the start of an opening move, by motion_axis. */
 void DoorOpenStanbyFunc(DoorUnit *door)
 {
     AlignedVector4 resting = door->resting_position;
@@ -608,6 +656,10 @@ void DoorOpenStanbyFunc(DoorUnit *door)
     }
 }
 
+/*
+ * Returns the 2D distance from the player to the door position, or
+ * DOOR_FAR_DISTANCE when the player is more than DOOR_FLOOR_TOLERANCE above or below the door.
+ */
 float CheckDoorDist(DoorUnit *door)
 {
     DoorPlayerState *player = GameLoopState.player;
@@ -624,6 +676,10 @@ float CheckDoorDist(DoorUnit *door)
     }
 }
 
+/*
+ * Returns 1 when the Circle bit of PadData.half_2a is set and the player faces
+ * the door within DOOR_SWITCH_ANGLE, otherwise 0.
+ */
 int CheckDoorSwitch(DoorUnit *door)
 {
     Vector4 position;
@@ -641,6 +697,10 @@ int CheckDoorSwitch(DoorUnit *door)
     return 0;
 }
 
+/*
+ * Writes the door position to position: its own position for an unlinked door,
+ * or the midpoint between the door and its linked unit (y is the door's own).
+ */
 void CheckDoorPos(DoorUnit *door, AlignedVector4 *position)
 {
     signed char linked_index = door->params.linked_unit;

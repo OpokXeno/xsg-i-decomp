@@ -1,5 +1,6 @@
 /*
  * OV12 original TU 71: 0x00a3cd10..0x00a3e518 (26 functions)
+ * The robot selection screen.
  */
 #include "common.h"
 #include "shared.h"
@@ -57,19 +58,19 @@ typedef struct AlignedLightBlock {
     AlignedLightVector vectors[4];
 } AlignedLightBlock;
 
-/* main/xgl_cd.c's CD read cancellation (src/main/xgl_hdd.h declares it with an int result). */
+/* Cancels the pending CD read (main/xgl_cd.c). */
 extern void xglCdReadCancel(void);
 
 /*
  * main/xgl_light.c takes the intensity as an XglLightQuadword; this TU's
- * 8-aligned AlignedLightVector blocks (measured: a 16-aligned union changes
- * the frame and the data alignment) are passed as their Vector4 member.
+ * 8-aligned AlignedLightVector blocks are passed as their Vector4 member, since
+ * a 16-aligned union would change the data alignment.
  */
 extern void xglLightIntensityAmbient(StudioLight *light,
                                      const Vector4 *intensity);
 extern void xglLightIntensityParallel(StudioLight *light, unsigned int index,
                                      const Vector4 *intensity);
-/* Defined elsewhere (scaffold data): file-name and assertion strings. */
+/* Defined outside this file: file-name and assertion strings. */
 extern const char selectRobotAssertFileNumWithinDataMax[];
 extern const char selectRobotFloorModelFileName[];
 extern const char selectRobotDataDirectory[];
@@ -105,8 +106,8 @@ static void _DestructAct(RgSelectRobot *pCont);
 static void _DrawAct(RgSelectRobot *pCont);
 static int _ReqLoad(const char *const *names, void *const *buffers,
                     unsigned int count, void *owner);
-/* The published _DumpHead takes no parameter; the original call passes
-   one node pointer, which its empty body ignores. */
+/* The definition takes no parameter; the original calls pass one node
+   pointer, which its empty body ignores. */
 static void _DumpHead();
 
 static int s_bLoading = 0;
@@ -135,10 +136,9 @@ const AlignedLightBlock selectRobotLightIntensityBlock = {
 const char selectRobotAssertContNotNil[16] = "pCont != NIL";
 
 /*
- * xglCdReadFile's completion callback: only completion code 4 does
- * anything, and only when a requester (s_pWhoAreYou) is on file to receive
- * the count; any other requester-less code-4 completion is logged instead
- * of counted.  Codes below -2 and codes 1..3 are guarded out and ignored.
+ * xglCdReadFile's completion callback: only completion code 4 does anything.
+ * It counts the read when a requester (s_pWhoAreYou) is on file to receive it,
+ * and logs a warning otherwise. Every other code is ignored.
  */
 static void _ReadCallback(int completionCode)
 {
@@ -240,7 +240,6 @@ static __inline__ void ResetLoadCounts(unsigned int *completed_count,
     *completed_count = 0;
 }
 
-/* Original OV12 local function at 0x00a3d008. */
 static void _InitLoad(void)
 {
     s_bLoading = 0;
@@ -249,6 +248,11 @@ static void _InitLoad(void)
     xglCdReadCancel();
 }
 
+/*
+ * Resets a preview record and carves its file buffers from cursor. With a
+ * nonzero count it also allocates the weapon children and reads the floor
+ * model. Returns the advanced cursor.
+ */
 static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor,
                       int regionBytes, int count)
 {
@@ -302,6 +306,7 @@ static void *_InitAct(RgSelectRobot *pCont, unsigned char *cursor,
     return cursor;
 }
 
+/* Sets the ambient light and three parallel lights of a preview actor, with the intensities scaled by 0.8. */
 void _select_light(StudioLight *light)
 {
     static AlignedLightBlock asDirection = {
@@ -350,6 +355,10 @@ static void _ActorPos(RgSelectRobot *pCont, RgVector position)
     XrgLinearIntpVector(position, s_aPos[1], s_aPos[0], pCont->screenPos);
 }
 
+/*
+ * Places the root preview actor at its screen position and eases its displayed
+ * yaw toward displayPosition, keeping the yaw wrapped to +/-PI.
+ */
 static void _ActorPosUpdate(RgSelectRobot *pCont)
 {
     Actor *actor;
@@ -392,6 +401,10 @@ static void _ActorPosUpdate(RgSelectRobot *pCont)
     pCont->displayYaw = wrappedYaw;
 }
 
+/*
+ * Creates the preview actor for a record from its buffers. A weapon child is
+ * attached to its parent robot's actor and takes the weapon's motion.
+ */
 static void _ActivateAct(RgSelectRobot *pCont)
 {
     Actor *actor;
@@ -462,6 +475,7 @@ static void _ActivateAct(RgSelectRobot *pCont)
     }
     actor->shadow_kind = SELECT_ROBOT_SHADOW_KIND;
     actor->shadowSize = SELECT_ROBOT_SHADOW_SIZE;
+    /* A weapon child mounts on its parent robot's actor and takes the weapon motion. */
     if (pCont->parent != 0) {
         RgSelectRobot *up = pCont->parent;
         RgWeaponEssence *table = pCont->weapon;
@@ -492,6 +506,11 @@ static void _ActivateAct(RgSelectRobot *pCont)
     _ActorPosUpdate(pCont);
 }
 
+/*
+ * Applies a selection to a preview record. When the file names already match,
+ * only its weapon children are refreshed; otherwise the names are replaced and
+ * the state is updated.
+ */
 static void _ReqAct(RgSelectRobot *pCont, XrgActorEssence *essence,
                     RgWeaponEssence **weapons, int *extra)
 {
@@ -543,6 +562,7 @@ static void _ReqAct(RgSelectRobot *pCont, XrgActorEssence *essence,
         return;
     }
 
+    /* A new selection: retire the current actor if there is one, then take the new names. */
     robotKind = pCont->state;
     pCont->actorID = code;
     switch (robotKind) {
@@ -595,6 +615,7 @@ static void _ReqAct(RgSelectRobot *pCont, XrgActorEssence *essence,
     }
 }
 
+/* Hides the preview actors and frees the weapon children and the loaded data. */
 static void _DestructAct(RgSelectRobot *pCont)
 {
     unsigned int i;
@@ -630,6 +651,11 @@ static void _DestructAct(RgSelectRobot *pCont)
     }
 }
 
+/*
+ * Advances a preview record: an idle record with names starts its load, a
+ * loading record waits for it, and an active record creates its actor and fades
+ * it in. A disposing actor is removed after its delay. Weapon children follow.
+ */
 static void _JobAct(RgSelectRobot *pCont, float deltaTime)
 {
     const char *names[RG_SELECT_ROBOT_FILE_MAX];
@@ -704,6 +730,10 @@ static void _JobAct(RgSelectRobot *pCont, float deltaTime)
     }
 }
 
+/*
+ * Draws the floor model, then shows the active weapon children one at a time,
+ * switching every blink period.
+ */
 static void _DrawAct(RgSelectRobot *pCont)
 {
     unsigned int count;

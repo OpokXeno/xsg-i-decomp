@@ -14,8 +14,6 @@
 #include "ov12/rg_disp.h"
 #include "ov12/rg_font.h"
 
-/* Declared here: functions of other translation units. */
-
 /* Screen layout of the HUD. */
 #define RG_DISP_WPN1P_BOARD_Y 0x160
 #define RG_DISP_WPN1P_PAINT_PRIO 4
@@ -28,7 +26,7 @@ static void _UpdateWepDisp(WepDisp *pWepDisp, RgStatus *pRobot);
 static void _DispWepDisp(WepDisp *pWepDisp, XrgPaint2D *paint,
                          RgFont *bulletFont, RgFont *weaponFont);
 
-/* Defined here: the assert strings of the scaffold-owned data window. */
+/* Assert messages and the source path for the assert_prog calls in this file. */
 const char dispWpn1pAssertDispNotNil[] = "pDisp != NIL";
 const char dispWpn1pSourcePath[] = "../rg_disp_wpn1p.euc.c";
 const char dispWpn1pAssertBxxNotNil[] = "pBxx != NIL";
@@ -56,6 +54,10 @@ const char dispWpn1pAssertBarTexNotNil[] = "pBarTex != NIL";
 const char dispWpn1pBarRightPictureName[] = "bar_wepr.bmp";
 const char dispWpn1pBarBothPictureName[] = "bar_wepb.bmp";
 
+/*
+ * Binds a weapon to a weapon display slot and sets the gauge's bar picture, position
+ * and activity for it. A null weapon clears the slot and deactivates its gauge.
+ */
 static void _SetWepDisp(WepDisp *pWepDisp, RgWeapon *weapon,
                         unsigned int index)
 {
@@ -122,6 +124,7 @@ static void _SetWepDisp(WepDisp *pWepDisp, RgWeapon *weapon,
     }
 }
 
+/* Re-reads the weapon of this slot from the robot and rebinds the slot when it changed. */
 static void _UpdateWepDisp(WepDisp *pWepDisp, RgStatus *pRobot)
 {
     RgWeapon *weapon;
@@ -156,6 +159,7 @@ typedef struct WepTextPositions {
 const WepTextPositions dispWpn1pTextPositionTable = {{{8, 365}, {452, 366}, {416, 401}}};
 const char dispWpn1pUnarmedText[] = "UNARMED";
 
+/* Draws the remaining shot count and the weapon name of a slot, or UNARMED when it has no weapon. */
 static void _DispWepDisp(WepDisp *pWepDisp, XrgPaint2D *paint,
                          RgFont *bulletFont, RgFont *weaponFont)
 {
@@ -197,6 +201,10 @@ const char dispWpn1pBoostPictureName[] = "boost.bmp";
 const char dispWpn1pMphPictureName[] = "mph1.bmp";
 const char dispWpn1pBarDashPictureName[] = "bar_dash.bmp";
 
+/*
+ * Creates the paint, fonts, pictures and dash gauge from the battle common data, then
+ * initializes the four weapon slots.
+ */
 static void _InitDisp(RgDispWpn1P *pDisp)
 {
     RgBattleCommonDataEnv *env;
@@ -270,6 +278,7 @@ void DisposeRgDispWpn1P(RgDispWpn1P *pDisp)
 }
 
 
+/* Attaches the robot to the display and binds each of its weapons to a slot. */
 void RgDispWpn1PSetRobot(RgDispWpn1P *pDisp, RgStatus *pRobot)
 {
     unsigned int i;
@@ -286,6 +295,7 @@ void RgDispWpn1PSetRobot(RgDispWpn1P *pDisp, RgStatus *pRobot)
 }
 
 
+/* Advances the dash gauge and each weapon slot by deltaTime. */
 void RgDispWpn1PPassTime(RgDispWpn1P *pDisp, float deltaTime)
 {
     unsigned int i;
@@ -304,6 +314,10 @@ void RgDispWpn1PPassTime(RgDispWpn1P *pDisp, float deltaTime)
 }
 
 
+/*
+ * Draws the HUD for the attached robot: the board pictures, the dash gauge, the speed
+ * text and each weapon slot, then flushes the paint.
+ */
 void RgDispWpn1PDisp(RgDispWpn1P *pDisp)
 {
     unsigned int i;

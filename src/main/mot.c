@@ -1,6 +1,9 @@
 #include "common.h"
 #include "main/xgl_2.h"
 
+/* Moves the translation of the current transform by the vector at xyz, taken in the
+ * transform's own axes. Returns xyz advanced past the three floats.
+ */
 float *MotTransXYZ(float *xyz)
 {
     Matrix4 matrix;

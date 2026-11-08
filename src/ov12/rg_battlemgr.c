@@ -33,7 +33,7 @@
 /* libgcc float-to-double helper (shared.h cannot declare it: main/matrix_print.c uses another result type). */
 extern double fptodp(float value);
 
-/* The battle's fixed time limit in seconds; RgBattleMgrGetPlayTime returns
+/* The battle's fixed time limit; RgBattleMgrGetPlayTime returns
  * the time played so far as the limit minus the remaining-time field. */
 #define RG_BATTLE_TIME_LIMIT 180.0f
 
@@ -78,7 +78,6 @@ static void _InitBattleField(BattleField *pField);
 static void _InitDispInfo(DispInfo *pInfo);
 static void _DestructDispInfo(DispInfo *pInfo);
 
-/* The original call site passes the display texture; the callee ignores it. */
 
 static void _ControlPlayerList(PlayerList *pList);
 static void _DispPlayerList(PlayerList *pList);
@@ -130,6 +129,10 @@ const char battleMgrAssertMgrNotNil[16] = "pMgr != NIL";
 
 const char battleMgrPlayerDamageLogFormat[32] = "*** max = %f life = %f ***\n";
 
+/*
+ * Creates a battle camera on pStudio and loads its settings from the CAM paragraph of
+ * rg_camera.info when that paragraph exists.
+ */
 static RgCamera *_CreateBattleCamera(RgDrawStudio *pStudio)
 {
     RgReadText *pReader = CreateRgReadText(battleMgrCameraInfoFileName);
@@ -147,6 +150,7 @@ static RgCamera *_CreateBattleCamera(RgDrawStudio *pStudio)
     return camera;
 }
 
+/* Returns a bit mask with bit i set for each player slot whose robot is dead. */
 static int _GetDeadList(PlayerList *pList)
 {
     extern RgStatus *RgPlayerGetRobot(RgPlayer *pPlayer);
@@ -167,6 +171,7 @@ static int _GetDeadList(PlayerList *pList)
     return deadList;
 }
 
+/* Returns 1 when slot 1 has more life, 0 when slot 0 has more, and -1 when they are equal. */
 static int _GetBigLifePlayer(PlayerList *pList)
 {
     extern RgStatus *RgPlayerGetRobot(RgPlayer *pPlayer);
@@ -209,6 +214,7 @@ static RgPlayer *_GetInPlayerList(PlayerList *pList, u32 slotIndex)
     return pList->players[slotIndex];
 }
 
+/* Adds pPlayer to the list unless it is already in it. */
 static void _AddPlayerList(PlayerList *pList, RgPlayer *pPlayer)
 {
     RgPlayer **players;
@@ -238,6 +244,7 @@ static void _AddPlayerList(PlayerList *pList, RgPlayer *pPlayer)
     pList->count = i + 1;
 }
 
+/* Disposes the players in both slots and empties the list. */
 static void _ClearPlayerList(PlayerList *pList)
 {
     RgPlayer **pSlot;
@@ -364,6 +371,10 @@ static RgCamera *_GetCameraBattleField(BattleField *pField, u32 index)
     return pField->camera[index];
 }
 
+/*
+ * Disposes the cameras and screen balls of the field and resets the draw studio to
+ * full screen.
+ */
 static void _ClearBattleField(BattleField *pField)
 {
     u32 i;
@@ -385,6 +396,7 @@ static void _ClearBattleField(BattleField *pField)
     RgDrawCreateDrawStudioFullScreen(InstanceOfRgDraw());
 }
 
+/* Creates the field's geometry group and clears its camera and screen ball slots. */
 static void _InitBattleField(BattleField *pField)
 {
     RgGeomGroup *pGroup;
@@ -432,6 +444,7 @@ static void _DisposeBattleField(BattleField *pField)
     RgHeapFree(InstanceOfRgHeap(), pField, battleMgrSourcePath, 0x13B);
 }
 
+/* Sets the field to one full-screen camera on the first studio. Returns 1. */
 static u32 _FullScreenBattleField(BattleField *pField)
 {
     RgCamera *camera;
@@ -454,6 +467,10 @@ static u32 _FullScreenBattleField(BattleField *pField)
     return 1;
 }
 
+/*
+ * Sets the field to two studios, each with a camera selected for its player. Returns the
+ * studio count.
+ */
 static u32 _DoubleScreenBattleField(BattleField *pField)
 {
     u32 playerIndex;
@@ -491,6 +508,10 @@ static RgGeomGroup *_GetGeomGroupBattleField(BattleField *pField)
     return pField->geomGroup;
 }
 
+/*
+ * Advances the field's cameras, then places each screen ball behind its camera and moves
+ * it to a point just short of the camera target.
+ */
 static void _PassTimeBattleField(BattleField *pField, float deltaTime)
 {
     u32 cameraIndex;
@@ -530,6 +551,7 @@ static void _PassTimeBattleField(BattleField *pField, float deltaTime)
     }
 }
 
+/* Creates a game-info display for each player and clears the player slots and mode. */
 static void _InitDispInfo(DispInfo *pInfo)
 {
     u32 playerIndex;
@@ -588,6 +610,7 @@ static void _SetDispInfo(DispInfo *pDisp, int mode, RgPlayer *player1P,
     pDisp->player2P = player2P;
 }
 
+/* Gives a game-info display its host and sub robots, then advances and draws it. */
 static void _DrawDispInfoOnePlayer(RgDispGameInfo *pInfo, RgPlayer **players,
                                    u32 nHost, u32 nSub)
 {
@@ -612,6 +635,10 @@ static void _DrawDispInfoOnePlayer(RgDispGameInfo *pInfo, RgPlayer **players,
     RgDispGameInfoDisplay(pInfo);
 }
 
+/*
+ * Draws the display info for the current mode: both panels in the two-human modes, or
+ * the panel of the one human player otherwise.
+ */
 static void _DrawDispInfo(DispInfo *pInfo)
 {
     u32 mode;
@@ -641,6 +668,10 @@ static void _DrawDispInfo(DispInfo *pInfo)
     }
 }
 
+/*
+ * Creates the player list, collision, geometry, field, display info and display widgets
+ * of a new battle manager.
+ */
 static void _InitBattleMgr(RgBattleMgr *pMgr)
 {
     RgBattleCommonDataEnv *pData;
@@ -666,6 +697,7 @@ static void _InitBattleMgr(RgBattleMgr *pMgr)
     pMgr->result = 0;
 }
 
+/* Disposes the parts of a battle manager and clears the character manager. */
 static void _DisposeBattleMgr(RgBattleMgr *pMgr)
 {
     if (pMgr == 0) {
@@ -707,6 +739,10 @@ static void _BattleMgrActivateTime(RgBattleMgr *pMgr, int active)
     pMgr->timerActive = active;
 }
 
+/*
+ * Sets up a battle from pInfo: the screens and cameras, the player and enemy controls,
+ * the robot targets and the collision pairs.
+ */
 static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
 {
     RgPlayer *players[4];
@@ -751,6 +787,7 @@ static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
         RgDispWpn1PSetRobot(pMgr->dispWpn1P, robots[0]);
         RgDispLifeSetVsMode(pMgr->dispLife, 0);
     }
+    /* One camera per screen, aimed at its player's robot and the next player's robot. */
     for (i = 0; i < screenCount; i++) {
         nextIndex = i + 1;
         camera = _GetCameraBattleField(pMgr->battleField, i);
@@ -759,6 +796,7 @@ static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
             RgPlayerGetRobot(players[nextIndex % playerCount]));
         RgCameraSetting(camera, geoms);
         playerBit = 1U << i;
+        /* Human players get an input control and trace the camera of their screen. */
         if (i < playerCount && (pInfo->mode & playerBit)) {
             RgRobotControl *control;
             RgPlayer *player;
@@ -772,6 +810,7 @@ static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
     }
     for (i = 0; i < playerCount; i++) {
         playerBit = 1U << i;
+        /* Players that are not human get an enemy control. */
         if (!(pInfo->mode & playerBit)) {
             RgStatus *robotA;
             RgStatus *robotB;
@@ -794,6 +833,7 @@ static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
             RgGeomPoint *geomA;
             RgGeomPoint *geomB;
 
+            /* Each pair of players targets the other robot and its geometry. */
             robotA = RgPlayerGetRobot(players[i]);
             robotB = RgPlayerGetRobot(players[j]);
             geomA = RgRobotGetGeom(robotA);
@@ -877,6 +917,10 @@ static void _InitBattle(RgBattleMgr *pMgr, RgBattleInit *pInfo)
     }
 }
 
+/*
+ * Runs player control when it is enabled, then the character manager's control and
+ * garbage collection.
+ */
 static void _ControlBattle(RgBattleMgr *pMgr)
 {
     if (pMgr == 0) {
@@ -889,6 +933,10 @@ static void _ControlBattle(RgBattleMgr *pMgr)
     RgCharMgrGC(InstanceOfRgCharMgr());
 }
 
+/*
+ * Draws the battle: the split-screen divider in the two-human modes, then the players,
+ * characters, display info and life and weapon displays.
+ */
 static void _DispBattle(RgBattleMgr *pMgr)
 {
     XrgPaint2DRGBA color;
@@ -915,6 +963,10 @@ static void _DispBattle(RgBattleMgr *pMgr)
     RgDispWpn2PDisp(pMgr->dispWpn2P);
 }
 
+/*
+ * Advances the battle by deltaTime. Sets the result when a player is knocked out or the
+ * time runs out.
+ */
 static void _PassTimeBattle(RgBattleMgr *pMgr, float deltaTime)
 {
     int timeExpired;
@@ -1030,6 +1082,10 @@ RgDispLife *RgBattleMgrGetDispLife(RgBattleMgr *pMgr)
     return pMgr->dispLife;
 }
 
+/*
+ * Returns the damage taken by a player (maximum life minus life), logging it, or 0 when
+ * the player has no robot.
+ */
 float RgBattleMgrGetPlayerDamage(RgBattleMgr *pMgr, int playerIndex)
 {
     RgPlayer *player;

@@ -254,9 +254,8 @@ typedef struct {
 } MpegCallbackState;
 
 /*
- * xglCdStreamClose's own parameter type (CdStreamParam, main/tu092
- * src/main/xgl_cd.c) is TU-local to that file; this TU only forwards a
- * pointer to it and does not access its members, so the tag stays opaque.
+ * CdStreamParam is only forwarded here as a pointer. This file does not access
+ * its members, so the tag stays opaque.
  */
 typedef struct CdStreamParam CdStreamParam;
 
@@ -285,14 +284,7 @@ extern XglMovieRenderState sRender;
 
 const char mpegGetPictureFailedMessage[];
 
-/*
- * xglMpeg2InfoInit2's own body is still INCLUDE_ASM below, but its tail at
- * 0x00222818..0x00222828 computes align64(arena + allocated_size +
- * audio_buffer_size) into v0 immediately before return: that value is the
- * function's result, not a void return. xglMpeg2InfoInit calls it and
- * discards the result, but the forward declaration used here must still
- * spell the pointer-return signature the body actually implements.
- */
+/* xglMpeg2InfoInit2 returns a pointer, which xglMpeg2InfoInit discards. */
 extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
 
 extern int DIntr(void);
@@ -317,14 +309,9 @@ extern int sceMpegDemuxPss(void *mpeg, unsigned char *source, int size);
 static int fillBuff(XglMovieInfo *info, int wait);
 static int nodataCallback(int event, void *data, XglMovieInfo *info);
 extern int printf(const char *format, ...);
+/* sceMpegReset and sceMpegDelete have no public prototype, so the embedded MPEG handle stays an untyped pointer. */
 extern void sceMpegReset(void *mpegHandle);
 
-/*
- * arg0+0x30 (temp_16 = s1+0x30 in the original) is passed to sceMpegReset
- * and sceMpegDelete as a raw address; sceMpegReset/sceMpegDelete have no
- * public prototype (docs/naming.md), so the embedded MPEG handle stays an
- * untyped pointer computed by byte offset from the stream object.
- */
 extern int sceIpuInit(void);
 
 extern void SyncDCache(void *start, void *end);
@@ -337,6 +324,7 @@ static int checkdma(XglMovieWork *info);
 
 const char errorMessageFormat[] = "%s\n";
 
+/* Starts a DMA transfer from the IPU (channel D3) of `count` quadwords to `address`. */
 static int myDmaDirectFromIPU(u32 address, u32 count)
 {
     if ((address >> 16) != DMA_SPR_ADDRESS_HIGH)
@@ -352,6 +340,7 @@ static int myDmaDirectFromIPU(u32 address, u32 count)
     return EIntr();
 }
 
+/* Writes the control register of DMA channel D4 with the transfer hold set. */
 static void setD4_CHCR(u32 value)
 {
     DIntr();
@@ -361,6 +350,10 @@ static void setD4_CHCR(u32 value)
     EIntr();
 }
 
+/*
+ * Builds the GIF packet that uploads one row of macroblocks at row `y` into the
+ * current transfer buffer, and returns the packet end.
+ */
 static unsigned long *make_gstrans(XglMovieWork *info, int y)
 {
     int width = info->width;
@@ -410,6 +403,10 @@ static unsigned long *make_gstrans(XglMovieWork *info, int y)
     return packet;
 }
 
+/*
+ * Advances the stream's DMA chain once the IPU has consumed the current source
+ * chunk. Returns 1 when the caller must wait for more stream data.
+ */
 static int checkdma(XglMovieWork *info)
 {
     int wait = 0;
@@ -419,6 +416,7 @@ static int checkdma(XglMovieWork *info)
         return 0;
     setD4_CHCR(MOVIE_D4_CHCR_CHAIN_STOP);
     consumed = *D4_MADR - (unsigned int)info->source;
+    /* decodeState selects which chain entry the DMA continues with. */
     switch (info->decodeState) {
     case 0:
         if ((unsigned int)info->sourceSize < consumed) {
@@ -476,6 +474,10 @@ static int checkdma(XglMovieWork *info)
     return wait;
 }
 
+/*
+ * Prepares a movie for playback: a CD stream when `stream` is set, otherwise the
+ * source already in memory. Returns 1 when the source header signature is wrong.
+ */
 int xglMovieOpen(XglMovieWork *info, int stream)
 {
     XglMovieSourceHeader *source;
@@ -532,6 +534,11 @@ int xglMovieOpen(XglMovieWork *info, int stream)
     return 0;
 }
 
+/*
+ * Decodes the next frame through the IPU and uploads it, either to the GS
+ * transfer buffers or to memory. Returns 1 when the last frame is reached,
+ * -1 on an IPU sync failure or a dropped frame, and 0 otherwise.
+ */
 int xglMoviePlay(XglMovieWork *info)
 {
     int strip;
@@ -543,6 +550,7 @@ int xglMoviePlay(XglMovieWork *info)
     Quadword *source;
     Quadword *destination;
 
+    /* Reset the IPU and restart the decode DMA when the channel has stopped. */
     if ((*D4_CHCR & DMA_CHCR_STR) == 0) {
         *IPU_CTRL = IPU_CTRL_RESET;
         if (sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0) {
@@ -571,6 +579,7 @@ int xglMoviePlay(XglMovieWork *info)
             return -1;
         }
     }
+    /* Upload each strip through the GS transfer buffers. */
     if (info->transMode != MOVIE_TRANS_MEMORY) {
         sceGsSyncPath(0, 0);
         for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
@@ -599,6 +608,7 @@ int xglMoviePlay(XglMovieWork *info)
         }
         sceGsSyncPath(0, 0);
     } else {
+        /* Copy each strip from the scratchpad into the image buffer in memory. */
         for (strip = 0; strip < info->height; strip += MOVIE_MACROBLOCK) {
             myDmaDirectFromIPU(SCRATCHPAD_BASE, info->stripQwords);
             if (strip == 0) {
@@ -678,6 +688,7 @@ int xglMoviePlay(XglMovieWork *info)
         }
         return 1;
     }
+    /* Save where the next DMA resumes, using the IPU bit pointer. */
     if (info->streamOpen) {
         unsigned int bitstream;
 
@@ -704,6 +715,7 @@ int xglMoviePlay(XglMovieWork *info)
     return 0;
 }
 
+/* Closes the movie stream if one is open and resets the IPU. Returns -1 if an IPU sync fails. */
 int xglMovieClose(XglMovieInfo *info)
 {
     if (info->streamOpen) {
@@ -718,6 +730,7 @@ int xglMovieClose(XglMovieInfo *info)
     return sceIpuSync(0, IPU_SYNC_TIMEOUT) < 0 ? -1 : 0;
 }
 
+/* Sets the default packet addresses and transfer thresholds of a movie init record. */
 void xglMovieInfoInit(XglMovieInitInfo *info)
 {
     xglCdStreamParamInit((struct CdStreamParam *) info);
@@ -729,6 +742,7 @@ void xglMovieInfoInit(XglMovieInitInfo *info)
     info->threshold0 = 0;
 }
 
+/* Fills an XTX texture header for the movie frame and returns the address just past it. */
 XglXtxHeader *xglMovieMakeXtxHeader(XglMovieWork *info, XglXtxHeader *header)
 {
     unsigned int base = info->imageQwords;
@@ -752,6 +766,7 @@ XglXtxHeader *xglMovieMakeXtxHeader(XglMovieWork *info, XglXtxHeader *header)
     return header + 1;
 }
 
+/* Copies the next stream bytes from the ring buffer into the read buffer, wrapping at the ring end. Returns the byte count. */
 static int fileRead(XglMovieInfo *info)
 {
     unsigned char *destination;
@@ -791,6 +806,7 @@ static int fileRead(XglMovieInfo *info)
     return length;
 }
 
+/* Feeds the MPEG demuxer from the stream, waiting for data when `wait` is set. Returns the bytes consumed. */
 static int fillBuff(XglMovieInfo *info, int wait)
 {
     unsigned char *position;
@@ -821,6 +837,7 @@ static int fillBuff(XglMovieInfo *info, int wait)
     return count;
 }
 
+/* Copies one video packet into the DMA ring, wrapping at its end. Returns 0 when there is no room. */
 static int videoCallback(int event, MpegStreamData *data, XglMovieInfo *info)
 {
     int free;
@@ -850,6 +867,10 @@ static int videoCallback(int event, MpegStreamData *data, XglMovieInfo *info)
     return 1;
 }
 
+/*
+ * Copies one audio packet into the sound ring. The first packet also carries the
+ * sample rate header. Returns 0 when there is no room.
+ */
 static int audioCallback(int event, MpegStreamData *data, XglMovieInfo *info)
 {
     unsigned char *source;
@@ -886,6 +907,10 @@ static int audioCallback(int event, MpegStreamData *data, XglMovieInfo *info)
     return 1;
 }
 
+/*
+ * Supplies the decoder when the stream has no data: a filler pattern after too
+ * many misses, otherwise the next DMA chunk from the ring.
+ */
 static int nodataCallback(int event, void *data, XglMovieInfo *info)
 {
     unsigned int *pattern;
@@ -898,6 +923,7 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
     /* DMA channel 4 is programmed in QWC, MADR, then CHCR order. */
     volatile u32 *qwc_register;
 
+    /* Too many misses in a row: send a fixed filler pattern instead of stream data. */
     if (++info->missCount >= MPEG_MISS_LIMIT) {
         info->decodeState = MPEG_NODATA_DECODE_STATE;
         pattern = (unsigned int *) info->dmaBuffer;
@@ -948,11 +974,8 @@ static int nodataCallback(int event, void *data, XglMovieInfo *info)
 }
 
 /*
- * errorCallback (main:0x00222158) is registered as the MPEG movie decoder's
- * error handler. The original bytes read a pointer at arg1+0x04 and pass it
- * as the "%s\n" argument of errorMessageFormat's printf, then read, increment and
- * store back an unsigned byte at arg2+0x98 and clear a byte at arg2+0x99
- * right after it (lbu/sb at those fixed offsets).
+ * Error handler of the MPEG decoder: prints the error message, then increments
+ * errorCount (+0x98) and clears errorFlag (+0x99) in the callback state.
  */
 static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *state)
 {
@@ -962,6 +985,7 @@ static int errorCallback(int event, MpegErrorInfo *error, MpegCallbackState *sta
     return 1;
 }
 
+/* Opens the MPEG2 movie: starts the CD stream, creates the decoder with its callbacks and primes the buffers. Returns -1 if the stream cannot be opened. */
 int xglMpeg2Open(XglMovieInfo *info)
 {
     int result;
@@ -996,6 +1020,7 @@ int xglMpeg2Open(XglMovieInfo *info)
     return 0;
 }
 
+/* Builds the GIF packet list that loads the decoded picture's macroblocks into the GS buffer. */
 static void setLoadImageTags(unsigned int destination, unsigned int image, int width, int height)
 {
     unsigned long *packet = UNCACHED(destination);
@@ -1034,6 +1059,10 @@ static void setLoadImageTags(unsigned int destination, unsigned int image, int w
     ((XglDmaRefTag *) packet)[-1].tag &= DMA_TAG_ID_CLEAR_MASK;
 }
 
+/*
+ * Decodes the next MPEG2 picture into the video buffer, feeds the sound stream
+ * and uploads the frame. Returns 1 at the end of the stream and -1 on a decode error.
+ */
 int xglMpeg2Play(XglMovieInfo *info)
 {
     static unsigned long TestEnv[24] = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x00000053531eeeeeULL, 0x0000000000000000ULL, 0x000000000000003fULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000000000000000ULL, 0x0000000000000008ULL, 0x000000000007000dULL, 0x0000000000000047ULL, 0x0000008000000080ULL, 0x0000008000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x0000000000f00000ULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x00008df700008ff8ULL, 0x0000000000f00000ULL };
@@ -1103,6 +1132,7 @@ int xglMpeg2Play(XglMovieInfo *info)
     return 0;
 }
 
+/* Tears down the MPEG decoder, the sound stream and the CD stream. */
 int xglMpeg2Close(XglMovieInfo *info)
 {
     XglMpegState *mpegHandle;
@@ -1121,6 +1151,10 @@ int xglMpeg2Close(XglMovieInfo *info)
     return 0;
 }
 
+/*
+ * Lays out the movie buffers in arena, each 64-byte aligned, with the sound
+ * ring last. Returns the aligned end of that ring.
+ */
 void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size)
 {
     XglMovieInfo *movie;

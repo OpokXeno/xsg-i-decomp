@@ -48,6 +48,11 @@ MapUnitRecord MapUnit[MAP_UNIT_COUNT] = { 0 };
 
 UnitSequenceEntry unitSequence[MAP_UNIT_COUNT] = { 0 };
 
+/*
+ * Writes the point at position, pushed by the current wind, into result[0..2].
+ * unit supplies the axis rotation and the optional frame. With the wind off or
+ * an unknown mode, only result[0] is written, with position[0].
+ */
 void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *position)
 {
     DoublewordAlignedVector4 force;
@@ -95,6 +100,7 @@ void EXM_GetWindPower(float *result, const EXM_WindUnit *unit, const float *posi
         x = force_vector->x * axis_cos - force_vector->z * axis_sin;
         z = force_vector->z * axis_cos + force_vector->x * axis_sin;
         frame = unit->frame;
+        /* Rotate the offset by the frame's yaw when the unit has one. */
         if (frame != 0) {
             MATRIX_identity4s(matrix);
             MATRIX_translate4s(matrix, x, 0.0f, z);
@@ -153,6 +159,7 @@ void EXM_SetShakePower(float power)
     wind->shake_power = power;
 }
 
+/* Sets the shake rate, clamped to +/- 2*pi. */
 void EXM_SetShakeTime(float time)
 {
     if (time > SHAKE_ANGLE_MAX) {
@@ -163,6 +170,7 @@ void EXM_SetShakeTime(float time)
     wind->shake_time = time;
 }
 
+/* Makes the wind directional. A non-null direction is copied into the wind state first. */
 void EXM_SetDirectionalWind(Vector4 *direction)
 {
     EXM_WindState *state;
@@ -176,6 +184,7 @@ void EXM_SetDirectionalWind(Vector4 *direction)
     state->mode = EXM_WIND_DIRECTIONAL;
 }
 
+/* Makes the wind point-sourced. A non-null point is copied into the wind state first. */
 void EXM_SetPointWind(Vector4 *point)
 {
     EXM_WindState *state;
@@ -199,6 +208,10 @@ void EXM_ClearWindStruct(void)
     wind = &_wind;
 }
 
+/*
+ * Advances the shake angle by shake_time and the wave angle by EXM_WAVE_RAD_STEP,
+ * wrapping both back into range.
+ */
 void EXM_StepShakeWind(void)
 {
     if (wind != 0) {

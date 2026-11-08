@@ -34,6 +34,7 @@ const char gaugeDispAssertDispNotNil[] = "pDisp != NIL";
 const char gaugeDispSourcePath[] = "../rg_gauge_disp.euc.c";
 const char gaugeDispAssertPaintNotNil[] = "pPaint != NIL";
 
+/* Sets validState from the bar and rest textures and their UV sizes. */
 static void _CheckDatas(RgGaugeDisp *disp)
 {
     if (disp == 0)
@@ -48,6 +49,7 @@ static void _CheckDatas(RgGaugeDisp *disp)
     }
 }
 
+/* Resets a gauge to its default values: full value, no textures, origin. */
 static void _InitDisp(RgGaugeDisp *disp)
 {
     if (disp == 0)
@@ -158,6 +160,10 @@ void RgGaugeDispSetAlpha(RgGaugeDisp *disp, int alpha)
     _CheckDatas(disp);
 }
 
+/*
+ * Draws the filled part of the bar and stores the unfilled strip in rest.
+ * With order set, the filled part is drawn from the right end.
+ */
 static void _disp_bar(XrgPaint2D *paint, RgGaugeDisp *disp,
                       RgGaugeDispRect *rest)
 {
@@ -193,6 +199,7 @@ static void _disp_bar(XrgPaint2D *paint, RgGaugeDisp *disp,
     rest->height = barHeight;
 }
 
+/* Draws the unfilled strip rest with the rest texture. */
 static void _disp_bar_rest(XrgPaint2D *paint, RgGaugeDisp *disp,
                            const RgGaugeDispRect *rest)
 {
@@ -203,6 +210,7 @@ static void _disp_bar_rest(XrgPaint2D *paint, RgGaugeDisp *disp,
     XrgPaint2DDrawXYWH(paint, 0, rest->x, rest->y, rest->width, rest->height);
 }
 
+/* Draws the bar, plus the rest strip when a rest texture is set. */
 void RgGaugeDispDraw(RgGaugeDisp *disp, XrgPaint2D *paint)
 {
     RgGaugeDispRect rest;

@@ -18,6 +18,11 @@ static void fnSOLB_PR000(void *self, SolbState *state);
 static void fnSOLB_DP000(void *self, SolbState *state);
 static void fnSOLB_PO000(void *self, SolbState *state);
 
+/*
+ * Initializes an SOLB effect object: clears the trail, builds the path and the
+ * first segment's tangents, sets up the GS packet and installs the process,
+ * draw and post-process callbacks. Returns 1.
+ */
 int MEfCreate_SOLB(MEfObjRecord *work)
 {
     SolbObject *object = (SolbObject *)work;
@@ -46,6 +51,11 @@ extern Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle);
 extern Matrix4 *MMathRotateMatrixZ(Matrix4 *out, Matrix4 *matrix, float angle);
 extern float srsAtan2(float deltaX, float deltaZ);
 static const int timetbl[4] = { 5, 6, 12, 23 };
+/*
+ * Fills state->control with the four path points. Each offset is rotated by the
+ * heading and a fixed pitch, turned by the actor yaw plus a step of sweepDegrees / 3
+ * per point, then moved to the actor's world origin.
+ */
 static void makePath(SolbState *state)
 {
     static const Vector4 offset[SOLB_CONTROL_POINTS] = {
@@ -116,6 +126,7 @@ extern void MMathCalcHermitePrm(HermiteVector *tangent_start, HermiteVector *tan
                                 const HermiteVector *point_previous, const HermiteVector *point_start,
                                 const HermiteVector *point_end, const HermiteVector *point_next);
 
+/* Computes the start and end tangents of a path segment from its neighbouring control points. */
 static void makeHermiteParam(int segment, SolbState *state)
 {
     HermiteVector *point_previous;
@@ -139,28 +150,11 @@ static void makeHermiteParam(int segment, SolbState *state)
                         point_previous, point_start, point_end, point_next);
 }
 
-/* makeHermiteCoord: corrected tangent/endpoint attribution.
- *
- * Proof of the corrected names from the actual helper bodies:
- * - MMathCalcHermitePrm (main 0x002ef1d0) takes its two outputs in a0/a1 and
- *   stores (vf3-vf1)*k to (a0) and (vf4-vf2)*k to (a1). Its caller
- *   makeHermiteParams passes effect+0x330 in a0 and effect+0x340 in a1, so
- *   +0x330/+0x340 hold the computed segment TANGENTS, not endpoints.
- * - MMathCalcHermite (main 0x002ef160) loads its middle operand vectors from
- *   (a1)/(a2) and weights them with the parameter-derived tangent
- *   coefficients, while the (a3)/(t0) vectors take the endpoint weights; the
- *   caller passes +0x330/+0x340 in a1/a2 and the segment-indexed +0x2f0/+0x300
- *   pair in a3/t0. Hence a1/a2 are tangent_at_segment_start/end and a3/t0
- *   are control_at_segment_start/end. Start/end ordering within each pair is
- *   unchanged from the prior exact form; only the category names and this
- *   comment are corrected. Codegen is unchanged (LOCAL binding preserved).
- *
- * Those four addresses are now the SolbState members tangent_at_segment_start,
- * tangent_at_segment_end and control[segment]/control[segment + 1]; the effect
- * this is called with is the same record MEfCreate_SOLB sets up, which
- * fnSOLB_PR000 (0x00a37010) proves by passing it in a1 to both.
+/*
+ * Writes the curve point for the current frame of the current segment to
+ * destination. The tangents are the segment tangents; the control points are
+ * the segment's start and end points.
  */
-
 static void makeHermiteCoord(float *destination, SolbState *state)
 {
     short segment_index = state->segment;
@@ -181,6 +175,10 @@ static void makeHermiteCoord(float *destination, SolbState *state)
 #define SOLB_HIT_FRAME 0x17
 #define SOLB_LIFETIME  0x35
 
+/*
+ * Process callback: shifts the trail back by one entry, then, while the effect
+ * is travelling, writes a new head point and advances the frame and segment.
+ */
 static void fnSOLB_PR000(void *self, SolbState *state)
 {
     Vector4 *head;
@@ -251,6 +249,10 @@ static inline void solbCloseTag(MEfGsPacket *packet, int nloop)
     packet->count += size;
 }
 
+/*
+ * Draw-packet callback: builds the GS packet for the trail, with two ribbon
+ * passes, six fiber passes and two more fiber passes with random angles.
+ */
 static void fnSOLB_DP000(void *self, SolbState *state)
 {
     MEfGsQword color;
@@ -276,6 +278,7 @@ static void fnSOLB_DP000(void *self, SolbState *state)
     view = mefCamParams.matrix;
     point = (Vector4 *)&state->packet;
     MGsGPInit(point, 0, 0);
+    /* Render state for the ribbons: alpha test, no depth write, additive blend. */
     {
     MEfGsQword *setting = ((MEfGsPacket *)point)->current;
     setting[0].gif.tag = MEF_GS_SETUP_TAG;
@@ -290,6 +293,7 @@ static void fnSOLB_DP000(void *self, SolbState *state)
     point = *(Vector4 **)point;
     adc = &vertex[1].xyz.adc;
 
+    /* Two ribbon passes: the lead point is offset by +width, then by -width. */
     color.whole = coltbl_1_00A43780[0];
     for (pass = 0; pass < 2; pass++) {
         clip = 0;
@@ -367,6 +371,7 @@ static void fnSOLB_DP000(void *self, SolbState *state)
     solbSetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
     solbCloseTag(packet, 3);
     }
+    /* Six fiber passes: each point is offset around a circle, with the angle set by the point index and the pass. */
     color.whole = coltbl_1_00A43780[1];
     for (pass = 0; pass < SOLB_FIBER_COUNT; pass++) {
         clip = 0;
@@ -435,6 +440,7 @@ static void fnSOLB_DP000(void *self, SolbState *state)
     solbSetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
     solbCloseTag(packet, 3);
     }
+    /* Two more fiber passes, each point offset by a random angle on a circle. */
     color.whole = coltbl_1_00A43780[1];
     for (pass = 0; pass < 2; pass++) {
         drawn = 0;

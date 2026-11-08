@@ -14,7 +14,7 @@
 #define SSD_VAG_FIRST_VOICE (SSD_VOICE_COUNT - SSD_VAG_MAX_CHANNELS)
 #define SSD_VAG_VOICE_PRIORITY 0xa0000
 
-/* SsdVagWork.flags above SSD_STREAM_FLAG_*: voices wait for the IRQ, a DMA chain is running. */
+/* SsdVagWork.flags bits: a start waits for the IRQ; a DMA chain is running. */
 #define SSD_VAG_FLAG_START_PENDING 0x10
 #define SSD_VAG_FLAG_TRANSFERRING 0x20
 
@@ -118,6 +118,7 @@ void SsdAllocVoiceVagStream(void);
 
 void SsdFreeVoiceVagStream(void);
 
+/* Starts a stereo VAG stream and sets the default pitch, volume and pan of its two channels. */
 void SsdInitVagStreamStereo(int bytes, void (*callback)(void *), void *arg)
 {
     SsdInitVagStream(bytes / 2, 2, callback, arg);
@@ -133,6 +134,7 @@ void SsdInitVagStreamStereo(int bytes, void (*callback)(void *), void *arg)
     SsdVagStrWork.channels[1].flags = 0;
 }
 
+/* Starts a mono VAG stream of up to SSD_VAG_MAX_CHANNELS channels and resets their defaults. */
 void SsdInitVagStreamMono(int bytes, int channels, void (*callback)(void *), void *arg)
 {
     int channel;
@@ -151,6 +153,7 @@ void SsdInitVagStreamMono(int bytes, int channels, void (*callback)(void *), voi
     }
 }
 
+/* Allocates the double buffer the stream DMAs from, then installs its callbacks and update proc. */
 void SsdInitVagStream(int bytes_per_channel, int channels,
                      void (*callback)(void *), void *arg)
 {
@@ -187,6 +190,7 @@ void SsdInitVagStream(int bytes_per_channel, int channels,
     CpuEnableIntr();
 }
 
+/* Stops the stream if it plays, removes its callbacks and update proc, and frees its buffer. */
 void SsdDisposeVagStream(void)
 {
     if (SsdVagStrWork.status == SSD_STREAM_PLAYING)
@@ -223,6 +227,10 @@ void SsdSuspendVagStream(void)
     }
 }
 
+/*
+ * Starts the stream with the given pitch and fades the master volume to volume over ticks.
+ * When the stream already plays, only the master volume changes.
+ */
 void SsdPlayVagStream(int volume, int ticks, int pitch)
 {
     int channels = SsdVagStrWork.channel_count;
@@ -245,6 +253,7 @@ void SsdPlayVagStream(int volume, int ticks, int pitch)
     }
 }
 
+/* Fades the master volume to 0 over ticks; with ticks 0 the stream stops at once and its buffer is cleared. */
 void SsdStopVagStream(int ticks)
 {
     if (SsdVagStrWork.status) {
@@ -277,6 +286,7 @@ int SsdGetVagStreamParam(int channel, int *pitch, int *volume, int *pan)
     return SsdVagStrWork.status;
 }
 
+/* Copies the next half buffer of stereo data into the buffer not being played, or clears it when source is null. */
 void SsdSetVagStreamDataStereo(const void *source)
 {
     unsigned char *buffer;
@@ -296,6 +306,7 @@ void SsdSetVagStreamDataStereo(const void *source)
     }
 }
 
+/* Copies mono data for one channel into the buffer not being played, one chunk per block; clears it when source is null. */
 void SsdSetVagStreamDataMono(int channel, const unsigned char *source, int bytes)
 {
     int block;
@@ -340,6 +351,7 @@ void SsdVagStreamCallback(int result, void *argument)
         SsdVagStrWork.callback(SsdVagStrWork.callback_arg);
 }
 
+/* Fills bytes of buffer with silent VAG blocks, 16 bytes each. */
 void SsdVagStreamClearMemory(void *buffer, int bytes)
 {
     SsdVagBlock *blocks = buffer;
@@ -358,6 +370,10 @@ void SsdVagStreamIrqCallback(int result, void *argument)
     SsdVagStreamSpuTransfer();
 }
 
+/*
+ * Continues the DMA chain with the next channel. After the last channel it arms the IRQ
+ * and, when the chain started the stream, keys on the stream voices.
+ */
 void SsdVagStreamDmaCallback(int first, void *context)
 {
     if (SsdVagStrWork.flags & SSD_VAG_FLAG_TRANSFERRING) {
@@ -393,6 +409,7 @@ void SsdVagStreamInitTrans(void *source, int bytes)
     SsdVagStrWork.completed_blocks = 0;
 }
 
+/* Starts (start 1) or stops (start 0) the stream's DMA chain and its voice connections. */
 void SsdVagStreamBlockTrans(int channel, int start, void *buffer, int bytes)
 {
     int voice;
@@ -415,6 +432,10 @@ void SsdVagStreamBlockTrans(int channel, int start, void *buffer, int bytes)
     }
 }
 
+/*
+ * Advances the completed block count, calls the VAG callback at each half-buffer
+ * boundary and starts the next DMA transfer.
+ */
 void SsdVagStreamSpuTransfer(void)
 {
     int completedIndex;
@@ -438,6 +459,7 @@ void SsdVagStreamSpuTransfer(void)
     SsdVagStreamDmaTransfer(0);
 }
 
+/* Transfers one VAG chunk of the current channel and buffer to SPU memory; first marks it as the loop start. */
 void SsdVagStreamDmaTransfer(int first)
 {
     SsdVagPacket *packet;
@@ -477,11 +499,13 @@ void SsdVagStreamDmaTransfer(int first)
         Kprintf("sceSdVoiceTrans Error=%d", status);
 }
 
+/* Returns 1 << 24 once completed_blocks reaches half_blocks, otherwise 0. */
 int SsdVagStreamTransferStatus(int channel, int wait)
 {
     return (SsdVagStrWork.completed_blocks >= SsdVagStrWork.half_blocks) << 24;
 }
 
+/* Copies a stream channel's pitch, volume, pan and effect settings into its voice. */
 void SsdInitVagStreamVoice(int channel)
 {
     SsdVagChannel *stream = &SsdVagStrWork.channels[channel];
@@ -502,6 +526,7 @@ void SsdInitVagStreamVoice(int channel)
     voice->adsr2 = SSD_VOICE_ADSR2_RAW;
 }
 
+/* Sets a channel's pitch; applies only when the stream has fewer than two channels. */
 void SsdSetVagStreamPitch(int channel, int pitch)
 {
     if (SsdVagStrWork.channel_count < 2) {
@@ -514,6 +539,10 @@ void SsdSetVagStreamPitch(int channel, int pitch)
     }
 }
 
+/*
+ * Sets the volume of one channel, or of all channels when channel is negative.
+ * The change fades over ticks; with ticks 0 it applies at once.
+ */
 void SsdSetVagStreamVolume(int channel, int volume, int ticks)
 {
     int end;
@@ -546,6 +575,7 @@ void SsdSetVagStreamVolume(int channel, int volume, int ticks)
     }
 }
 
+/* Sets the pan of one channel, or of all channels when channel is negative, and refreshes their voice volumes. */
 void SsdSetVagStreamPanpot(int channel, int pan)
 {
     int end;
@@ -579,6 +609,7 @@ void SsdSetVagStreamPanpot(int channel, int pan)
     } while (channel < end);
 }
 
+/* Sets the pitch, volume and pan of one channel at once and refreshes its voice. */
 void SsdSetVagStreamParam(int channel, int pitch, int volume, int pan)
 {
     SsdVagChannel *stream = &SsdVagStrWork.channels[channel];
@@ -593,6 +624,7 @@ void SsdSetVagStreamParam(int channel, int pitch, int volume, int pan)
     voice->flags |= SSD_VOICE_FLAG_PITCH | SSD_VOICE_FLAG_VOLUME;
 }
 
+/* Refreshes a channel's voice effect setting and sets the voice flags in dirty. */
 void SsdSetVagStreamHWEffect(int channel, int control, int dirty)
 {
     SsdVagChannel *stream = &SsdVagStrWork.channels[channel];
@@ -602,6 +634,10 @@ void SsdSetVagStreamHWEffect(int channel, int control, int dirty)
     voice->flags |= dirty;
 }
 
+/*
+ * Sets the master volume, fading it over ticks. With ticks 0 the channel voices
+ * are updated at once.
+ */
 void SsdSetVagStreamMasterVolume(int volume, int ticks)
 {
     int fixed_volume;
@@ -634,6 +670,10 @@ void SsdSetVagStreamMasterVolume(int volume, int ticks)
     SsdVagStrWork.master_volume.remaining = ticks;
 }
 
+/*
+ * Per-frame update: advances the master and channel volume ramps and refreshes the
+ * voice volumes that changed. Stops the stream when the master volume reaches 0.
+ */
 void SsdVagStreamVolumeFadeProc(SsdGlobalWork *global_work, void *context)
 {
     SsdVagWork *work = context;
@@ -682,6 +722,7 @@ void SsdVagStreamVolumeFadeProc(SsdGlobalWork *global_work, void *context)
     }
 }
 
+/* Takes the top voices for the stream channels and marks them with the stream priority. */
 void SsdAllocVoiceVagStream(void)
 {
     int channelIndex;

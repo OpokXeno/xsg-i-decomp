@@ -18,6 +18,7 @@ char *_GetLocalPath(void)
     return (char *) cdReadEmptyPath;
 }
 
+/* Builds pszResult from pszRoot (or an empty string) followed by the part of pszName after its last path separator. */
 static char *_RootName(const char *pszName, char *pszResult, const char *pszRoot)
 {
     int length;

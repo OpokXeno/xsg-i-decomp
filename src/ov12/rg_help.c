@@ -1,5 +1,6 @@
 /*
  * OV12 original TU 76: 0x00a420e0..0x00a434b8 (21 functions)
+ * The help screen.
  */
 #include "common.h"
 #include "shared.h"
@@ -42,7 +43,7 @@ const char helpBxxNotLoadedWarningFormat[] = "'%s' bxx is not loaded";
 static int s_aColor[4] = {RG_HELP_BRIGHTNESS_MAX, RG_HELP_BRIGHTNESS_MAX,
                           RG_HELP_BRIGHTNESS_MAX, RG_HELP_BRIGHTNESS_MAX};
 
-/* Defined here: the archive names, picture names and assert strings below. */
+/* Archive and picture name strings, defined outside this file. */
 extern const char helpBgPadArchiveName[];
 extern const char helpBgGradArchiveName[];
 extern const char helpPage0303LowArchiveName[];
@@ -126,9 +127,9 @@ extern const char helpPic010102Name[];
 extern const char helpPic010101Name[];
 
 /*
- * s_anMoveTbl_2 (ov12:0x00a50760, size 0x100) is a 16-entry table indexed by
- * the current cursor position; the member for whichever Xrg pad direction
- * the player just pressed gives the cursor value that press moves to.
+ * One row of the 16-entry cursor move table in _control_mode_left, indexed by
+ * the current cursor position; the member for whichever pad direction the
+ * player pressed gives the cursor value that press moves to.
  */
 typedef struct RgHelpMoveEntry {
     int up;
@@ -181,6 +182,7 @@ static void _paint_bg_lower(RgHelp *pHelp);
 static void _paint_bg_higher(RgHelp *pHelp);
 static void _paint_mode_left(RgHelp *pHelp);
 
+/* Sets all four colour channels to blight scaled to 0..RG_HELP_BRIGHTNESS_MAX, clamped at the top. */
 static void _set_global_blight(float blight)
 {
     int scaled_brightness;
@@ -202,6 +204,7 @@ static void _set_global_blight(float blight)
     s_aColor[0] = brightness;
 }
 
+/* Creates the paint context, loads every help archive, then looks up each picture in its archive. */
 static void _InitHelp(RgHelp *pHelp)
 {
     static const char *s_apszFileTbl[RG_HELP_ARCHIVE_COUNT] = {
@@ -260,6 +263,7 @@ static void _InitHelp(RgHelp *pHelp)
     _init_mode_left(pHelp);
     pHelp->bxxCount = 0;
 
+    /* Load the archives in table order. */
     for (archive_index = 0; archive_index < RG_HELP_ARCHIVE_COUNT;
          archive_index++) {
         file_name = s_apszFileTbl[archive_index];
@@ -273,6 +277,7 @@ static void _InitHelp(RgHelp *pHelp)
         pHelp->bxxCount++;
     }
 
+    /* Resolve each picture in the loaded archive that holds it. */
     for (archive_index = 0; archive_index < RG_HELP_PIC_COUNT;
          archive_index++) {
         archive_name = s_ainPicNameTbl[archive_index][0];
@@ -301,6 +306,7 @@ static void _InitHelp(RgHelp *pHelp)
     }
 }
 
+/* Releases the paint context and every archive loaded by _InitHelp. */
 static void _DestructHelp(RgHelp *pHelp)
 {
     unsigned int archive_index;
@@ -343,6 +349,10 @@ int RgHelpIsEnd(RgHelp *pHelp)
     return pHelp->ended;
 }
 
+/*
+ * Advances the help: in the wait phase a cancel or start press begins the fade,
+ * and the fade ends the help once its countdown runs out.
+ */
 void RgHelpPassTime(RgHelp *pHelp, float deltaTime)
 {
     unsigned int phase;
@@ -380,6 +390,7 @@ void RgHelpPassTime(RgHelp *pHelp, float deltaTime)
     }
 }
 
+/* Draws the help background and mode screen in the wait and fade phases, then flushes. */
 void RgHelpDisp(RgHelp *pHelp)
 {
     if (pHelp == 0) {
@@ -409,6 +420,10 @@ static void _init_mode_left(RgHelp *pHelp)
 }
 
 
+/*
+ * Moves the cursor by the pad direction pressed, playing the cursor sound when
+ * it changes, and wraps the blink timer at RG_HELP_BLINK_PERIOD.
+ */
 static void _control_mode_left(RgHelp *pHelp)
 {
     static RgHelpMoveEntry s_anMoveTbl[RG_HELP_MODE_COUNT] = {
@@ -450,6 +465,7 @@ static void _control_mode_left(RgHelp *pHelp)
     }
 }
 
+/* Sets the paint colour from the global brightness; an override colour is scaled by it. */
 static void _color(XrgPaint2D *paintContext, const XrgPaint2DRGBA *overrideColor)
 {
     XrgPaint2DRGBA color;
@@ -483,6 +499,7 @@ static void _paint(XrgPaint2D *paintContext, RgBxxPic *pic, int blendMode, int x
 
 const RgHelpColor helpNeutralTintColor = {.rgba = {128, 128, 128, 127}};
 
+/* Draws a picture tinted by the neutral colour scaled by factor (0 to 128). */
 static void _paint_b(XrgPaint2D *paintContext, RgBxxPic *pic, int blendMode, int x,
                      int y, int factor)
 {
@@ -516,6 +533,7 @@ static void _paint_lin(XrgPaint2D *paintContext, RgBxxPic *pic, int x, int y)
 }
 
 
+/* Draws the part of a picture given by rect, placed at x + u and y + v. */
 static void _paint_lin_uvwh(XrgPaint2D *paintContext, RgBxxPic *pic, int x, int y,
                             const RgHelpUvRect *rect)
 {
@@ -560,6 +578,7 @@ static void _paint_bg_higher(RgHelp *pHelp)
 const RgHelpAlignedUvRect helpUpperCropUvRect = {{0, 0, 432, 160}};
 const RgHelpAlignedUvRect helpSideCropUvRect = {{80, 0, 432, 160}};
 
+/* Draws the left panel for the current cursor position, then the cropped edge pictures. */
 static void _paint_mode_left(RgHelp *pHelp)
 {
     RgHelpAlignedUvRect upper_crop;
@@ -569,6 +588,7 @@ static void _paint_mode_left(RgHelp *pHelp)
 
     pictures = pHelp->pics;
     paintContext = pHelp->paintContext;
+    /* One case per cursor position: a tinted backdrop, the body and the footer. */
     switch ((unsigned int)pHelp->cursor) {
     case 0:
         _paint_b(paintContext, pictures[13], 0, 8, -16, 100);
@@ -689,6 +709,7 @@ static void _paint_mode_left(RgHelp *pHelp)
         break;
     }
 
+    /* Overlay the cropped top and side edges. */
     upper_crop = helpUpperCropUvRect;
     _paint_lin_uvwh(paintContext, pictures[0], 8, -16, &upper_crop.rect);
     _paint_lin_uvwh(paintContext, pictures[2], 8, -16, &upper_crop.rect);
@@ -697,6 +718,7 @@ static void _paint_mode_left(RgHelp *pHelp)
     _paint_lin_uvwh(paintContext, pictures[3], -8, 18, &side_crop.rect);
 }
 
+/* Draws the right-hand panel for the current cursor position. */
 static void _paint_mode_right(RgHelp *pHelp)
 {
     RgBxxPic **pictures = pHelp->pics;

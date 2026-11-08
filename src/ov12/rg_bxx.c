@@ -68,6 +68,7 @@ static void _InitBxx(RgBxx *pBxx, const char *pszName, int nMode)
     pBxx->m_nMode = nMode;
 }
 
+/* Frees the link and load data of a bxx, reporting memory the heap no longer holds. */
 static void _DestructBxx(RgBxx *pBxx, const char *pszFile, int nLine)
 {
     RgHeap *heap;
@@ -93,6 +94,7 @@ static void _DestructBxx(RgBxx *pBxx, const char *pszFile, int nLine)
     }
 }
 
+/* Allocates a bxx, stores its name and mode, and returns it. */
 RgBxx *CreateRgBxx_sub(const char *pszName, int nMode)
 {
     RgHeap *heap;
@@ -104,6 +106,9 @@ RgBxx *CreateRgBxx_sub(const char *pszName, int nMode)
     return pBxx;
 }
 
+/*
+ * Creates a bxx named pszArchiveName and attaches the data of the file pszName to it.
+ */
 RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
                      int nMode)
 {
@@ -123,6 +128,7 @@ RgBxx *LoadRgBxx_sub(const char *pszName, const char *pszArchiveName,
     return pBxx;
 }
 
+/* Frees a bxx together with its data. */
 void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine)
 {
     if (pBxx == 0) {
@@ -132,6 +138,9 @@ void DisposeRgBxx_sub(RgBxx *pBxx, const char *pszFile, int nLine)
     RgHeapFree(InstanceOfRgHeap(), pBxx, RG_BXX_SOURCE_FILE, 83);
 }
 
+/*
+ * Replaces the link data of a bxx with pData and sets the owner of each picture record.
+ */
 void RgBxxSetData(RgBxx *pBxx, void *pData)
 {
     RgHeap *heap;
@@ -173,6 +182,7 @@ void RgBxxSetData(RgBxx *pBxx, void *pData)
     }
 }
 
+/* Returns the header stored at index 0 of the link data. */
 static RgBxxHeader *_GetHeader(RgBxx *pBxx)
 {
     if (pBxx == 0) {
@@ -184,6 +194,7 @@ static RgBxxHeader *_GetHeader(RgBxx *pBxx)
     return RgLinkDataGetIndex(pBxx->m_pLink, 0);
 }
 
+/* Returns the first picture record, which follows the header. */
 static RgBxxPic *_GetPicTop(RgBxx *pBxx)
 {
     RgBxxHeader *header;
@@ -208,6 +219,7 @@ int RgBxxGetTexNum(RgBxx *pBxx)
     return _GetHeader(pBxx)->numTex;
 }
 
+/* Returns the picture record at index id; reports an error when id is out of range. */
 RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
 {
     RgBxxHeader *header;
@@ -223,6 +235,7 @@ RgBxxPic *RgBxxGetPicID(RgBxx *pBxx, unsigned int id)
     return &picTop[id];
 }
 
+/* Returns the index of the first picture whose name begins with pszName, or -1. */
 static int _FindPicByName(RgBxx *pBxx, const char *pszName)
 {
     RgBxxHeader *header;
@@ -250,6 +263,7 @@ static int _FindPicByName(RgBxx *pBxx, const char *pszName)
     return -1;
 }
 
+/* Returns the index of the named picture; reports an error when no picture has that name. */
 int RgBxxGetFindPic(RgBxx *pBxx, const char *pszName)
 {
     int index;
@@ -261,6 +275,7 @@ int RgBxxGetFindPic(RgBxx *pBxx, const char *pszName)
     return index;
 }
 
+/* Returns the named picture record, or 0 when no picture has that name. */
 RgBxxPic *RgBxxGetPic(RgBxx *pBxx, const char *pszName)
 {
     RgBxxPic *picTop;
@@ -274,6 +289,7 @@ RgBxxPic *RgBxxGetPic(RgBxx *pBxx, const char *pszName)
     return &picTop[index];
 }
 
+/* Returns link data entry 1 of the bxx. */
 void *RgBxxGetXtx(RgBxx *pBxx)
 {
     if (pBxx == 0) {

@@ -28,17 +28,13 @@
 #define EW_FRAME_ALPHA_DEFAULT 0x60
 /* Border pieces of the frame (rows of frameUV) drawn by frame_put/label_put. */
 #define EW_FRAME_PIECE_COUNT 8
-/* label_put draws every border piece but the bottom edge (bit i = piece i). */
+/* label_put draws the border pieces whose bit is set (bit i = piece i). */
 #define EW_LABEL_PIECE_MASK 0x3D
 
 typedef struct EwFrameState {
-    /* +0x00: cleared by frame_init; no reader found among this TU's own
-       functions (frame_put reads only the shared header, +0x04..+0x0e). */
+    /* +0x00: cleared by frame_init. No reader in this file. */
     short flags;
-    /* +0x02: default alpha (PS2 GS 0-0x80 range; matches EwMaskState's
-       own 0x60 default and the codebase's "alpha" term, e.g.
-       include/ov12/rg_piclist.h); same "no reader in this TU" caveat as
-       flags above. */
+    /* +0x02: default alpha (GS alpha range 0..0x80). No reader in this file. */
     signed char alpha;
 } EwFrameState;
 
@@ -66,7 +62,7 @@ typedef struct EwFrameWidget {
 } EwFrameWidget;
 
 typedef struct EwTextState {
-    /* +0x00: padding word, the init stores nothing here. */
+    /* +0x00: two bytes of padding that the init does not write. */
     unsigned char unmodeled_00[2];
     /* +0x02: line pitch in pixels; EW_drawComoponent advances the y
        position by it after each line. */
@@ -95,10 +91,11 @@ typedef struct EwTextWidget {
 } EwTextWidget;
 
 /*
- * Shared 0x28-byte ewComponent table-slot header:
- * flags encodes both the widget type and its enabled bit. EW_sendPacket
- * and EW_draw test the type via (flags & 0xE000) == 0xC000; EW_drawContainer
- * tests only the enabled bit via flags & 0x4000.
+ * Shared header of each 0x28-byte ewComponent slot. flags holds the
+ * allocated (0x8000), visible (0x4000) and child (0x2000) bits; the widget
+ * type is a separate field at +0x02. EW_sendPacket and EW_draw test
+ * (flags & 0xE000) == 0xC000 (allocated and visible); EW_drawContainer
+ * tests only the visible bit.
  */
 void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget);
 
@@ -108,9 +105,9 @@ static void container_init(EwContainerState *container);
 
 static void frame_put(FontDrawCursor *cursor, EwWidget *widget);
 
-/* The font queue calls these back with its draw cursor; EW_draw registers
- * EW_sendPacket with a null argument, the clip and mask widgets pass
- * themselves. */
+/* mask_put and set_clip are called back by the font queue in the text pass,
+ * with the widget as argument. EW_draw queues EW_sendPacket with a null
+ * argument. */
 static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget);
 static void mask_put(FontDrawCursor *cursor, void *arg);
 static void set_clip(FontDrawCursor *cursor, void *arg);
@@ -139,8 +136,8 @@ static unsigned int frameUV[8][4] = {
     { 0x900, 0x900, 0xA00, 0xA00 },
 };
 
-/* Retail maps ewComponent as a GLOBAL OBJECT at 0x0099CA30 with size 0xA00.
- * This table has 64 observed 0x28-byte slots; only flags are modeled here. */
+/* The retail binary keeps ewComponent at 0x0099CA30 (0xA00 bytes: 64 slots of
+ * 0x28 bytes). Only each slot's header (flags, type, position, size) is modeled here. */
 EwWidget ewComponent[EW_SLOT_COUNT];
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
@@ -151,6 +148,8 @@ const unsigned char labelFontStyleTable[0x20] = {
     0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+/* Sets the sprite's texture origin (u, v) to a cell of an atlas grid. mode
+ * selects the atlas region and the grid shift and mask used for the cell. */
 void EW_sprtSetCursorUV(EwSpriteWidget *widget, int mode, int cell)
 {
     EwSpriteState *sprite = &widget->sprite;
@@ -202,6 +201,7 @@ static void mask_init(EwMaskState *mask)
     mask->fix = 0x80 << 8;
 }
 
+/* Writes a GIF packet that sets the draw environment (alpha, texture and test state). */
 static void EW_setDrawEnv(FontDrawCursor *cursor)
 {
     EwDrawEnvPacket *env;
@@ -236,13 +236,10 @@ static void EW_setDrawEnv(FontDrawCursor *cursor)
 }
 
 /*
- * EW_create (main:0x0026c0e0) indexes a fixed table of 40-byte (0x28)
- * ewComponent slots (index*5*8); each slot holds a 0x10-byte shared
- * header (flags at +0x00, widget type at +0x02) followed by 0x18 bytes
- * of type-specific storage. It calls one of frame_init/sprt_init/
- * container_init/mask_init with a pointer to that type-specific storage
- * to initialize a newly created widget (type 1, 5, 4 and 8/10
- * respectively, per the jump table at 0x004c2360).
+ * Allocates a ewComponent slot and initializes it for the given type.
+ * index < 0 takes the first free slot. Each slot holds a 0x10-byte shared
+ * header (flags at +0x00, widget type at +0x02) followed by 0x18 bytes of
+ * type-specific storage, which the corresponding *_init function sets up.
  */
 EwWidget *EW_create(int index, int type)
 {
@@ -293,6 +290,7 @@ EwWidget *EW_create(int index, int type)
     return widget;
 }
 
+/* Clears the allocated flag of a container's children, then of the container. */
 void EW_dispose(EwContainerWidget *widget)
 {
     EwWidget **firstChild;
@@ -327,6 +325,11 @@ void EW_dispose(EwContainerWidget *widget)
     widget->flags = 0;
 }
 
+/*
+ * Stores child in a container's children array and returns the slot used,
+ * or -1 on failure. index -1 takes the first empty slot, other negative
+ * values the last empty slot, and 0 or more that slot.
+ */
 int EW_addComponent(EwContainerWidget *widget, int index, EwWidget *child)
 {
     EwWidget **children;
@@ -366,6 +369,7 @@ int EW_addComponent(EwContainerWidget *widget, int index, EwWidget *child)
     return index;
 }
 
+/* Draws each visible child of a container. */
 void EW_drawContainer(FontDrawCursor *cursor, EwContainerState *container)
 {
     EwWidget **firstChild;
@@ -396,6 +400,8 @@ void EW_drawContainer(FontDrawCursor *cursor, EwContainerState *container)
     }
 }
 
+/* Draws one widget according to its type. Each case runs only in the pass(es)
+ * selected by ew_send_mode. */
 void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
 {
     switch (widget->type)
@@ -487,6 +493,7 @@ void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
         int i;
         int centeredX;
 
+        /* Text pass: prints the lines from firstLine, advancing y by lineHeight. */
         if ((ew_send_mode & EW_PASS_TEXT) == 0)
         {
             return;
@@ -553,6 +560,7 @@ void EW_drawComoponent(FontDrawCursor *cursor, EwWidget *widget)
     }
 }
 
+/* Clears the flags of every widget slot. */
 void EW_init(void)
 {
     int i;
@@ -563,6 +571,7 @@ void EW_init(void)
     }
 }
 
+/* Font-queue callback for the packet pass: draws the visible top-level widgets. */
 void EW_sendPacket(FontDrawCursor *cursor, void *argument)
 {
     int i;
@@ -581,6 +590,7 @@ void EW_sendPacket(FontDrawCursor *cursor, void *argument)
     ew_send_mode = 0;
 }
 
+/* Queues the packet pass, then runs the text pass over the visible top-level widgets. */
 void EW_draw(void)
 {
     int i;
@@ -605,12 +615,11 @@ static void container_init(EwContainerState *container)
 }
 
 /*
- * Draws a mask widget as one four-vertex Gouraud triangle strip (GIF
- * PRIM 0x20264000 with the ALPHA_1 value held in the mask state). The
- * top edge is filled with the intensity in bits 16-23 of the mask's fix
- * word and the bottom-right edge with bits 8-15; bit 0x100 of the blend
- * word swaps the two middle vertices, which turns the gradient from
- * vertical to horizontal.
+ * Emits a GIF packet that draws a mask widget as four vertices. The two
+ * colours come from bits 16-23 and 8-15 of the fix word. Bit 0x100 of the
+ * blend word sets the vertex order: when it is set, the top two vertices
+ * take the first colour and the bottom two the second; when it is clear,
+ * the left two take the first colour and the right two the second.
  */
 static void mask_put(FontDrawCursor *cursor, void *arg)
 {
@@ -738,6 +747,7 @@ static void mask_put(FontDrawCursor *cursor, void *arg)
     xglPrimAddGifTagDirect(cursor->packet, gif, (qword - gif) / 4);
 }
 
+/* Emits a GIF packet that draws a sprite widget as one textured quad. */
 static void sprt_put(FontDrawCursor *cursor, EwSpriteWidget *widget)
 {
     unsigned int *packet;
@@ -801,6 +811,10 @@ static void sprt_put(FontDrawCursor *cursor, EwSpriteWidget *widget)
     xglPrimAddGifTagDirect(cursor->packet, packet, 9);
 }
 
+/*
+ * Sets the scissor to the widget rectangle, clamped to the screen. The
+ * bottom limit is written as bottom - 2.
+ */
 static void set_clip(FontDrawCursor *cursor, void *arg)
 {
     EwWidget *widget;
@@ -839,6 +853,7 @@ static void set_clip(FontDrawCursor *cursor, void *arg)
     xglPrimAddGifTagDirect(cursor->packet, env, 2);
 }
 
+/* Returns the bit index when value is a power of two, else 0 (also for 1). */
 static int checkN2(int value)
 {
     int bitIndex;
@@ -858,6 +873,11 @@ static int checkN2(int value)
     return 0;
 }
 
+/*
+ * Emits a GIF packet that draws a frame widget as nine patches: a centre
+ * quad over the widget rectangle and eight border pieces, with texture
+ * coordinates from frameUV.
+ */
 static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
 {
     int xs[16];
@@ -961,6 +981,7 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
     }
     right = left + width;
     bottom = top + height;
+    /* Border columns in xs and rows in ys, two entries per vertex pair. */
     xs[0] = xs[2] = left;
     xs[1] = xs[3] = right;
     xs[4] = left - 256;
@@ -1017,11 +1038,10 @@ static void frame_put(FontDrawCursor *cursor, EwWidget *widget)
 }
 
 /*
- * Draws a label widget: a four-vertex Gouraud-shaded sprite strip over the
- * widget rectangle (a power-of-two side widened by one pixel, as in
- * frame_put), then the border pieces of frameUV selected by the bits of
- * 0x3D: the top, left and right edges and all four corners, but not the
- * bottom edge.
+ * Emits a GIF packet that draws a label widget: a four-vertex strip over
+ * the widget rectangle (a power-of-two side is widened by 16 GS units, as
+ * in frame_put), then the frameUV border pieces selected by
+ * EW_LABEL_PIECE_MASK.
  */
 static void label_put(FontDrawCursor *cursor, EwLabelWidget *widget)
 {

@@ -288,6 +288,7 @@ const char sdvOpNameBipush[8] = "bipush";
 
 const char sdvOpNameNop[8] = "nop";
 
+/* Formats its arguments like printf and prints the text followed by a newline. */
 void tracePrint(const char *format, ...) {
     va_list args;
     char buffer[0x100];
@@ -299,11 +300,8 @@ void tracePrint(const char *format, ...) {
 }
 
 /*
- * These exported debug entry points contain no instructions beyond their
- * return sequence.  Their callers are not present in the bounded resident
- * call search, so the historical argument lists remain unresolved; the
- * unspecified C parameter lists preserve that uncertainty without inventing
- * a prototype.  The original symbol spellings are retained.
+ * Exported debug entry points with empty bodies. Their argument lists are not
+ * recovered, so they keep unspecified parameter lists.
  */
 void sefPrintVector()
 {

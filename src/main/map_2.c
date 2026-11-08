@@ -30,6 +30,10 @@ extern int MDL_create(void *model_instance, void *resource_model);
 extern void unit6003_update(MapUnitRecord *unit);
 extern void nmlModelSetShadowMapEntry(void);
 extern void nmlModelEntry(int entry);
+/*
+ * Loads the model for `resource_id`, falling back to the group's first resource
+ * when that fails, and stores it in the unit. Returns MDL_create's result.
+ */
 int MAP_loadUnitResource(MapUnitRecord *unit, int resource_id)
 {
     MapUnitResource *resource = RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_MODEL_NO_JOINTS, resource_id, 0);
@@ -61,6 +65,7 @@ int MAP_loadUnitResource(MapUnitRecord *unit, int resource_id)
     return MDL_create(&unit->modelState, model);
 }
 
+/* Resets every record in MapUnit to its default state. */
 void MAP_initUnit(void)
 {
     MapUnitRecord *unit = MapUnit;
@@ -110,6 +115,11 @@ void MAP_initUnit(void)
     }
 }
 
+/*
+ * Claims the record at `slot` (the first free slot when `slot` is negative) for
+ * `serial` and returns it, or returns 0 when no slot is free. Serial
+ * MAP_UNIT_SERIAL_UNIT6003 also gets unit6003_update as its type update.
+ */
 MapUnitRecord *MAP_createUnit(int slot, int serial)
 {
     MapUnitRecord *unit;
@@ -154,6 +164,7 @@ MapUnitRecord *MAP_createUnit(int slot, int serial)
     return unit;
 }
 
+/* Runs the update and type-update hooks of each live, unsuspended unit. */
 void MAP_updateUnit(void)
 {
     MapUnitRecord *unit = MapUnit;
@@ -172,6 +183,11 @@ void MAP_updateUnit(void)
     }
 }
 
+/*
+ * Draws one map unit: builds its transform from position, rotation and scale,
+ * combined with a joint or root matrix of its parent when it has one, sets the
+ * model's render state, then draws the model and calls the unit's draw hook.
+ */
 void MAP_drawUnitAt(MapUnitRecord *unit)
 {
     Matrix4 place;
@@ -197,7 +213,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
         matrixIndex = unit->parentMatrixIndex;
         matrices = unit->parent->matrices;
         if (matrixIndex >= 0) {
-            /* Aligned matrix copies use the SDK's scratch-register quartet. */
+            /* The matrices are copied with quadword moves (QuadwordCopyMatrix). */
             if (matrixIndex & MAP_PARENT_MATRIX_JOINT) {
                 QuadwordCopyMatrix(joint, (matrixIndex & MAP_PARENT_MATRIX_MASK) * sizeof(Matrix4) + (unsigned int)matrices);
                 homogeneousZero = 0.0f;
@@ -224,6 +240,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
     }
     model = unit->modelEntry;
     if (model != 0) {
+        /* Model state and render settings, then the model entry itself. */
         if (!(unit->flags & 4)) {
             if (unit->resourceStatus != 0) {
                 nmlModelSetTexture(unit->resourceStatus);
@@ -287,6 +304,7 @@ void MAP_drawUnitAt(MapUnitRecord *unit)
     }
 }
 
+/* Draws every unit with a nonnegative serial. */
 void MAP_drawUnit(void)
 {
     MapUnitRecord *unit = MapUnit;
@@ -300,6 +318,7 @@ void MAP_drawUnit(void)
     }
 }
 
+/* Sets position->y to the ground height at x and z when the lookup finds ground; otherwise leaves y unchanged. */
 void MAP_getHeight(MapPosition *position)
 {
     float height = UnduGet(position->x, position->z);

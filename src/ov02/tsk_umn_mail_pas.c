@@ -382,6 +382,10 @@ static const char *msg00_0_00A10618[UMN_MAIL_CAPTIONS] = {
     mailPathHistoryText,
 };
 
+/*
+ * Mail title bar task: INIT builds the caption window and its messages. RUN slides the
+ * window and the captions in for the mail steps that show them, and out otherwise.
+ */
 void tskUmnMailPas(UmnObjectTask *task, void *data)
 {
     UmnMailPasWork *work = data;
@@ -487,6 +491,10 @@ void tskUmnMailPas(UmnObjectTask *task, void *data)
     }
 }
 
+/*
+ * Info line task: fills the text buffer for the current mail step (mail summary, menu
+ * help or reply price) and slides the line into view, or out for the other steps.
+ */
 void tskUmnMailInfo(UmnObjectTask *task, void *argument)
 {
     struct UmnMailInfoWork *work = argument;
@@ -638,6 +646,11 @@ void tskUmnMailInfo(UmnObjectTask *task, void *argument)
     }
 }
 
+/*
+ * Mail folder task: slides the record rows in and out for the tab step, scrolls the list
+ * by one row when the cursor moves past the visible rows, and focuses the selected row
+ * for reading.
+ */
 void tskUmnMailFolder(UmnObjectTask *task, void *data)
 {
     UmnMailFolderWork *work = data;
@@ -867,6 +880,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
             }
             break;
 
+        /* The selected row moves to the top-left; the other rows slide off to the side. */
         case UMN_MAIL_FOLDER_FOCUS:
             {
                 cnt = 0;
@@ -964,6 +978,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
             break;
         }
 
+        /* Copies the header of each row's mail, starting at the list cursor. */
         if (work->flag != 0) {
             more = 0;
             if (UmnWork.direction != 0) {
@@ -994,6 +1009,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
                 endPrintExtFunc(work->color, END_PRINT_CMD_SCISSOR_SET, &work->box);
             }
 
+            /* Draws each row's window. */
             for (i = 0; i < work->count + more; i++) {
                 work->records[i].window.x = work->records[i].x;
                 if (work->records[i].head.flags & UMN_MAIL_FLAG_REPLY) {
@@ -1037,6 +1053,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
                 endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET, &work->box);
             }
 
+            /* Draws each row's icons, subject and title, and attachment mark. */
             for (i = 0; i < work->count + more; i++) {
                 int pick;
 
@@ -1105,6 +1122,11 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
     xglFontDebugPrintf(0, 16, "Folder : %2d", work->state);
 }
 
+/*
+ * Mail text window task: opens the window for the selected mail, scrolls its text with the
+ * pad (line, page, top, bottom and column steps) while it is read, and closes it again.
+ * The name-lookup step reuses the same window with a shorter target height.
+ */
 void tskUmnMailDisp(UmnObjectTask *task, void *data)
 {
     UmnMailDispWork *work = data;
@@ -1277,6 +1299,7 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
                         }
                     }
                 }
+                /* Applies the scroll requested above. */
                 kind = work->scrol_type;
                 switch (kind) {
                 case UMN_MAIL_SCROLL_LINE_UP:
@@ -1486,6 +1509,10 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
     xglFontDebugPrintf(16, 136, mailNowPageDebugFormat, work->now_page);
 }
 
+/*
+ * Reply name window task: slides the window in when the reply selection starts and out
+ * when it ends, and draws one line per UmnWork.name entry, showing the subject of that mail.
+ */
 void tskUmnMailHensin(UmnObjectTask *task, void *data)
 {
     UmnMailHensinWork *work = data;
@@ -1585,6 +1612,11 @@ void tskUmnMailHensin(UmnObjectTask *task, void *data)
     eCursolMain(&work->cursor);
 }
 
+/*
+ * Mail menu task: opens the Read, History, Attach and Back menu for the mail step (with the
+ * entries that cannot be used locked) and the reply confirmation window, and slides them
+ * in and out.
+ */
 void tskUmnMailMenu(UmnObjectTask *task, void *data)
 {
     UmnMailMenuWork *work = data;
@@ -1731,6 +1763,10 @@ void tskUmnMailMenu(UmnObjectTask *task, void *data)
     xglFontDebugPrintf(0, 40, mailYesNoDebugFormat, work->state);
 }
 
+/*
+ * Extra window task: slides three message slots and two numbered ribbon rows in and out for
+ * the mail step, and shades the text_5 bars for the read and reply steps.
+ */
 void tskUmnMailExWin(UmnObjectTask *task, void *data)
 {
     UmnMailExWork *work = data;
@@ -1860,8 +1896,14 @@ void tskUmnMailExWin(UmnObjectTask *task, void *data)
     }
 }
 
+/*
+ * Rebuilds mail_folder. With a selection active it holds the history path from the root to
+ * the selected mail; otherwise it holds the saved mail list, oldest first. Sets the list
+ * cursor, row and scroll to match.
+ */
 void UmnMailFolderSet(void)
 {
+    /* Returns 1 when the history below mail_id contains the selected mail. */
     int SisoSiso(int mail_id)
     {
         int child_index = 0;
@@ -1958,6 +2000,10 @@ void UmnMailFolderSet(void)
     }
 }
 
+/*
+ * Mail screen state machine. INIT creates the mail tasks and the folder list; later steps
+ * move the tab state through the folder, menu, read, reply and attachment steps.
+ */
 void UmnMail(int menu_id)
 {
     int i;
@@ -2014,6 +2060,7 @@ void UmnMail(int menu_id)
         UmnWork.wait = 0;
         UmnMailFolderSet();
         /* fall through */
+    /* Folder list: the pad moves the cursor and scrolls the list at its edges. */
     case UMN_MAIL_STEP_FOLDER: {
         if (UmnWork.moving == 0) {
         if (UmnWork.wait == 0) {
@@ -2097,7 +2144,7 @@ void UmnMail(int menu_id)
         }
         }
 
-        /* refresh the selected mail */
+        /* Selects the mail under the cursor and flags its attachment state. */
         UmnWork.mail_text_ready = 0;
         UmnWork.mail_has_data = 0;
         UmnWork.entry = (signed char)mail_folder[UmnWork.list_cursor];
@@ -2179,6 +2226,7 @@ void UmnMail(int menu_id)
             }
         }
         break;
+    /* Opens the mail: copies its name slots, adds its items on first read, marks it read. */
     case UMN_MAIL_STEP_READ_OPEN: {
         unsigned char *data;
         UmnMailHeader *header;

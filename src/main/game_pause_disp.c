@@ -46,6 +46,9 @@ static void DrawShadow(FontDrawCursor *cursor, void *argument)
     sceVif1PkAddDirectDataN(cursor->packet, &ShadowEnv, PAUSE_SHADOW_QWORDS);
 }
 
+/*
+ * Font-draw callback: fills the credit block in the cursor's work area and sends it as direct data.
+ */
 static void DrawCredit(FontDrawCursor *cursor, void *argument)
 {
     PauseCreditData *data = &cursor->work.credit_data;
@@ -80,6 +83,10 @@ static void DrawCredit(FontDrawCursor *cursor, void *argument)
     sceVif1PkAddDirectDataN(cursor->packet, &cursor->work.credit_data, PAUSE_CREDIT_QWORDS);
 }
 
+/*
+ * Runs one frame of the pause state machine. Draws the pause screen or the credit overlay; in
+ * snapshot mode it saves the snapshot and restores the scanline setting.
+ */
 void PauseMenu(void)
 {
     int pause_mode = GameLoopState.pause_mode;
@@ -125,6 +132,7 @@ void GamePauseDispCf(void)
     GamePauseDispBG();
 }
 
+/* Draws the pause caption and the two button messages. */
 void GamePauseDispEvent(void)
 {
     GamePauseDispCf();

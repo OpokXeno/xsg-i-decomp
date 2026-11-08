@@ -5,7 +5,7 @@
 #include "main/string_utf_get_hash.h"
 #include "main/xgl_light.h"
 
-/* Original .lit4 pool at 0x004D83EC: IEEE-754 binary32 0x40490fdb. */
+/* Single-precision pi (IEEE-754 bits 0x40490fdb). */
 #define PI_F (3.141592741f)
 
 #define HALF_TURN_RADIANS PI_F
@@ -29,6 +29,11 @@ extern void xglLightIntensityParallel(void *light, int index, void *intensity);
 extern void xglLightDirection(void *light, unsigned int index,
                               const Vector4 *direction);
 
+/*
+ * Sets the intensity of the Light object's light from (x, y, z): the ambient light for
+ * id 0, otherwise parallel light id - 1.  Uses the current studio light when the
+ * object has no peer light.
+ */
 void Java_xeno_Light_setColor__FFF(JThread *thread, LightVectorCall *arguments)
 {
     SceneObject object = arguments->object;
@@ -59,6 +64,7 @@ void Java_xeno_Light_setColor__FFF(JThread *thread, LightVectorCall *arguments)
     }
 }
 
+/* Sets the direction of parallel light id - 1 from (x, y, z) given in degrees. */
 void Java_xeno_Light_setDirection__FFF(JThread *thread,
                                        LightVectorCall *arguments)
 {
@@ -86,6 +92,7 @@ void Java_xeno_Light_setDirection__FFF(JThread *thread,
     xglLightAngle(light, light_id - 1, &angles);
 }
 
+/* Sets the direction of parallel light id - 1 to (x, y, z); ignored unless the index is 0 to 2. */
 void Java_xeno_Light_setDirection2__FFF(JThread *thread,
                                          LightVectorCall *arguments)
 {
@@ -117,6 +124,7 @@ void Java_xeno_Light_setDirection2__FFF(JThread *thread,
     }
 }
 
+/* Sets the colour of global point light `arguments[1]` from the three float arguments. */
 void Java_xeno_Light_setGlobalPointLightCol__IFFF(
     void *thread, void *argument_block)
 {
@@ -134,6 +142,7 @@ void Java_xeno_Light_setGlobalPointLightCol__IFFF(
         arguments[1].integer, &color);
 }
 
+/* Sets the position of global point light `arguments[1]` from the three float arguments. */
 void Java_xeno_Light_setGlobalPointLightPos__IFFF(
     void *thread, void *argument_block)
 {

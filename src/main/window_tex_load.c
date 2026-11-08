@@ -5,7 +5,6 @@
 #include "main/file.h"
 #include "main/party.h"
 
-/* The defining headers supply the flags and renderer callback layouts. */
 #define GAME_LOOP_FLAG_UMN 0x04000000
 
 #define MENU_WORK_SIZE 0x500000       /* GameResourceWorkAlloc request */
@@ -121,8 +120,6 @@ void *MenuModelOut[4] = { 0 };
 
 XglRenderFadeCallback MenuCfTaiki[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
-/* The external data witness covers these 0x9c bytes; the spans around the
- * two evidenced bit sets remain unmodelled (see UmnDataBase). */
 static unsigned char Menu02Tex[0x40800];
 
 /* MenuWorkEndGet clears and returns this entire 64 KiB work region. */
@@ -130,6 +127,11 @@ static unsigned char MenuWorkEndTop[MENU_WORK_END_SIZE];
 
 static int original_font_no_1;
 
+/*
+ * Loads the window texture for the slot in the low 16 bits of request; bit 16
+ * selects an asynchronous load. A non-null buffer becomes the window texture
+ * buffer first. Returns the read result for synchronous slot 0 and 1 loads.
+ */
 int WindowTexLoad(unsigned char *buffer, unsigned int request)
 {
     int texture_slot = request & MENU_TEX_SLOT_MASK;
@@ -182,6 +184,7 @@ void MenuWorkEndCheck(void)
 {
 }
 
+/* Sets the top menu level, clears the other menu_state entries and reset_work[0..6]. */
 void ChangeTopLevel(int top_level)
 {
     int remaining = 6;
@@ -206,6 +209,11 @@ void MenuKeepSelectReset(void)
         memset(&MenuKeepSelect[i * 5], 0, 5U);
 }
 
+/*
+ * Moves a vertical menu selection by one on a repeated up or down press and
+ * returns the new index. The selection wraps at both ends; a cursor sound
+ * plays on a move.
+ */
 int MenuSelectMove(int selection, int count, int wrap)
 {
     int movement = 0;
@@ -235,6 +243,11 @@ int MenuSelectMove(int selection, int count, int wrap)
     return selection;
 }
 
+/*
+ * Moves a selection on a four-way repeated press (up -2, left -1, down +2,
+ * right +1) and returns the new index. The selection wraps at both ends; a
+ * cursor sound plays on a move.
+ */
 int MenuSelectMove2(int selection, int count)
 {
     int movement = 0;
@@ -267,6 +280,7 @@ int MenuSelectMove2(int selection, int count)
     return selection;
 }
 
+/* Moves *current toward *target by about the distance divided by rate, and snaps to the target when that step is zero. */
 void MoveSlide(short *current, short *target, float rate)
 {
     short current_position = *current;
@@ -301,6 +315,7 @@ void MoveSlide(short *current, short *target, float rate)
     *target = target_position;
 }
 
+/* Moves *current toward *target by step, without passing the target. */
 void MoveSlide2(short *current, short *target, short step)
 {
     short current_position = *current;
@@ -323,6 +338,7 @@ void MoveSlide2(short *current, short *target, short step)
     *target = target_position;
 }
 
+/* Load-event callback: event 1 and 4 adjust MenuLoadCount, -1 and -2 set it to the error value. */
 static void menuCallback(int event)
 {
     switch (event) {
@@ -347,6 +363,10 @@ static void menuCallback(int event)
     }
 }
 
+/*
+ * Loads font 1 when original_font is set and remembers its number; otherwise
+ * loads the remembered font again. Uses menuCallback when asynchronous.
+ */
 void MenuFontLoad(int original_font, int asynchronous)
 {
     void (*callback)(int) = 0;
@@ -361,6 +381,7 @@ void MenuFontLoad(int original_font, int asynchronous)
     }
 }
 
+/* Reads name into buffer with menuCallback tracking the load count. */
 void MenuLoadFile(const char *name, void *buffer)
 {
     xglCdReadFile(name, buffer, 1, (int)menuCallback);
@@ -380,6 +401,7 @@ void MenuLoadEnd(void)
 {
 }
 
+/* Cancels a pending read and resets the load count, when one is pending. */
 void MenuLoadCancel(void)
 {
     if (MenuLoadSync() != 0) {
@@ -410,6 +432,7 @@ void MenuBibrationMain(void)
     }
 }
 
+/* Saves the eight final-packet render callbacks into MenuCfTaiki and clears them. */
 void MenuCfTaikiPush(void)
 {
     int index;
@@ -421,6 +444,7 @@ void MenuCfTaikiPush(void)
     }
 }
 
+/* Restores the eight render callbacks saved by MenuCfTaikiPush. */
 void MenuCfTaikiPop(void)
 {
     int index;
@@ -429,6 +453,10 @@ void MenuCfTaikiPop(void)
         sRender.final_packet_callback[index] = MenuCfTaiki[index];
 }
 
+/*
+ * Sets up the menu background task in work, with a copy of the camera it
+ * uses. Returns the address just past the saved camera.
+ */
 unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
 {
     float camera_rotation_x;
@@ -482,6 +510,7 @@ unsigned char *MenuBgTaskInit(unsigned char *work, int camera_id)
     return (unsigned char *)saved_end;
 }
 
+/* Steps the background colour, draws it and runs the background task. */
 void MenuBgTaskMain(void)
 {
     int level = MenuBgRgba.r + 0xF8;
@@ -496,6 +525,7 @@ void MenuBgTaskMain(void)
     MenuModelDirectSendZClear();
 }
 
+/* Stops the background task and restores the live camera from the saved copy. */
 void MenuBgTaskBreak(void)
 {
     StudioCamera *saved_camera;
@@ -508,6 +538,10 @@ void MenuBgTaskBreak(void)
     *live_camera = *saved_camera;
 }
 
+/*
+ * Loads the tairetu model texture, pointer and lex files into consecutive
+ * buffers starting at buffer. Returns the address after the loaded lex data.
+ */
 unsigned char *MenuTairetuLoad(unsigned char *buffer, int load_flags)
 {
     MenuModelPath filename;
@@ -542,6 +576,10 @@ unsigned char *MenuTairetuLoad(unsigned char *buffer, int load_flags)
     return MenuTairetuModelLexAddr + 0x800;
 }
 
+/*
+ * Runs the main menu: loads its resources, runs the menu loop until quit, then
+ * starts the chosen mini-game or reloads the game data.
+ */
 void MainMenu(void)
 {
     MenuLightConfig lighting;
@@ -573,6 +611,7 @@ void MainMenu(void)
     xglLightDirection(light, 1, lighting.light.direction[1]);
     xglLightIntensityParallel(light, 2, lighting.light.parallel[2]);
     xglLightDirection(light, 2, lighting.light.direction[2]);
+    /* Model pool, then the background, scene and window resources. */
     MenuModelWorkTop = GameResourceWorkAlloc(MENU_WORK_SIZE);
     MainMenuWorkEnd = MenuModelWorkTop + MENU_MODEL_WORK_SIZE;
     MainMenuWorkEnd = MenuModelInit(MainMenuWorkEnd);
@@ -603,12 +642,14 @@ void MainMenu(void)
     WindowTexLoad(0, MENU_TEX_ASYNC_FLAG | 2);
     MainMenuWorkEnd = MenuTairetuLoad(MainMenuWorkEnd, 1);
     xglSoundEffectNormalID(1, 0);
+    /* Wait for the asynchronous loads to finish, keeping the background running. */
     while (MenuLoadSync()) {
         MenuBgTaskMain();
         xglSleep();
     }
     MenuScenarioNo = MenuScenarioNoGet();
     MenuEquipStealMaskCheck();
+    /* Menu loop: dispatch the current level until it becomes MENU_LEVEL_QUIT. */
     while (MenuWork.menu_state[1] != MENU_LEVEL_QUIT) {
         GameSnapShotCheck();
         switch (MenuWork.menu_state[1]) {
@@ -647,6 +688,7 @@ void MainMenu(void)
         xglFontDebugHex(0, 0x28, MenuWork.menu_state[3], 2);
         xglSleep();
     }
+    /* Tear down the menu tasks and textures. */
     MenuLoadCancel();
     MenuBgTaskBreak();
     xglTaskExecute(MenuTask_XMX);
@@ -656,6 +698,7 @@ void MainMenu(void)
     MenuCfTaikiPop();
     MenuFontLoad(0, 0);
     WindowTexLoad(0, 0);
+    /* Start the chosen mini-game overlay, or reload the game data. */
     if (mini_game_no != 0 && mini_game_no != 15) {
         xglCullingIgnoreOff();
         nmlModelSendMenuEnd();
@@ -699,6 +742,7 @@ void MainMenu(void)
     GameLoopState.flags &= ~GAME_LOOP_FLAG_UMN;
 }
 
+/* Resets HP and EP of characters 1 to 11 to their recalculated maximums. */
 void CharactorAllRecovery(int unused, int continueFlag) {
     int attack[4];
     int defense[4];
@@ -719,6 +763,7 @@ void CharactorAllRecovery(int unused, int continueFlag) {
     } while (continueFlag != 0);
 }
 
+/* Resets HP and EP of characters 0x11 to 0x20 to their recalculated maximums. */
 void AgwsAllRecovery(int unused, int continueFlag) {
     int attack[4];
     int defense[4];
@@ -744,6 +789,7 @@ void UmnkosmosSpecialInit(void)
     memset(UmnKosmosSpecialBox, 0, sizeof(UmnKosmosSpecialBox));
 }
 
+/* Applies the non-zero entries of UmnKosmosSpecialBox through func_A19750, up to four, stopping at the first zero. */
 void UmnkosmosSpecialSet(void)
 {
     int index = 0;
@@ -762,6 +808,10 @@ void UmnkosmosSpecialSet(void)
     }
 }
 
+/*
+ * Fills the UMN records for units 0x22 to 0x3e from the unit tables, then runs
+ * the UMN overlay and restores the menu memory.
+ */
 void UmnInterface(void)
 {
     UmnTextPageMap text_pages;
@@ -781,6 +831,7 @@ void UmnInterface(void)
     default_character = defaultCharacterBuffer[0];
     record = UmnGunoDataBaseTop;
 
+    /* One record per unit: type, properties, name and description. */
     for (unit_id = 0x22; unit_id < 0x3f; ++unit_id, ++record) {
         UmnUnitInitRecord *unit_init;
         UmnUnitTextRecord *unit_text;
@@ -828,6 +879,7 @@ void UmnInterface(void)
     endBackTexDraw((unsigned char *)-1);
     xglSleep();
     xglSleep();
+    /* Run the UMN overlay (overlay 2), then return to overlay 1. */
     xglCdLoadOverlay(2);
     xglSleep();
     UmnMain();
@@ -838,6 +890,7 @@ void UmnInterface(void)
     MenuModelMemoryInit(MenuModelWorkTop, 0x480000);
 }
 
+/* Runs the UMN mail screen for menuId inside overlay 2, then reloads overlay 1. */
 void UmnMailMain(int menuId)
 {
     UmnkosmosSpecialInit();
@@ -853,6 +906,7 @@ void UmnMailMain(int menuId)
     UmnkosmosSpecialSet();
 }
 
+/* Stores mail_id in the first free slot of the mail box table. A slot holding -1 is free. */
 void UmnMailBoxSet(int mail_id)
 {
     int index;
@@ -878,6 +932,7 @@ unsigned char *UmnMailDataGet(int box_id)
     return &SaveData[SAVE_UMN_MAIL_DATA + box_id * 2];
 }
 
+/* Marks monster_id as discovered. Ids 0x22 to 0x3e are tracked, one bit each. */
 void UmnDataBaseMonsterSet(int monster_id)
 {
     UmnDataBase *state = UmnDataBaseStateData;
@@ -889,6 +944,7 @@ void UmnDataBaseMonsterSet(int monster_id)
     }
 }
 
+/* Returns 1 when monster_id is marked as discovered, 0 otherwise. */
 int UmnDataBaseMonsterCheck(int monster_id)
 {
     UmnDataBase *state = UmnDataBaseStateData;
@@ -903,6 +959,7 @@ int UmnDataBaseMonsterCheck(int monster_id)
     return result;
 }
 
+/* Marks monster_id as analysed. Ids 0x22 to 0x3e are tracked, one bit each. */
 void UmnDataBaseAnalisisSet(int monster_id)
 {
     UmnDataBase *state = UmnDataBaseStateData;
@@ -914,6 +971,7 @@ void UmnDataBaseAnalisisSet(int monster_id)
     }
 }
 
+/* Returns 1 when monster_id is marked as analysed, 0 otherwise. */
 int UmnDataBaseAnalisisCheck(int monster_id)
 {
     UmnDataBase *state = UmnDataBaseStateData;

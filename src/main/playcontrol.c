@@ -25,15 +25,12 @@ typedef struct PlayControlTimingCall {
 } PlayControlTimingCall;
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU) and src/main/jni.h. Every Java native in
- * this TU receives it as its first, unused argument (a0), the same
- * (thread, arguments[, result]) convention src/main/runtime.c and
- * src/main/camera.c use.
+ * The script VM's per-thread context (see src/main/jni.h). Every Java native in
+ * this TU receives it as its first argument, which the natives do not use, in
+ * the same (thread, arguments[, result]) convention as src/main/runtime.c and
+ * src/main/camera.c.
  */
 typedef struct JThread JThread;
-
-
 
 typedef struct PlayControlStringStorage {
     unsigned char unmodeled_00[4];
@@ -97,10 +94,9 @@ extern JavaMethod *findMethod(JavaClass *clazz, SceneString *name,
 
 extern int TCH_getInfoID(void *chart, const char *name, int length);
 
-/* Already recovered in src/main/play.c (main's play TU, VA 0x0026a770);
-   restated here verbatim (a TU-local declaration cannot be included from
-   another TU). Stores its second argument into the playback controller's
-   timeChart field (play.h +0x08). */
+/* Defined in src/main/play.c; declared here because a TU-local declaration
+   cannot be included from another TU. Stores its second argument into the
+   playback controller's timeChart field (play.h +0x08). */
 extern void PLAY_setTimeChart(Play *play, void *time_chart);
 
 extern PlayControlCallBackParams *PLAY_getCallBackParams(Play *play);
@@ -119,10 +115,7 @@ void Java_xeno_PlayControl_create__(JThread *thread, void *arguments,
     *result = (int)play;
 }
 
-/*
- * Java_xeno_PlayControl_getSignal__ (main VA 0x002fa3e8, 16 bytes, GLOBAL
- * binding). Returns the playback controller's signal word.
- */
+/* Returns the playback controller's signal word. */
 void Java_xeno_PlayControl_getSignal__(JThread *thread,
                                        Play **arguments,
                                        int *result)
@@ -130,16 +123,14 @@ void Java_xeno_PlayControl_getSignal__(JThread *thread,
     *result = (*arguments)->signal;
 }
 
-/*
- * Java_xeno_PlayControl_signal__I (main VA 0x002fa3f8, 16 bytes, GLOBAL
- * binding). Sets the playback controller's signal word.
- */
+/* Sets the playback controller's signal word to the given value. */
 void Java_xeno_PlayControl_signal__I(JThread *thread,
                                      PlayControlSignalArguments *arguments)
 {
     arguments->control->signal = arguments->value;
 }
 
+/* Stores the camera index and flags, then sets up the playback controller. */
 void Java_xeno_PlayControl_init__II(JThread *thread,
                                      const PlayControlIntegerCall *arguments)
 {
@@ -151,6 +142,10 @@ void Java_xeno_PlayControl_init__II(JThread *thread,
     PLAY_setup(play);
 }
 
+/*
+ * Initializes the playback controller like init__II, and converts the frame range
+ * and frame step to seconds for the start time, end time and current time.
+ */
 void Java_xeno_PlayControl_init__IIIIF(JThread *thread,
                                         const PlayControlTimingCall *arguments)
 {
@@ -173,11 +168,7 @@ void Java_xeno_PlayControl_init__IIIIF(JThread *thread,
     control->frameStep = frame_step * PLAY_SECONDS_PER_FRAME;
 }
 
-/*
- * Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_ (main VA
- * 0x002fa4b0, 16 bytes, GLOBAL binding). Stores the given Object into the
- * playback controller's source field.
- */
+/* Stores the given Object into the playback controller's source field. */
 void Java_xeno_PlayControl_loadCamera__Ljava_lang_Object_(
     JThread *thread, PlayControlLoadCameraArguments *arguments)
 {
@@ -202,6 +193,7 @@ void Java_xeno_PlayControl_stop__(JThread *thread,
     (*arguments)->flags &= ~PLAY_FLAG_ENABLED;
 }
 
+/* Registers the named method of the observer object as the callback for the event. */
 void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(
     JThread *thread, PlayControlSetObserverArguments *arguments)
 {
@@ -222,6 +214,10 @@ void Java_xeno_PlayControl_setObserver__IILjava_lang_Object_Ljava_lang_String_(
                      arguments->event_key, observer, method);
 }
 
+/*
+ * Registers the named method of the observer as the callback for the event of the
+ * named time chart's entry; does nothing when the chart has no such entry.
+ */
 void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Ljava_lang_String_(
     JThread *thread, PlayControlSetChartObserverArguments *arguments)
 {
@@ -256,10 +252,7 @@ void Java_xeno_PlayControl_setObserver__ILjava_lang_String_Ljava_lang_Object_Lja
                      observer, method);
 }
 
-/*
- * Java_xeno_PlayControl_getParams__ (main VA 0x002fa648, 44 bytes, GLOBAL
- * binding). Returns the playback controller's callback-parameter object.
- */
+/* Returns the playback controller's callback-parameter object. */
 void Java_xeno_PlayControl_getParams__(JThread *thread,
                                        Play **arguments,
                                        PlayControlCallBackParams **result)

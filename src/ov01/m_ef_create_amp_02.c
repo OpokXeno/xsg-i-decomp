@@ -81,10 +81,10 @@ static void fnAMP02_DP000(void *self, Amp02InitState *work);
 static void fnAMP02_DM000(void *self, Amp02DrawView *work);
 static void fnAMP02_PO000(void *self, Amp02InitState *work);
 
-/* Initialize actor geometry, the previous position and the drawing packet. */
+/* Starts the flight from the source actor's matrix, sets the facing and the trail packet, and installs the callbacks. */
 int MEfCreate_AMP02(MEfObjRecord *self)
 {
-    /* This constructor interprets its own variant of the pooled work. */
+    /* The pooled record is viewed as this effect's own object type. */
     Amp02Object *object = (Amp02Object *)self;
     Amp02InitState *work = &object->work;
     Amp02GsParameter parameter;
@@ -147,9 +147,8 @@ extern void MMathVectorInterpolation(Vector4 *destination, const Vector4 *first,
                                      const Vector4 *second, float parameter);
 
 /*
- * fnAMP02_PR000 advances the flight: the head position and its velocity, the
- * facing angles, the per-frame step of the first angle, and the ten-slot
- * trail of points with their twist values (the target_packet fields).
+ * Advances the flight: moves the head position, steps the facing angle x each frame,
+ * and shifts the ten-slot trail of points and their twist values (target_packet).
  */
 static void fnAMP02_PR000(void *self, Amp02InitState *work)
 {
@@ -209,12 +208,12 @@ static void fnAMP02_PR000(void *self, Amp02InitState *work)
 
 /*
  * DM000's own view of the AMP02 work area: the model `entry`/`texture` pair
- * MEfCreate_AMP02 (outside this allocation) installs, the same `frame`
+ * MEfCreate_AMP02 installs, the same `frame`
  * counter fnAMP02_PO000 advances, this effect's own `position` and the
  * `target` it turns to face.
  */
-/* Partial view of Amp02InitState (measured: +0xC0 is `target` here but
- * previous_position for fnAMP02_PR000, so the draw role keeps its own type). */
+/* Partial view of Amp02InitState. Offset +0xC0 is `target` for this draw role but
+ * previous_position for fnAMP02_PR000, so the draw role keeps its own type. */
 typedef struct Amp02DrawView {
     unsigned char unmodeled_00[0x40];
     int entry;             /* +0x40 */
@@ -255,6 +254,10 @@ extern Quadword McEfSTQtbl[];
 static const Quadword coltbl_1_00A515B0[10];
 static const float sztbl_2_00A51650[10];
 
+/*
+ * Builds the GS packet for the trail: a setup block, then one textured strip of four
+ * vertices for each active slot.
+ */
 static void fnAMP02_DP000(void *self, Amp02InitState *work)
 {
     int i;
@@ -288,6 +291,7 @@ static void fnAMP02_DP000(void *self, Amp02InitState *work)
     q[0].gif.tag = MEF_GS_SETUP_TAG;
     q[0].gif.registers = MEF_GS_SETUP_REGS;
     pk->reg_count = 1;
+    /* Write the GS state: test, texture filter, clamp, depth and additive alpha. */
     a1 = q + 1;
     a2 = q + 2;
     a3 = q + 3;
@@ -308,6 +312,7 @@ static void fnAMP02_DP000(void *self, Amp02InitState *work)
     pk->current->nloop |= nreg;
     pk->current += n;
     pk->count += n;
+    /* Emit the textured strip of each active trail slot. */
     for (; i < 10; i++) {
         if (((short *)work->target_packet.active)[i] != 0) {
             color = coltbl_1_00A515B0[i];
@@ -343,6 +348,7 @@ static void fnAMP02_DP000(void *self, Amp02InitState *work)
                     gp->current->nloop |= 1;
                     gp->current += n1;
                     gp->count += n1;
+                    /* Strip tag, then four ST, colour and vertex quadwords. */
                     g = gp->current;
                     g[0].gif.tag = MEF_GS_TEXTURED_STRIP_TAG;
                     g[0].gif.registers = regs;
@@ -373,9 +379,8 @@ static void fnAMP02_DP000(void *self, Amp02InitState *work)
 extern void sefHitEffect(void);
 
 /*
- * fnAMP02_PO000 advances the frame counter (the work's frame, the same role
- * the sibling MSP02 effect keeps at this offset): incremented once per call,
- * it fires sefHitEffect at 30 and MEfObjDestroy at 40.
+ * Advances the frame counter (the work's frame at +0x70) once per call. It fires
+ * sefHitEffect at frame 30 and calls MEfObjDestroy at frame 40.
  */
 static void fnAMP02_PO000(void *self, Amp02InitState *work)
 {

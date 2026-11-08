@@ -24,6 +24,7 @@ extern const char vectorAssertIndexWithinSize[]; /* "0 <= uIndex && uIndex < pVe
 extern const char vectorDumpHeaderFormat[];
 extern const char vectorDumpElementFormat[];
 
+/* Reports a failed vector check; a non-null vector also reports its creation site. */
 static void _VecAssert(RgPtrVector *vector, const char *message,
                        const char *file, int line)
 {
@@ -35,6 +36,7 @@ static void _VecAssert(RgPtrVector *vector, const char *message,
     }
 }
 
+/* Allocates the pointer array for a vector and resets its size and creation site. */
 static void _InitRgVector(RgPtrVector *vector, unsigned int capacity)
 {
     if (vector == 0)
@@ -51,6 +53,7 @@ static void _InitRgVector(RgPtrVector *vector, unsigned int capacity)
     vector->m_nLine = 0;
 }
 
+/* Allocates a vector with the given capacity and records file and line as its creation site. */
 RgPtrVector *CreateRgVector(unsigned int capacity, const char *file, int line)
 {
     RgPtrVector *vector;
@@ -73,6 +76,7 @@ void DisposeRgVector(RgPtrVector *vector, const char *file, int line)
     RgHeapFree(InstanceOfRgHeap(), vector, vectorSourcePath, 61);
 }
 
+/* Appends element; asserts that the vector has room. */
 void RgVectorPush(RgPtrVector *vector, void *element)
 {
     if (vector == 0)
@@ -85,10 +89,9 @@ void RgVectorPush(RgPtrVector *vector, void *element)
 }
 
 /*
- * RgVectorIndex returns one element of the pointer array, asserting the
- * index is below the current size.
+ * Returns one element of the pointer array. Asserts that index is below the
+ * current size.
  */
-
 void *RgVectorIndex(RgPtrVector *vector, unsigned int index,
                     const char *file, int line)
 {
@@ -113,6 +116,10 @@ unsigned int RgVectorCapacity(RgPtrVector *vector)
     return vector->m_uCapa;
 }
 
+/*
+ * Removes every occurrence of element, shifting later entries down.
+ * Returns 1 when at least one was removed, 0 otherwise.
+ */
 int RgVectorRemove(RgPtrVector *vector, void *element, const char *file,
                    int line)
 {
@@ -144,6 +151,7 @@ void RgVectorClear(RgPtrVector *vector)
     vector->m_uSize = 0;
 }
 
+/* Returns the index of the first entry equal to element, or -1 when none is. */
 int RgVectorFind_sub(RgPtrVector *vector, void *element,
                      const char *file, int line)
 {
@@ -158,6 +166,7 @@ int RgVectorFind_sub(RgPtrVector *vector, void *element,
     return -1;
 }
 
+/* Sets the size; slots exposed by growing are set to 0. */
 void RgVectorResize(RgPtrVector *vector, unsigned int size)
 {
     unsigned int index;
@@ -182,6 +191,7 @@ void RgVectorAssign(RgPtrVector *vector, unsigned int index, void *element)
     vector->m_apList[index] = element;
 }
 
+/* Copies the entry pointers into dest. */
 void RgVectorDup(RgPtrVector *vector, void **dest)
 {
     void **src;
@@ -199,6 +209,7 @@ void RgVectorDup(RgPtrVector *vector, void **dest)
     }
 }
 
+/* Returns the vector's pointer array. */
 void **RgVectorGetArray(RgPtrVector *vector)
 {
     if (vector == 0)
@@ -206,6 +217,7 @@ void **RgVectorGetArray(RgPtrVector *vector)
     return vector->m_apList;
 }
 
+/* Logs the vector's header and every entry pointer. */
 void RgVectorDump(RgPtrVector *vector)
 {
     unsigned int index;

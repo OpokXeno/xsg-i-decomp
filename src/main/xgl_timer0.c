@@ -59,17 +59,20 @@ typedef struct ArxBitReader {
     u32 *data;
 } ArxBitReader;
 
+/* Clears the counter and starts it with `mode` plus the CUE bit. */
 void xglTimer0Reset(int mode)
 {
     *T0_COUNT = 0;
     *T0_MODE = mode + T0_MODE_CUE;
 }
 
+/* Returns the 16-bit timer count. */
 int xglTimer0Get(void)
 {
     return *T0_COUNT & T0_COUNT_MASK;
 }
 
+/* Returns the next stream bit, most significant bit first, loading a new word when the current one is used up. */
 static u32 getbit1(ArxBitReader *reader)
 {
     u32 bit;
@@ -83,6 +86,7 @@ static u32 getbit1(ArxBitReader *reader)
     return bit;
 }
 
+/* Returns the next `count` stream bits. */
 static u32 getbits(ArxBitReader *reader, u32 count)
 {
     u32 high = 0;
@@ -102,6 +106,10 @@ static u32 getbits(ArxBitReader *reader, u32 count)
     return result;
 }
 
+/*
+ * Decompresses the ARX stream at `src` into `dest`, writing the decoded size in bytes.
+ * Returns that size, or -1 when the header is not a valid ARX stream.
+ */
 int xglArxExtract(u32 *dest, u32 *src)
 {
     ArxBitReader reader;
@@ -127,6 +135,7 @@ int xglArxExtract(u32 *dest, u32 *src)
     reader.value = 0;
     reader.bit_count = 0;
     reader.data = src + ARX_DATA_WORD;
+    /* Overlapping source and destination take the tail-relocation path below. */
     if (!((reader.data < dest || dest + size / 4 < reader.data) &&
           (reader.data + payloadSize / 4 < dest ||
            dest + size / 4 < reader.data + payloadSize / 4))) {
@@ -136,6 +145,7 @@ int xglArxExtract(u32 *dest, u32 *src)
             while (1) {
                 ARX_DECODE_WORD(value);
                 *cursor++ = value;
+                /* The output reached the read pointer: move the unread stream tail into the table area. */
                 if (cursor >= reader.data) {
                     u32 *from = reader.data;
                     u32 *to = table + ARX_TABLE_SLOTS;

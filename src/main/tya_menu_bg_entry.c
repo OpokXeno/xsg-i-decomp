@@ -4,11 +4,10 @@
 #include "main/xgl_camera.h"
 #include "main/xgl_task.h"
 
-/* Original .lit4 words byte-pinned at their mapped VAs. */
-#define MENUBG_VERTICAL_OFFSET_SCALE (0.4f) /* 0x004D7C88: cd cc cc 3e */
+#define MENUBG_VERTICAL_OFFSET_SCALE (0.4f)
 
-#define MENUBG_HORIZONTAL_SCALE_DECAY (0.7f) /* 0x004D7C8C: 33 33 33 3f */
-#define MENUBG_MIN_HORIZONTAL_SCALE (0.001f) /* 0x004D7C90: 6f 12 83 3a */
+#define MENUBG_HORIZONTAL_SCALE_DECAY (0.7f)
+#define MENUBG_MIN_HORIZONTAL_SCALE (0.001f)
 #define MENU_BG_VERTICAL_OFFSET_FACTOR MENUBG_VERTICAL_OFFSET_SCALE
 #define MENU_BG_HORIZONTAL_DECAY MENUBG_HORIZONTAL_SCALE_DECAY
 #define MENU_BG_MIN_HORIZONTAL_LIMIT MENUBG_MIN_HORIZONTAL_SCALE
@@ -159,6 +158,10 @@ static u8 TestEnv_2_0036AAA0[176];
 
 static u8 TestEnv_3_0036AB50[112];
 
+/*
+ * Draws one wall of the menu background at the given scale. Nothing is sent when
+ * a projected point is outside the screen range or has negative depth.
+ */
 static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
 {
     static Vector4 model[MENU_BG_POINT_COUNT] = {
@@ -184,7 +187,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     const u8 *quad_bytes;
     float depth_adjustment;
     float base_depth;
-    /* The scratchpad x word is the zero scale sentinel. */
+    /* Zero is stored in the scratchpad x word and read back as the value scale is compared against. */
     ((volatile MenuBgScratch *)SCRATCHPAD_BASE)->points[0].x = 0.0f;
     scratch->points[0].y = task->vertical_offset;
     depth_adjustment = ((volatile MenuBgScratch *)SCRATCHPAD_BASE)->points[0].x;
@@ -203,6 +206,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     xglMatrixStackTrans(&scratch->points[0].x);
     xglMatrixStackSave(scratch->saved_matrix);
 
+    /* Set the eight wall points from the model; points with x 0 take their x from horizontal_scale. */
     for (i = 0; i < MENU_BG_POINT_COUNT; i++) {
         if (model[i].x == 0.0f) {
             scratch->points[i].x =
@@ -243,6 +247,7 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     scratch->packet.gif_tag = 0x908a400000008001ULL;
     scratch->packet.gif_registers = 0x0000000535353531ULL;
 
+    /* One direct packet per quad: a colour from the quad bytes, then its four projected vertices. */
     for (i = 0; i < MENU_BG_QUAD_COUNT; i++) {
         MenuBgProjectedPoint *screen_vertex;
         u8 alpha;
@@ -293,11 +298,17 @@ static void task_menubg_sub(XglTaskPrefix *task_prefix, float scale)
     }
 }
 
+/*
+ * Per-frame update of one menu background row. Its two walls are drawn each
+ * frame, and the task is removed once tasks_finished is non-zero. Returns the
+ * work block while the task continues.
+ */
 static int task_menubg(XglTaskPrefix *task_prefix)
 {
     MenuBgTask *task = (MenuBgTask *)task_prefix;
     int frame_delay;
 
+    /* INIT picks the random offsets and start delay, DELAY waits, SHRINK decays horizontal_scale to zero. */
     switch (task->state) {
     case MENU_BG_STATE_INIT:
         task->horizontal_offset = 2.0f * (xglFRand() - 1.5f);
@@ -325,6 +336,7 @@ static int task_menubg(XglTaskPrefix *task_prefix)
         break;
     }
 
+    /* The first row also sends the palette and positions the camera. */
     if (task->index == 0) {
         StudioCamera *camera;
 
@@ -351,6 +363,10 @@ static int task_menubg(XglTaskPrefix *task_prefix)
     return xglTaskRemove(task_prefix);
 }
 
+/*
+ * Starts the menu background: randomizes the palette colours in work and adds
+ * the 16 row tasks to scheduler, each with its row index and a random vertical position.
+ */
 void tyaMenuBgEntry(XglTaskScheduler *scheduler, MenuBgWork *work)
 {
     int color_index;

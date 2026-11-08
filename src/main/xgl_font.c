@@ -8,10 +8,9 @@
 
 /*
  * buffer_reset also reaches two fields 0x20 bytes before the queue buffer:
- * a reset flag byte and the queue's free-cursor pointer. The header these
- * belong to is not otherwise evidenced within this allocation, so they are
- * reached by byte offset from the queue symbol instead of a named member
- * (matching src/ov11/res.c's RES_IsDebugMode).
+ * a reset flag byte and the queue's free-cursor pointer. No named struct
+ * covers them in this file, so they are reached by byte offset from the
+ * queue symbol instead of a named member.
  */
 #define FONT_QUEUE_HEADER_OFFSET 0x20
 
@@ -78,7 +77,7 @@ typedef enum FontOpcode {
 #define FONT_STATE_DEBUG_PRINT 2
 #define FONT_STATE_CLIP 8 /* skip glyphs that fall outside the GS drawing area */
 
-/* Size of the print queue buckets and of the draw cursor's scratchpad packet. */
+/* Number of buckets in the print queue. */
 #define FONT_QUEUE_BUCKETS 16
 /* Coordinates above these use the extended position command. */
 #define FONT_COMPACT_X_LIMIT 768
@@ -182,11 +181,11 @@ typedef union FontStateStorage {
 } FontStateStorage;
 
 /*
- * Each 4-byte slot of the font print-queue buffer at fontPrintQueueBuffer (16 slots,
- * scaffold-owned splat name): link is the byte offset, from this array's
- * base, of the next queued record for this bucket (0 marks the bucket
- * empty -- xglFontFlush follows it as a chain), and selfOffset is the
- * slot's own byte offset within the array.
+ * Each 4-byte slot of the font print-queue buffer at fontPrintQueueBuffer (16 slots):
+ * link is the byte offset, from this array's base, of the first queued record for
+ * this bucket (0 marks the bucket empty; xglFontFlush follows the records as a chain
+ * through their own links). selfOffset is the byte offset of the link field that the
+ * next record appended to this bucket fills in; it starts as the slot's own byte offset.
  */
 typedef struct FontQueueSlot {
     unsigned short link;
@@ -375,17 +374,10 @@ static void set_xyz(int x, int y, int color);
 static void xglFontPrintSub(void *args);
 static void xglFontPrintDirectCore(const char *text);
 
-/* Prints text straight away into ordering-table slot ot (passed to set_ot). */
 void xglFontPrintDirectOT(int ot, const char *text);
 
 static void set_ot(int ot);
 
-/*
- * Draws one glyph from the font texture: u and v are texel coordinates in
- * 1/16 units, size packs the glyph width (high byte) and height (low byte),
- * flags' low nibble selects the draw attributes and bit 4 can double the
- * drawn size.
- */
 static void xglFontFlushSub(int u, int v, int size, int flags);
 
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
@@ -485,6 +477,10 @@ static FontImageStorage FontImage;
 
 static unsigned char WindowImage[264192];
 
+/*
+ * Sets the debug mode when `mode` is not negative, and updates the frame values of the two
+ * mode packets to match.
+ */
 void xglFontDebugMode(int mode)
 {
     if (mode >= 0) {
@@ -502,6 +498,10 @@ void xglFontDebugMode(int mode)
     }
 }
 
+/*
+ * Returns the texture offset of the EUC-JP kanji `code` in the kanji font textures. When
+ * `clut` is not null, stores the CLUT value of the glyph there.
+ */
 int xglFontGetKanjiClutUV(int code, int *clut)
 {
     unsigned short index = code;
@@ -530,6 +530,10 @@ int xglFontGetKanjiClutUV(int code, int *clut)
         (first_range_or_texture_column * 0x140);
 }
 
+/*
+ * Appends a record to ordering-table bucket `ot`: patches the bucket's pending link to the
+ * cursor, then reserves a zeroed two-byte link at the cursor.
+ */
 static void set_ot(int ot)
 {
     FontState *state = (FontState *)(fontPrintQueueBuffer.bytes - sizeof(FontState));
@@ -546,6 +550,10 @@ static void set_ot(int ot)
     state->queue_cursor += 2;
 }
 
+/*
+ * Starts a record in the bucket for `color` (see set_ot), then queues the position of the
+ * next text at (x, y), in full or compact form.
+ */
 static void set_xyz(int x, int y, int color)
 {
     set_ot(color);
@@ -577,6 +585,10 @@ static void set_xyz(int x, int y, int color)
     }
 }
 
+/*
+ * Returns the length of control code `code` at `text`. Some codes, such as POSITION,
+ * take their length from the flag bytes that follow.
+ */
 int xglFontGetSPcodeSize(int code, const unsigned char *text)
 {
     unsigned char size;
@@ -611,6 +623,10 @@ int xglFontGetSPcodeSize(int code, const unsigned char *text)
     return size;
 }
 
+/*
+ * Queues the text described by `args`: list[0] holds the format string and the following
+ * entries hold its arguments.
+ */
 static void xglFontPrintSub(void *args)
 {
     unsigned long long *list = (unsigned long long *)args;
@@ -625,6 +641,7 @@ static void xglFontPrintSub(void *args)
             break;
         code = *text & 0xff;
 
+        /* Control codes are copied with their parameter bytes. */
         if (code < 32) {
             int remaining = xglFontGetSPcodeSize(code, (const unsigned char *)text);
 
@@ -635,6 +652,7 @@ static void xglFontPrintSub(void *args)
             unsigned int radix;
 
             text++;
+            /* Read the conversion: digits set the field width, then the type letter. */
             for (;;) {
                 code = (unsigned char)*text++;
 
@@ -718,6 +736,10 @@ static void xglFontPrintSub(void *args)
     *FS.state.queue_cursor++ = 0;
 }
 
+/*
+ * Copies `text` into the print queue, control code parameters included, and ends it with a
+ * zero byte.
+ */
 static void xglFontPrintDirectCore(const char *text)
 {
     while (*text != 0) {
@@ -757,6 +779,7 @@ void xglFontPrintDirect(const char *text)
     xglFontPrintDirectOT(0, text);
 }
 
+/* Prints `text` straight away into ordering-table slot `ot`, when the font is enabled. */
 void xglFontPrintDirectOT(int ot, const char *text)
 {
     if (FONT_STATE_FLAGS & FONT_STATE_ENABLED & 0xFFFF) {
@@ -790,6 +813,10 @@ void xglFontPrintExtFunc(int ot, FontExtFunc function, void *argument)
     }
 }
 
+/*
+ * Queues a formatted debug print at (x, y), preceded by a reset command. The position is
+ * doubled when debug mode is 0.
+ */
 void xglFontDebugPrintf(int x, int y, const char *format, ...)
 {
     unsigned long long arguments[32];
@@ -823,6 +850,7 @@ void xglFontDebugPrintf(int x, int y, const char *format, ...)
     }
 }
 
+/* Queues `value` as `digits` hex digits at (x, y), for debug output. */
 void xglFontDebugHex(int x, int y, unsigned int value, int digits)
 {
     struct FontState *state = &FS.state;
@@ -847,6 +875,10 @@ void xglFontDebugHex(int x, int y, unsigned int value, int digits)
     }
 }
 
+/*
+ * Empties the print queue: every bucket link is cleared, each slot records its own offset,
+ * and the queue cursor starts after the slots.
+ */
 static void buffer_reset(void)
 {
     FontQueueSlot *slot;
@@ -867,6 +899,11 @@ static void buffer_reset(void)
     state->queue_reset_flag = 0;
 }
 
+/*
+ * Draws one glyph from the font texture: texture_u and texture_v are texel coordinates in
+ * 1/16 units, size packs the glyph width (high byte) and height (low byte), and flags'
+ * low nibble selects the draw attributes. Bit 4 doubles the drawn size outside debug mode.
+ */
 static void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
 {
     struct FontDrawCursor *cursor = (struct FontDrawCursor *)SCRATCHPAD_BASE;
@@ -897,17 +934,20 @@ static void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
         draw_width = glyph_width * 16;
         draw_height = glyph_height * 16;
     }
+    /* Apply the cursor scale to the drawn size. */
     draw_width = (draw_width * (short)cursor->scale_x) >> 4;
     effect_x = cursor->effect_x * 16;
     effect_y = cursor->effect_y * 16;
     draw_height = (draw_height * (short)cursor->scale_y) >> 4;
     cursor->x += draw_width / 16;
+    /* Skip glyphs outside the drawing area when clipping is on. */
     if ((FS.state.flags & FONT_STATE_CLIP) && (left > FONT_CLIP_LIMIT || top > FONT_CLIP_LIMIT)) {
         return;
     }
     {
         unsigned long long texture;
 
+        /* Build the textured quad; the horizontal-shift branch below shifts its top edge. */
         sprite->tag_low = GIF_TAG_EOP | 1;
         sprite->tag_high = FONT_SPRITE_TAG_HIGH;
         sprite->registers_low = FONT_SPRITE_TAG_REGS;
@@ -988,6 +1028,7 @@ static void xglFontFlushSub(int texture_u, int texture_v, int size, int flags)
             sprite->corners[1].y = sprite->corners[2].backup_y + 16;
             sceVif1PkAddDirectDataN(cursor->packet, sprite, FONT_SPRITE_QWORDS);
         } else if (cursor->effect >= FONT_EFFECT_SHADOW) {
+            /* Shadow and outline draw copies of the quad in the effect colour. */
             unsigned char effect_red = cursor->effect_red;
             unsigned char effect_green = cursor->effect_green;
             unsigned char effect_blue = cursor->effect_blue;
@@ -1056,6 +1097,10 @@ static void xglFontFlushSubCRLF(void)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static const unsigned char kanaFontCodeTable[96];
 
+/*
+ * Draws one queued text record from `text` through `cursor`. Control codes update the
+ * cursor or the draw state, and glyph bytes emit glyph sprites into the packet.
+ */
 static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
 {
     struct FontRealDigits real_digits;
@@ -1064,6 +1109,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
 
     while (*text != 0) {
         unsigned char opcode = *text;
+        /* One case per control code. Glyph bytes take the default case. */
         switch (opcode) {
         case FONT_OP_POS_X_0: case FONT_OP_POS_X_1: case FONT_OP_POS_X_2: {
             unsigned int position_high = text[0];
@@ -1179,6 +1225,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             text += 4;
             break;
         }
+        /* Literal hex value: each digit is drawn as a glyph. */
         case FONT_OP_HEX_DIGITS: {
             const struct FontLiteralHexCommand *command =
                 (const struct FontLiteralHexCommand *)text;
@@ -1193,6 +1240,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
             text += sizeof(*command);
             break;
         }
+        /* Number: a float when the radix is FONT_NUMERIC_FLOAT, otherwise an integer in that radix. */
         case FONT_OP_NUMBER: {
             const struct FontNumericCommand *command =
                 (const struct FontNumericCommand *)text;
@@ -1382,6 +1430,7 @@ static void xglFontFlushCore(struct FontDrawCursor *cursor, unsigned char *text)
         case 20: case 22: case 26:
         case 28: case 29: case 30: case 31:
             break;
+        /* Glyph bytes: a space that would pass the wrap width wraps the line; other bytes draw glyphs. */
         default: {
             signed char sign;
             if ((short)FS.state.character_spacing > 0 && opcode == ' ' &&
@@ -1477,6 +1526,10 @@ static const unsigned char kanaFontCodeTable[96] = {
     0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+/*
+ * Maps the EUC-JP code (`row`, `column`) to its index in the proportional width table, or
+ * returns -1 when the code is not mapped.
+ */
 int xglFontCheckProportional(unsigned char row, int column)
 {
     column &= 0xff;
@@ -1517,6 +1570,11 @@ int xglFontCheckProportional(unsigned char row, int column)
     return -1;
 }
 
+/*
+ * Returns the width of glyph `code` as its table entry's low and high bytes, or the default
+ * width when the entry is unset. In proportional mode the result is recomputed from the average
+ * of those two bytes.
+ */
 unsigned int xglFontGetProportionalSize(int code)
 {
     struct FontState *state = &FS.state;
@@ -1541,6 +1599,7 @@ unsigned int xglFontGetProportionalSize(int code)
     return width;
 }
 
+/* Returns the value of hex digit `digit`, or 0 for other characters. */
 static unsigned int hex2val(signed char digit)
 {
     unsigned int digit_value;
@@ -1558,6 +1617,11 @@ static unsigned int hex2val(signed char digit)
     return digit_value;
 }
 
+/*
+ * Converts ASCII `character` to its EUC-JP code. A '#' followed by two hex digits gives the
+ * code of that byte, read from *text, which is advanced past them; a doubled '#' gives
+ * ascii2euc[3].
+ */
 unsigned int xglFontAscii2Euc(signed char character, signed char **text)
 {
     unsigned int code = EUC_SPACE;
@@ -1588,6 +1652,11 @@ unsigned int xglFontAscii2Euc(signed char character, signed char **text)
     return code;
 }
 
+/*
+ * Marks the cursor as reloaded and sends the texture uploads that `flags` select: the kanji
+ * glyph textures (flags & 3 == 1) or the window texture (flags & 3 == 2). Then sends the test
+ * environment for the current debug mode and effect.
+ */
 void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
 {
     XglPacket *packet = cursor->packet;
@@ -1600,6 +1669,7 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
             cursor->packet->write_cursor -= 4;
     }
 
+    /* Texture uploads for the reload kind the flags select. */
     flags &= 3;
     if (flags == FONT_RELOAD_KANJI) {
         sceVif1PkRef(cursor->packet, KanjiTex0Env_8, 7, 0, 0, 0);
@@ -1636,6 +1706,7 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
         }
     }
 
+    /* Test and mode environment for the current debug mode and effect. */
     sceVif1PkRef(cursor->packet, TestEnv_11_00490BC0, 6, 0, 0, 0);
     if (FS.state.debug_mode) {
         sceVif1PkRef(cursor->packet, &ModeEnv[LoopCount & 1], 8, 0, 0, 0);
@@ -1660,6 +1731,10 @@ void xglFontReloadTexture(struct FontDrawCursor *cursor, int flags)
     sceVif1PkOpenDirectHLCode(cursor->packet, 0);
 }
 
+/*
+ * Draws all queued text: resets the draw cursor, reloads the textures, draws each bucket's
+ * record chain in order, then resets the queue.
+ */
 void xglFontFlush(void)
 {
     /* The font drawing cursor resides at the base of EE scratchpad RAM. */
@@ -1695,6 +1770,7 @@ void xglFontFlush(void)
     cursor->packet = xglPacketGetCurrent();
     xglFontReloadTexture(cursor, 0x80000001);
 
+    /* Draw each bucket's record chain in bucket order. */
     slot = fontPrintQueueBuffer.slots;
     do {
         unsigned short offset = slot->link;
@@ -1717,6 +1793,11 @@ void xglFontFlush(void)
     buffer_reset();
 }
 
+/*
+ * Returns the pixel width of `text`, stopping at a newline, and at a space when delimiter is
+ * positive (or at '/' when it is 2), except before the first character. Control codes in
+ * the text change the width state as they are read.
+ */
 int xglFontGetStringWidth2(const char *text, int delimiter)
 {
     struct FontState *state;
@@ -1734,6 +1815,7 @@ int xglFontGetStringWidth2(const char *text, int delimiter)
         unsigned char low;
         int proportional_code;
 
+        /* Control codes: some set width state, then their parameter bytes are skipped. */
         if (high < 32) {
             int remaining;
             switch (high) {
@@ -1817,6 +1899,10 @@ void xglFontSetFlags(int flags)
     FONT_STATE_FLAGS = flags & (0xFFFF & ~FONT_STATE_DEBUG_PRINT);
 }
 
+/*
+ * Loads font `font_index` into the font image and returns the previously selected font. When
+ * `load_flags` is 0, the read uses mode 0 and flag 1.
+ */
 unsigned char xglFontLoad(int font_index, int load_flags)
 {
     unsigned char previous_font;
@@ -1829,7 +1915,7 @@ unsigned char xglFontLoad(int font_index, int load_flags)
         /*
          * Both fonts take the same synchronous defaults, but the original
          * tests the font here too: the inner branch ends the extended block,
-         * so each read below re-addresses FS (lw %lo(FS)) as it does.
+         * so each read below re-addresses FS.
          */
         if (font_index != 0) {
             read_mode = 0;
@@ -1847,6 +1933,10 @@ unsigned char xglFontLoad(int font_index, int load_flags)
     return previous_font;
 }
 
+/*
+ * Initialises the font state: loads font 1 and the window texture, resets the print queue,
+ * and sets the default layout and flags.
+ */
 void xglFontInitial(void)
 {
     FS.state.font_selection = 0xFF;

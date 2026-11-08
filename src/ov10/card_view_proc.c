@@ -1,5 +1,6 @@
 /*
  * OV10 original TU 5: 0x00a1c1b8..0x00a1e5d8 (5 functions)
+ * The card view and the pack opening screens.
  */
 #include "common.h"
 #include "shared.h"
@@ -15,49 +16,50 @@
 #include "main/nml_model_set.h"
 
 /* CardViewProc: the card list window and the digit models of the list position shown beside it. */
-#define CARD_LIST_FILTER_ALL 0xFFFF   /* CardMakeDispList (0x00a08880) masks the type byte with the high byte and the
-                                       * subtype halfword with the low byte: every card passes */
-#define CARD_LIST_SCROLL_MARGIN 2     /* cursor rows kept between the cursor and the window edge: slti at 0x00a1c38c */
-#define CARD_COMPLETE_MODEL ((void *) 0x01ddf800) /* deckmake\comp.lex, shown when CardCntList is nonzero for every card, ori at 0x00a1c750 */
-#define CARD_COMPLETE_TEXTURE ((void *) 0x01ddfc00) /* deckmake\comp.xtx, ori at 0x00a1c73c */
+/* CardMakeDispList masks the type byte with the high byte and the subtype
+ * halfword with the low byte: every card passes. */
+#define CARD_LIST_FILTER_ALL 0xFFFF
+#define CARD_LIST_SCROLL_MARGIN 2     /* cursor rows kept between the cursor and the window edge */
+#define CARD_COMPLETE_MODEL ((void *) 0x01ddf800) /* deckmake\comp.lex, shown when CardCntList is nonzero for every card */
+#define CARD_COMPLETE_TEXTURE ((void *) 0x01ddfc00) /* deckmake\comp.xtx */
 
 /* COPCardDispSub: the cards fanned out in the pack opening screens. */
-#define CARD_FAN_SELECTED_MODEL ((void *) 0x01d12000) /* game\Cur_WakuW.lex, ori at 0x00a1c928 */
+#define CARD_FAN_SELECTED_MODEL ((void *) 0x01d12000) /* game\Cur_WakuW.lex */
 #define CARD_FAN_SELECTED_TEXTURE ((void *) 0x01d60000) /* game\Cur_Waku.xtx */
-#define CARD_FAN_BACKDROP_MODEL ((void *) 0x01da5600) /* title\window3.lex, ori at 0x00a1ca48 */
-#define CARD_FAN_BACKDROP_TEXTURE ((void *) 0x01db5800) /* title\window.bin, ori at 0x00a1ca34 */
+#define CARD_FAN_BACKDROP_MODEL ((void *) 0x01da5600) /* title\window3.lex */
+#define CARD_FAN_BACKDROP_TEXTURE ((void *) 0x01db5800) /* title\window.bin */
 
 /* CardOpenProc loads these files into the card model arena (see cgp.c) and draws the pack models from the
  * same addresses. */
 #define CARD_PACK1_MODEL 0x01900000   /* deckmake\pack1.lex */
-#define CARD_PACK2_MODEL 0x01901000   /* deckmake\pack2.lex, ori at 0x00a1ce58 */
+#define CARD_PACK2_MODEL 0x01901000   /* deckmake\pack2.lex */
 #define CARD_PACK3_MODEL 0x01903000   /* deckmake\pack3.lex */
 #define CARD_PACK4_MODEL 0x01905000   /* deckmake\pack4.lex */
 #define CARD_CURSOR_L_MODEL ((void *) 0x01908000) /* deckmake\cur_L.lex */
 #define CARD_CURSOR_R_MODEL ((void *) 0x01908800) /* deckmake\cur_R.lex */
 #define CARD_PACK_TEXTURE ((void *) 0x01A00000)  /* deckmake\pack.bin */
-#define CARD_CURSOR_TEXTURE ((void *) 0x01A40050) /* deckmake\cur_LR.bin, ori at 0x00a1cecc */
+#define CARD_CURSOR_TEXTURE ((void *) 0x01A40050) /* deckmake\cur_LR.bin */
 
 /* Pack kinds: CardExist holds one count per kind. The counts are read with dataEvtBoxChk and used up with dataEvtBoxDec
  * on the entries CARD_PACK_EVENT_BASE + kind. */
-#define CARD_PACK_COUNT 20            /* slti at 0x00a1ceec, 0x00a1ca94 */
-#define CARD_PACK_EVENT_BASE 0x24     /* addiu at 0x00a1cedc (dataEvtBoxChk), 0x00a1dc5c (dataEvtBoxDec) */
+#define CARD_PACK_COUNT 20            /* pack kinds; sizes the CardExist array */
+#define CARD_PACK_EVENT_BASE 0x24     /* event box entry of pack kind 0; the kind is added to it */
 #define CARD_OPEN_LIST_MAX 0x28       /* CardList capacity: a starter pack lists 1 + 39 cards */
-/* The save keeps the owned copies of each card (0..3) in 2 bits, four cards per byte (0x00a1dfb4..0x00a1dfcc). */
-#define CARD_SELL_PRICE 5             /* dataMoneyBoxInc argument for a card sold instead of kept (0x00a1deb8) */
+/* The save keeps the owned copies of each card (0..3) in 2 bits, four cards per byte. */
+#define CARD_SELL_PRICE 5             /* dataMoneyBoxInc argument for a card sold instead of kept */
 #define ZENKAKU_GLYPH_SIZE 2          /* the full-width digit tables hold two bytes per glyph */
 
 /* Packs. Kinds 0..16 each give CARD_PACK_SPECIAL_CARDS copies of one fixed card; the three that follow draw cards at
- * random from the BS1 / BS2 / ST1 lists. The kind also selects the pack model (switch at 0x00a1d3a0, 0x00a1d51c). */
-#define CARD_PACK_SPECIAL_CARDS 3     /* li 3 at 0x00a1d6b8, stored to CardCnt at 0x00a1d6c0 */
+ * random from the BS1 / BS2 / ST1 lists. The kind also selects the pack model. */
+#define CARD_PACK_SPECIAL_CARDS 3     /* copies of the fixed card that kinds 0..16 give */
 enum {
     CARD_PACK_ST1 = 17,
     CARD_PACK_BS1,
     CARD_PACK_BS2
 };
-#define CARD_PACK_DRAW_SIZE 10        /* cards drawn from BS1 / BS2: slti at 0x00a1d858 */
-#define CARD_PACK_RARE_DRAWS 1        /* BS1: li 1 at 0x00a1d6dc, bgtz at 0x00a1d78c; BS2: 0x00a1d944, 0x00a1da0c */
-#define CARD_PACK_UNCOMMON_DRAWS 2    /* BS1: li 2 at 0x00a1d6f8, bgtz at 0x00a1d84c; BS2: 0x00a1d960, 0x00a1dacc */
+#define CARD_PACK_DRAW_SIZE 10        /* cards drawn from BS1 / BS2 */
+#define CARD_PACK_RARE_DRAWS 1        /* rare draws from BS1 / BS2 */
+#define CARD_PACK_UNCOMMON_DRAWS 2    /* uncommon draws from BS1 / BS2 */
 /* Entries of the BS1 / BS2 / ST1 card lists: the sizes of their original symbols (config/symbols/ov10.txt). */
 #define BS1_RARE_COUNT 0x10
 #define BS1_UNCOMMON_COUNT 0x17
@@ -66,11 +68,11 @@ enum {
 #define BS2_UNCOMMON_COUNT 9
 #define BS2_COMMON_COUNT 0x11
 #define ST1_RARE_COUNT 6
-#define ST1_CARD_COUNT 0x27           /* slti at 0x00a1dc2c */
+#define ST1_CARD_COUNT 0x27           /* entries in the ST1 list */
 
 /* Pack selection (CARD_OPEN_STEP_SELECT / _OPENING): the two cursor arrows slide in by CARD_CURSOR_TRAVEL over a cycle of
  * CARD_CURSOR_FRAMES frames starting at CARD_CURSOR_REST_X, and the pack model turns by a fixed angle per frame. */
-#define CARD_CURSOR_FRAMES 0x10       /* CursorTimer wraps here: sltiu at 0x00a1d1f0 */
+#define CARD_CURSOR_FRAMES 0x10       /* CursorTimer wraps here */
 #define CARD_CURSOR_LAST_FRAME 15.0f
 #define CARD_CURSOR_TRAVEL 0.31260002f
 #define CARD_CURSOR_REST_X 1.5924f
@@ -100,6 +102,11 @@ enum {
 extern void xglMatrixRotY(Matrix4 destination, Matrix4 source, float angle);
 
 
+/*
+ * Draws the card list view: scrolls the list on up and down, shows the list
+ * position as digit models, draws the selected card and the completion badge
+ * once every card is counted. START sets *exiting to open the exit prompt.
+ */
 void CardViewProc(CardGameWork *work, CardListWindow *list, s16 *exiting)
 {
     Matrix4 cardMatrix;
@@ -124,6 +131,7 @@ void CardViewProc(CardGameWork *work, CardListWindow *list, s16 *exiting)
     xglMatrixUnit(cardMatrix);
     xglMatrixTrans(cardMatrix, cardMatrix, cardOffset);
 
+    /* The exit prompt while *exiting is set, otherwise the list controls. */
     if (*exiting != 0) {
         xglFontPrint(24, 312, CARD_TEXT_COLOR, ModeEndMess0);
         xglFontPrint(224, 360, CARD_TEXT_COLOR, ModeEndMess1);
@@ -228,6 +236,7 @@ void CardViewProc(CardGameWork *work, CardListWindow *list, s16 *exiting)
              work->ownedCount[list->entries[list->top + list->cursor].cardId] != 0,
              *exiting == 0);
 
+    /* The completion badge shows only when every card is counted. */
     for (i = 0; i < work->cardCount; i += 1) {
         if (CardCntList(work, i) == 0) {
             allCounted = 0;
@@ -248,6 +257,10 @@ void CardViewProc(CardGameWork *work, CardListWindow *list, s16 *exiting)
     }
 }
 
+/*
+ * Draws the cards of a pack opening screen fanned out along base, with the
+ * selected card raised. showDetail adds the enlarged card for the selection.
+ */
 void COPCardDispSub(int showDetail, CardGameWork *work, Matrix4 base, s16 *cardIds,
                     u8 cardCount, int selected)
 {
@@ -267,7 +280,7 @@ void COPCardDispSub(int showDetail, CardGameWork *work, Matrix4 base, s16 *cardI
                 position[2] = (float)(cardCount + 1) * 0.02f;
             }
             position[3] = 1.0f;
-            /* This statement order gives the original store sequence at 0x00a1c8bc..0x00a1c8d0 (+0x4C, +0x54, +0x50,
+            /* This statement order gives the original store sequence (+0x4C, +0x54, +0x50,
              * +0x5C, +0x58); index order compiles to a different sequence. */
             scale[1] = 0.4f;
             scale[0] = 0.4f;
@@ -286,7 +299,7 @@ void COPCardDispSub(int showDetail, CardGameWork *work, Matrix4 base, s16 *cardI
             }
         }
         if (showDetail != 0) {
-            /* This statement order gives the original store sequence at 0x00a1c99c..0x00a1c9b8 (+0x44, +0x48, +0x50,
+            /* This statement order gives the original store sequence (+0x44, +0x48, +0x50,
              * +0x58, +0x40, +0x54, +0x5C); index order compiles to a different sequence. */
             position[1] = 1.4f;
             position[2] = 0.01f;
@@ -300,7 +313,7 @@ void COPCardDispSub(int showDetail, CardGameWork *work, Matrix4 base, s16 *cardI
             CardDisp(&transformed, cardIds[selected], 1, 1);
         }
     }
-    /* This statement order gives the original store sequence at 0x00a1ca10..0x00a1ca20 (+0x50, +0x54, +0x5C, +0x58);
+    /* This statement order gives the original store sequence (+0x50, +0x54, +0x5C, +0x58);
      * index order compiles to a different sequence. */
     scale[1] = 0.4f;
     scale[3] = 1.0f;
@@ -313,6 +326,11 @@ void COPCardDispSub(int showDetail, CardGameWork *work, Matrix4 base, s16 *cardI
     nmlModelEntryCard(CARD_FAN_BACKDROP_MODEL);
 }
 
+/*
+ * Returns the next occupied pack slot after current_position. When there is
+ * none, it scans from slot 0 up to current_position - 2 (slot current_position - 1
+ * is not examined); with no hit it returns current_position.
+ */
 int COPSerachPackR(unsigned char *pack_occupied, int current_position)
 {
     int found_position = -1;
@@ -340,6 +358,10 @@ int COPSerachPackR(unsigned char *pack_occupied, int current_position)
     return found_position;
 }
 
+/*
+ * Returns the previous occupied pack slot before current_position, wrapping
+ * around from the end, or current_position when none is found.
+ */
 int COPSerachPackL(unsigned char *pack_occupied, int current_position)
 {
     int found_position = -1;
@@ -387,7 +409,7 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
     Matrix4 cardMatrix;
     Matrix4 placement;
     float cardOffset[4];
-    float cardScale[4]; /* only ever stored: the original writes it too (0x00a1cc40..0x00a1cc60) */
+    float cardScale[4]; /* only ever stored: the original writes it too */
     int i;
     int j;
     int packModel;
@@ -440,6 +462,7 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
         return;
     }
 
+    /* Runs the current step of the opening sequence; each step advances faseStep when it is done. */
     switch (work->faseStep) {
     case CARD_OPEN_STEP_INIT:
     default:
@@ -526,7 +549,7 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
         packDigits[2] = ZenkakuListB[(CardExist[Now] % 10) * ZENKAKU_GLYPH_SIZE];
         packDigits[3] = ZenkakuListB[(CardExist[Now] % 10) * ZENKAKU_GLYPH_SIZE + 1];
         xglFontPrint(146, 336, CARD_TEXT_COLOR, packDigits);
-        xglFontPrint(130, 336, CARD_TEXT_COLOR, ""); /* the original prints an empty string here too (0x00a1d154, string at 0x00a4dca8) */
+        xglFontPrint(130, 336, CARD_TEXT_COLOR, ""); /* The original prints an empty string here too. */
         xglFontPrint(120, 288, CARD_TEXT_COLOR, "\v");
         if (serchcnt != 1) {
             if (work->command.input[0].pressed & PAD_RIGHT) {
@@ -732,8 +755,8 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
             }
             break;
         }
-        /* i starts the search below; the original clears it before dataEvtBoxDec (0x00a1dc4c), and starting the
-         * search from the loop header instead changes the code size. */
+        /* i is cleared here, before dataEvtBoxDec; starting the search from the loop
+         * header instead changes the code size. */
         i = 0;
         dataEvtBoxDec(Now + CARD_PACK_EVENT_BASE);
         CardExist[Now]--;
@@ -784,6 +807,7 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
+    /* Adds the drawn cards to the collection; copies the collection cannot take are sold. */
     case CARD_OPEN_STEP_STORE:
         CardFadeOut(work);
         if (work->fadeOutTimer == 0) {
@@ -839,6 +863,7 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
             work->faseStep += 1;
         }
         break;
+    /* Reports the sold copies and their proceeds, then shows the kept cards. */
     case CARD_OPEN_STEP_SOLD:
         if (SelFlg != 0) {
             xglFontPrint(24, 312, CARD_TEXT_COLOR, "\v\x19\x03\r\0You can only hold up to 3 identical cards.");
@@ -932,9 +957,10 @@ void CardOpenProc(CardGameWork *work, s16 *exiting)
     }
 }
 
-/* Defined after CardOpenProc on purpose: the original .data holds the function statics rotval (0x00a43a94) and
- * CursorTimer (0x00a43a98) before TitleMaxList (0x00a43aa0), and cc1 emits file-scope data after the statics of the
- * functions above it. Defined above the functions it is placed first and the data carve rejects the layout. */
+/* Defined after CardOpenProc on purpose: the original .data holds the function statics rotval and
+ * CursorTimer before TitleMaxList, and cc1 emits file-scope data after the statics of the
+ * functions above it. Defined above the functions, it is placed first and the data layout no longer
+ * matches the original. */
 unsigned char TitleMaxList[7] = {6, 9, 14, 9, 3, 5, 6};
 
 

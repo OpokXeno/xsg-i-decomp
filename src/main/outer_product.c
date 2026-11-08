@@ -8,6 +8,7 @@
 extern void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                                const Vector4 *third, Vector4 *vertical);
 
+/* Stores the cross product of `left` and `right` (x, y, z) in `destination`. */
 void OuterProduct(const Vector4 *left, const Vector4 *right,
                   AlignedVector4 *destination)
 {
@@ -19,6 +20,10 @@ void OuterProduct(const Vector4 *left, const Vector4 *right,
     *destination = result;
 }
 
+/*
+ * Stores in `vertical` the cross product of the first edge (first to second) with the
+ * plane normal of the three points.  It lies in the plane and is perpendicular to that edge.
+ */
 void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
                         const Vector4 *third, Vector4 *vertical)
 {
@@ -32,6 +37,7 @@ void CalcVerticalVector(const Vector4 *first, const Vector4 *second,
     xglVectorOuter(vertical, &first_edge, &normal);
 }
 
+/* Returns the length of (first - third) projected onto the unit vertical vector of the three points. */
 float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *third)
 {
     Vector4 vertical;
@@ -45,6 +51,10 @@ float CalcLength(const Vector4 *first, const Vector4 *second, const Vector4 *thi
     return length;
 }
 
+/*
+ * Stores in `cross_point` where the line through `third` and `fourth` meets the
+ * plane of the first three points.
+ */
 void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
                     const Vector4 *third, const Vector4 *fourth,
                     Vector4 *cross_point)
@@ -73,6 +83,10 @@ void CalcCrossPoint(const Vector4 *first, const Vector4 *second,
         : "memory");
 }
 
+/*
+ * Classifies `point` against the line from `first` to `second` in the XZ plane:
+ * 1 or 2 for the two sides, 0 when it is on the line.
+ */
 int CheckPointLine(const Vector4 *first, const Vector4 *second,
                    const Vector4 *point)
 {
@@ -99,6 +113,7 @@ int CheckPointLine(const Vector4 *first, const Vector4 *second,
     return result;
 }
 
+/* Returns 1 when the two segments cross in the XZ plane, otherwise 0. */
 int CheckCrossLine(const Vector4 *first_start, const Vector4 *first_end,
                    const Vector4 *second_start, const Vector4 *second_end)
 {
@@ -116,6 +131,7 @@ int CheckCrossLine(const Vector4 *first_start, const Vector4 *first_end,
     return 0;
 }
 
+/* Returns 1 when the segment from start to end passes within `radius` of `center` in the XZ plane, otherwise 0. */
 int CheckCrossCircle(const Vector4 *start, const Vector4 *end,
                      const Vector4 *center, float radius)
 {
@@ -151,6 +167,7 @@ int CheckCrossCircle(const Vector4 *start, const Vector4 *end,
     return result;
 }
 
+/* Returns the distance between two points in 3D. */
 float CheckDist3D(const Vector4 *first, const Vector4 *second)
 {
     return __builtin_sqrtf((first->x - second->x) * (first->x - second->x)
@@ -158,6 +175,7 @@ float CheckDist3D(const Vector4 *first, const Vector4 *second)
                            + (first->z - second->z) * (first->z - second->z));
 }
 
+/* Returns the distance between two points in the XZ plane. */
 float CheckDist2D(const Vector4 *first, const Vector4 *second)
 {
     return __builtin_sqrtf((first->x - second->x) * (first->x - second->x)

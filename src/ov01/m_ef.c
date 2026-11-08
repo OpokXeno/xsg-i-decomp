@@ -36,9 +36,10 @@ int MEfCheckWorkSize(const char *name, int size)
 }
 
 /*
- * MEfCalcAngle: the pitch/yaw pair that turns "from" towards "to". out->z and
- * out->w come from VU0's hardwired VF0 = (0,0,0,1). The horizontal distance is
- * the VU0 square root of the XZ lengths; the height difference is from - to.
+ * MEfCalcAngle: the pitch/yaw pair that turns "from" towards "to".
+ * destination->z and destination->w come from VU0's hardwired VF0 = (0,0,0,1).
+ * The horizontal distance is the VU0 square root of the XZ lengths; the height
+ * difference is from - to.
  */
 Vector4 *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vector4 *to)
 {
@@ -69,14 +70,12 @@ Vector4 *MEfCalcAngle(Vector4 *destination, const Vector4 *from, const Vector4 *
 }
 
 /*
- * MEfCalcAngleMatrix: recover the yaw/pitch pair of "matrix" from the
- * direction "matrix" rotates its local -Z axis (0,0,-1,1) to. out->z and
- * out->w come from the trailing "sqc2 vf0" (VU0's hardwired (0,0,0,1)) and
- * are never overwritten; out->x is pitch, out->y is yaw. Compare
- * src/main/m_math.c's MMathCalcAngleMatrix, which recovers the same pair from
- * a direction it reads directly out of the matrix's third row instead of by
- * rotating a fixed local axis, hence that sibling's un-negated
- * MMathCalcLengthXZ where this one negates it.
+ * MEfCalcAngleMatrix: recovers the yaw/pitch pair of matrix from the direction
+ * its local -Z axis (0,0,-1,1) is rotated to. out->z and out->w come from the
+ * trailing "sqc2 vf0" (VU0's hardwired (0,0,0,1)) and are never overwritten;
+ * out->x is pitch, out->y is yaw. MMathCalcAngleMatrix in src/main/m_math.c
+ * reads the direction from the matrix's third row instead, so it uses
+ * MMathCalcLengthXZ without the negation.
  */
 Vector4 *MEfCalcAngleMatrix(Vector4 *out, Matrix4 *matrix)
 {
@@ -197,8 +196,8 @@ Vector4 *MEfGetActorCoord(Vector4 *destination, Actor *actor, u32 coordinate)
 }
 
 /*
- * Optionally binds the entry's texture, applies its placement matrix, then
- * tail-calls the model system to draw the given entry.
+ * Binds texture when it is not null, sets the placement matrix, then draws the
+ * entry with the model system.
  */
 void MEfDrawModel(const Vector4 *place, int entry, const char *texture)
 {
@@ -354,7 +353,6 @@ int MEfMake4Vertex2(Vector4 *dst, const Vector4 *source, float size, float angle
 /*
  * Places a point at a random bearing on the circle of the given radius around
  * center, in the XZ plane, and returns the output pointer.
- *
  */
 Vector4 *MEfCalcCircumXZ(Vector4 *out, Vector4 *center, float radius)
 {
@@ -411,8 +409,7 @@ Vector4 *MEfCalcCircumXZ(Vector4 *out, Vector4 *center, float radius)
         : "memory"
     );
 
-    /* The R5900's native 128-bit copy, the shape the SDK's own vector copy
-       uses. */
+    /* The R5900's native 128-bit copy. */
     __asm__ __volatile__(
         "lq $8,0(%1)\n\t"
         "sq $8,0(%0)\n\t"
@@ -454,7 +451,7 @@ Vector4 *MEfScatterXY(Vector4 *out, const Vector4 *source, const Vector4 *actor,
     randomAngle = MMathMakeRandom2PI();
     randomLength = spread * MMathMakeRandom();
 
-    /* Clear the offset to the origin with w = 1 (VF0). */
+    /* Clear angles to the origin with w = 1 (VF0). */
     __asm__ __volatile__("sqc2 $vf0,0(%0)" : : "r"(&angles) : "memory");
 
     /* The resident VU0 cosine and sine microprogram launches; the EE has no
@@ -487,6 +484,7 @@ Vector4 *MEfScatterXY(Vector4 *out, const Vector4 *source, const Vector4 *actor,
     return out;
 }
 
+/* Returns the world position of a weapon coordinate: the actor matrix applied to the local position, with w = 1. */
 Vector4 *MEfCalcWeaponCoord(Vector4 *destination, const MEfWeaponCoord *weapon)
 {
     Matrix4 actor_matrix;

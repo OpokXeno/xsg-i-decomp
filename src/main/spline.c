@@ -6,8 +6,9 @@
 #include "main/spl.h"
 
 #define SPLINE_OBJECT_SIZE 0x494      /* xeno.util.Spline native instance */
-#define SPLINE_HEAP_CATEGORY 0xE      /* xmalloc category shared with Java class objects */
+#define SPLINE_HEAP_CATEGORY 0xE      /* xmalloc category used for the Spline object */
 
+/* Java float[] object: class pointer, byte length, then the elements. */
 struct SplineFloatArray {
     void *class_pointer;
     unsigned int byte_length;
@@ -25,6 +26,7 @@ struct SplineGetValueArgs {
     int frame;
 };
 
+/* Vector4f object returned to Java: class pointer, then z, y, x and w at +0x04..+0x10. */
 struct SplineValueVector4f {
     DispatchTable *class_ref;
     float z;
@@ -42,6 +44,7 @@ union SplineResultValue {
 extern void SPL_init2(Spline *spline, int order, float *control_points,
                       int point_count, int component_count);
 
+/* Allocates a Spline object, stores the Spline class pointer in it and returns it. */
 void Java_xeno_util_Spline_create__(void *environment, void *arguments,
                                     void **result)
 {
@@ -56,6 +59,10 @@ void Java_xeno_util_Spline_create__(void *environment, void *arguments,
     *result = spline;
 }
 
+/*
+ * Initializes the spline from its arguments (the control points, order, weight mode and duration),
+ * with three components per point.
+ */
 void Java_xeno_util_Spline_setCtrlVertex__aFIII(
     void *environment, union SplineArgumentValue *arguments)
 {
@@ -73,6 +80,7 @@ void Java_xeno_util_Spline_setCtrlVertex__aFIII(
     SPL_init2(spline, order, values, point_count, 3);
 }
 
+/* Evaluates the spline at frame and returns the point as a shared Vector4f with w set to 1. */
 void Java_xeno_util_Spline_getValue__I(
     void *environment, struct SplineGetValueArgs *arguments,
     union SplineResultValue *result)

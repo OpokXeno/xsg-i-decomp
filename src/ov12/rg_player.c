@@ -38,10 +38,9 @@
 #define RG_PLAYER_STATUS_DASH 4
 
 /*
- * Partial view of RgWeaponCreateInfo (measured: the record's third member is
- * an int id there, and storing the shot geometry group pointer through it
- * reorders the stores): the player's robot, the equip side, and the geometry
- * groups of its shots and attacks.
+ * Partial view of RgWeaponCreateInfo (its third member is an int id there, and
+ * storing the shot geometry group pointer through it reorders the stores): the
+ * player's robot, the equip side, and the geometry groups of its shots and attacks.
  */
 typedef struct RgWeaponCreateInfoPlayerView {
     RgStatus *robot;
@@ -66,6 +65,7 @@ const char playerSourcePath[24] = "../rg_player.euc.c";
 const char playerAssertPlayerAndDatNotNil[32] = "pPlayer != NIL && pDat != NIL";
 const char playerAssertPlayerNotNil[16] = "pPlayer != NIL";
 
+/* Resets a player essence: zero position, direction -Z, no spec, actor id -1 and no weapons. */
 void InitRgPlayerEssence(RgPlayerEssence *pDat)
 {
     int i;
@@ -84,6 +84,10 @@ void InitRgPlayerEssence(RgPlayerEssence *pDat)
     }
 }
 
+/*
+ * Applies the essence to the player's robot: its position and direction, a fresh null
+ * control, and the main and spare weapon of each equip side.
+ */
 static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat)
 {
     RgWeaponCreateInfoPlayerView weaponInfo;
@@ -131,6 +135,10 @@ static void _PlayerSetFromEssence(RgPlayer *pPlayer, RgPlayerEssence *pDat)
     } while (side < RG_EQUIP_TYPE_NUM);
 }
 
+/*
+ * Creates the robot and its geometry groups, applies the spec, actor and sound, then
+ * sets the player from the essence.
+ */
 static void _InitRgPlayer(RgPlayer *pPlayer, RgPlayerEssence *pDat)
 {
     XrgActorEssence actorEssence;
@@ -306,6 +314,10 @@ RgGeomGroup *RgPlayerGetAdvGeoms(RgPlayer *pPlayer)
     return pPlayer->advGeoms;
 }
 
+/*
+ * Runs the robot's control job, then, while a trace camera is attached, forwards the
+ * robot's accepted commands and status flags to the camera as its actions.
+ */
 void RgPlayerControl(RgPlayer *pPlayer)
 {
     RgStatus *pRobot;

@@ -8,7 +8,7 @@
 #define PLAYER_NAME_COUNT 32
 #define PLAYER_ID_ZIGGURAT8 5
 /* From this scenario number on, dataPlayerNameGet returns ziggyName for
- * PLAYER_ID_ZIGGURAT8 (the value is the code's threshold, not a documented name). */
+ * PLAYER_ID_ZIGGURAT8 (the number is a threshold the code compares against). */
 #define ZIGGURAT8_NAME_SCENARIO_FIRST 108
 #define SPC_NAME_FIRST_ID 45
 
@@ -2184,6 +2184,10 @@ static EthName frmNameTbl[40] = {
 };
 
 
+/*
+ * Returns the address of the name pointer for a 1-based ethId in ethNameTbl,
+ * or 0 after printing an error when ethId <= 0.
+ */
 const char **dataEthNameGet(int ethId)
 {
     if (ethId <= 0)
@@ -2196,6 +2200,10 @@ const char **dataEthNameGet(int ethId)
 
 const char ethNameDataItmNameGetErrText[] = "** dataItmNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in itmNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataItmNameGet(int index)
 {
     if (index <= 0)
@@ -2208,6 +2216,10 @@ const char **dataItmNameGet(int index)
 
 const char ethNameDataSklNameGetErrText[] = "** dataSklNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in sklNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataSklNameGet(int index)
 {
     if (index <= 0)
@@ -2220,6 +2232,10 @@ const char **dataSklNameGet(int index)
 
 const char ethNameDataAccNameGetErrText[] = "** dataAccNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in accNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataAccNameGet(int index)
 {
     if (index <= 0)
@@ -2232,6 +2248,10 @@ const char **dataAccNameGet(int index)
 
 const char ethNameDataWepNameGetErrText[] = "** dataWepNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in wepNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataWepNameGet(int index)
 {
     if (index <= 0)
@@ -2244,6 +2264,10 @@ const char **dataWepNameGet(int index)
 
 const char ethNameDataBltNameGetErrText[] = "** dataBltNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in bltNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataBltNameGet(int index)
 {
     if (index <= 0)
@@ -2256,6 +2280,10 @@ const char **dataBltNameGet(int index)
 
 const char ethNameDataNrmNameGetErrText[] = "** dataNrmNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in nrmNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataNrmNameGet(int index)
 {
     if (index <= 0)
@@ -2268,10 +2296,10 @@ const char **dataNrmNameGet(int index)
 
 const char ethNameDataSpcNameGetErrText[] = "** dataSpcNameGet: err %d\n";
 /*
- * Special item ids continue after the normal item ids (nrmNameTbl), so the
- * table index here is (index - SPC_NAME_FIRST_ID).
+ * Returns the name pointer slot for a special item id, or 0 after an error
+ * message when index <= 0. Special ids continue after the normal item ids
+ * (nrmNameTbl), so the table index is (index - SPC_NAME_FIRST_ID).
  */
-
 const char **dataSpcNameGet(int index)
 {
     if (index <= 0)
@@ -2283,8 +2311,11 @@ const char **dataSpcNameGet(int index)
 }
 
 const char ethNameDataEnemyNameGetErrText[] = "** dataEnemyNameGet: err %d\n";
-/* enemyNameTbl holds one name pointer per enemy id, starting at ENEMY_NAME_FIRST_ID. */
-
+/*
+ * Returns the address of the name pointer for an enemy id. enemyNameTbl holds
+ * one pointer per enemy id, starting at ENEMY_NAME_FIRST_ID; ids below it print
+ * an error and return 0.
+ */
 const char **dataEnemyNameGet(int index)
 {
     if (index < ENEMY_NAME_FIRST_ID)
@@ -2295,11 +2326,11 @@ const char **dataEnemyNameGet(int index)
     return &enemyNameTbl[index - ENEMY_NAME_FIRST_ID];
 }
 
-/* statNameTbl holds one name-table pointer per stat type; each is indexed by `index`.
- * The bound below is 9 although the table has 8 entries: statType 8 passes the
- * check and reads statNameTbl[8], one entry past the end (the original does the
- * same; kept as is). */
-
+/*
+ * Returns the slot at `index` in the name table of statType, or 0 when statType
+ * is 9 or more. The bound is 9 although statNameTbl has eight entries, so
+ * statType 8 reads one entry past the end, as the original does (kept as is).
+ */
 const char **dataStatNameGet(int statType, int index)
 {
     const char **name;
@@ -2314,6 +2345,11 @@ const char **dataStatNameGet(int statType, int index)
 
 const char ethNameDataPlayerNameGetErrText[] = "** dataPlayerNameGet: err %d\n";
 
+/*
+ * Returns the name pointer slot for a 1-based player id, or 0 after an error
+ * message when id is above PLAYER_NAME_COUNT. Ziggurat 8 returns &ziggyName
+ * instead once the scenario number reaches ZIGGURAT8_NAME_SCENARIO_FIRST.
+ */
 const char **dataPlayerNameGet(int id)
 {
     int no;
@@ -2336,6 +2372,10 @@ const char **dataPlayerNameGet(int id)
 
 const char ethNameDataEngNameGetErrText[] = "** dataEngNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in engNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataEngNameGet(int index)
 {
     if (index <= 0)
@@ -2348,6 +2388,10 @@ const char **dataEngNameGet(int index)
 
 const char ethNameDataFrmNameGetErrText[40] = "** dataFrmNameGet: err %d\n";
 
+/*
+ * Returns the address of the name pointer for a 1-based index in frmNameTbl,
+ * or 0 after printing an error when index <= 0.
+ */
 const char **dataFrmNameGet(int index)
 {
     if (index <= 0)

@@ -210,11 +210,8 @@ extern const char longTypeName[];
 extern const char floatTypeName[];
 extern const char doubleTypeName[];
 
-/*
- * initBaseClasses and initPrimitiveTypes are file-local (LOCAL in the
- * original symbol table); initPrimitiveTypes stays asm, so both are
- * declared static before their use below.
- */
+/* initBaseClasses and initPrimitiveTypes are file-local; both are declared
+ * static before their first use. */
 static void initBaseClasses(void);
 static void initPrimitiveTypes(void);
 extern void resolveNativeMethod(JavaMethod *method);
@@ -329,10 +326,13 @@ JavaClass *classInt;
 
 JavaClass *primitiveClassTable[VM_ATYPE_COUNT];
 
-/* 0x0099D510, 0x400 bytes of COMMON storage allocated after primitiveClassTable;
-   no MAIN function reads it. */
+/* Not read by any code in src/. */
 float key_value[256];
 
+/*
+ * Sets up the VM: interns the constant names and attribute strings, creates
+ * the system thread and initializes the base classes.
+ */
 void initVM(void) {
     int i;
 
@@ -366,6 +366,12 @@ static inline VMSlot *_StackTop(VMSlots *stack)
     return &stack->base[stack->top];
 }
 
+/*
+ * Runs one Java method on the thread. Native methods are called directly.
+ * Otherwise a frame is pushed (its locals take the arguments) or a suspended
+ * native call is resumed, and bytecode runs until the frame returns or the
+ * thread stops. A returned value is written to result.
+ */
 void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *result)
 {
     JThread *thread = vm;
@@ -379,6 +385,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
     JavaMethod *callee;
     VMSlot *args;
 
+    /* Native methods run their C implementation directly. */
     if (access & JVM_ACC_NATIVE) {
         if (!(thread->flags & JTHREAD_FLAG_WOKEN)) {
             if (method->native == 0) {
@@ -391,6 +398,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
         return;
     }
 
+    /* Push a new frame whose locals take the arguments. */
     if (!(thread->flags & JTHREAD_FLAG_WOKEN)) {
         int count;
         int i;
@@ -422,7 +430,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             }
         }
     } else {
-        /* Resume the invoke a native call suspended. */
+        /* Resume an invoke whose native call suspended, then fix the stack for its arguments and result. */
         frame = &thread->frames[thread->frame_depth - thread->resume_frames];
         thread->resume_frames--;
         code = method->code;
@@ -476,6 +484,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
         frame->pc = frame->nextPc;
     }
 
+    /* Interpret one opcode at a time until the frame returns or the thread stops. */
     while (frame->pc < codeLength) {
         unsigned short pc;
 
@@ -1409,6 +1418,7 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
             frame->nextPc = frame->pc + CODE_U16(2) - 1;
             break;
         }
+        /* Stop when the thread is busy, or when this frame must be left. */
         flags = thread->flags;
         if (flags & JTHREAD_FLAGS_BUSY) {
             return;
@@ -1429,13 +1439,13 @@ void virtualMachine(SceneVm *vm, JavaMethod *method, VMSlot *arguments, VMSlot *
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-/* These class names follow virtualMachine's generated opcode dispatch tables. */
 const char objectClassName[24] = "java/lang/Object";
 
 const char stringBufferClassName[24] = "java/lang/StringBuffer";
 
 const char stringClassName[24] = "java/lang/String";
 
+/* Creates the primitive classes, then the Object, StringBuffer and String classes. */
 static void initBaseClasses(void) {
     initPrimitiveTypes();
     loadStaticClass(&classObject, objectClassName);
@@ -1443,6 +1453,7 @@ static void initBaseClasses(void) {
     loadStaticClass(&classString, stringClassName);
 }
 
+/* Creates the primitive wrapper classes and indexes them by JVM newarray type. */
 static void initPrimitiveTypes(void) {
     initWrapperClass(&classBoolean, booleanTypeName, 'Z', 1);
     initWrapperClass(&classByte, byteTypeName, 'B', 1);
@@ -1463,6 +1474,7 @@ static void initPrimitiveTypes(void) {
     primitiveClassTable[JVM_T_DOUBLE] = classDouble;
 }
 
+/* Creates a primitive class with the given type code and element size, stores it in *class_slot. */
 static void initWrapperClass(JavaClass **class_slot, const char *name,
                               signed char type_code, int element_size)
 {

@@ -18,6 +18,7 @@ const char geomPolyAssertPolyNotNil[16] = "pPoly != NIL";
 
 const char geomPolyAssertCollisionArgumentsNotNil[56] = "pPoly != NIL && pOrgArg != NIL && pResult != NIL";
 
+/* Sets up a poly geometry with no collision data and identity local matrices. */
 static void _InitRgGeomPoly(RgGeom *geom)
 {
     RgGeomPoly *poly = (RgGeomPoly *)geom;
@@ -33,10 +34,8 @@ static void _InitRgGeomPoly(RgGeom *geom)
 }
 
 /*
- * The failed-allocation assert reuses "pData != NIL" (geomPolyAssertDataNotNil), not the
- * "pPoly != NIL" text the rest of this TU validates a geometry pointer with;
- * the object is still the same RgGeom every RgGeomPoly accessor here calls
- * geom.
+ * Allocates and initializes a poly geometry. The failed-allocation assert uses the
+ * "pData != NIL" text, not the "pPoly != NIL" text the other checks here use.
  */
 RgGeom *CreateRgGeomPoly(void)
 {
@@ -50,6 +49,7 @@ RgGeom *CreateRgGeomPoly(void)
     return geom;
 }
 
+/* Initializes an existing poly geometry. */
 void InitRgGeomPoly(RgGeom *geom)
 {
     if (geom == 0) {
@@ -66,6 +66,7 @@ void RgGeomPolySetColiData(RgGeom *geom, RgColiData *coliData)
     ((RgGeomPoly *)geom)->coliData = coliData;
 }
 
+/* Sets the local matrix and its inverse. A null geometry is ignored. */
 void RgGeomPolySetLocal(RgGeom *geom, const RgMatrix local)
 {
     RgGeomPoly *poly = (RgGeomPoly *)geom;
@@ -84,6 +85,7 @@ RgColiData *RgGeomPolyGetData(const RgGeom *geom)
     return ((const RgGeomPoly *)geom)->coliData;
 }
 
+/* Copies the local matrix to destination, or the identity when geom is null. */
 void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination)
 {
     const RgGeomPoly *poly = (const RgGeomPoly *)geom;
@@ -95,6 +97,7 @@ void RgGeomPolyGetLocal(const RgGeom *geom, RgMatrix destination)
     }
 }
 
+/* Copies the inverse local matrix to destination, or the identity when geom is null. */
 void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination)
 {
     const RgGeomPoly *poly = (const RgGeomPoly *)geom;
@@ -107,11 +110,9 @@ void RgGeomPolyGetInvLocal(const RgGeom *geom, RgMatrix destination)
 }
 
 /*
- * The ball's center is transformed into the poly's local space with
- * inverseLocal, its homogeneous component forced to 1.0 (a point, not a
- * direction), and tested with its radius. On a hit, the correction vector
- * (homogeneous component forced to 0.0, a direction rather than a point) is
- * transformed back out of local space with the poly's local matrix.
+ * Tests a ball against the poly. The ball centre is moved into local space with
+ * inverseLocal as a point, and on a hit the correction vector is moved back out
+ * with the local matrix as a direction.
  */
 int RgGeomPolyCheckBall(RgGeom *pPoly, RgColiBall *pOrgArg,
                         RgColiBallResult *pResult)
@@ -141,11 +142,9 @@ int RgGeomPolyCheckBall(RgGeom *pPoly, RgColiBall *pOrgArg,
 }
 
 /*
- * The segment's start (homogeneous component forced to 1.0) and vector
- * (component forced to 0.0) are transformed into poly space with inverseLocal
- * into a local segment that RgColiDataVsRay reads. On a hit, the hit plane
- * (component forced to 0.0) is transformed back out with the poly's local
- * matrix.
+ * Tests a segment against the poly. The start and vector are moved into local
+ * space with inverseLocal, and on a hit the hit plane is moved back out with the
+ * local matrix.
  */
 int RgGeomPolyCheckRay(RgGeom *pPoly, RgColiSegment *pOrgArg,
                        RgColiSegmentHit *pResult)
@@ -163,6 +162,7 @@ int RgGeomPolyCheckRay(RgGeom *pPoly, RgColiSegment *pOrgArg,
 
     pOrgArg->m_start[3] = 1.0f;
     pOrgArg->m_vector[3] = 0.0f;
+    /* Transforms the segment start and then its vector by inverseLocal on VU0. */
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"
@@ -190,11 +190,13 @@ int RgGeomPolyCheckRay(RgGeom *pPoly, RgColiSegment *pOrgArg,
         : : "r"(ray.m_vector), "r"(pOrgArg->m_vector), "r"(poly->inverseLocal)
         : "memory");
 
+    /* Tests the local segment against the collision data. */
     if (RgColiDataVsRay(poly->coliData, &ray, pResult) == 0) {
         return 0;
     }
 
     pResult->m_plane[3] = 0.0f;
+    /* Moves the hit plane back out with the local matrix. */
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"

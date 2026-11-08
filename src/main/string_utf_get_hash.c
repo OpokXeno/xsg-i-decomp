@@ -4,17 +4,14 @@
 
 static int constStringCount = 0;
 
+/* Returns the Java-style hash of the `length` bytes at `bytes`. */
 int StringUtf_getHash(const char *bytes, int length)
 {
     const unsigned char *current = (const unsigned char *)bytes;
     const unsigned char *end = current + length;
     int hash = 0;
-    /* Separate load keeps the fetched byte in its own register before the
-       multiply: gcc 2.96 schedules the accumulator shift ahead of the byte
-       load when the byte is read directly in the expression (form01, this
-       attempt, differs 73.125% at StringUtf_getHash); the separate local
-       reproduces the original lbu-before-sll order (CP-0222, form04,
-       attempt-be432885387a). */
+    /* The byte is loaded into its own local before the multiply, which keeps the
+       original order of the byte load and the accumulator shift. */
     unsigned char byte;
 
     if (current < end) {
@@ -28,11 +25,13 @@ int StringUtf_getHash(const char *bytes, int length)
     return hash;
 }
 
+/* Allocates a string object with room for `length` bytes, a header and a terminator. */
 void *StringUtf_create(int length)
 {
     return xmalloc(length + VM_CONST_STRING_HEADER_SIZE + 1, VM_HEAP_STRING);
 }
 
+/* Returns the table entry equal to the `length` bytes at `bytes`, or 0 when there is none. */
 ConstString *findConstString(const char *bytes, int length)
 {
     int bucket_index = StringUtf_getHash(bytes, length) & VM_HASH_MASK;
@@ -49,6 +48,7 @@ ConstString *findConstString(const char *bytes, int length)
     return entry;
 }
 
+/* Drops the leading entries of each bucket whose addresses are at or above `heap_boundary`. */
 void reloadConstString(void *heap_boundary)
 {
     ConstString **bucket = constStringTable;
@@ -74,6 +74,11 @@ void reloadConstString(void *heap_boundary)
     } while (remaining >= 0);
 }
 
+/*
+ * Returns the interned string for the bytes, adding an entry when it is new.  The
+ * table is created on first use.  The bytes are not copied; a negative length
+ * means NUL-terminated.  Returns 0 for length 0.
+ */
 SceneString *loadConstString(const char *bytes, int length)
 {
     int hash;
@@ -123,6 +128,7 @@ SceneString *loadConstString(const char *bytes, int length)
     return (SceneString *)entry;
 }
 
+/* Like loadConstString, but a new entry gets its own copy of the bytes. */
 SceneString *loadConstString2(const char *bytes, int length)
 {
     unsigned int bucket_index;

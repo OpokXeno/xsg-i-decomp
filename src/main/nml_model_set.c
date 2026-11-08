@@ -20,7 +20,7 @@
 /*
  * Bounds and alignment a model texture pointer must satisfy: the pointer
  * lands inside main RAM at or above the executable's own load base
- * (config/tu/main/tu000.json "start": "0x00200000") and at or below the top
+ * (0x00200000) and at or below the top
  * of the 32 MiB EE RAM, and it is qword (16-byte) aligned as GIF/DMA
  * texture transfers require.
  */
@@ -36,23 +36,22 @@
 
 #define LAYOUT_S32(off) (s_inLayout.slots[(off) / 4].i)
 
-/* Measurement proxy only: stands in for the StudioCamera scissor members
- * (float at +0x60 x0, +0x64 y0, +0x68 x1, +0x6c y1) until the owner adds them. */
+/* Reads a float from the StudioCamera scissor rectangle: x0 at +0x60, y0 at
+ * +0x64, x1 at +0x68 and y1 at +0x6c. */
 #define SCISSOR_F(c, i) (*(float *)((char *)(c) + 0x60 + 4 * (i)))
 
 /*
- * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
- * with count 0x1e, so the copied extent is established. nmlModelClear clears
- * projection_entry at +0x1c0. No C body names the earlier float slots; their
- * meanings stay unknown, so that region is explicit unmodeled storage.
+ * Layout of the 0x1e0-byte block the renderer passes to
+ * nmlPacketSetAttributeData16N with count 0x1e. nmlModelClear clears
+ * projection_entry at +0x1c0. No C body names the earlier float slots, so
+ * that region is unmodeled storage.
  */
 typedef struct NmlProRealFields {
     Matrix4 matrix_000;
     Matrix4 inverseTransform;
-    /* The original Circle/Map bodies use the +0x80/+0xC0 ranges only as
-     * whole-qword copy destinations. Their base is 0x0095B940 and every
-     * access is at a 16-byte slot in the corresponding function.s; model
-     * each owned qword directly, without an overlay. */
+    /* The +0x80 and +0xC0 ranges are used only as whole-qword copy
+     * destinations (base 0x0095B940), each access at a 16-byte slot. Each
+     * qword is modeled directly, without an overlay. */
     NmlVector4Overlay unmodeled_080[4];
     NmlVector4Overlay unmodeled_0c0[4];
     int unmodeled_100;
@@ -95,10 +94,10 @@ typedef struct {
 } NmlFadeValues;
 
 /*
- * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030;
- * TU-local by canon, config/header-canon.json). Only the two fields this
- * setter reads are modeled: the fade level at +0x58 and the three fade
- * color components at +0x90, both forwarded to fade_set unchanged.
+ * TU-local partial view of GameLoopState (main 0x00338680, size 0x2a030).
+ * Only the two fields this setter reads are modeled: the fade level at +0x58
+ * and the three fade color components at +0x90, both forwarded to fade_set
+ * unchanged.
  */
 typedef struct {
     unsigned char unmodeled_000[0xc - 0x0];
@@ -177,19 +176,18 @@ typedef union NmlModelBlockBounds {
 } NmlModelBlockBounds;
 
 /*
- * fadeOutLockedFlag is main:0x0095DB90, the same byte the FadeControl comment above
- * ties to s_inFadeOut's "locked" field at +0x30 (0x0095DB60 + 0x30): cited
- * there only as evidence, not as claimed source. Addressing it through
- * &s_inFadeOut+0x30 rather than its own symbol changes the emitted %lo
- * immediate (sw v0,48(v1) for the original's sw v0,0(v1)), so this
- * function keeps the flat scaffold symbol, as an unsized array so -G8
- * small-data gp-relative addressing does not apply to it either (matching
- * nmlModelBackBufferRequestFlags/nmlModelMpeg2CrossFadeTime above).
+ * fadeOutLockedFlag is main:0x0095DB90, the "locked" byte at +0x30 of
+ * s_inFadeOut (0x0095DB60 + 0x30). Addressing it through &s_inFadeOut+0x30
+ * instead of its own symbol changes the emitted immediate (sw v0,48(v1)
+ * instead of the original's sw v0,0(v1)), so this function keeps the flat
+ * extern symbol. It is declared as an unsized array so -G8 small-data
+ * gp-relative addressing does not apply, as it does not for
+ * nmlModelBackBufferRequestFlags and nmlModelMpeg2CrossFadeTime.
  */
 extern int fadeOutLockedFlag[];
 
-/* activeFadeInCancelFrames is s_inActiveFadeIn's "cancelFrames" byte (+0x28); see the
- * fadeOutLockedFlag comment above for why it stays a flat scaffold symbol. */
+/* activeFadeInCancelFrames is s_inActiveFadeIn's "cancelFrames" byte (+0x28); it is a
+ * flat extern symbol for the reason given at fadeOutLockedFlag. */
 extern int activeFadeInCancelFrames[];
 
 /* fadeInCancelFrames is s_inFadeIn's "cancelFrames" byte (+0x28). */
@@ -235,18 +233,12 @@ extern float entryPartsClipScale;
 
 static void CONSTRUCT_MODELSYSTEM(void);
 
-/* INIT_BACK_BUFFER (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
 static void INIT_BACK_BUFFER(void);
 
 static void fade_render(XglPacket *packet, FadeControl *control);
 
-/* fade_set (near the top of this TU) is still INCLUDE_ASM; declare it so
- * this caller does not see an implicit declaration. */
 static void fade_set(FadeControl *, float *, int, int, int, int, int);
 
-/* nmlModelFogPara (above) is still INCLUDE_ASM; declare it so its caller
- * does not see an implicit declaration. */
 static void nmlModelFogPara(Vector4 *fog, float fogNear, float fogFar, float fogMin, float fogMax);
 
 extern unsigned int strlen(const char *string);
@@ -255,28 +247,15 @@ extern int memcmp(const void *left, const void *right, unsigned int count);
 extern int strcmp(const char *left, const char *right);
 extern char *strstr(const char *string, const char *pattern);
 
-/* nmlModelLexDataCheck remains assembly-owned below. */
+/* Defined later in this file. */
 int nmlModelLexDataCheck(NmlModel *model);
 
-/* nmlModelDirectXtxSub (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
 static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId);
 
-/*
- * CONSTRUCT_CIRCLR_SHADOW (near the top of this TU) is still INCLUDE_ASM
- * and nmlModelClear is defined below (this TU); declare them, and the
- * s_inMapHandle array nmlModelClear also declares nearer its own use, so
- * this caller does not see an implicit declaration.
- */
 static void CONSTRUCT_CIRCLR_SHADOW(void);
-/* CLEAR_LAYOUT_MODEL and CLEAR_MODEL_ENTRY (near the top of this TU) are
- * still INCLUDE_ASM; declare them so this caller does not see an implicit
- * declaration. */
 static void CLEAR_LAYOUT_MODEL(LayoutStore *arg0);
 static void CLEAR_MODEL_ENTRY(void);
 
-/* FLUSH_MODELSYSTEM (above) is still INCLUDE_ASM; declare it so this
- * caller does not see an implicit declaration. */
 static void FLUSH_MODELSYSTEM(void);
 
 extern float xglPointLength(Vector4 *first, Vector4 *second);
@@ -367,8 +346,7 @@ static void *s_pMapLast = 0;
 
 /*
  * Allocation counter CONSTRUCT_PARENT_BUF/FLUSH_PARENT_BUF reset to zero:
- * an index into the s_aParentBuf entries (main 0x0095bb50), also still
- * INCLUDE_ASM in this TU.
+ * an index into the s_aParentBuf entries (main 0x0095bb50).
  */
 static int s_nParentBuf = 0;
 
@@ -511,7 +489,7 @@ static Vector4 s_inGblPos;
 /*
  * Circle rendering copies this 0x400-byte table after the 0x20-byte prefix
  * at 0x00956920: nmlPacketSetAttributeData16N consumes 66 16-byte qwords.
- * Keep its definition between s_inGblPos and s_inProReal, matching the
+ * Keep its definition between s_inGblPos and s_inProReal, to follow the
  * original local-storage order. set_circle_shadow_ratio writes entries 0-7
  * and 16-23. The original storage is 0x1000 bytes (no other label until
  * s_aAlphaGroup at 0x00957940); only the first 0x400 are read.
@@ -520,10 +498,9 @@ static int circleShadowRatioTable[1024];
 
 /*
  * The renderer passes this 0x1e0-byte block to nmlPacketSetAttributeData16N
- * with count 0x1e, so the copied extent is established.  ProjectMap and
- * ProjectCircle access the listed float slots; nmlModelClear clears the word
- * at +0x1c0.  Other bytes remain unnamed because their roles are not shown
- * by this TU's C callers.
+ * with count 0x1e. ProjectMap and ProjectCircle access the float slots of
+ * NmlProRealFields; nmlModelClear clears the word at +0x1c0. Other bytes stay
+ * unnamed because this TU's C callers do not show their roles.
  */
 static NmlProRealState s_inProReal[1];
 
@@ -716,6 +693,7 @@ static void _WeightToGlobalVec(Vector4 *destination, Matrix4 matrix, Matrix4 wei
         : "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9", "memory");
 }
 
+/* Stores the component-wise minimum of the two vectors in min and the maximum in max. */
 static void _MinMaxSort(Vector4 *min, Vector4 *max) {
     __asm__ __volatile__(
         "lqc2 vf20, 0(%0)\n\t"
@@ -730,6 +708,7 @@ static void _MinMaxSort(Vector4 *min, Vector4 *max) {
     );
 }
 
+/* Resets a LayoutStore to its default state: identity place matrices, default slot values and zeroed point colors. */
 void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
 {
     StudioLight *light;
@@ -790,6 +769,7 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
     QuadwordZero(&arg0->slots[0x210 / 4]);
 }
 
+/* Builds the radial circle shadow texture once, then sets its CLUT and upload headers. */
 static void CONSTRUCT_CIRCLR_SHADOW(void)
 {
     int row;
@@ -917,10 +897,9 @@ static void FLUSH_PARENT_BUF(void)
 static void CONSTRUCT_MAP_HANDLE(int *mapHandle)
 {
     /*
-     * The original writes word 0 and puts the word-1 store in the return's
-     * delay slot; the two stores are independent, and in declaration order
-     * cc1 schedules them the other way round (form 01, build/form-01,
-     * first difference at 0x6e8: sw zero,4(a0) for sw zero,0(a0)).
+     * The original writes word 0 and fills the return's delay slot with the
+     * word-1 store. The two stores are independent; word 1 is written first
+     * in the source so the compiler emits word 0 first, as the original does.
      */
     mapHandle[1] = 0;
     mapHandle[0] = 0;
@@ -1132,11 +1111,8 @@ static inline void NmlMovieRestoreSavedBuffer(void)
 
 /*
  * TU-local partial view of the shared render-state global sRender (main
- * 0x004A90E0, size 0x5C; see src/main/game_over.c's DrawImageRenderState,
- * src/main/map_1.c's MapRenderState, src/main/window_tex_load.c's
- * UmnRenderSize and src/main/game_defocus.c's DefocusRenderState for other
- * TUs' views of the same object). Only the halfword at +0x22 is evidenced
- * here: nmlModelSendSignalMovieFinish forwards it unchanged as the
+ * 0x004A90E0, size 0x5C). Only the halfword at +0x22 (draw_buffer_base) is
+ * used here: nmlModelSendSignalMovieFinish passes it unchanged as the
  * "ownerIndex" argument of nmlModelSetBackBuffer and
  * nmlModelSetBackBufferToBattle.
  */
@@ -1174,6 +1150,7 @@ int nmlModelSetRenderLevel(int level)
     return renderLevel;
 }
 
+/* Advances one fade control by a frame and, unless skipRender is set, queues its fade sprite on packet. */
 static void fade_render(XglPacket *packet, FadeControl *control)
 {
     int mode = control->unclassified_1c;
@@ -1213,6 +1190,7 @@ static void fade_render(XglPacket *packet, FadeControl *control)
                 if (control->level > NML_FADE_LEVEL_MAX) {
                     control->level = NML_FADE_LEVEL_MAX;
                 }
+                /* Queue the fade as one sprite in a GIF direct-data packet. */
                 if (control->skipRender == 0) {
                     GifCommandData gifData[32];
                     GifCommandData *write = fade_packet_begin(gifData,
@@ -1255,6 +1233,7 @@ static void fade_render(XglPacket *packet, FadeControl *control)
             }
         }
     }
+    /* A disposed or cancelled fade returns to its idle state. */
     if (control->dispose != 0 || control->cancelFrames > 0) {
         control->frame = -1;
         control->duration = 1;
@@ -1273,6 +1252,11 @@ void nmlFadePacketWrite(XglPacket *packet)
     s_nFadeDoit = 0;
 }
 
+/*
+ * Starts a fade on control from a float RGB color (scaled to 0-255), a
+ * duration, a direction and a start delay, and hooks nmlFadePacketWrite into
+ * the render callback.
+ */
 static void fade_set(FadeControl *control, float *color, int skipRender,
                      int duration, int direction, int mode, int startDelay)
 {
@@ -1427,6 +1411,11 @@ int nmlModelGetFadeLevel(void)
     return active;
 }
 
+/*
+ * Returns non-zero when the main camera has jumped in position or in Y angle
+ * since the saved main camera state. The result is cached in
+ * s_nMainCameraWarp once it has been computed.
+ */
 int nmlModelAskNonLinearCamera(void)
 {
     StudioCamera *camera;
@@ -1619,6 +1608,7 @@ void nmlModelSetTexMap(int mode, int size, float weight)
     }
 }
 
+/* Stores input in s_inProReal and derives its transform, texture window and clamp words. */
 void nmlModelSetProreal(NmlProRealState *input)
 {
     DoublewordAlignedVector4 transformOrigin;
@@ -1650,6 +1640,7 @@ void nmlModelSetProreal(NmlProRealState *input)
     xglMatrixInverse(input->fields.inverseTransform, scaledTransform);
     xglVectorNormal(&input->fields.unmodeled_160, &input->fields.unmodeled_160);
 
+    /* Texture base and format word, chosen by the texture pixel format. */
     textureMode = input->fields.unmodeled_114;
     switch (textureMode) {
     case NML_GS_PSMT4: {
@@ -1675,6 +1666,7 @@ void nmlModelSetProreal(NmlProRealState *input)
         break;
     }
 
+    /* Texture window: start and end texel per axis, with the direction flags. */
     textureXDirection = input->fields.unmodeled_110 != 0 ? 3 : 2;
     textureYDirection = input->fields.unmodeled_112 != 0 ? 3 : 2;
     textureStartX = input->fields.unmodeled_110 != 0 ? input->fields.unmodeled_108 - 1 : input->fields.unmodeled_100;
@@ -1881,10 +1873,9 @@ void nmlModelSetLight(Matrix4 *direction, Matrix4 *color)
 
 void nmlModelSetTexture(const char *texture)
 {
-    /* Accept only a non-null, in-range, qword-aligned pointer whose header
-     * carries the "XTX" texture-resource signature: texture[0..2] ==
-     * 'X','T','X' (texture[2] is compared against texture[0], not a literal,
-     * per the original disassembly). */
+    /* Accepts only a non-null, in-range, qword-aligned pointer whose header starts
+     * with "XT" and repeats its first byte as the third (texture[2] is compared
+     * with texture[0], not with a literal, as the original does). */
     if (texture == 0 ||
         (u32)texture - NML_TEXTURE_RAM_BASE > NML_TEXTURE_RAM_MAX_OFFSET ||
         ((u32)texture & NML_TEXTURE_ALIGN_MASK) != 0 ||
@@ -2068,7 +2059,7 @@ void nmlModelSetShadowMapEntry(void) {
     s_inLayout.fields.render_status |= NML_RENDER_MAP_ENTRY;
 }
 
-/* The map callers pass halfword part IDs; the layout has eight shadow slots. */
+/* Records partId in the layout's map shadow part list, which holds eight entries. */
 void nmlModelSetMapShadowParts(int partId)
 {
     if (s_nMapShadowParts < NML_MAP_SHADOW_PARTS_MAX) {
@@ -2092,6 +2083,10 @@ void nmlModelSetMapLastInit(void)
     s_nMapLast = 0;
 }
 
+/*
+ * Shows or hides the blocks of partId. Models without named parts instead
+ * record a hidden part in s_aDispVisible.
+ */
 void nmlModelSetPartsVisible(NmlModel *model, int partId, int visible)
 {
     int *blockOffsets;
@@ -2122,6 +2117,11 @@ void nmlModelSetPartsVisible(NmlModel *model, int partId, int visible)
     }
 }
 
+/*
+ * Shows or hides the blocks whose name matches name, by prefix, exact or
+ * substring comparison as selected by match. Only models whose first block
+ * has the named-parts material flag are changed.
+ */
 void nmlModelSetNameVisible(NmlModel *model, const char *name, int visible, int match)
 {
     int *block_offsets;
@@ -2176,6 +2176,11 @@ void nmlModelSetNameVisible(NmlModel *model, const char *name, int visible, int 
     }
 }
 
+/*
+ * Appends a direct-data record for count items of data to s_aDirect. Odd modes
+ * copy the data through nmlPacketSetAttributeData16N, even modes keep the
+ * pointer, and the record's attribute is taken from mode.
+ */
 void nmlModelDirectSend(int mode, const void *data, int count)
 {
     NmlDirectRecord *entry;
@@ -2269,9 +2274,9 @@ static void nmlModelDirectXtxSub(void *data, int modelId, int nextModelId)
 }
 
 /*
- * Callers (GameRadarDraw main 0x00252fc8, unit6003_draw main 0x003211a0;
- * both still INCLUDE_ASM) never inspect the result -- the tail call below
- * matches the compiled form, so this is void.
+ * Sends a texture through nmlModelDirectXtxSub when no packet signal is set and
+ * data has the XTX header. The callers (GameRadarDraw, unit6003_draw) do not
+ * inspect a result, so this returns void.
  */
 void nmlModelDirectSendXtx(int modelId, void *data)
 {
@@ -2285,6 +2290,7 @@ void nmlModelDirectSendXtx(int modelId, void *data)
     }
 }
 
+/* Builds the group flags from render_status and sets s_nUseZwrite when the Z-write bit is set. */
 static void set_group_status(LayoutStore *layout, u32 *status)
 {
     *status = 0;
@@ -2337,6 +2343,7 @@ static void AlphaGroupSortEntry(const Vector4 *position)
     s_aAlphaGroup[s_nAlphaGroup].sortDistance = distance + s_fSortOffset;
 }
 
+/* Moves the saved last-entry blocks into the alpha block pool, one alpha group per block while the group limit allows. */
 static void AlphaGroupLastEntry(void)
 {
     int index = 0;
@@ -2504,6 +2511,10 @@ static void set_circle_shadow_ratio(int scale)
     }
 }
 
+/*
+ * Returns 0 for a usable model: aligned, inside the texture RAM range, tagged
+ * "lex", with at least one block. Returns 1 otherwise.
+ */
 int nmlModelLexDataCheck(NmlModel *model)
 {
     int result = 1;
@@ -2532,6 +2543,11 @@ int nmlModelLexDataCheck(NmlModel *model)
     return result;
 }
 
+/*
+ * Per-frame block update: advances each block's translation by its step,
+ * wrapping at 0.5 (x) and 1.0 (y), applies the multiply color and collects the
+ * shape blocks.
+ */
 static void nmlModelLexBlockDoit(NmlModel *model)
 {
     int blockIndex;
@@ -2563,6 +2579,7 @@ static void nmlModelLexBlockDoit(NmlModel *model)
             }
         }
 
+        /* A non-empty material name selects one material's multiply color; otherwise the layout color applies. */
         if (s_aMatName.text[0] != '\0') {
             if (strcmp(s_aMatName.text, block->materialName) == 0) {
                 QuadwordCopy(&block->multiplyColor, &s_inMulColor);
@@ -2571,6 +2588,7 @@ static void nmlModelLexBlockDoit(NmlModel *model)
             QuadwordCopy(&block->multiplyColor, &s_inLayout.fields.multiplyColor);
         }
 
+        /* Shape blocks (shapeFlags 2 or 3) whose part ID is not listed yet get a weight entry. */
         if ((u32)(block->shapeFlags - 2) < 2) {
             int partId = block->partId;
             int index;
@@ -2619,6 +2637,11 @@ static void nmlModelLexBlockDoit(NmlModel *model)
     }
 }
 
+/*
+ * Projects the centre sample with the camera and computes the stealth depth,
+ * fills the stealth entries, then sorts them with bubble passes by sort class
+ * and endpoint depth.
+ */
 static void nmlModelStealthEntry(void *arg0, void *arg1)
 {
     NmlModel *model = arg0;
@@ -2670,6 +2693,11 @@ static void nmlModelStealthEntry(void *arg0, void *arg1)
     }
 }
 
+/*
+ * Computes the sampled centre and current position of one model. Models with
+ * samples are weighted by their blend matrices; the others are offset by their
+ * entry translation.
+ */
 static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
 {
     unsigned char *modelBytes = (unsigned char *)arg0;
@@ -2737,6 +2765,7 @@ static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
     }
 }
 
+/* Culls the model against the active sub-windows; sets NML_RENDER_CULLED when every active window rejects it. */
 static int nmlModelCalcEntryClip(NmlModel *model, StudioCamera *camera)
 {
     Vector4 clip;
@@ -2780,6 +2809,7 @@ static int nmlModelCalcEntryClip(NmlModel *model, StudioCamera *camera)
     return 0;
 }
 
+/* Returns the depth of position seen through the camera of studio, scaled by scale and the camera's field of view. */
 static float deapth_for_studio(int studio, Vector4 *position, float scale)
 {
     StudioCamera *camera;
@@ -2802,6 +2832,11 @@ static float deapth_for_studio(int studio, Vector4 *position, float scale)
     return depth;
 }
 
+/*
+ * Derives the specular and sub-window weights from the depth of the model
+ * centre through the camera. The parent's depth scale is used when
+ * useParentDepth is set, or when the model is not a face and has a parent.
+ */
 static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
 {
     f32 distanceScale = s_inLayout.slots[0x7F].f;
@@ -2885,6 +2920,7 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
         s_inLayout.slots[0xC3].f = 0.0f;
         s_inLayout.slots[0x8A].f = 0.0f;
     }
+    /* Face and human models get flag 0x800 when they are near the camera. */
     if ((s_inLayout.slots[0x94].i & (NML_RENDER_FACE_MODEL | NML_RENDER_HUMAN_MODEL)) != 0) {
         float clipDistance = __builtin_fabsf(depth);
         float clipLimit = 32582.0f;
@@ -2894,6 +2930,10 @@ static void nmlModelCalcSpecularClip(void *model, int useParentDepth)
     }
 }
 
+/*
+ * Builds the drop-shadow matrix and its offsets from the shadow vector when one
+ * is set, otherwise from layout slots 0x40 and 0x60.
+ */
 static void nmlModelCalcDropShadow(NmlModel *model)
 {
     xglMatrixUnit((float (*)[4])&s_inLayout.slots[0x180 / 4].f);
@@ -2931,6 +2971,10 @@ static void nmlModelCalcDropShadow(NmlModel *model)
     }
 }
 
+/*
+ * Sets up the circle projection: builds the camera matrix stack for the
+ * projected circle, fills s_inProReal and hands it to nmlModelSetProreal.
+ */
 static void nmlModelCalcEntryProjectCircle(NmlModel *model)
 {
     extern void nmlModelSetProreal(NmlProRealState *);
@@ -2989,6 +3033,7 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     xglMatrixStackMul(savedMatrix.rows);
     xglMatrixStackSave(s_inLayout.fields.projectionMatrix);
 
+    /* Fills the ProReal state; its size fields are 0x40 by 0x40. */
     s_inProReal[0].unmodeled_1c8 = 0x89;
     s_inProReal[0].unmodeled_1d0 = 0x3200000062LL;
     s_inProReal[0].fields.unmodeled_100 = 0;
@@ -3057,6 +3102,11 @@ static void nmlModelCalcEntryProjectCircle(NmlModel *model)
     }
 }
 
+/*
+ * Sets up the map projection for the model: derives the surface direction and
+ * projection matrix, fills s_inProReal and hands it to nmlModelSetProreal.
+ * Clears the texture-map flag and returns when the camera is too low for the map.
+ */
 static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
 {
     extern void nmlModelSetProreal(NmlProRealState *);
@@ -3079,7 +3129,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     float denom;
     float scale;
     float offset;
-    /* Never accessed: the original frame keeps this 16-byte slot (frame 272). */
+    /* Never read: the original's stack frame keeps this 16-byte slot. */
     Vector4 unusedFrameSlot;
 
     /* Empty loop kept from the original: its loop notes order the prologue
@@ -3141,6 +3191,7 @@ static void nmlModelCalcEntryProjectMap(NmlModel *model, StudioCamera *camera)
     xglMatrixStackMul(savedMatrix.rows);
     xglMatrixStackSave(s_inLayout.fields.projectionMatrix);
 
+    /* Fills the ProReal state; its size fields are 0x100 by 0xe0. */
     s_inProReal[0].unmodeled_1c8 = 0x89;
     s_inProReal[0].unmodeled_1d0 = 0x3200000062LL;
     s_inProReal[0].fields.unmodeled_100 = 0;
@@ -3220,6 +3271,11 @@ static inline void nmlModelWeightAttributeVector(
     _WeightToGlobalVec(destination, transform, weights);
 }
 
+/*
+ * Computes the clip mask of each block. Sampled models first weight and
+ * transform their vertices; a block with a weighted list gets mask 1 only when
+ * every weighted part passes its clip test.
+ */
 static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
 {
     /* Four original initialized words have no observed subsequent reader. */
@@ -3291,6 +3347,11 @@ static void nmlModelCalcEntryPartsClip(NmlModel *model, LayoutStore *layout)
     }
 }
 
+/*
+ * Adds one model to the render lists: runs the sample, clip and projection
+ * steps, copies the layout into the packet, and appends the visible blocks to
+ * the alpha and non-alpha block groups.
+ */
 void nmlModelEntry(NmlModel *model)
 {
     NmlParentBuffer *parentEntry;
@@ -3416,6 +3477,7 @@ void nmlModelEntry(NmlModel *model)
                         (char *)model + model->weightedMatrixOffset,
                         (model->partCount + model->sampleCount) * 2);
                 }
+                /* One clip-mask byte per block, allocated in whole quadwords. */
                 quadCount = model->blockCount;
                 if ((quadCount & 0xf) != 0) {
                     quadCount = quadCount - (quadCount & 0xf) + 16;
@@ -3458,6 +3520,7 @@ void nmlModelEntry(NmlModel *model)
                     (layout->fields.renderLevel & 0x200) != 0) {
                     nmlModelCalcEntryPartsClip(model, layout);
                 }
+                /* Open this model's alpha and non-alpha block groups. */
                 alphaGroup = &s_aAlphaGroup[s_nAlphaGroup];
                 alphaAdded = 0;
                 nonAlphaAdded = 0;
@@ -3483,6 +3546,7 @@ void nmlModelEntry(NmlModel *model)
                     parentAlphaCount = parent->alphaCount;
                     parentNonAlphaCount = parent->nonAlphaCount;
                 }
+                /* Route each block into the alpha or non-alpha group, skipping clipped and hidden blocks. */
                 for (index = 0; index < model->blockCount; index++) {
                     block = (NmlModelBlock *)((char *)model + blockOffsets[index]);
                     if (s_nClip != 1) {
@@ -3599,6 +3663,7 @@ void nmlModelEntry(NmlModel *model)
     nmlModelClear();
 }
 
+/* Adds one effect model to the render lists, with its own clip-mask allocation and block groups. */
 void nmlModelEntryEffect(NmlModel *model)
 {
     LayoutStore *layout;
@@ -3700,6 +3765,7 @@ void nmlModelEntryEffect(NmlModel *model)
     nmlModelClear();
 }
 
+/* Adds one card model to the render lists, with the same group handling as nmlModelEntryEffect. */
 void nmlModelEntryCard(NmlModel *model)
 {
     LayoutStore *layout;
@@ -3801,6 +3867,11 @@ void nmlModelEntryCard(NmlModel *model)
     nmlModelClear();
 }
 
+/*
+ * Draws the ProReal passes for the non-alpha groups that the model can see.
+ * Each block is culled against the model's bounds and plane before it is
+ * added to the packet. Returns the last nmlPacketAddParts result.
+ */
 static int nmlModelRenderProreal(LayoutStore *model, int frame)
 {
     int groupIndex;
@@ -3847,6 +3918,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
             }
         }
 
+        /* Set up the GS state for one ProReal pass. */
         nmlPacketGsInit();
         nmlPacketAddGsTexture();
         nmlPacketAddGsZbuf(1);
@@ -3864,6 +3936,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
         nmlPacketAddGsFlush();
         nmlPacketAddGifTagStandard(1, 1);
 
+        /* Cull each block by its bounds, then add it to the packet. */
         for (index = s_aNonAlphaGroup[groupIndex].firstBlock;
              index < s_aNonAlphaGroup[groupIndex].firstBlock + s_aNonAlphaGroup[groupIndex].blockCount;
              index++) {
@@ -3915,6 +3988,7 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                 }
             }
 
+            /* Add the block with the ProReal override set on its layout. */
             layout->fields.render_status |= NML_RENDER_PROREAL;
             layout->fields.prorealOverride = model->fields.proreal;
             nmlPacketAddTransMicrocode(&entry->block,
@@ -3941,6 +4015,11 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
     return result;
 }
 
+/*
+ * Renders the texture groups in range for the frame. Returns early when the
+ * camera is missing or the owner's transparency is below the minimum;
+ * otherwise draws each non-face layout, then its ProReal pass.
+ */
 static int nmlModelRenderTexture(NmlBlockGroup *range, int step,
                                  int frame)
 {
@@ -4029,6 +4108,7 @@ render_done:
     return result;
 }
 
+/* Draws the circle shadow for the first non-face model of the group. Returns 0 when the owner is not visible enough. */
 static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame)
 {
     extern unsigned short s_aBlockLayout[NML_BLOCK_POOL_SIZE];
@@ -4070,6 +4150,7 @@ static int nmlModelRenderCircle(const NmlBlockGroup *group, int pitch, int frame
     return result;
 }
 
+/* Creates the drop-shadow circle texture from the group's first non-face model. Always returns 0. */
 static int nmlModelRenderDropCircle(const NmlBlockGroup *group, int pitch, StudioCamera *camera)
 {
     int index;
@@ -4093,6 +4174,7 @@ static int nmlModelRenderDropCircle(const NmlBlockGroup *group, int pitch, Studi
     return 0;
 }
 
+/* Draws the drop-shadow pass for the non-face blocks of range, marking each layout with NML_RENDER_DROP_PASS while its parts are added. */
 static int nmlModelRenderDrop(NmlBlockGroup *range,
                               int step, StudioCamera *screen, int mode)
 {
@@ -4134,6 +4216,11 @@ static int nmlModelRenderDrop(NmlBlockGroup *range,
     return partsResult;
 }
 
+/*
+ * Flushes the non-alpha groups for one viewport. Groups that are ProReal or
+ * culled, and groups outside the viewport's subwindow, are skipped. Returns the
+ * first nonzero packet result, or 0.
+ */
 static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
 {
     int result;
@@ -4234,6 +4321,10 @@ static int nmlModelFlushSubNonAlpha(int viewport, StudioCamera *camera)
     return result;
 }
 
+/*
+ * Flushes the alpha groups for one viewport, walking each group's blocks in
+ * reverse order. Returns the first nonzero packet result, or 0.
+ */
 static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
 {
     int result;
@@ -4459,6 +4550,11 @@ static int nmlModelFlushSubAlpha(int viewport, StudioCamera *camera)
     return result;
 }
 
+/*
+ * Draws one viewport: sets its camera screen and scissor, then the non-alpha
+ * groups, the texture, circle and drop groups, the alpha groups and the direct
+ * data for that viewport.
+ */
 static int nmlModelFlushSub(int viewport)
 {
     int result;
@@ -4489,6 +4585,7 @@ static int nmlModelFlushSub(int viewport)
             return 0;
         }
     }
+    /* Non-alpha groups first; direct data is sent only for viewport 0. */
     result = nmlModelFlushSubNonAlpha(viewport, camera);
     if (result == 0 && viewport == 0) {
         for (index = 0; index < s_nDirect; index++) {
@@ -4652,6 +4749,11 @@ void nmlModelClear(void) {
     CLEAR_MODEL_ENTRY();
 }
 
+/*
+ * Renders the frame: sets the back-buffer and GS state, sorts the alpha groups,
+ * draws the main viewport and the sub-windows, then advances the back-buffer
+ * and fade timers.
+ */
 void nmlModelFlush(void)
 {
     int result = 0;
@@ -4703,6 +4805,7 @@ void nmlModelFlush(void)
         }
     }
 
+    /* Main viewport first, then the sub-windows. */
     if (s_nRenderCancel == 0) {
         result = nmlModelFlushSub(0);
     }
@@ -4728,6 +4831,7 @@ void nmlModelFlush(void)
         }
     }
 
+    /* Advance the back-buffer timers, then capture the buffer when one is requested. */
     if (s_inBackBuffer[3] != 0 && --s_inBackBuffer[3] == 0) {
         s_inBackBuffer[0] = 1;
         s_inBackBuffer[1] = s_inBackBuffer[2];

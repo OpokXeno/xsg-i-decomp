@@ -53,6 +53,10 @@ void *xglTaskInitial(void *manager, int capacity, int flags)
     return afterPool;
 }
 
+/*
+ * Takes a task from the free list and links it before `entry`, or makes it the only
+ * active task when `entry` is 0.  Returns the task, or 0 when none is free.
+ */
 XglTaskPrefix *xglTaskEntryPrev(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry)
@@ -85,6 +89,10 @@ XglTaskPrefix *xglTaskEntryPrev(XglTaskScheduler *scheduler,
     return task;
 }
 
+/*
+ * Takes a task from the free list and links it after `entry`, or makes it the only
+ * active task when `entry` is 0.  Returns the task, or 0 when none is free.
+ */
 XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
                                 int (*callback)(XglTaskPrefix *task),
                                 XglTaskPrefix *entry)
@@ -117,6 +125,7 @@ XglTaskPrefix *xglTaskEntryNext(XglTaskScheduler *scheduler,
     return task;
 }
 
+/* Unlinks `task` from its scheduler's active list and returns it to the free list. */
 int xglTaskRemove(XglTaskPrefix *task)
 {
     XglTaskScheduler *scheduler = task->scheduler;

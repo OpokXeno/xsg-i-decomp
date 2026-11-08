@@ -15,7 +15,7 @@
 #define JPEG_LEVEL_SHIFT 128.0f
 #define JPEG_IDCT_SCALE 0.125f
 
-/* Chroma subsampling of the first component (JPEG SOF sampling factors, H << 4 | V). */
+/* Chroma subsampling mode; each mode's SOF sampling factors (H << 4 | V) are JPEG_SAMPLING_FACTORS_*. */
 typedef enum JpegSamplingMode {
     JPEG_SAMPLING_444,
     JPEG_SAMPLING_422,
@@ -54,7 +54,7 @@ typedef enum JpegComponent {
 #define JPEG_AC_ZRL 0xF0 /* 16 zeros in a row */
 #define JPEG_ZRL_RUN 16
 
-/* Layout of headerALL, the canned JFIF/DQT/SOF0/DHT/SOS header written by the encoder. */
+/* Layout of headerALL, the canned JFIF/DQT/SOF0/DHT/SOS header copied to the start of each encoded image. */
 #define JPEG_HEADER_SIZE 0x26F
 #define JPEG_HEADER_DENSITY_OFFSET 14
 #define JPEG_HEADER_DQT_LUMA_OFFSET 25
@@ -64,11 +64,11 @@ typedef enum JpegComponent {
 #define JPEG_HEADER_DHT_AC_LUMA_OFFSET 0xD7
 #define JPEG_HEADER_DHT_DC_CHROMA_OFFSET 0x18E
 #define JPEG_HEADER_DHT_AC_CHROMA_OFFSET 0x1AF
-/* Pixel density written into the header is 100 per display pixel over the encoded size. */
+/* JFIF density fields are these numerators divided by the image height and width. */
 #define JPEG_DENSITY_HEIGHT_NUMERATOR 0xAF00
 #define JPEG_DENSITY_WIDTH_NUMERATOR 0xFA00
 
-/* The decoder and encoder work area lives in the scratchpad; decoded RGBA texels are staged after it. */
+/* The codec work area lives in the scratchpad; pixel staging buffers start 0x3000 bytes above its base. */
 #define JPEG_WORK_ADDRESS SCRATCHPAD_BASE
 #define JPEG_STAGING_ADDRESS (SCRATCHPAD_BASE + 0x3000)
 
@@ -320,7 +320,11 @@ static u8 headerALL[JPEG_HEADER_SIZE] = {
     0xFA, 0xFF, 0xDA, 0x00, 0x0C, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3F, 0x00
 };
 
-/* Input rows contain sixteen consecutive Y/U/V float triples. */
+/*
+ * Splits YUV float pixels into the 8x8 planes of one MCU for the given sampling
+ * mode. Input rows hold sixteen consecutive Y/U/V float triples. Luma planes are
+ * level-shifted by 128; subsampled chroma planes are averaged over their pixels.
+ */
 static void ConvertYUV2MCU(float *planes, const float *pixels, int samplingMode)
 {
     int row;
@@ -374,6 +378,10 @@ static void ConvertYUV2MCU(float *planes, const float *pixels, int samplingMode)
     }
 }
 
+/*
+ * Forward 8x8 DCT of a float block, in place. The first pass transforms each
+ * row into work->idct_block; the second transforms each column back into block.
+ */
 static void FFDCT(float *block)
 {
     JpegWork *work = sw;
@@ -428,6 +436,7 @@ static void FFDCT(float *block)
                         samples[6] * oddWeight5 + samples[7] * negativeOddWeight7;
     }
 
+    /* Second pass: transform each column of the intermediate block into block. */
     bottomRow = &work->idct_block[7];
     for (coordinate = 0; coordinate < 8; coordinate++) {
         block[coordinate] = (bottomRow[-7][coordinate] + bottomRow[-6][coordinate] +
@@ -448,6 +457,7 @@ static void FFDCT(float *block)
     }
 }
 
+/* Quantizes 64 coefficients: each is scaled by its reciprocal and rounded away from zero. */
 static void Quantize(int *quantized, const float *coefficients, const float *reciprocals)
 {
     float coefficient;
@@ -471,6 +481,11 @@ static void Quantize(int *quantized, const float *coefficients, const float *rec
     }
 }
 
+/*
+ * Builds the 64 quantizers for one component from a quality value (clamped to
+ * 1..100), scaling the luminance or chrominance base table. Stores the quantizers
+ * as bytes and their reciprocals as floats.
+ */
 static void RebuildQuantizeTable(u8 *quantizers, float *reciprocals,
                                  int chrominance, int quality)
 {
@@ -511,6 +526,7 @@ static void RebuildQuantizeTable(u8 *quantizers, float *reciprocals,
     }
 }
 
+/* Appends the low length bits of code to the output, stuffing a 0x00 after each 0xFF byte. */
 static void PutBits(u16 code, int length)
 {
     u8 *output = sw->buffer;
@@ -541,6 +557,10 @@ static void PutBits(u16 code, int length)
     }
 }
 
+/*
+ * Encodes one DC difference: its size category through the Huffman table, then
+ * the magnitude bits (one's complement for negative values).
+ */
 static void EncodeDc(int value, JpegHuffCode *table)
 {
     int magnitude;
@@ -574,6 +594,10 @@ static void EncodeDc(int value, JpegHuffCode *table)
     PutBits(bits, length);
 }
 
+/*
+ * Encodes one AC coefficient; runIndex is the zero-run times 16. A zero value
+ * emits the table entry at runIndex instead (EOB or ZRL, as used by HuffmanEncode).
+ */
 static void EncodeAc(int value, int runIndex, JpegHuffCode *table)
 {
     int magnitude;
@@ -611,6 +635,7 @@ static void EncodeAc(int value, int runIndex, JpegHuffCode *table)
     PutBits(bits, length);
 }
 
+/* Huffman-encodes one quantized 8x8 block in zigzag order: the DC difference, then the AC runs. */
 static void HuffmanEncode(int *coefficients, JpegHuffCode *dcCodes,
                          JpegHuffCode *acCodes, int *previousDc)
 {
@@ -648,6 +673,10 @@ static void HuffmanEncode(int *coefficients, JpegHuffCode *dcCodes,
     }
 }
 
+/*
+ * Builds canonical Huffman codes into table from a DHT segment body: 16 code-length
+ * counts followed by the symbols.
+ */
 static void ExtractHuffmanTableSub(JpegHuffCode *table, const u8 *symbols, int tableSize)
 {
     const u8 *counts;
@@ -675,6 +704,11 @@ static void ExtractHuffmanTableSub(JpegHuffCode *table, const u8 *symbols, int t
     }
 }
 
+/*
+ * Encodes the request's frame buffer rectangle as a baseline JPEG into
+ * request->outputBuffer and stores the byte count in request->outputSize.
+ * The image is read one MCU at a time and converted from RGB to YCbCr.
+ */
 int xglJpegEncode(JpegEncodeRequest *request)
 {
     u8 *header;
@@ -688,6 +722,7 @@ int xglJpegEncode(JpegEncodeRequest *request)
     int mcuHeight;
     int quotient;
 
+    /* Quantizer and Huffman tables, then the canned header with the image size. */
     sw->rowBytes = request->width * 3;
     RebuildQuantizeTable(sw->unmodeled_02d0, sw->luminanceQuantization, 0, request->luminanceQuality);
     RebuildQuantizeTable(&sw->unmodeled_02d0[JPEG_BLOCK_COEFFS], sw->chrominanceQuantization, 1, request->chrominanceQuality);
@@ -760,6 +795,7 @@ int xglJpegEncode(JpegEncodeRequest *request)
         break;
     }
 
+    /* Per MCU: store the frame buffer rectangle, convert to YUV, transform, quantize and encode. */
     for (y = 0; y < request->height; y += mcuHeight) {
         for (x = 0; x < request->width; x += mcuWidth) {
             sceGsSetDefStoreImage(&sw->unmodeled_0000[JPEG_STORE_IMAGE_OFFSET], request->sourceX, request->sourceY, SCE_GS_PSMCT24,
@@ -849,6 +885,7 @@ int xglJpegEncode(JpegEncodeRequest *request)
         }
     }
 
+    /* Flush the partial byte, then write the EOI marker. */
     if (sw->bitsRemaining != 0) {
         sw->buffer[sw->outputPosition] = sw->bufferedByte;
         sw->outputPosition++;
@@ -862,7 +899,7 @@ int xglJpegEncode(JpegEncodeRequest *request)
 
 /* A DRI marker carries a big-endian restart interval in bytes 2 and 3.
  * The parser stores that value and its successor at +0x2BA0/+0x2BA4,
- * then returns the next segment byte. */
+ * then returns the pointer 4 bytes past the marker. */
 static void *DefineRestartInterval(void *marker)
 {
     u8 *segment = marker;
@@ -875,9 +912,8 @@ static void *DefineRestartInterval(void *marker)
     return segment + 4;
 }
 
-/* Each quantization table has 64 floats. DefineQuantizeTable selects
- * luminance for table ID 0 and chrominance otherwise; HuffmanDecode uses
- * the same bases (main:0x224c24/0x224c30) and indexes 64 coefficients. */
+/* Reads a DQT segment into the luminance (table ID 0) or chrominance quantizer
+ * array as 64 floats. Returns the position after the segment. */
 static u8 *DefineQuantizeTable(u8 *marker)
 {
     u8 *segment;
@@ -904,6 +940,10 @@ static u8 *DefineQuantizeTable(u8 *marker)
     return segment;
 }
 
+/*
+ * Reads an SOF0 segment: image height and width, and the first component's
+ * sampling factors, which select the sampling mode. Returns the position after the segment.
+ */
 static u8 *StartOfFrame(u8 *segment)
 {
     JpegWork *work = sw;
@@ -928,6 +968,10 @@ static u8 *StartOfFrame(u8 *segment)
     return segment + ((segment[0] << 8) + segment[1]);
 }
 
+/*
+ * Reads a DHT segment into the decode tables as code/symbol pairs, each length
+ * group closed by 0xFE and the table by 0xFF. Returns the position after the segment.
+ */
 static u8 *DefineHuffmanTable(u8 *segment)
 {
     JpegWork *work;
@@ -980,6 +1024,10 @@ static u8 *DefineHuffmanTable(u8 *segment)
     return cursor;
 }
 
+/*
+ * Returns the next entropy-coded bit, most significant first. A new byte is read
+ * when the current one is used up; the 0x00 after each 0xFF is skipped.
+ */
 static int GetBit(void)
 {
     u8 *buffer;
@@ -1002,6 +1050,7 @@ static int GetBit(void)
     return (sw->bufferedByte >> sw->bitsRemaining) & 1;
 }
 
+/* Reads bits, one code length at a time, until the code matches a table entry; returns its symbol. */
 static s16 decode_sub(s16 *codes)
 {
     u32 code = 0;
@@ -1021,6 +1070,11 @@ static s16 decode_sub(s16 *codes)
     }
 }
 
+/*
+ * Decodes one 8x8 block of a component into dequantized float coefficients in
+ * zigzag order. The DC value is coded as a difference from the component's
+ * predictor, which is updated.
+ */
 static void HuffmanDecode(float *coefficients, int component)
 {
     JpegWork *work;
@@ -1051,6 +1105,7 @@ static void HuffmanDecode(float *coefficients, int component)
         break;
     }
 
+    /* DC: size category, then the magnitude bits, added to the predictor. */
     value = 0;
     predictor = &work->dcPredictors[component];
     bits = decode_sub(dcCodes);
@@ -1073,6 +1128,7 @@ static void HuffmanDecode(float *coefficients, int component)
     *predictor = value;
     coefficients[0] = I2F(value) * quantization[0];
 
+    /* AC: run and size symbols until the block is full; runs of zeros are stored as 0.0f. */
     do {
         value = 0;
         bits = decode_sub(acCodes);
@@ -1207,6 +1263,10 @@ static void FFIDCT(float block[8][8])
     }
 }
 
+/*
+ * Expands the decoded MCU planes into YUV pixels for the current sampling mode,
+ * replicating each subsampled chroma sample over the pixels it covers.
+ */
 static void ConvertMCU2YUV(void)
 {
     JpegWork *work = sw;
@@ -1263,6 +1323,10 @@ static void ConvertMCU2YUV(void)
     }
 }
 
+/*
+ * Converts a width x height block of YUV pixels into 32-bit words at the staging
+ * address, clamping each channel to 0..255 on VU0.
+ */
 static void ConvertYUV2RGB(int width, int height)
 {
     int row = 0;
@@ -1306,6 +1370,11 @@ static void ConvertYUV2RGB(int width, int height)
     }
 }
 
+/*
+ * Decodes the entropy-coded data of the scan that follows segment, MCU by MCU,
+ * into the request's destination or the GS frame buffer. Returns the address of
+ * the next marker.
+ */
 static u8 *StartOfScan(u8 *segment, void *requestAddress)
 {
     JpegDecodeControl *request = requestAddress;
@@ -1384,7 +1453,7 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
             u32 restartPeriod = sw->restart_interval;
             /* A restart interval resets the bit reader and the DC predictors. */
             if (restartPeriod != 0 && --sw->restart_interval_plus_one == 0) {
-                sw->restart_interval_plus_one = restartPeriod; /* restart the interval countdown */
+                sw->restart_interval_plus_one = restartPeriod;
                 sw->buffer += 2; /* step over the RSTn marker */
                 sw->bitsRemaining = 0; /* no bits left in the current byte */
                 sw->dcPredictors[JPEG_COMPONENT_CR] = 0;
@@ -1404,7 +1473,7 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
             HuffmanDecode(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CB * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_CB);
             HuffmanDecode(sw->decodedMcuPlanes.planes + JPEG_BLOCK_CR * JPEG_BLOCK_COEFFS, JPEG_COMPONENT_CR);
 
-            /* MCUs outside the requested crop window are decoded but not converted or stored. */
+            /* MCUs that start beyond the crop limit are decoded but not converted or stored. */
             if (mcuX <= sw->maximumX && mcuY <= sw->maximumY) {
                 /* Inverse DCT of each decoded 8x8 block, in decode order. */
                 FFIDCT(sw->decodedMcuPlanes.blocks[0]);
@@ -1425,12 +1494,12 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
                 if (request->destination == 0) {
                     /* The load-image packet lives in the work area; the MCU is read from 0x70003000. */
                     sceGsSetDefLoadImage(sw, request->frameBufferBase, request->frameBufferWidth, SCE_GS_PSMCT32,
-                                         (short)(request->originX + mcuX), /* GS x */
-                                         (short)(request->originY + mcuY), /* GS y */
+                                         (short)(request->originX + mcuX),
+                                         (short)(request->originY + mcuY),
                                          (short)mcuWidth, (short)mcuHeight); /* upload size: one MCU */
                     sceGsExecLoadImage(sw, (void *)JPEG_STAGING_ADDRESS);
                 } else if (request->pixelFormat & JPEG_PIXEL_FORMAT_RGB555) {
-                /* 16-bit RGB555 destination: pack each RGBA texel. */
+                    /* 16-bit RGB555 destination: pack each RGBA texel. */
                     for (texelRow = 0; texelRow < mcuHeight; texelRow++) {
                         int texelsLeft;
 
@@ -1442,8 +1511,8 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
                             int blue555 = (stagedRgba[2] >> 3) << 10;
 
                             *(u16 *)destCursor = (u16)((stagedRgba[0] >> 3) + (blue555 + green555));
-                            destCursor += JPEG_RGB555_BYTES; /* advance one RGB555 pixel */
-                            stagedRgba += JPEG_RGBA_BYTES; /* advance one RGBA texel */
+                            destCursor += JPEG_RGB555_BYTES;
+                            stagedRgba += JPEG_RGBA_BYTES;
                         }
                     }
                 } else {
@@ -1453,7 +1522,7 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
 
                     for (texelRow = 0; texelRow < mcuHeight; texelRow++) {
                         if (sw->imageWidth < mcuX + mcuWidth) {
-                            /* Clip the last MCU mcuX to the image width. */
+                            /* Last MCU column: clip the row to the image width. */
                             memcpy(destCursor, stagedRgba, (sw->imageWidth - mcuX) * JPEG_RGBA_BYTES);
                         } else {
                             memcpy(destCursor, stagedRgba, mcuWidth * JPEG_RGBA_BYTES);
@@ -1472,11 +1541,16 @@ static u8 *StartOfScan(u8 *segment, void *requestAddress)
         while (*segment++ != JPEG_MARKER_PREFIX) {
         }
         if (*segment != 0) {
-            return segment - 1; /* return the address of the marker byte */
+            return segment - 1;
         }
     }
 }
 
+/*
+ * Decodes the JPEG at request->source: applies the colour scale percentages,
+ * walks the markers up to EOI or the first RST marker, and writes the image
+ * size back to request->imageLimits.
+ */
 int xglJpegDecode(void *requestAddress)
 {
     JpegDecodeControl *request = requestAddress;
@@ -1520,6 +1594,7 @@ int xglJpegDecode(void *requestAddress)
     default:
         break;
     }
+    /* Each segment handler returns the position where parsing continues. */
     cursor = request->source;
     for (;;) {
         while (*cursor++ != JPEG_MARKER_PREFIX) {

@@ -14,6 +14,7 @@
 #define XGL_FLAGS_OFFSET 0x74
 #define XGL_FLAGS_AREA_SIZE 0x10000
 
+/* Stores the low `bit_count` bits of `value` at bit `bit_offset` of the flag area; returns the previous field value. */
 int xglFlagsSet(int bit_offset, int bit_count, int value)
 {
     union XglPackedFlagWindow flag_window;
@@ -87,6 +88,7 @@ int xglFlagsSet32(int bit_offset, int value)
     return xglFlagsSet(bit_offset, 32, value);
 }
 
+/* Stores the 64-bit `value` as two 32-bit fields from `bit_offset`; returns the previous value. */
 long long xglFlagsSet64(int bit_offset, long long value)
 {
     unsigned long long low;
@@ -103,6 +105,7 @@ long long xglFlagsSet64(int bit_offset, long long value)
     return (long long)((high << 32) + low);
 }
 
+/* Returns the `bit_count`-bit field at bit `bit_offset` of the flag area. */
 int xglFlagsGet(int bit_offset, int bit_count)
 {
     union XglPackedFlagWindow value;
@@ -156,6 +159,7 @@ int xglFlagsGet32(int bit_offset)
     return xglFlagsGet(bit_offset, 32);
 }
 
+/* Returns the 64-bit field at `bit_offset`, composed of two 32-bit reads. */
 unsigned long long xglFlagsGet64(int bit_offset)
 {
     unsigned long long low;
@@ -176,7 +180,7 @@ void xglFlagsInitial(void)
 {
     unsigned int byte_index;
 
-    /* The observed byte window is cleared exactly from 0x74 for 0x10000 bytes. */
+    /* Clears the 0x10000 bytes of the flag area that start at SaveData + 0x74. */
     for (byte_index = XGL_FLAGS_AREA_SIZE; byte_index != 0; byte_index--) {
         SaveData[XGL_FLAGS_OFFSET + XGL_FLAGS_AREA_SIZE - byte_index] = 0;
     }

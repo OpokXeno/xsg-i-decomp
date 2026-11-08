@@ -1,5 +1,6 @@
 /*
  * OV02 original TU 8: 0x00a04170..0x00a05738 (11 functions)
+ * The Manzai windows and the procurator model workers.
  */
 #include "common.h"
 #include "shared.h"
@@ -70,7 +71,7 @@ typedef union UmnLightSet {
     u64 words[14];
 } UmnLightSet;
 
-/* Defined in main/tu165 over a view whose only used member is the actor at +0x20, the same as MenuModelUnit. */
+/* Defined in main/tu165 (menu_model.c), which takes a MenuModelMotionTarget view of the unit. */
 extern void MenuModelMotionSet(MenuModelUnit *unit, unsigned int data_id);
 extern const char manzaiFlagDebugFormat[];
 extern const char manzaiWindowPhaseDebugFormat[];
@@ -79,6 +80,10 @@ extern const UmnLightSet manzaiModelLightTable;
 extern const DoublewordAlignedVector4 manzaiSubWindowCameraOffsetVector;
 extern const DoublewordAlignedVector4 manzaiSubWindowFaceOffsetVector;
 
+/*
+ * Advances the Manzai text when the circle button confirms a page. Returns 0
+ * once the text is finished and both windows are hidden, otherwise 1.
+ */
 int UmnManzaiControl(void)
 {
     unsigned int flag = UmnManzaiFlag;
@@ -112,6 +117,11 @@ int UmnManzaiControl(void)
     return 1;
 }
 
+/*
+ * Builds the text for event_no, creates the two procurator models and the
+ * window tasks, and sets the initial Manzai flags. Returns -1 when the event
+ * text cannot be made.
+ */
 int UmnManzaiInit(int event_no)
 {
     UmnManzaiWinTask *window;
@@ -136,7 +146,6 @@ int UmnManzaiInit(int event_no)
             window->task_index = next_index;
             index = next_index;
         }
-        /* Advance this loop to the next task record. */
         window++;
     } while (index < UMN_MANZAI_WINDOW_COUNT);
     UmnManzaiFlag = UMN_MANZAI_UKN_MOVING | UMN_MANZAI_SON_MOVING;
@@ -183,6 +192,7 @@ void tskUmnManzaiWin(UmnObjectTask *task, void *data)
         return;
     }
 
+    /* Steps the window through its slide-in, idle and slide-out phases. */
     switch (window->phase) {
     case UMN_MANZAI_WIN_START:
         window->phase = UMN_MANZAI_WIN_WAIT_SHOWN;
@@ -275,6 +285,7 @@ void tskUmnManzaiWin(UmnObjectTask *task, void *data)
         break;
     }
 
+    /* Draws the ribbon, the message box and the debug phase once the window is ready. */
     if (window->ready != 0) {
         endPrintExtFunc(0, END_PRINT_CMD_RIBBON, window->rows);
         if (window->task_index == 1) {
@@ -304,6 +315,11 @@ static void LocalLightSet(void *model, int unused)
     actor->flags |= 0x8000;
 }
 
+/*
+ * Model worker for UmnModelSon: it enters, opens the sub window and slides it
+ * to the speaking or listening size, depending on whether the text's speaker
+ * is UMN_EVENT_SPEAKER_SHION.
+ */
 void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
 {
     Actor *actor;
@@ -380,6 +396,7 @@ void UmnProcuratorManzai2(MenuModelUnit *task, void *argument)
             UmnManzaiFlag |= UMN_MANZAI_SON_VISIBLE;
         }
         break;
+    /* Opens the sub window and aims the camera at the model. */
     case UMN_MANZAI_MODEL_SUBWINDOW:
         {
             DoublewordAlignedVector4 local = manzaiSubWindowCameraOffsetVector;
@@ -498,6 +515,10 @@ static void Rotation(float *out, float *position, float *base, float *rotation)
     out[2] = base[2] + matrix[3][2];
 }
 
+/*
+ * Model worker for the other Manzai model (UmnModelUkn): it enters, opens its
+ * sub window and closes it again when the text is finished.
+ */
 void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
 {
     Actor *actor;
@@ -647,6 +668,10 @@ void UmnProcuratorManzai(MenuModelUnit *task, void *argument)
     xglFontDebugPrintf(0x80, 0x18, manzaiModelStateDebugFormat, task->extFuncFlag);
 }
 
+/*
+ * Model worker for the mail procurator: on its first call it sets the camera
+ * and opens the model, then eases scale, offset and rotation into place.
+ */
 void UmnProcuratorMail(MenuModelUnit *task, void *argument)
 {
     AlignedVector4 *offset;
@@ -716,6 +741,7 @@ void UmnProcuratorMail(MenuModelUnit *task, void *argument)
         task->extFuncFlag = 2;
 }
 
+/* Model worker for the top menu procurator: sets its resting pose and keeps it open. */
 void UmnProcuratorTop(MenuModelUnit *task, void *argument)
 {
     AlignedVector4 *offset;
@@ -747,6 +773,7 @@ void UmnProcuratorTop(MenuModelUnit *task, void *argument)
     task->extFuncFlag = 2;
 }
 
+/* Model worker that moves the procurator away and ends its task once its transparency is 0. */
 void UmnProcuratorGoodBy(MenuModelUnit *task, void *argument)
 {
     ActorMenuControl *menu;
@@ -772,6 +799,7 @@ void UmnProcuratorGoodBy(MenuModelUnit *task, void *argument)
     }
 }
 
+/* Selects the procurator model worker for the current mode, creating the model on first use. */
 void UmnProcuratorSet(void)
 {
     switch (UmnWork.mode) {

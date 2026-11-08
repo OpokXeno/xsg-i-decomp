@@ -16,11 +16,9 @@ extern void menuTimeSet(int);
 extern int *actStockGet(void);
 
 /*
- * The one queued-command word calcTurnStart (this TU) reads
- * through unitCmdPtrGet's return (`lw $3,0x0($2)`), and the two further
- * words calcTurnStart writes through unitCmdSet's second argument
- * (`sw $2,0x0($29)` / `sw $3,0x4($29)` / `sw $0,0x8($29)` at 0x00a12c00,
- * both defined in src/ov01/unit_cmd.c).
+ * The queued-command word calcTurnStart (this TU) reads through
+ * unitCmdPtrGet's return, and the words it writes through unitCmdSet's
+ * second argument (both defined in src/ov01/unit_cmd.c).
  */
 #include "ov01/unit_cmd.h"
 typedef CmdEntry CalcCmdEntry;
@@ -53,15 +51,14 @@ extern int rnd(int max);
 typedef struct WpnData WpnData;
 
 struct WpnData {
-    short attack;                      /* +0x00: calcWpnAtkGet's own base term,
-                                       * `lh $19,0x0($2)` (0x00a13438) */
+    short attack;                      /* +0x00: base term calcWpnAtkGet reads */
     unsigned char unmodeled_02[0x0F - 0x02];
-    signed char apCost;               /* +0x0F: calcWpnEnableChk's `lb $4,0xF($17)`
+    signed char apCost;               /* +0x0F: AP cost calcWpnEnableChk compares
                                        * against the AP count calcAp keeps */
     u8 equipped;                      /* +0x10: calcAttWpnChk's own check */
     unsigned char unmodeled_11[0x14 - 0x11];
-    short tecId;                      /* +0x14: calcWpnEnableChk's `lh $4,0x14($17)`
-                                       * passed to dataTecGet/calcTakeEpGet */
+    short tecId;                      /* +0x14: tech id calcWpnEnableChk passes to
+                                       * dataTecGet/calcTakeEpGet */
     unsigned char unmodeled_16[0x18 - 0x16];
     short dblAct;                     /* +0x18: calcDblActChk requires nonzero */
     unsigned char unmodeled_1a[0x1C - 0x1A];
@@ -76,9 +73,8 @@ extern WpnData *dataWpnGet(int weaponId);
  * sets it up with the control points, their count, the duration in frames
  * as a float and a fixed 0.5 tension, the frame counter starting at zero.
  * The types are the readers' own: calcSpline loads +0x00 as the point
- * array it indexes by 16 (`lw $5,0x0($16)`, `sll $3,$6,4`, `lwc1 $f0,0x0($3)`)
- * and +0x04 as the point count (`lw $4,0x4($16)`, `addiu $6,$4,-0x1`);
- * calcHermiteSub scales its tangents by +0x0C (`lwc1 $f2,0xC($4)`).
+ * array it indexes by 16 bytes per entry and +0x04 as the point count;
+ * calcHermiteSub scales its tangents by +0x0C.
  */
 typedef struct CalcSpline {
     Vector4 *points;   /* +0x00 */
@@ -92,8 +88,8 @@ typedef struct CalcSpline {
  * The 0x180-byte parameter table calcCopyParaMake fills from a unit's
  * origin record and calcTotalParaMenuSub hands back. calcCopyParaMake
  * copies the whole origin into it first, so the offsets below are the
- * origin's: agwsId is the halfword at +0x38 (`lh $4,0x38($16)`, tested
- * against 0x10 before any AGWS adjustment), engineId/frameId are +0x56/+0x58.
+ * origin's: agwsId is the halfword at +0x38 (tested against 0x10 before any
+ * AGWS adjustment), engineId/frameId are +0x56/+0x58.
  */
 typedef struct CalcParaTable {
     short maxHp;            /* +0x00 */
@@ -134,6 +130,11 @@ extern const char calcAGWSParaEPEPMAXText[]; /* "** AGWS para = EP=%d EPMAX=%d\n
 extern const char calcAGWSParaEatkEdefHITEVAText[]; /* "** AGWS para = Eatk=%d Edef=%d HIT=%d EVA=%d\n" */
 extern CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table);
 
+/*
+ * Builds the parameter table for a unit from its origin record. For an AGWS
+ * unit, the pilot's stats and the frame and engine adjustments are applied
+ * on top.
+ */
 void calcCopyParaMake(CalcCharParaData *origin, unsigned char *table)
 {
     unsigned char buf[0x180];
@@ -179,22 +180,12 @@ void calcCopyParaMake(CalcCharParaData *origin, unsigned char *table)
 }
 
 /*
- * calcTotalParaMenuSub/calcSkillEquChkAll's (this TU) own fake unit: a
- * stack-local BattleUnit/Actor pair whose `work`/`up` chain
- * (calcUPGet's own traversal, 0x00a11010..0x00a1101c) is pointed at a
- * temporary CalcUnitParam-compatible record instead of a live battle unit,
- * so the two functions can reuse calcSkillInit/calcWpnAtkGet/calcPhyDefGet/
- * calcMagDefGet/calcSkillEquChk for a unit that has no BattleUnit;
- * calcPara2Org (below) uses the same pair for calcPara2OrgSub.
- * calcTotalParaMenuSub allocates 0x80/0x110 bytes for the pair
- * (`addiu v0,sp,128`, sp+0x190 for the outer's own end), matching the
- * BattleUnit/Actor prefixes it actually writes through plus the
- * task-specific payload xglTaskEntryNext callers leave unwritten here.
+ * Stack-local stand-in for a unit that has no BattleUnit. calcTotalParaMenuSub
+ * points the `work` chain of a BattleUnit/Actor pair at a temporary
+ * CalcUnitParam-compatible record, so calcSkillInit, calcWpnAtkGet,
+ * calcPhyDefGet and calcMagDefGet can run on it. The 0x110-byte Actor extent
+ * keeps the stack frame at its original size.
  */
-/* The scratch record for a fake unit: the head the fake-unit code writes
- * (flags at +0x00, the CalcUnitParam pointer at +0x84, as in Actor) and the
- * 0x110-byte extent that keeps the stack frames the original sizes. Fake units
- * are passed as (Actor *) &record at each use. */
 typedef struct CalcScratchActor {
     u32 flags;                                    /* +0x00 */
     unsigned char unmodeled_04[0x84 - 0x04];
@@ -263,16 +254,14 @@ void calcPara2OrgSub(BattleUnit *unit) {
 }
 
 /*
- * Gives one hit point in the persistent origin record to every unit that,
- * when its table slot is re-read after the two lookups, is gone or dead
- * (ACTOR_FLAG_DEAD), or whose origin record is at zero HP. A slot that is already empty at
- * the first read is skipped: it has no origin record to update.
+ * Sets the HP of every unit's origin record to 1 when the unit's table slot,
+ * re-read after the two lookups, is gone or dead (ACTOR_FLAG_DEAD), or when
+ * the origin record's HP is already zero. A slot that is empty at the first
+ * read is skipped: it has no origin record to update.
  *
- * The original keeps the unit table in a register across the loop (`lw
- * $5,0x0($29)` once before it, 0x00a10f74) and refreshes that register after
- * the two calls through a second load that is copied over it (`lw $2,0x0($29)`
- * / `daddu $5,$2`, 0x00a10fa8..0x00a10fac) before the element is indexed
- * through the refreshed copy (`addu $3,$16,$5`). Only this spelling, the
+ * The original keeps the unit table pointer in a register across the loop and
+ * refreshes that register after the two calls through a second load, then
+ * indexes the element through the refreshed copy. Only this spelling, the
  * re-read into its own local and the cursor assigned from it, reproduces
  * that copy: reading `table` again directly merges into one load.
  */
@@ -358,15 +347,14 @@ int calcHpDmg(BattleUnit *src, BattleUnit *dst, int packedHit, int amount)
 }
 
 /*
- * calcTotalParaMenuSub (this TU, defined below, 0x00a11128): calcTotalParaMenu's
- * tail-called worker, given the same three arguments plus the per-charaId
- * table below.
+ * calcTotalParaMenuSub (this TU, defined below): the worker calcTotalParaMenu
+ * forwards to, with the scratch table below.
  */
 extern CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table);
 
-/* calcCopyParaMake copies twelve 0x20-byte units into this scratch table;
- * calcTotalParaMenuSub then reads the CalcCharParaData and CalcUnitParam
- * views from the same storage. */
+/* The 0x180-byte scratch table calcTotalParaMenu passes to
+ * calcTotalParaMenuSub; calcCopyParaMake fills it, and the CalcCharParaData
+ * and CalcUnitParam views read the same storage. */
 static unsigned char unitPara_0[0x180];
 
 CalcCharParaData *calcTotalParaMenu(int charaId, int *attack, int *defense)
@@ -380,12 +368,16 @@ CalcCharParaData *calcTotalParaMenu(int charaId, int *attack, int *defense)
  * through calcUPGet, so calcTotalParaMenuSub hands them its own fake unit
  * above. */
 extern void calcCopyParaMake(CalcCharParaData *origin, unsigned char *table);
-/* calcSkillInit returns int: its exit `addiu $2,$0,0x1` (0x00a11d38). */
 extern int calcSkillInit(BattleUnit *unit);
 extern int calcWpnAtkGet(BattleUnit *unit, int slot);
 extern int calcPhyDefGet(BattleUnit *unit);
 extern int calcMagDefGet(BattleUnit *unit);
 
+/*
+ * Builds the derived parameters of charaId into table and returns it as a
+ * CalcCharParaData. attack and defense (when non-null) receive the three
+ * weapon attack values and the physical and magic defense values.
+ */
 CalcCharParaData *calcTotalParaMenuSub(int charaId, int *attack, int *defense, unsigned char *table)
 {
     CalcScratchUnit fakeUnit;
@@ -431,8 +423,7 @@ typedef struct CalcTakeEpPara {
 
 /*
  * The context block calcTakeEpGetMenu builds for its only call to
- * calcTakeEpGet (this TU, 0x00a15670); nothing else in this TU
- * fills the rest of it.
+ * calcTakeEpGet (this TU); nothing else in this TU fills the rest of it.
  */
 typedef struct CalcTakeEpArg {
     BattleUnit unit;           /* +0x00: unit.work (+0x10) is the record above */
@@ -440,7 +431,7 @@ typedef struct CalcTakeEpArg {
 } CalcTakeEpArg;
 
 /* calcTakeEpGet takes a unit: calcWpnEnableChk (this TU) passes its own
- * unit argument (`daddu $4,$20,$0` at 0x00a16474). */
+ * unit argument. */
 extern int calcTakeEpGet(BattleUnit *unit, int tecId);
 
 /* dataEthGet (src/ov01/data_unit_org_get.c), this TU's own
@@ -465,41 +456,39 @@ typedef struct TecKindView TecKindView;
 
 struct TecKindView {
     /*
-     * +0x00: attribute bits: calcAtkChk's range class, `lbu $3,0x0($2)`/`andi
-     * $16,$3,0x3` (0x00a16024..0x00a16028; TEC_ATTR_RANGE, defined beside
-     * calcAtkChk), and calcUseEtherMenu's CALC_TRG_ALL_PARTY (0x00a112f4).
+     * +0x00: attribute bits: calcAtkChk's range class (TEC_ATTR_RANGE, defined
+     * beside calcAtkChk) and calcUseEtherMenu's CALC_TRG_ALL_PARTY.
      */
     u8 attr;
-    signed char epCost;     /* +0x01: calcTakeEpGet's base term, `lb $16,0x1($2)` */
+    signed char epCost;     /* +0x01: base term calcTakeEpGet reads */
     u16 flags;              /* +0x02: bit 0x800 rules out a counter */
-    int effectType : 8; /* +0x04: calcStatClr's `lb $4,0x4($18)`, 4 clears statuses */
+    int effectType : 8; /* +0x04: effect type, 4 clears statuses (calcStatClr) */
     /*
-     * +0x05: calcStat's `lb $3,0x5($2)`: 1 makes the hit double *damage
-     * while the target carries status (0, 0x20), which calcStat then resets.
+     * +0x05: 1 makes the hit double *damage* while the target carries status
+     * (0, 0x20), which calcStat then resets.
      */
     int doubleDamageKind : 8;
     /*
-     * +0x06: calcPowLevGet's base term, `lbu $18,0x6($2)` (0x00a13684,
-     * unsigned byte load). TecRecord (src/ov01/data_unit_org_get.c) owns
+     * +0x06: base term calcPowLevGet reads (unsigned byte). TecRecord
+     * (src/ov01/data_unit_org_get.c) owns
      * the rest of this layout and does not yet name this byte or the next
      * one either (its unmodeled_00[0x11] covers both).
      */
     u8 powLevBase;
-    signed char agility;    /* +0x07: calcPlusAglGet's base term, `lb $18,0x7($2)` */
+    signed char agility;    /* +0x07: base term calcPlusAglGet reads */
     /*
-     * +0x08/+0x09/+0x0A: calcStatAtk's status-test bytes, `lbu $3,0x8($2)`,
-     * `lbu $3,0x9($2)`, `lbu $3,0xA($2)` (0x00a14a08..0x00a14a20), tested
-     * against 1 under TEC flags 0x4000, 0x2000 and 0x1000 respectively.
+     * +0x08/+0x09/+0x0A: calcStatAtk's status-test bytes, tested against 1
+     * under TEC flags 0x4000, 0x2000 and 0x1000 respectively.
      */
     unsigned char statFlagKind[3];
     unsigned char unmodeled_0b[0x0C - 0x0B];
-    signed char statCategory; /* +0x0C: calcStatClr's `lb $3,0xC($18)` */
-    signed char statRate;     /* +0x0D: calcStatAtk's `lb $18,0xD($16)` */
-    u16 statMask;           /* +0x0E: calcStatClr's `lhu $2,0xE($18)` */
+    signed char statCategory; /* +0x0C: status category calcStatClr reads */
+    signed char statRate;     /* +0x0D: status rate calcStatAtk reads */
+    u16 statMask;           /* +0x0E: status mask calcStatClr reads */
     unsigned char unmodeled_10[0x11 - 0x10];
     /*
-     * +0x11: calcBp2Tid's timeline selector. calcBp2Tid (0x00a1267c)
-     * reads it with `lb $2,0x11($2)` (signed byte load), hence `signed char`.
+     * +0x11: calcBp2Tid's timeline selector, read as a signed byte, hence
+     * `signed char`.
      */
     signed char kind;
     /* +0x12: calcCrit's attribute, passed to calcAtrChg. */
@@ -507,16 +496,15 @@ struct TecKindView {
 };
 
 /*
- * Bits of TecKindView.flags (+0x02, `lhu $3,0x2($2)`/`andi $3,$3,<bit>`),
- * each named by the effect its one test has; the field stays u16.
+ * Bits of TecKindView.flags (+0x02), each named by the effect its one test
+ * has; the field stays u16.
  */
 enum TecFlag {
-    /* futtobiChk (`lhu $3,0x2($5)`/`andi $3,$3,0x100`, 0x00a14600..0x00a14604,
-     * on its technique argument): clear, no knockback (result 0). */
+    /* futtobiChk, on its technique argument: clear, no knockback (result 0). */
     TEC_FLAG_KNOCKBACK = 0x100,
-    /* calcHitRate (0x00a130bc): set, the hit roll is skipped (result 0). */
+    /* calcHitRate: set, the hit roll is skipped (result 0). */
     TEC_FLAG_NO_HIT_ROLL = 0x200,
-    /* calcHitRate (0x00a1310c): set, the first roll's result 2 is blocked. */
+    /* calcHitRate: set, the first roll's result 2 is blocked. */
     TEC_FLAG_NO_HIT_RESULT_2 = 0x400
 };
 
@@ -527,8 +515,7 @@ extern TecKindView *dataTecGet(int tecId);
  * tgtFindChk, as far as either reads it: tgtFindFirst resolves +0x00
  * through dataTecGet and +0x08 through dataItmGet, takes the target from
  * +0x04, and branches on mode 3 (an item, as in sndConvSpid's mode 3).
- * calcHitRate (below) reads the same +0x00 (`lw $4,0x0($17)` before
- * dataTecGet) and +0x04 (`lw $4,0x4($17)` before calcUPGet).
+ * calcHitRate (below) reads the same +0x00 and +0x04.
  */
 typedef struct TgtCmd {
     int tecId;          /* +0x00 */
@@ -540,31 +527,29 @@ typedef struct TgtCmd {
 /*
  * The hit record calcHitDmg (this TU) fills and hands to
  * calcDmg, which passes it on to calcLinePos; calcLinePos reads only the
- * byte at +0x00 (`lbu $16,0x0($6)`) and goes on when it is 1; calcStatClr
- * records the status category and bits the technique clears.
+ * byte at +0x00 and goes on when it is 1; calcStatClr records the status
+ * category and bits the technique clears.
  */
 typedef struct CalcHitInfo {
     /*
      * +0x00: calcRevHit's packed word, the hit mode in the low byte and
-     * the side above it. A word: calcHitDmg stores it with `sw $2,0x0($17)`
-     * and calcStat hands it whole to calcRevHit (`lw $4,0x0($18)`) and
-     * stores the answer back; calcLinePos and calcStat read the mode alone
-     * (`lbu`, `& 0xFF`).
+     * the side above it. A word: calcHitDmg stores it, and calcStat hands it
+     * whole to calcRevHit and stores the answer back; calcLinePos and calcStat
+     * read the mode alone.
      */
     int result;
     /*
      * +0x04: the damage amount. calcUseEtherMenu (this TU) hands the record's
-     * +0x00 and +0x04 words to calcHpDmg (`lw $6,0x330($29)` /
-     * `lw $7,0x334($29)` at 0x00a113ec..0x00a113f0), which applies the word
-     * as the calcHp/calcEp delta for the mode in result's low byte.
+     * +0x00 and +0x04 words to calcHpDmg, which applies the word as the
+     * calcHp/calcEp delta for the mode in result's low byte.
      */
     int damage;
-    /* +0x08: 1 when calcHitDmg's PL ICHIGEKI path fires (`sw $16,0x8($17)`). */
+    /* +0x08: 1 when calcHitDmg's PL ICHIGEKI path fires. */
     int ichigekiHit;
-    int setCategory;   /* +0x0C: calcHitItem's `sw $3,0xC($16)`, 8 = none */
-    int setMask;       /* +0x10: calcHitItem's `sw $0,0x10($16)` */
+    int setCategory;   /* +0x0C: category calcHitItem sets, 8 = none */
+    int setMask;       /* +0x10: mask calcHitItem sets to zero */
     /*
-     * +0x14/+0x18: calcStatClr's `sw $3,0x14($16)` / `sw $2,0x18($16)`. Read
+     * +0x14/+0x18: the category and mask calcStatClr records. Read
      * together: category 8 with a zero mask records no clearing; category 8
      * with mask 0xFFFF clears every bit of every category; any other category
      * clears that category's statMask bits.
@@ -573,7 +558,7 @@ typedef struct CalcHitInfo {
     int clearMask;
 } CalcHitInfo;
 
-/* calcUseEtherMenu's `addiu $2,$0,2` / `sw $2,0x32C($29)`, cmd at 0x320 (0x00a112cc). */
+/* Mode value of TgtCmd.mode for an ether. */
 #define TGT_CMD_MODE_ETHER 2
 
 /*
@@ -586,7 +571,7 @@ extern int calcHitDmg(BattleUnit *user, TgtCmd *cmd, CalcHitInfo *hit);
 /*
  * Uses ether etherId from the menu: charaId's character casts it on
  * targetCharaId, or on every party member when the technique's attr
- * carries CALC_TRG_ALL_PARTY (`lbu $3,0x0($2)` / `andi $3,$3,0x10`, 0x00a112f4).
+ * carries CALC_TRG_ALL_PARTY.
  * Both the user and each target are fake units whose actor points at the
  * character's origin record; the target's maxHp/maxEp and statAltMask are
  * calcTotalParaMenu's recalculated values while calcHitDmg/calcHpDmg run,
@@ -659,26 +644,23 @@ int calcUseEtherMenu(int charaId, int targetCharaId, int etherId)
 
 /*
  * dataItmGet's return, as far as calcUseItemMenu, calcItmEnableChk,
- * calcDItemChk, calcHitItem and calcDmgItem read it:
- * the item's target-selection flags at +0x08 (`lbu $5,0x8($2)`), handed on
- * to calcTgtUnitTbl, and a flag byte at +0x09 whose bit 0 calcDItemChk
- * tests (`lbu $3,0x9($2)`, `andi 0x1`, `andi 0xFF`) and whose bit 1
- * calcDmgItem tests (`lbu $3,0x9($18)`, `andi $3,$3,0x2`). It is a plain
- * byte, not bit-fields: with the u16 bit-fields at +0x0C the record is
- * 2-aligned and gcc reads +0x09 bit-fields as `lhu 0x8`/`andi 0x100`.
+ * calcDItemChk, calcHitItem and calcDmgItem read it: the item's
+ * target-selection flags at +0x08, handed on to calcTgtUnitTbl, and a flag
+ * byte at +0x09 whose bit 0 calcDItemChk tests and whose bit 1 calcDmgItem
+ * tests. It is a plain byte, not bit-fields: with the u16 bit-fields at +0x0C
+ * the record is 2-aligned and the compiler would read +0x09 bit-fields as
+ * halfword loads.
  */
 typedef struct ItmTrgView {
     unsigned char unmodeled_00[0x08];
     u8 trgFlags;        /* +0x08 */
     u8 useFlags;        /* +0x09 */
-    u8 power;           /* +0x0A: calcHitItem/calcDmgItem's `lbu 0xA` */
+    u8 power;           /* +0x0A: amount used by calcHitItem/calcDmgItem */
     unsigned char unmodeled_0b[0x0C - 0x0B];
     /*
-     * +0x0C: the effect bits calcHitItem and calcDmgItem test from one
-     * `lhu 0xC` (bit 0 as `andi 0x1`/`andi 0xFFFF`, a bit-field read, the
-     * others as a plain `andi` of the same register). Each name is the
-     * hit mode calcHitItem returns for the bit, as calcHpDmg (jtbl_00A44360)
-     * applies it: mode 1 calcHp(-amount), 2 calcHp(+amount), 3/4 the same
+     * +0x0C: the effect bits calcHitItem and calcDmgItem test, read as one
+     * halfword. Each name is the hit mode calcHitItem returns for the bit,
+     * as calcHpDmg applies it: mode 1 calcHp(-amount), 2 calcHp(+amount), 3/4 the same
      * through calcEp, 5 and 6 neither; the amount is calcDmgItem's.
      */
     u16 recoverHp : 1;      /* bit 0: mode 2, amount power * 50 */
@@ -703,19 +685,17 @@ typedef struct ItmTrgView {
 extern ItmTrgView *dataItmGet(int itmId);
 
 /* calcUseItem (this TU, below): the item effect of itmId used by user
- * on target; calcUseItemMenu passes no user (`daddu $4,$0,$0`). */
+ * on target; calcUseItemMenu passes no user. */
 
 /*
  * Uses item itmId from the menu on charaId, or on every party member when
- * the item's trgFlags carry CALC_TRG_ALL_PARTY (`andi $3,$3,0x10`, 0x00a11508).
+ * the item's trgFlags carry CALC_TRG_ALL_PARTY.
  * Each target's origin record stands in as the unit parameter block of a
  * fake unit, with maxHp/maxEp and statAltMask temporarily replaced by
- * calcTotalParaMenu's recalculated values (`lhu`/`sh` at +0x0/+0x2, the
- * eight halfwords from +0xBC) and restored after calcUseItem.
- * targetIds is set in each branch: both branches compute the address into
- * $16 (`addiu $16,$29,0x190` in the branch delay slot, 0x00a11510), so the
- * PartyAllPartyGet call loads $5 before `daddu $4,$16,$0`; one assignment
- * before the `if` puts `daddu $4,$16,$0` first.
+ * calcTotalParaMenu's recalculated values and restored after calcUseItem.
+ * targetIds is assigned in each branch rather than once before the if: the
+ * single-assignment form changes the order the original loads the array
+ * address.
  */
 int calcUseItemMenu(int charaId, int itmId)
 {
@@ -768,30 +748,22 @@ int calcUseItemMenu(int charaId, int itmId)
 }
 
 /*
- * dataPlChaGet's return (src/ov01/data_unit_org_get.c, this TU's own
- * bounded view): calcPowLevGet reads a short at +0x9A (`lh $4,0x9A($2)`,
- * 0x00a1373c) for tecId 0x262/0x263, divides it by 5 and adds it to the
- * power level. dataPlChaGet's own TU already names the owning record
- * (data_unit_org_get.h's `PlCharacter`, eight 0xC-byte `PlSpecialSlot`
- * entries from +0x48), so +0x9A is that same special[6]'s own +0x0A
- * halfword (0x48 + 6*0xC + 0xA = 0x9A) -- a member of the same 0xC-byte
- * record CalcSpecSlot views above. CalcSpecSlot names only +0x04 and +0x06
- * of it and leaves its +0x0A halfword unmodeled (inside unmodeled_08), so
- * this view is the only place that halfword is named here. Naming it in
- * `PlSpecialSlot` and reading it as `special[6]` there removes this view
- * entirely. This TU
- * cannot include data_unit_org_get.h (that header includes this one), so it
- * keeps the plain offset here and says what it overlaps.
+ * dataPlChaGet's return, as far as calcPowLevGet reads it: a short at +0x9A
+ * that tecId 0x262/0x263 divides by 5 and adds to the power level. It is the
+ * +0x0A halfword of PlCharacter.special[6] (0x48 + 6*0xC + 0xA = 0x9A) in
+ * data_unit_org_get.h, which this TU cannot include (that header includes
+ * this one), so the plain offset is kept here. CalcSpecSlot views the same
+ * 0xC-byte record above and names only +0x04 and +0x06.
  */
 typedef struct CalcPlCharaView {
     /*
-     * +0x00/+0x0C/+0x10/+0x14: the four running totals calcResultSub (this
-     * TU) adds a battle's share to (`lw`/`sw` at 0x0, 0xC, 0x10, 0x14 of
-     * $18, clamped to 9999999 and 9999), inside PlCharacter's unmodeled_0.
+     * +0x00/+0x0C/+0x10/+0x14: running totals calcResultSub (this TU) adds a
+     * battle's share to, clamped to 9999999 and 9999 (inside PlCharacter's
+     * unmodeled_0).
      */
     int exp;
     int expToNext;    /* +0x04: calcLvUp's exp left before the next level */
-    u16 waitOffset;   /* +0x08: calcUseItem's `lhu $3,0x8(...)` target */
+    u16 waitOffset;   /* +0x08: changed by ITEM_EFFECT_WAIT_OFFSET in calcUseItem */
     unsigned char unmodeled_0a[0x0C - 0x0A];
     int techPoint;
     int etherPoint;
@@ -804,8 +776,9 @@ extern CalcPlCharaView *dataPlChaGet(int cid);
 
 /*
  * The item record calcUseItem reads through dataItmGet, as far as it goes:
- * the per-stat group selector at +0x0A (`lbu $2,0xA($17)`, an index into
- * the four-entry group table), a target byte at +0x0B that picks the stat
+ * the per-stat group selector and power at +0x0A (an index into the
+ * four-entry group table, and the amount for the point and growth effects),
+ * a target byte at +0x0B that picks the stat
  * reset, the effect word at +0x0C and a halfword value at +0x0E. The value
  * is read three ways: as a signed halfword (`lh $6,0xE`, the stat mask), as
  * an unsigned halfword (`lhu $4,0xE`, the protect bits and the growth
@@ -872,6 +845,7 @@ int calcUseItem(BattleUnit *user, BattleUnit *target, int itmId)
     hit.target = target;
     hit.itmId = itmId;
     ret = 1;
+    /* The effects run in ITEM_EFFECT_* order; the HP and EP entries use calcDmgItem's amount. */
     if (item->effectBits & ITEM_EFFECT_HP_FIRST) {
         ret = calcHp(target, calcDmgItem(user, &hit));
     }
@@ -909,6 +883,7 @@ int calcUseItem(BattleUnit *user, BattleUnit *target, int itmId)
             dataPlChaGet(up->charaId)->waitOffset -= item->value.b;
         }
     }
+    /* Growth: each value bit adds item->power to one base stat, capped below its limit. */
     if (item->effectBits & ITEM_EFFECT_GROWTH) {
         if (item->value.s & 0x8000) {
             int add;
@@ -1055,10 +1030,8 @@ extern AccessoryData *dataAccGet(int accessoryId);
 /*
  * Hands calcSkillInitSub every skill the unit carries: the skill of each
  * of its three accessories, then its three own skill ids. A zero accessory
- * id is skipped (`lh $3,0x4($2)`/`beqz $3`, 0x00a11cc8..0x00a11ccc), as is
- * a zero skill id from the accessory (`lhu $2,0xE($2)`/`beqz $2`,
- * 0x00a11ce0..0x00a11ce4) or from the unit (`lh $2,0x6($2)`/`beqz $2`,
- * 0x00a11d1c..0x00a11d20). Always returns 1 (`addiu $2,$0,0x1`, 0x00a11d38).
+ * id is skipped, as is a zero skill id from the accessory or from the unit.
+ * Always returns 1.
  */
 int calcSkillInit(BattleUnit *unit)
 {
@@ -1103,12 +1076,11 @@ struct SkillData {
 extern SkillData *dataSklGet(int skillId);
 
 /*
- * SkillData.typeFlags bits calcSkillInitSub tests, in its own order
- * (`andi $2,$5,0x8000`, `andi $2,$5,0x800`, `andi $2,$5,0x400`).
+ * SkillData.typeFlags bits calcSkillInitSub tests, in its own order.
  */
 enum SkillType {
-    SKILL_TYPE_STAT_SET = 0x400,     /* tail call to calcStatSet(..., 1) */
-    SKILL_TYPE_STAT_PROTECT = 0x800, /* tail call to calcStatProtectSet */
+    SKILL_TYPE_STAT_SET = 0x400,     /* calls calcStatSet(..., 1) */
+    SKILL_TYPE_STAT_PROTECT = 0x800, /* calls calcStatProtectSet */
     SKILL_TYPE_PARAM_UP = 0x8000     /* raises the SkillParam members below */
 };
 
@@ -1136,10 +1108,9 @@ extern int calcStatSetChk(BattleUnit *unit, int category, int flag, int force);
 
 /*
  * Applies one equipped skill to the unit: a parameter skill raises the
- * members its levelFlags select by its level, each clamped (`slti` 0x3E8,
- * 0x64, 0x2710 then the store of 999, 99, 9999); a protect or status skill
- * tail-calls calcStatProtectSet or calcStatSet with the category in the low
- * byte of typeFlags (`andi $5,$5,0xFF`).
+ * members its levelFlags select by its level, each clamped to its maximum;
+ * a protect or status skill calls calcStatProtectSet or calcStatSet with the
+ * category in the low byte of typeFlags.
  */
 void calcSkillInitSub(BattleUnit *unit, int skillId)
 {
@@ -1219,10 +1190,8 @@ extern AccessoryData *dataAccGet(int accessoryId);
 
 /*
  * The sum of calcSkillSub over the same skills calcSkillInit walks: a zero
- * accessory id is skipped (`lh $3,0x4($2)`/`beqz $3`, 0x00a12050..
- * 0x00a12054), as is a zero skill id from the accessory (`beqz $2`,
- * 0x00a12074) or from the unit (`lh $2,0x6($2)`/`beqz $2`, 0x00a120b4..
- * 0x00a120c0); such slots add nothing.
+ * accessory id is skipped, as is a zero skill id from the accessory or from
+ * the unit; such slots add nothing.
  */
 int calcSkill(BattleUnit *unit, int kind, int mask)
 {
@@ -1319,10 +1288,14 @@ int calcSkillEquChk(BattleUnit *unit, int skillId)
     return 0;
 }
 
-/* calcSkillEquChk: calcSkillEquChkAll's own callee (this TU). Its second
- * call below hands it the same fake unit calcMagDefGet (this TU) takes. */
+/* calcSkillEquChk: calcSkillEquChkAll's own callee (this TU); its second call
+ * in that function passes the fake unit. */
 extern int calcSkillEquChk(BattleUnit *unit, int skillId);
 
+/*
+ * Returns 1 when some battle unit has skillId equipped, checking the linked
+ * unit of an AGWS unit as well; otherwise returns 0.
+ */
 int calcSkillEquChkAll(int skillId)
 {
     CalcScratchUnit fakeUnit;
@@ -1424,20 +1397,10 @@ int calcEp(BattleUnit *unit, int delta)
 }
 
 /*
- * calcBc (this TU, defined below) takes the unit as a BattleUnit *, the
- * type calcUPGet takes, the same type battle_init.c's extern declares.
- * calcBc returns int, not void: the original sets
- * $2 = 1 (`addiu $2,$0,0x1`, asm/nonmatchings/ov01/calc/calcBc.s) right
- * before the epilogue on every path; calcBoost, its only caller, discards
- * the result.
- */
-
-/*
  * Adds bp to the unit's boost-point gauge while its boost count is below
- * the limit; every 50 points (`slti $4,$3,0x32`, `div $0,$3,$2` with
- * $2 = 0x32) become one boost through calcBc, and a full count empties the
- * gauge. Returns 1 on every path (`addiu $2,$0,0x1` at 0x00a12630), so
- * calcBp2Tid discards the result.
+ * the limit; every 50 points become one boost through calcBc, and a full
+ * count empties the gauge. Returns 1 on every path; calcBp2Tid ignores the
+ * result.
  */
 int calcBp(BattleUnit *unit, int bp)
 {
@@ -1491,6 +1454,10 @@ int calcBp2Tid(BattleUnit *unit, int tecId)
     return 1;
 }
 
+/*
+ * Adds delta to the unit's boost count, clamped to 0..bcLimit. Typed int, not
+ * void: the original returns 1 on every path, and the callers ignore the value.
+ */
 int calcBc(BattleUnit *unit, int delta)
 {
     int bc;
@@ -1757,11 +1724,10 @@ extern const char calcPLICHIGEKIText[]; /* "** PL ICHIGEKI\n" */
 
 /*
  * Resolves cmd against the user into hit: the hit class (calcHit) and, on a
- * hit, the damage (calcDmg). Both unit flags tested are 0x40 (the enemy
- * flag of the actor): an enemy user against a target that is not an enemy,
- * while cfEventGet carries bit 0, zeroes the damage. A user that is not an
- * enemy and has PL ICHIGEKI active turns a hit class below 2 into a hit of
- * class 1 whose damage is the target's maxHp. Always returns 1.
+ * hit, the damage (calcDmg). A non-enemy user against an enemy target zeroes
+ * the damage while cfEventGet carries bit 0. A user that is not an enemy and
+ * has PL ICHIGEKI active turns a hit class below 2 into a hit of class 1 whose
+ * damage is the target's maxHp. Always returns 1.
  */
 int calcHitDmg(BattleUnit *user, TgtCmd *cmd, CalcHitInfo *hit)
 {
@@ -1810,14 +1776,12 @@ int calcHitParaGet(BattleUnit *unit);
  * first, or raised by a quarter when the attacker carries the third one.
  * Early returns: 0 when the target's HP is 0; 1 when its actor carries
  * flag 0x800 (Actor.flags); 0 when the technique carries TEC_FLAG_NO_HIT_ROLL.
- * Then a first roll, rnd(100) - margin (`jal rnd` 0x00a130cc, `subu`
- * 0x00a130d4), compared with 90 (`slti $2,$2,0x5A`, 0x00a130d8): at 90 or
+ * Then a first roll, rnd(100) - margin, is compared with 90: at 90 or
  * more it returns 2 unless the target carries CALC_UNIT_FLAG_NO_HIT_RESULT_2,
  * the technique carries TEC_FLAG_NO_HIT_RESULT_2, or calcBattleChk of the
- * target is 0. Failing that, a second, independent roll (`jal rnd`
- * 0x00a13128) compared with 85 (`slti $2,$2,0x55`, 0x00a13134): at 85 or
- * more it returns 1 unless the target carries CALC_UNIT_FLAG_NO_HIT_RESULT_1
- * or calcBattleChk is 0; otherwise 0.
+ * target is 0. Failing that, a second, independent roll is compared with 85:
+ * at 85 or more it returns 1 unless the target carries
+ * CALC_UNIT_FLAG_NO_HIT_RESULT_1 or calcBattleChk is 0; otherwise 0.
  */
 int calcHitRate(BattleUnit *unit, TgtCmd *cmd)
 {
@@ -1876,9 +1840,9 @@ int calcHitParaGet(BattleUnit *unit) {
 /*
  * The hit class of a technique against its target, from the technique's
  * effect type (+0x04). Class 0 rolls for a hit unless the target's unit flags
- * carry 0x80 (the hit roll is skipped); the roll's result 2 is marked with
- * 0x200 and result 2 of calcHitRate means a miss. Classes 5 and 6 add the
- * 0x200 bit on a first-roll hit. Unknown classes print and fall back to 1.
+ * carry 0x80 (the hit roll is skipped); a calcHitRate result of 1 adds the
+ * 0x200 bit and 2 means a miss. Classes 5 and 6 add the 0x200 bit on a
+ * first-roll hit. Unknown classes print and fall back to 1.
  */
 extern const char calcJobTypeErrText[]; /* "** jobType err -> %d\n" */
 
@@ -1937,13 +1901,11 @@ int calcHit(BattleUnit *attacker, TgtCmd *cmd)
 }
 
 /*
- * dataAttGet's return (src/ov01/data_unit_org_get.c, still opaque there:
- * `typedef struct AttRecord { unsigned char opaque[0x0E]; } AttRecord;`),
- * this TU's own bounded view: calcWpnAtkGet's attachment attack term,
- * `lh $19,0x0($2)` (0x00a13410). AttRecord does not name this field and is
- * not published, so this is a second definition of the same record (a
- * same-size split of AttRecord's `opaque[0x0E]` would name it on the owner
- * side instead).
+ * dataAttGet's return (src/ov01/data_unit_org_get.c, where AttRecord is still
+ * opaque), this TU's own bounded view: calcWpnAtkGet's attachment attack term.
+ * AttRecord does not name this field, so this is a second definition of the
+ * same record; a same-size split of AttRecord's opaque bytes would name it on
+ * the owner side instead.
  */
 typedef struct CalcAttData {
     short attack;                 /* +0x00 */
@@ -1958,13 +1920,11 @@ extern const char calcWpnAtkGetWpnAtkAdjText[]; /* "** calcWpnAtkGet: wpnAtkAdj=
 
 /*
  * calcWpnAtkGet's attack-boost percentage, the word at +0x17C of the unit's
- * CalcUnitParam: a nonzero value gates the whole bonus block (`lw $3,0x17C($2)`,
- * 0x00a13444) and is later divided into atk*pct/100 (`lw $3,0x17C($2)`,
- * 0x00a134cc). CalcUnitParam (above) ends at 0x17C (effectUnit at +0x158 plus
- * statEffUnits[8] reaches exactly +0x17C), so a trailing member would change
- * the struct's size; that extent/alignment decision is not this function's to
- * make, so the term is read through this named
- * offset, not a member.
+ * CalcUnitParam: a nonzero value gates the whole bonus block and is divided
+ * into atk*pct/100. CalcUnitParam (above) ends at 0x17C (effectUnit at +0x158
+ * plus statEffUnits[8] reaches exactly +0x17C), so a trailing member would
+ * change the struct's size; the term is read through this named offset
+ * instead.
  */
 #define CALC_PARAM_ATK_BOOST_PCT_OFF 0x17C
 
@@ -2002,17 +1962,15 @@ int calcWpnAtkGet(BattleUnit *unit, int slot)
         if (*(int *)((char *)calcUPGet(unit) + CALC_PARAM_ATK_BOOST_PCT_OFF) != 0)
         {
             /* An extra calcUPGet(unit) call the original makes and
-             * discards (`jal calcUPGet`/`daddu $4,$17,$0`, 0x00a13450)
-             * right before reading unit->work below. */
+             * discards, right before reading unit->work below. */
             calcUPGet(unit);
             actor = unit->work;
             if (!(actor->flags & ACTOR_FLAG_ENEMY))
             {
                 if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS))
                 {
-                    /* The 0xBB..0xC2 charaId range futtobiChk and
-                     * calcPlusAglGet exclude the same way (`slti $3,$3,0xBB`
-                     * at 0x00a13490, `slti $3,$3,0xC3` at 0x00a134a8). */
+                    /* The 0xBB..0xC2 charaId range that futtobiChk and
+                     * calcPlusAglGet exclude the same way. */
                     if (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN ||
                         calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END)
                     {
@@ -2079,14 +2037,13 @@ int calcMagDefGet(BattleUnit *unit)
 
 /*
  * dataSpecDataGet's return (src/ov01/data_unit_org_get.c, this TU's own
- * bounded view): calcPowLevGet adds the halfword at +0x04 (`lh $2,0x4($2)`,
- * 0x00a13710) to the technique's power level; calcPlusAglGet adds the
- * halfword at +0x06 (`lh $2,0x6($2)`, 0x00a13828) to the technique's
+ * bounded view): calcPowLevGet adds the halfword at +0x04 to the technique's
+ * power level; calcPlusAglGet adds the halfword at +0x06 to the technique's
  * agility. dataSpecDataGet's own TU already names this record
  * (src/ov01/data_unit_org_get.h's `PlSpecialSlot`, an 0xC-byte id/unmodeled
- * pair) but does not yet name these two fields and is not published to
- * calc.c (its header includes this one); a same-size split of
- * `PlSpecialSlot.unmodeled_2[10]` would.
+ * pair) but not these two fields, and that header includes this one; a
+ * same-size split of `PlSpecialSlot.unmodeled_2[10]` would name them on the
+ * owner side.
  */
 typedef struct CalcSpecSlot {
     short id;                      /* +0x00 */
@@ -2099,6 +2056,11 @@ typedef struct CalcSpecSlot {
 extern CalcSpecSlot *dataSpecDataGet(int charaId, int specialId);
 
 
+/*
+ * Returns the power level of tecId for unit: the technique's base, plus the
+ * special-character bonus for kind 2 techniques and the PL special term for
+ * tecIds 0x262 and 0x263.
+ */
 int calcPowLevGet(BattleUnit *unit, int tecId)
 {
     Actor *actor;
@@ -2110,8 +2072,7 @@ int calcPowLevGet(BattleUnit *unit, int tecId)
         actor = unit->work;
         if (!(actor->flags & ACTOR_FLAG_ENEMY)) {
             if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS)) {
-                /* The same 0xBB..0xC2 charaId exclusion as calcWpnAtkGet
-                 * (`slti` against 0xBB at 0x00a136d0, 0xC3 at 0x00a136e8). */
+                /* The same 0xBB..0xC2 charaId exclusion as calcWpnAtkGet. */
                 if (calcUPGet(unit)->charaId < CALC_SPECIAL_MODEL_CHARACTER_ID_BEGIN ||
                     calcUPGet(unit)->charaId >= CALC_SPECIAL_MODEL_CHARACTER_ID_END) {
                     spec = dataSpecDataGet(calcUPGet(unit)->charaId, tecId);
@@ -2122,8 +2083,7 @@ int calcPowLevGet(BattleUnit *unit, int tecId)
             }
         }
     }
-    /* Technique ids 0x262 and 0x263 (`addiu $2,$17,-0x262`/`sltiu $2,$2,0x2`,
-     * 0x00a13718..0x00a1371c); what they are is not established. */
+    /* Technique ids 0x262 and 0x263; what they are is not established. */
     if ((unsigned int) (tecId - 0x262) < 2) {
         powLev += dataPlChaGet(calcUPGet(unit)->charaId)->special6PowLevTerm / 5;
     }
@@ -2159,17 +2119,16 @@ typedef struct CalcStatAtkArg CalcStatAtkArg;
 typedef struct CalcStatAtkOut CalcStatAtkOut;
 typedef struct CalcCritArg CalcCritArg;
 /*
- * calcCrit's damage word, scaled in place when the critical hits. The void *
- * member is never read here; it is the second view of the same word, and
- * without it the access in calcCrit compiles to different code (style debt).
- */
-/*
  * calcDmg's damage value once its address has been passed out. A read of the
  * plain variable has alias set 0 after the first `&`, so it would not unify
- * with the stores before it and the value would leave t0 (`move a3,t0` at the
- * last printf, 0x00a145ac).
+ * with the stores before it, and the codegen for the last printf changes.
  */
 typedef int CalcDamage;
+/*
+ * calcCrit's damage word, scaled in place when the critical hits. The void *
+ * member is never read here; it is the second view of the same word, and
+ * without it the access in calcCrit compiles to different code.
+ */
 typedef union CalcCritDmg {
     int value;
     void *p;
@@ -2191,6 +2150,11 @@ extern const char calcStatDEATHText[]; /* "** Stat: DEATH\n" */
 extern const char calcStatGRAVText[]; /* "** Stat: GRAV\n" */
 extern const char calcDMG1HitAtrHitFlagDmgText[]; /* "** DMG1:hitAtr=%d hitFlag=%X dmg=%d\n" */
 
+/*
+ * Computes the damage of cmd's technique from attacker to the target, from
+ * both units' stats and the hit record, applies the status and critical
+ * adjustments, and returns it (clamped to 0..9999).
+ */
 int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
 {
     TecKindView *tec;
@@ -2218,6 +2182,7 @@ int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
     def = calcUPGet(cmd->target)->phyDefense;
     magAtk = calcUPGet(attacker)->magAttack;
     magDef = calcUPGet(cmd->target)->magDefense;
+    /* Attack and defense values adjusted by the statuses of both units. */
     if (calcStatGet(attacker, 0, 0x100) != 0 || calcStatGet(attacker, 4, 0x1000) != 0) {
         atk -= atk / 4;
     }
@@ -2249,6 +2214,10 @@ int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
 
         hit->setMask = v;
     }
+    /*
+     * Base damage by effect type: 0 physical or magic hit, 1 magic hit, 2 max HP
+     * scaled, 5 and 6 point drain from the target's max or current points.
+     */
     switch (tec->effectType) {
     case 0:
         phyArm = calcPhyDefGet(cmd->target);
@@ -2418,6 +2387,7 @@ int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
     if (statOk == 0 && tec->effectType == 3) {
         hit->result &= 0xFF00;
     }
+    /* Category 1 hits with mask 0x100 (death) or 2 (GRAV) set the outcome. */
     category = hit->setCategory;
     if (cmd->tecId == 0x23E && (category != 1 || hit->setMask != 0x100)) {
         hit->setCategory = 1;
@@ -2439,6 +2409,7 @@ int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
             printf(calcStatGRAVText);
         }
     }
+    /* Hit class 1: the target's and attacker's status multipliers, then the ichigeki flag. */
     category = hit->result & 0xFF;
     if (category != 1) {
         hit->ichigekiHit = 0;
@@ -2459,6 +2430,7 @@ int calcDmg(BattleUnit *attacker, TgtCmd *cmd, CalcHitInfo *hit)
             hit->ichigekiHit = 0;
         }
     }
+    /* Flag 8 forces 9999, and any damage of 10000 or more is capped at 9999. */
     if (tec->flags & 8) {
         *(CalcDamage *) &dmg = 9999;
     }
@@ -2523,7 +2495,7 @@ int futtobiChk(BattleUnit *unit, TecKindView *tec)
  * by 20% per two units of its last decimal digit, down for odd damage, up
  * for even; (3, 2) cancels mode 3. A mode-1 hit also clears
  * flag 0x10 from a target calcBattleChk refuses, ends statuses
- * (1, 0x2000) and (5, 0x2000), and ends (5, 0x4000) when rnd(100) < 50 (50 of 101 outcomes).
+ * (1, 0x2000) and (5, 0x2000), and ends (5, 0x4000) when rnd(100) < 50.
  */
 /* calcRevHit (this TU, defined below): calcStat's own callee. */
 extern int calcRevHit(int hitMode);
@@ -2598,6 +2570,11 @@ typedef struct CalcStatAtkOut {
     int mask;            /* +0x10 */
 } CalcStatAtkOut;
 
+/*
+ * Rolls one status effect of the technique against arg->unit. Returns 1 when
+ * the status applies and records its category and mask in out; 0 when it is
+ * refused or the roll fails.
+ */
 int calcStatAtk(BattleUnit *self, CalcStatAtkArg *arg, CalcStatAtkOut *out, int *val)
 {
     TecKindView *tec;
@@ -2682,11 +2659,10 @@ int calcStatAtk(BattleUnit *self, CalcStatAtkArg *arg, CalcStatAtkOut *out, int 
 }
 
 /*
- * A status-clearing technique (effectType 4, `lb $4,0x4($18)`) takes the
- * the 0x10 bit off a target calcBattleChk refuses and records
- * the category and bits it clears in the hit record; category 8 records
- * the full mask (`ori $2,$0,0xFFFF`). Any other technique records category 8,
- * no bits, and returns 0.
+ * A status-clearing technique (effectType 4) clears the 0x10 bit from a
+ * target calcBattleChk refuses, and records the category and bits it clears
+ * in the hit record; category 8 records the full mask (0xFFFF). Any other
+ * technique records category 8, no bits, and returns 0.
  */
 int calcStatClr(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *dmg)
 {
@@ -2731,6 +2707,11 @@ typedef struct CalcCritArg {
     BattleUnit *unit;
 } CalcCritArg;
 
+/*
+ * Rolls for a critical hit on arg->unit. The rate rises with weakness, slot
+ * and monster-kind conditions; on a hit the damage is scaled by mul/2 and
+ * the critical bit 0x100 is set in out. Returns 1 on a hit.
+ */
 int calcCrit(BattleUnit *self, CalcCritArg *arg, unsigned int *out, CalcCritDmg *dmg)
 {
     int rate;
@@ -2812,6 +2793,11 @@ extern const char calcSpecErrSPECDEFText[]; /* "** calcSpec err SPEC_DEF\n" */
 extern const char calcSpecSkillALLText[]; /* "** Spec: skill(ALL)\n" */
 extern const char calcSpecSkillText[]; /* "** Spec: skill(%X)\n" */
 
+/*
+ * Applies the technique's special effects (ABSB and DEF, which change the
+ * hit mode and damage) and the target's skill reductions to *dmg. Returns 1
+ * when an effect or reduction applied.
+ */
 int calcSpec(BattleUnit *self, TgtCmd *arg, int *mode, int *dmg)
 {
     int kind;
@@ -2836,6 +2822,7 @@ int calcSpec(BattleUnit *self, TgtCmd *arg, int *mode, int *dmg)
     if (kind != 1 && kind != 3) {
         return 0;
     }
+    /* A target with a status of kind 2 takes half the damage. */
     if ((flags & 0x4000) && tec->statFlagKind[0] == 2 || (flags & 0x2000) && tec->statFlagKind[1] == 2
         || (flags & 0x1000) && tec->statFlagKind[2] == 2) {
         printf(calcSpecEffectInfoText);
@@ -2917,8 +2904,9 @@ extern const char calcLinePosAdjustText[]; /* "** LinePos: adjust\n" */
 
 /*
  * A target on battle line 2 (dataPosLineGet of its posId) loses a fifth of
- * the damage when it is hit (result 1), unless it is on side 0x40, carries
- * CalcUnitParam flag 0x40 or is a charaId in 0xBB..0xC2.
+ * the damage when it is hit (result 1), unless it is an enemy
+ * (ACTOR_FLAG_ENEMY), an AGWS unit (CALC_UNIT_FLAG_IS_AGWS) or a charaId in
+ * 0xBB..0xC2.
  */
 int calcLinePos(BattleUnit *unit, TgtCmd *cmd, CalcHitInfo *hit, int *damage)
 {
@@ -2992,9 +2980,8 @@ int calcAtrChg(BattleUnit *unit, int attribute) {
 /* calcSlotAChk (below, this TU): unit and the technique id. */
 extern int calcSlotAChk(BattleUnit *unit, int techId);
 
-/* tecId is `int`, not `short`: with `short` the entry block re-sign-extends
- * it (`sll $5,$5,16`/`sra $18,$5,16` replacing the original's plain
- * `daddu $18,$5,$0`), fndiff on form calcTakeEpGet (2026-10-14). */
+/* tecId is `int`, not `short`: a short parameter makes the entry block
+ * sign-extend it, which the original does not do. */
 int calcTakeEpGet(BattleUnit *unit, int tecId)
 {
     int ep;
@@ -3144,16 +3131,16 @@ int calcDmgItem(BattleUnit *unit, TgtCmd *cmd)
 
 /*
  * calcAtkChk (this TU, below): unit, target and technique id. Its
- * return type is narrower than int: tgtFindChk calls it with jal and returns
- * through its own epilogue, which a same-width int return would turn into a
- * sibling call (`j calcAtkChk`). Every narrow width gives the same bytes here.
+ * return type is narrower than int: tgtFindChk returns its result through its
+ * own epilogue, which a same-width int return would turn into a sibling call.
+ * Every narrow width gives the same bytes here.
  */
 
 /*
  * Candidate table of tgtFindFirst: tgtNum entries of tgtTbl are filled in
  * target-search order, and tgtIdx walks them out one at a time through
- * tgtFindNext. The gap between tgtTbl and tgtIdx (0x00a57e68..0x00a57e88,
- * 0x20 bytes) is the array's only size evidence.
+ * tgtFindNext. The 0x20-byte gap between tgtTbl and tgtIdx is the only
+ * evidence of the array's size.
  */
 static BattleUnit *tgtTbl[8];
 static int tgtIdx;
@@ -3181,6 +3168,11 @@ static inline int tgtIsDead(BattleUnit *u)
     return actor->flags & ACTOR_FLAG_DEAD;
 }
 
+/*
+ * Starts a target search for cmd from unit and returns the first target; the
+ * rest of the candidate table is walked with tgtFindNext. Returns 0 when no
+ * target qualifies.
+ */
 BattleUnit *tgtFindFirst(BattleUnit *unit, TgtCmd *cmd)
 {
     BattleUnit *single;
@@ -3205,6 +3197,7 @@ BattleUnit *tgtFindFirst(BattleUnit *unit, TgtCmd *cmd)
             targetFlags |= 0x50;
         }
     }
+    /* Single target: the given target, when it qualifies for the flags. */
     allTargets = targetFlags & 0x10;
     if (allTargets == 0) {
         found = 0;
@@ -3229,6 +3222,7 @@ BattleUnit *tgtFindFirst(BattleUnit *unit, TgtCmd *cmd)
         }
         printf(calcReTGTIDText, calcUPGet(target)->charaId);
     }
+    /* Otherwise collect the candidates from the side the flags select. */
     count = 1;
     if (targetFlags & 8) {
         single = unit;
@@ -3294,10 +3288,9 @@ BattleUnit *tgtFindNext(void)
 }
 
 /*
- * moveTbl (ov01/battle_init data, 0x00a3d880, 0x78 bytes): five reachable
- * positions per position, -1 for an empty entry. calcMoveChk indexes it by
- * posId - 1 (`lui/addiu` of 0x00a3d86c, one 0x14-byte row before the
- * table, plus posId * 0x14), so its six rows are posIds 1..6.
+ * moveTbl (ov01/battle_init data, 0x78 bytes): five reachable positions per
+ * position, -1 for an empty entry. calcMoveChk indexes it by posId - 1, so
+ * its six rows are posIds 1..6.
  */
 extern int moveTbl[6][5];
 
@@ -3329,8 +3322,8 @@ int calcMoveChk(BattleUnit *unit, int toPosId)
 /* TecKindView.attr's range class (calcAtkChk below). */
 enum { TEC_ATTR_RANGE = 0x03 };
 
-/* calcLineChk (this TU, defined below) and calcA2Chk (this TU, still
- * asm): calcAtkChk's per-unit battle-line tests. */
+/* calcLineChk and calcA2Chk (both this TU, defined below): calcAtkChk's
+ * per-unit battle-line tests. */
 extern int calcLineChk(BattleUnit *unit);
 extern int calcA2Chk(BattleUnit *unit);
 
@@ -3371,7 +3364,7 @@ short calcAtkChk(BattleUnit *unit, BattleUnit *target, int tecId)
 
 /*
  * A unit standing at posId 8 passes only when no live unit of its own side
- * stands at a posId in 1..6 (`addiu $3,$3,-0x1`/`sltiu $3,$3,0x6`).
+ * stands at a posId in 1..6.
  */
 int calcA2Chk(BattleUnit *unit)
 {
@@ -3404,6 +3397,10 @@ int calcA2Chk(BattleUnit *unit)
     return 1;
 }
 
+/*
+ * Returns 0 when a live unit on the same side stands on a lower battle line
+ * number than unit; 1 otherwise, including when unit has no line.
+ */
 int calcLineChk(BattleUnit *unit)
 {
     BattleUnit **table;
@@ -3457,9 +3454,8 @@ int calcLineChk(BattleUnit *unit)
 /*
  * calcBackLineChk's extra-blocker selector (calcDmg passes 1, stat2Proc
  * passes 0): selector 0 tests CALC_UNIT_FLAG_BLOCKS_BACK_LINE of a unit standing
- * further back (`lhu $3,0x1C($2)`/`andi $3,$3,0x800`, 0x00a16370);
- * selector 1 tests that unit's charaId against 6 (`lh $3,0x38($2)`/
- * `beq $3,$21`, 0x00a16398; which character 6 is, is not established).
+ * further back; selector 1 tests that unit's charaId against 6 (which
+ * character 6 is, is not established).
  */
 int calcBackLineChk(BattleUnit *unit, int selector)
 {
@@ -3538,9 +3534,7 @@ int calcWpnEnableChk(BattleUnit *unit, int slot)
     }
     wpn = dataWpnGet(weaponId);
     /* The original calls dataTecGet(wpn->tecId) here and uses nothing of
-     * its result (`jal dataTecGet` at 0x00a16424, `lh $4,0x14($17)` in its
-     * delay slot, $2 overwritten by the next call); the call is kept so the
-     * bytes match. */
+     * its result; the call is kept so the bytes match. */
     dataTecGet(wpn->tecId);
     if (calcAttWpnChk(weaponId) != 0) {
         if (up->attachmentId[slot] == 0) {
@@ -3662,10 +3656,8 @@ int calcFrameEquipOrg(int charaId, int frameId)
     return 1;
 }
 
-/*
- * The CalcUnitParam.dblActKind value calcDblActChk requires (`addiu $4,$0,6`
- * against `lb $2,0x3A($17)`); nothing else in this TU names it.
- */
+/* The CalcUnitParam.dblActKind value calcDblActChk requires; nothing else in
+ * this TU names it. */
 #define CALC_DBL_ACT_KIND 6
 
 /* calcSameWpnChk (this TU, defined below): a weapon slot of unit, or -1. */
@@ -3690,11 +3682,9 @@ int calcDblActChk(BattleUnit *unit)
 
 /*
  * The first weapon slot (0 or 1) whose weapon a later slot also holds, or
- * -1. An empty slot (weapon id 0) never counts as a match: slot 0's tests
- * are skipped when it is 0 (`lh $4,0x5E($6)`/`beqz $4`, 0x00a16954..
- * 0x00a16958) and slot 1's likewise (`beqz $3`, 0x00a16a64), so two empty
+ * -1. An empty slot (weapon id 0) never counts as a match, so two empty
  * slots give -1. Weapon ids 0x5B and 0x70 count as the same weapon, as do
- * 0x5C and 0x71 (the `addiu` pairs compared at 0x00a16984..0x00a16a48).
+ * 0x5C and 0x71.
  */
 int calcSameWpnChk(BattleUnit *unit)
 {
@@ -3979,8 +3969,7 @@ void calcStatProtectSet(BattleUnit *unit, int group, int mask)
 
 /*
  * calcStatGetNorm's lookup, widened: outside the two party-wide cases the
- * answer also includes statAltMask[category] & flag of the same unit
- * (`lhu $3,0xAC($2)` and `lhu $2,0xBC($16)`, OR-ed at 0x00a17234).
+ * answer also includes statAltMask[category] & flag of the same unit.
  */
 int calcStatGet(BattleUnit *unit, int category, int flag)
 {
@@ -4008,13 +3997,11 @@ int calcStatGet(BattleUnit *unit, int category, int flag)
 }
 
 /*
- * calcStatGet's plain lookup: statActiveMask[category] & flag of unit
- * (`lhu $2,0xAC($3)`/`and $6,$2,$17`, 0x00a17328..0x00a1732c). When category
- * is 3 and flag has bit 0x1 (`andi $2,$17,0x1`, 0x00a17288) or category is
- * 6 and flag has bit 0x800 (`andi $2,$17,0x800`, 0x00a1729c), the answer is
- * instead that same statActiveMask[category] & flag, with the whole
- * requested mask (`and $6,$3,$17`, 0x00a17300), of the first unit of
- * unitTblGet(0)'s table for which it is nonzero, or 0 when no unit's is.
+ * calcStatGet's plain lookup: statActiveMask[category] & flag of unit. When
+ * category is 3 and flag has bit 0x1, or category is 6 and flag has bit 0x800,
+ * the answer is instead the same statActiveMask[category] & flag of the first
+ * unit of unitTblGet(0)'s table for which it is nonzero, or 0 when no unit's
+ * is.
  */
 int calcStatGetNorm(BattleUnit *unit, int category, int flag)
 {
@@ -4042,12 +4029,10 @@ int calcStatGetNorm(BattleUnit *unit, int category, int flag)
 
 /*
  * Whether status category may be set on unit: with CalcUnitParam flag 0x1000
- * (not named: its role is not established) categories 0..3 are refused
- * (`sltiu $3,$16,0x4`) and category 5 too unless flag 0x8 is set; without
- * it categories 4..6 are refused (`addiu $3,$16,-0x4`/`sltiu $3,$3,0x3`).
- * Past that, force
- * accepts outright; otherwise calcStatProtectGet's protection and status
- * 2/0x2000 (which still admits category 7) refuse.
+ * (not named: its role is not established) categories 0..3 are refused and
+ * category 5 too unless flag 0x8 is set; without it categories 4..6 are
+ * refused. Past that, force accepts outright; otherwise calcStatProtectGet's
+ * protection and status 2/0x2000 (which still admits category 7) refuse.
  */
 int calcStatSetChk(BattleUnit *unit, int category, int flag, int force)
 {
@@ -4224,13 +4209,11 @@ static signed char turn_1[8][16];
 
 /*
  * Base bonus from turn_1[category][statIdx], returned as is unless category
- * is 7 (agility, per calcWct) and statBit has one of its two low bits set
- * (`andi $16,$16,0x3`, 0x00a179e4; `beql $16,$0`, 0x00a17a08). Then one more
- * turn when the unit's current HP (`lh $5,0x34($16)`, signed) is strictly
- * below half of its maxHp (signed halfword, division rounded toward zero:
- * 0x00a17a24..0x00a17a44) and one more again when it is strictly below a
- * quarter of maxHp (0x00a17a5c..0x00a17a74): at most two extra turns, each
- * comparison re-reading calcUPGet(unit) twice rather than caching it.
+ * is 7 (agility, per calcWct) and statBit has one of its two low bits set.
+ * Then one more turn when the unit's current HP is strictly below half of its
+ * maxHp (signed halfword, division rounded toward zero) and one more again
+ * when it is strictly below a quarter of maxHp: at most two extra turns. Each
+ * comparison re-reads calcUPGet(unit) rather than caching it.
  */
 int calcStatDefTurnGet(BattleUnit *unit, int category, int statBit)
 {
@@ -4310,7 +4293,7 @@ typedef struct CalcReward {
  */
 typedef struct CalcResultEntry {
     unsigned char unmodeled_00[0x04];
-    CalcReward gained; /* +0x04: calcResultSub's `sw $16,0x4($21)`..0x10 */
+    CalcReward gained; /* +0x04: the rewards calcResultSub writes */
 } CalcResultEntry;
 
 extern const char calcLvUPIDText[]; /* "Lv UP! (ID=%d) %d\n" */
@@ -4335,6 +4318,12 @@ extern int dataBoxInc(int category, int id);
 extern int dataMoneyBoxInc(int amount);
 void calcResultSub(BattleUnit *unit, CalcReward *total, int memberCount, CalcResultEntry *entry);
 
+/*
+ * Gives the battle's rewards: box items and money first, then each living
+ * unit's share of the experience and any level-up, recorded as 15 words per
+ * unit in results. Party members who sat out get three quarters of the
+ * experience and no other points. Returns the number of living units.
+ */
 int calcResult(int *results)
 {
     CalcScratchUnit fakeUnit;
@@ -4374,6 +4363,7 @@ int calcResult(int *results)
     }
 
     dataMoneyBoxInc(monsGain->money);
+    /* Living units gain the rewards; an AGWS unit gains through its linked unit. */
     for (unitIdx = 0; unitIdx < unitCount; unitIdx++) {
         unit = units[unitIdx];
         if ((unit != 0) && (!(unit->work->flags & ACTOR_FLAG_DEAD))) {
@@ -4510,6 +4500,12 @@ extern void *dataParaTblGet(int cid);
 extern short dataSpecLearnGet(int cid, int id);
 extern void dataSpecLearnSet(int cid, int id);
 
+/*
+ * Subtracts exp from the character's exp to the next level and gains levels
+ * while that count is spent, learning any specs reached and recalculating the
+ * stats per level. Learned specs are appended to res. Returns 1 when a level
+ * was gained, 0 otherwise.
+ */
 int calcLvUp(int cid, int exp, char *res)
 {
     CalcPlCharaView *pl;
@@ -4555,6 +4551,7 @@ int calcLvUp(int cid, int exp, char *res)
                 printf("** Spec Learn: (%d) %d\n", cid, id);
             }
         }
+        /* Moves the eight parameters toward their level-table values; the running sums are capped. */
         para = dataParaTblGet(cid);
         base = (char *) pl + 8;
         for (i = 0; i < 8; i++) {
@@ -4584,9 +4581,8 @@ ret0:
 
 /*
  * entryPhase40 (src/ov01/entry_first_init.c) calls this as a bare statement
- * and never reads a result, but the original ends with a real jal to
- * calcPartyStat plus its own separate epilogue rather than a tail jump into
- * it, which this int return type (left unset) reproduces.
+ * and never reads a result; the int return type, left unset, is kept to
+ * reproduce the original's epilogue.
  */
 int calcCfEncount(int flags)
 {
@@ -4717,20 +4713,9 @@ int calcSpline(CalcSpline *spline, Vector4 *out, int mode)
 }
 
 /*
- * calcLinerSub reads CalcSpline's point array: Vector4 is the shared
- * four-float record from include/shared.h, used the same way (an indexed
- * array, only x/y/z read) by src/ov01/unit_cmd.c's cmdTarget fields.
- *
- * The original (asm/nonmatchings/ov01/calc/calcLinerSub.s, 0x00a18a98):
- * `sll $6,$6,4` scales idx by 16 before `addu $6,$6,$2` adds it to the base,
- * proving the 16-byte stride per entry; the two `ldl/ldr` pairs at
- * `0x7($6)`/`0x0($6)` and `0xf($6)`/`0x8($6)` copy points[idx] and
- * points[idx+1] (0x10 bytes each) whole, and the `lwc1`/`sub.s`/`mul.s`/
- * `add.s` sequence on $f0-$f5 at offsets 0x0/0x4/0x8 of each copy is the
- * x/y/z lerp this function writes through `out`.
+ * Linear interpolation between points[idx] and points[idx + 1] by ratio;
+ * only x, y and z are written to out.
  */
-/* The table was a one-member CalcLinerTbl view until calcSpline (which
- * hands it its own CalcSpline) was recovered; no byte changes. */
 void calcLinerSub(CalcSpline *spline, Vector4 *out, int idx, float ratio)
 {
     Vector4 a, b;
@@ -4743,8 +4728,8 @@ void calcLinerSub(CalcSpline *spline, Vector4 *out, int idx, float ratio)
 }
 
 /*
- * The cubic Bezier through points[idx..idx+3] at t: weights (1-t)^3,
- * 3t(1-t)^2, 3t^2(1-t) and t^3 (`mul.s` on $f0/$f1/$f12/$f7).
+ * The cubic Bezier through points[idx..idx + 3] at t, written to out. The
+ * weights are (1-t)^3, 3t(1-t)^2, 3t^2(1-t) and t^3.
  */
 void calcBezierSub(CalcSpline *spline, Vector4 *out, int idx, float t)
 {
@@ -4769,9 +4754,8 @@ void calcBezierSub(CalcSpline *spline, Vector4 *out, int idx, float t)
 }
 
 /*
- * The uniform cubic B-spline segment over points[idx..idx+3] at t; each
- * weight is divided by the double 6.0 (`ori $16,$0,0x8030`/`dsll32
- * $16,$16,15`, then fptodp/dpdiv/dptofp).
+ * The uniform cubic B-spline segment over points[idx..idx + 3] at t,
+ * written to out.
  */
 void calcSplineSub(CalcSpline *spline, Vector4 *out, int idx, float t)
 {
@@ -4796,10 +4780,9 @@ void calcSplineSub(CalcSpline *spline, Vector4 *out, int idx, float t)
 }
 
 /*
- * The cubic Hermite segment from points[idx] to points[idx+1] at t; the two
- * tangents are the tension times the difference of the neighbouring points
- * (one-sided at either end of the array: `bnel $6,$0` and `slt $2,$6,$2`
- * against count - 1).
+ * The cubic Hermite segment from points[idx] to points[idx + 1] at t, written
+ * to out. Each tangent is tension times the difference of the neighbouring
+ * points; at either end of the array the difference is one-sided.
  */
 void calcHermiteSub(CalcSpline *spline, Vector4 *out, int idx, float t)
 {
@@ -4844,11 +4827,11 @@ void calcHermiteSub(CalcSpline *spline, Vector4 *out, int idx, float t)
     out->z = h00 * p0.z + h01 * p1.z + h10 * startTangent.z + h11 * endTangent.z;
 }
 
-/* Normalizes vec's x/y/z in place (`lwc1` at 0x0/0x4/0x8). What is tested
- * is the inverse length itself, 1.0f / sqrt(x*x + y*y + z*z) (`div.s $f12,
- * $f0,$f1`, 0x00a1916c), against 0.0f (`c.eq.s $f12,$f2`, 0x00a19170): equal,
- * all three components are stored as 0.0f; otherwise each is multiplied by
- * it. The input length is never compared with zero. */
+/*
+ * Scales vec to unit length in place. The scale is 1.0f / sqrt(x*x + y*y +
+ * z*z); when that scale equals 0.0f, all three components are set to 0.0f
+ * instead. The input length itself is never compared with zero.
+ */
 void calcNormal(Vector4 *vec)
 {
     float scale;

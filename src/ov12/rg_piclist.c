@@ -63,11 +63,11 @@ typedef struct RgPicDebug {
 #define PIC_DEBUG_COARSE_STEP 8
 
 
-/* Scaffold-owned counter (config/symbols/ov12.txt: s_nColor_0). */
+/* Gray level of the next rectangle drawn by _draw_nontex. */
 static int s_nColor_0;
 extern XglPadRecord PadData[2];
 
-/* Debug text strings: scaffold-owned rodata, referenced by address only. */
+/* Debug text strings, declared without a known array size. */
 extern const char picListDebugEditHelpText[];
 extern const char picListDebugPicNumberFormat[];
 extern const char picListDebugPicPositionFormat[];
@@ -101,6 +101,7 @@ const char picListAssertNumBelowPicMax[] = "pList->m_uNum < PIC_MAX";
 
 const char picListAssertDebugNotNil[] = "pDebug != NIL";
 
+/* Draws the named archive texture with additive blending, if it exists. */
 static void _draw_add(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
                       int x, int y)
 {
@@ -114,6 +115,7 @@ static void _draw_add(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
     }
 }
 
+/* Draws the named archive texture with linear blending, if it exists. */
 static void _draw_linear(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
                          int x, int y)
 {
@@ -127,6 +129,7 @@ static void _draw_linear(XrgPaint2D *paintId, RgBxx *bxx, const char *picName,
     }
 }
 
+/* Draws a flat gray rectangle; the gray level steps up on each call and wraps. */
 static void _draw_nontex(XrgPaint2D *paintId, int x, int y, int width, int height)
 {
     RgPicColor color;
@@ -173,6 +176,7 @@ int RgPicGetHeight(RgPic *pic)
     return height;
 }
 
+/* Writes a picture record to the host handle when debug flag 3 is set. */
 void RgPicWrite(RgPic *pic, int handle)
 {
     unsigned char buffer[0x400];
@@ -214,6 +218,7 @@ int RgPicBinarySize(void)
 
 const char picListAssertBufferNotNil[] = "pBuf != NIL";
 
+/* Creates a picture from a serialized record, or returns 0 when its texture is missing. */
 RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer)
 {
     unsigned char *src;
@@ -252,6 +257,7 @@ RgPic *CreateRgPicFromBinary(RgBxx *bxx, void *buffer)
     return pic;
 }
 
+/* Reads one serialized picture from the host handle, or returns 0 when debug flag 3 is clear. */
 RgPic *RgPicRead(int handle, RgBxx *bxx)
 {
     unsigned char buffer[0x400];
@@ -268,6 +274,7 @@ RgPic *RgPicRead(int handle, RgBxx *bxx)
 
 const char picListAssertPicDataNotNil[] = "pPic->m_pPic != NIL";
 
+/* Creates a picture that draws the named archive texture with default placement and color. */
 RgPic *CreateRgPic(RgBxx *bxx, const char *pszName)
 {
     RgPic *pic;
@@ -380,11 +387,9 @@ void RgPicMove(RgPic *pic, int dx, int dy)
 }
 
 /*
- * The picture's alpha field selects a blend mode with the same values
- * XrgPaint2DAlpha documents above (1 -> add, 3 -> alpha, 2 -> linear); any
- * other alpha value leaves the paint object's current blend mode untouched.
- * A "dark" picture halves every color component before handing it to
- * XrgPaint2DColor instead of drawing with its stored color unchanged.
+ * The alpha field selects the blend mode: 1 adds, 2 is linear and 3 is alpha
+ * blending. Any other value keeps the paint object's current blend mode.
+ * A dark picture halves each color component before XrgPaint2DColor.
  */
 void RgPicDraw(RgPic *pic, XrgPaint2D *paint)
 {
@@ -436,6 +441,7 @@ void RgPicNotDraw(RgPic *pic, int notDraw)
     pic->notDraw = notDraw;
 }
 
+/* Creates an empty picture list for the archive, with drawing enabled. */
 RgPicList *CreateRgPicList(RgBxx *pBxx)
 {
     RgPicList *pList;
@@ -451,6 +457,7 @@ RgPicList *CreateRgPicList(RgBxx *pBxx)
     return pList;
 }
 
+/* Frees every picture in the list, then the list itself. */
 void DisposeRgPicList(RgPicList *pList)
 {
     unsigned int i;
@@ -462,6 +469,7 @@ void DisposeRgPicList(RgPicList *pList)
     RgHeapFree(InstanceOfRgHeap(), pList, picListSourcePath, 365);
 }
 
+/* Adds a picture for the named texture at the end of the list and returns it. */
 RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
 {
     RgPic *pic;
@@ -478,6 +486,7 @@ RgPic *RgPicListAddPic(RgPicList *pList, const char *pszName)
     return pic;
 }
 
+/* Removes the picture at index, if any, and shifts the later pictures down. */
 void RgPicListDelPic(RgPicList *pList, int index)
 {
     unsigned int i;
@@ -511,6 +520,7 @@ unsigned int RgPicListGetSize(RgPicList *pList)
     return pList->m_uNum;
 }
 
+/* Draws every picture in the list, offset by the list offset, when drawing is enabled. */
 void RgPicListDraw(RgPicList *pList, XrgPaint2D *paint)
 {
     unsigned int i;
@@ -537,6 +547,7 @@ static int _BinarySizePicList(void)
     return RG_PIC_LIST_BINARY_SIZE;
 }
 
+/* Writes the list header, then each picture record, when debug flag 3 is set. */
 void RgPicListWrite(RgPicList *pList, int handle)
 {
     unsigned char buffer[0x400];
@@ -575,6 +586,7 @@ void RgPicListWrite(RgPicList *pList, int handle)
         RgPicWrite(pList->pics[i], handle);
 }
 
+/* Creates a picture list from a serialized list, skipping pictures whose textures are missing. */
 RgPicList *CreateRgPicListFromBinary(RgBxx *bxx, void *buffer)
 {
     RgPicList *pList;
@@ -614,6 +626,7 @@ RgPicList *CreateRgPicListFromBinary(RgBxx *bxx, void *buffer)
     return pList;
 }
 
+/* Reads a picture list from the host handle, or returns 0 when debug flag 3 is clear. */
 RgPicList *RgPicListRead(int handle, RgBxx *bxx)
 {
     unsigned char buffer[0x400];
@@ -631,7 +644,7 @@ RgPicList *RgPicListRead(int handle, RgBxx *bxx)
          * The serialized header is four words: picture count, ofsX, ofsY
          * and a reserved word that is copied but never read. They are
          * copied through a plain pointer, so the moves stay unaligned
-         * (lwl/lwr, ov12:0x00a413f8..0x00a41434).
+         * (lwl/lwr).
          */
         src = buffer;
         __builtin_memcpy(&num, src, 4);
@@ -705,7 +718,9 @@ void DisposeRgPicDebug(RgPicDebug *pDebug)
 }
 
 /*
- * The held buttons are read at PadData+0x28 (lhu, ov12:0x00a41750).
+ * Moves the position by the held d-pad directions. With L1 held the steps are
+ * coarse and both coordinates snap to the grid. The held buttons are read at
+ * PadData+0x28 (lhu).
  */
 void RgPicDebugEditPosition(int *x, int *y)
 {
@@ -744,6 +759,7 @@ const char picListAssertDebugListNotNil[] = "pDebug->m_pList != NIL";
 
 const char picListUnknownDebugEditModeFormat[] = "unknown debug edit mode %d";
 
+/* Handles the debug editor's pad input for the current mode and updates the list. */
 void RgPicDebugControl(RgPicDebug *pDebug)
 {
     RgPic *pic;
@@ -782,6 +798,7 @@ void RgPicDebugControl(RgPicDebug *pDebug)
 
     mode = pDebug->mode;
     if (mode == RG_PIC_DEBUG_EDIT) {
+        /* Moves the selected picture, then cycles the selection through the list. */
         pic = RgPicListGetPic(pDebug->list, pDebug->index);
         if (pic != 0) {
             x = RgPicGetX(pic);
@@ -817,6 +834,7 @@ void RgPicDebugControl(RgPicDebug *pDebug)
         if (repeat & PAD_START)
             pDebug->mode = RG_PIC_DEBUG_OFFSET;
     } else if (mode == RG_PIC_DEBUG_BROWSE) {
+        /* Steps through the archive textures; CIRCLE adds the one shown. */
         texNum = RgBxxGetTexNum(pDebug->bxx);
         if (texNum == 0)
             pDebug->mode = RG_PIC_DEBUG_EDIT;
@@ -920,6 +938,7 @@ void RgPicDebugControl(RgPicDebug *pDebug)
             pDebug->mode = RG_PIC_DEBUG_EDIT;
         }
     } else if (mode == RG_PIC_DEBUG_OFFSET) {
+        /* Moves the whole list: its offset, or every picture while R1 is held. */
         ofsX = RgPicListGetOfsX(pDebug->list);
         ofsY = RgPicListGetOfsY(pDebug->list);
         if (buttons & PAD_R1) {
@@ -938,6 +957,7 @@ void RgPicDebugControl(RgPicDebug *pDebug)
     }
 }
 
+/* Draws the debug editor overlay for the current mode, with its help text. */
 void RgPicDebugDisp(RgPicDebug *pDebug, XrgPaint2D *paint)
 {
     RgPic *pic;

@@ -23,6 +23,10 @@ void SsdInitLfoWork(SsdLfoWork *work)
         work->states[i].param.flags = 0;
 }
 
+/*
+ * Loads the LFO parameter entries. An entry without flags is cleared, and active
+ * takes the bit of the last enabled entry.
+ */
 void SsdInitLfoParam(SsdLfoWork *work, const SsdLfoParam *params)
 {
     int i;
@@ -42,6 +46,10 @@ void SsdInitLfoParam(SsdLfoWork *work, const SsdLfoParam *params)
     work->active = active;
 }
 
+/*
+ * Rebuilds the work's running LFO list from source: each enabled state is copied,
+ * restarted from zero and linked into the list, with its phase flags cleared.
+ */
 void SsdResetLfoProc(SsdLfoWork *work, SsdLfoWork *source)
 {
     int count;
@@ -74,6 +82,10 @@ void SsdResetLfoProc(SsdLfoWork *work, SsdLfoWork *source)
     }
 }
 
+/*
+ * Scales a depth for the period: divided by period for the triangular waveforms,
+ * and by period - 1 for waveforms 4 and 5 (when period is not 1).
+ */
 int SsdSeqGetLFODepth(int depth, int period, int waveform)
 {
     if (depth && period) {
@@ -95,6 +107,10 @@ int SsdSeqGetLFODepth(int depth, int period, int waveform)
     return depth;
 }
 
+/*
+ * Runs the LFO states of every active voice and adds each output to the voice's
+ * volume, pan or pitch total, according to the state's target. Sets the matching event bits.
+ */
 void SsdLfoControlProc(SsdGlobalWork *work)
 {
     int remaining;
@@ -116,6 +132,7 @@ void SsdLfoControlProc(SsdGlobalWork *work)
             voice->lfo.pan = 0;
             voice->lfo.volume = 0;
             voice->lfo.pitch = 0;
+            /* Each state is evaluated in turn; its value goes to the total for its target. */
             for (; state; state = state->next) {
                 if (state->delay) {
                     --state->delay;
@@ -164,6 +181,7 @@ int SsdLfoOffProc(SsdLfoState *state, SsdGlobalWork *work)
     return 0;
 }
 
+/* Square wave that toggles between 0 and depth every period. */
 int SsdLfoRectangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     int value = 0;
@@ -176,6 +194,7 @@ int SsdLfoRectangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value;
 }
 
+/* Square wave that alternates between +depth and -depth every period. */
 int SsdLfoRectangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
@@ -189,6 +208,7 @@ int SsdLfoRectangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value;
 }
 
+/* Triangle wave: the value moves by a step that reverses every period. */
 int SsdLfoTriangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
@@ -202,6 +222,10 @@ int SsdLfoTriangularSingleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value += state->step;
 }
 
+/*
+ * Triangle wave whose step reverses at each change. After the first segment,
+ * each segment lasts twice the period.
+ */
 int SsdLfoTriangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     int countdown = state->countdown;
@@ -222,6 +246,7 @@ int SsdLfoTriangularDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value += state->step;
 }
 
+/* Sawtooth wave: adds depth each step and resets to zero every period. */
 int SsdLfoSawtoothSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
@@ -233,6 +258,7 @@ int SsdLfoSawtoothSingleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value;
 }
 
+/* Noise: picks a new random level, scaled by depth, every period. */
 int SsdLfoNoiseSingleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
@@ -244,6 +270,7 @@ int SsdLfoNoiseSingleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value;
 }
 
+/* Noise centred on zero: picks a new random level between -depth and +depth every period. */
 int SsdLfoNoiseDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
 {
     if (--state->countdown == 0) {
@@ -255,6 +282,7 @@ int SsdLfoNoiseDoubleProc(SsdLfoState *state, SsdGlobalWork *work)
     return state->value;
 }
 
+/* Advances the work's xorshift random state and returns a 15-bit value. */
 int SsdGetRSLFORandom(SsdGlobalWork *work)
 {
     int random = work->random_state;

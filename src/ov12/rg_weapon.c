@@ -34,7 +34,7 @@
 
 /* Declared here: functions of other translation units. */
 
-/* Declared here: strings of the scaffold-owned data window (ov12:0x00a53642..0x00a53818). */
+/* Declared here: strings of the OV12 data block used by the assert and warning calls. */
 extern const char weaponAssertAttachNumInRange[]; /* "pAttach->m_uAttachNum < ATTACH_MAX" */
 extern const char weaponAssertEquipTypeInRange[]; /* "RG_EQUIP_TYPE_MIN <= (eEquipType) && (eEquipType) < RG_EQUIP_TYPE_NUM" */
 extern const char weaponAssertShotTypePNotNil[]; /* assert string of _ShotTypeShot */
@@ -142,6 +142,7 @@ static void _AddShotAttach(RgWeaponAttach *pAttach, RgShot *shot)
     pAttach->shots[pAttach->m_uAttachNum++] = shot;
 }
 
+/* Removes released shots from the attach list, keeping the order of the live ones. */
 static void _CheckAttach(RgWeaponAttach *pAttach)
 {
     RgShot *alive[ATTACH_MAX];
@@ -169,6 +170,10 @@ void _CommonDispose(RgWeapon *weapon)
 {
 }
 
+/*
+ * Switches the actor to the shot end motion once its current motion has ended,
+ * then drops released shots from the attach list.
+ */
 void _CommonPassTime(RgWeapon *weapon, float dt)
 {
     int charID;
@@ -186,6 +191,11 @@ void _CommonPassTime(RgWeapon *weapon, float dt)
     _CheckAttach(&weapon->shotAttach);
 }
 
+/*
+ * Updates the lock-on effector each frame. It follows the locked target, or aims
+ * ahead of an equipped weapon that has the lock-on control flag set. Otherwise it
+ * is deactivated.
+ */
 void _CommonDisp(RgWeapon *weapon)
 {
     RgVector position;
@@ -223,6 +233,10 @@ void _CommonDisp(RgWeapon *weapon)
     }
 }
 
+/*
+ * Fills a weapon from its essence and the create info: state flags, motion tables,
+ * equip and sound settings, and the lock-on angles for the equip side.
+ */
 void _InitWeaponCommon(RgWeapon *weapon, RgWeaponEssence *base, RgWeaponCreateInfo *info)
 {
     int i;
@@ -269,6 +283,7 @@ void _InitWeaponCommon(RgWeapon *weapon, RgWeaponEssence *base, RgWeaponCreateIn
     CopyRgEquip(&weapon->equip, &base->equip);
     weapon->useMask = base->useMask;
     weapon->lockOnEffector = 0;
+    /* Copy the motion tables for every character and equip type. */
     for (i = 0; i < RG_EQUIP_TYPE_NUM; i++) {
         for (j = 0; j < RG_ACTOR_CHAR_ROBNUM; j++) {
             weapon->shotMotionTable[j][i] = base->shotMotionTable[j][i];
@@ -276,6 +291,7 @@ void _InitWeaponCommon(RgWeapon *weapon, RgWeaponEssence *base, RgWeaponCreateIn
             weapon->shotEndMotionTable[j][i] = base->shotEndMotionTable[j][i];
         }
     }
+    /* Lock-on angle limits, wrapped into [-pi, pi]; the right side mirrors them. */
     if (info->equipType == RG_EQUIP_TYPE_LEFT) {
         angle = base->lockOnAngleMin;
         while (angle > XRG_PI) {
@@ -359,6 +375,7 @@ void _DestructWeaponCommon(RgWeapon *weapon)
     XrgActorDisposeEffector(RgRobotGetActor(weapon->robot), weapon->lockOnEffector);
 }
 
+/* Sets every field of a weapon essence to its default. */
 void _InitEssenceCommon(RgWeaponEssence *ess)
 {
     unsigned int i;
@@ -406,6 +423,11 @@ void _InitEssenceCommon(RgWeaponEssence *ess)
     ess->shotVolume = 1;
 }
 
+/*
+ * Fires a shot when the cooldown has run out and no shot is still attached. Returns
+ * 1 if a shot was fired, else 0. A firing starts the cooldown and uses one shot
+ * unless the weapon has infinite shots.
+ */
 int _ShotTypeShot(RgWeapon *pWeapon)
 {
     RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
@@ -461,6 +483,7 @@ void _ShotTypeFree(RgWeapon *pWeapon)
     weapon->cooldown = 0.0f;
 }
 
+/* Counts the cooldown down while no shot is attached. */
 void _ShotTypePassTime(RgWeapon *pWeapon, float dt)
 {
     RgWeaponShotType *weapon = (RgWeaponShotType *) pWeapon;
@@ -475,6 +498,10 @@ void _ShotTypePassTime(RgWeapon *pWeapon, float dt)
     }
 }
 
+/*
+ * Creates the lock-on constraint effector for the left or right equip, unless the
+ * control flags exclude it.
+ */
 void _InitWeaponCommonEffector(RgWeapon *weapon, RgStatus *robot,
                                unsigned int equipType)
 {
@@ -533,6 +560,7 @@ RgWeapon *_CreateWeaponShotType(void *pEss, RgWeaponCreateInfo *pInfo)
     return &pWpn->common;
 }
 
+/* Sets a shot-type essence to its defaults: lock-on control and a busy time of 0.4. */
 void InitRgWeaponShotEssence(RgWeaponShotEssence *pEss)
 {
     if (pEss == 0) {
@@ -570,6 +598,10 @@ void _ShotStopAttackType(RgWeapon *pWeapon)
     weapon->active = 1;
 }
 
+/*
+ * Moves the attack geometry with the followed joint while the attack is active,
+ * and resets its status otherwise.
+ */
 void _PassTimeAttackType(RgWeapon *pWeapon, float dt)
 {
     RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
@@ -583,10 +615,9 @@ void _PassTimeAttackType(RgWeapon *pWeapon, float dt)
     if (weapon->followActor != 0 &&
             XrgActorGetJointLocal(weapon->followActor, weapon->followJoint, jointLocal) != 0) {
         /*
-         * shotRequested and active are the original's two separate early-exit
-         * tests, not one "if / else if" condition: folding them into a single
-         * else-if compiles the guard scheduling for this pair differently, so
-         * shotRequested's test keeps its own goto to the shared reset call.
+         * shotRequested and active are two separate early-exit tests in the original,
+         * not one if / else if condition. Combining them changes the guard scheduling,
+         * so the shotRequested test keeps its own goto to the shared reset call.
          */
         if (weapon->common.shotRequested == 0) {
             goto resetStatus;
@@ -621,6 +652,10 @@ void _HitBgAttackType(RgWeapon *pWeapon, RgBgObj *bgObject, RgVector position)
     }
 }
 
+/*
+ * Handles a hit on a robot. A valid attack deals damage and plays the hit effect;
+ * an invalid one gives the robot an invalid-attack reaction.
+ */
 void _HitRobotAttackType(RgWeapon *pWeapon, RgStatus *robot, RgVector position)
 {
     RgWeaponAttackType *weapon = (RgWeaponAttackType *) pWeapon;
@@ -656,6 +691,10 @@ void _HitRobotAttackType(RgWeapon *pWeapon, RgStatus *robot, RgVector position)
     }
 }
 
+/*
+ * Initializes an attack weapon: its callbacks, follow joint and damage, and its
+ * collision ball, made from the attack geometry group or a default ball.
+ */
 void _InitWeaponAttack(RgWeaponAttackType *weapon, RgWeaponAttackEssence *essence,
                        RgWeaponCreateInfo *info)
 {
@@ -709,6 +748,7 @@ RgWeapon *_CreateWeaponAttackType(void *pEss, RgWeaponCreateInfo *pInfo)
     return &pWpn->common;
 }
 
+/* Sets an attack essence to its defaults: attack motions, default damage and control flags. */
 void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss)
 {
     unsigned int i;
@@ -730,6 +770,7 @@ void InitRgWeaponAttackEssence(RgWeaponAttackEssence *pEss)
     pEss->hitEffectName[0] = '\0';
 }
 
+/* Initializes an unarmed attack weapon. The follow joint depends on the equip side and the character. */
 void _InitWeaponUnArmedType(RgWeaponAttackType *weapon, RgWeaponUnArmedEssence *essence,
                             RgWeaponCreateInfo *info)
 {
@@ -775,6 +816,7 @@ RgWeapon *_CreateWeaponUnArmedType(void *pEss, RgWeaponCreateInfo *pInfo)
     return &pWpn->common;
 }
 
+/* Sets an unarmed attack essence to its defaults, with no actor. */
 void InitRgWeaponUnArmedEssence(RgWeaponUnArmedEssence *pEss)
 {
     unsigned int i;
@@ -905,6 +947,11 @@ int _EnergyShot(RgWeapon *pWeapon)
     return weapon->active == 0;
 }
 
+/*
+ * Advances the energy weapon one frame. A pending request that can fire starts a
+ * shot. While shooting, the shot count drains and the charge rises, becoming active
+ * at the limit. Otherwise the charge cools down.
+ */
 void _EnergyPassTime(RgWeapon *pWeapon, float dt)
 {
     RgWeaponEnergyType *weapon = (RgWeaponEnergyType *) pWeapon;
@@ -1037,6 +1084,7 @@ void DisposeRgWeapon(RgWeapon *weapon)
     RgHeapFree(InstanceOfRgHeap(), weapon, weaponSourcePath, 1352);
 }
 
+/* Disposes a weapon like DisposeRgWeapon, but returns its actor instead of disposing it. */
 XrgActor *DisposeRgWeaponNotActor(RgWeapon *weapon)
 {
     XrgActor *actor;
@@ -1097,6 +1145,11 @@ int RgWeaponIsNotBusy(RgWeapon *weapon)
     return 1;
 }
 
+/*
+ * Returns the unit of the weapon's rest gauge: none for infinite or attack weapons,
+ * a count for shot weapons, a percentage otherwise. A weapon without an essence
+ * warns and returns none.
+ */
 int RgWeaponGetRestUnit(RgWeapon *weapon)
 {
     RgWeaponEssence *ess;
@@ -1224,6 +1277,10 @@ void RgWeaponPlayShotMotion(RgWeapon *weapon)
     _PlayShotMotion(weapon);
 }
 
+/*
+ * Requests a shot. Returns the shoot callback's result, or 0 when no shots are left
+ * or there is no callback.
+ */
 int RgWeaponShot(RgWeapon *weapon)
 {
     if (weapon == 0) {
@@ -1281,9 +1338,10 @@ void RgWeaponDisposeLockon(RgWeapon *weapon)
     }
 }
 
+/* Stops the shot, runs the shot-stop callback, and unequips the weapon. */
 void RgWeaponShotStop(RgWeapon *weapon)
 {
-    /* separate load keeps the type's shot-stop callback in its own register */
+    /* A separate load keeps the shot-stop callback in its own register. */
     void (*shotStop)(RgWeapon *weapon);
 
     if (weapon == 0) {
@@ -1318,6 +1376,7 @@ void RgWeaponHitBG(RgWeapon *weapon, RgBgObj *bgObject, RgVector position)
     XrgSoundRingVol(weapon->sound, weapon->bgHitSound, weapon->bgHitSound);
 }
 
+/* Subtracts delta from the shot count, clamped at zero. Infinite counts are kept. */
 void RgWeaponSubShotNum(RgWeapon *weapon, float delta)
 {
     float shotNum;
@@ -1371,6 +1430,11 @@ void RgWeaponPassTime(RgWeapon *weapon, float dt)
     }
 }
 
+/*
+ * Updates the lock-on state from the robot's target. The target's position in the
+ * robot's local space gives an angle, and the weapon locks on when that angle is
+ * inside its lock-on window.
+ */
 void _CheckLockOn(RgWeapon *weapon)
 {
     RgMatrix local;
@@ -1420,6 +1484,7 @@ void _CheckLockOn(RgWeapon *weapon)
                     angle += XRG_TWO_PI;
                 } while (angle < -XRG_PI);
             }
+            /* Lock on when the angle lies inside the weapon's lock-on window. */
             lockedOn = 0;
             if (weapon->lockOnAngleMin <= angle && angle <= weapon->lockOnAngleMax) {
                 lockedOn = 1;
@@ -1449,7 +1514,7 @@ int _GetParentCharID(RgWeapon *weapon)
 
 void _PlayShotMotion(RgWeapon *weapon)
 {
-    /* separate load keeps shotMotionOffset live across the call below */
+    /* A separate load keeps shotMotionOffset live across the call below. */
     int shotMotionOffset;
     int charID;
     int motion;
@@ -1483,6 +1548,11 @@ int _GetDefShotPosDir(void *posOwner, RgVector position, RgVector direction)
     return 1;
 }
 
+/*
+ * Computes a shot's position and direction from the weapon's joint. The direction
+ * runs along the aim axis, toward the locked target, or away from the robot. The
+ * pitch and yaw offsets then rotate an unlocked aim.
+ */
 void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector direction)
 {
     /*
@@ -1506,6 +1576,7 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
         assert_prog(weaponAssertRobotNotNil, weaponSourcePath, 1892);
     }
     RgGeomRobotCalcLocal(&RgRobotGetGeom(robot)->geom, robotLocal);
+    /* Without an actor the joint is the robot itself. Otherwise the next aim joint in the cycle is used, or joint 8. */
     if (weapon->actor == 0) {
         XrgCopyMatrix(jointLocal, robotLocal);
     } else {
@@ -1544,6 +1615,7 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
     if (ess->shotPitch == 0.0f && ess->shotYaw == 0.0f) {
         return;
     }
+    /* Pitch and yaw rotate the aim about the joint, keeping its length. */
     XrgSubVector(aimVector, direction, position);
     length = XrgLengthVector(aimVector);
     XrgCalcMatrixZtoY(jointLocal, aimVector, XrgVectorY());
@@ -1555,8 +1627,8 @@ void _GetDefShotPosDirFunc(RgWeapon *weapon, RgVector position, RgVector directi
 
 void _GetShotInfo(RgWeapon *weapon, RgShotRequest *info)
 {
-    /* separate load keeps the owning robot in its own register, read
-     * once and passed to both RgRobotGetTarget and RgRobotIsConfused */
+    /* A separate load keeps the owning robot in its own register. It is read
+     * once and passed to both RgRobotGetTarget and RgRobotIsConfused. */
     RgStatus *robot;
 
     robot = weapon->robot;

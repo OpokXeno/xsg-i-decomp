@@ -114,7 +114,7 @@ enum ScriptDebugMenuItem {
 #define PAUSE_INPUT_DELAY 0x20
 #define PAUSE_SKIP_INPUT_DELAY 0x40
 
-/* Window/task state: set once the debug window has been answered. */
+/* Slider window state meaning the window has been answered. */
 #define SCRIPT_WINDOW_STATE_DONE 2
 
 /* Debug tool layout and limits. */
@@ -138,10 +138,7 @@ typedef void (*JSNativeMethod)(void);
 
 
 /* TU-local observer and CallMethod declarations. */
-/* Proposal: the script table indexed by currentScriptDB. Only the two fields
- * this allocation touches are modeled; scriptDB's element stride (0x1C bytes,
- * evidenced by *7*4 in every CallMethod family function) is fixed by that
- * indexing arithmetic, not invented. */
+/* One scriptDB element, indexed by currentScriptDB. The element is 0x1C bytes. */
 typedef struct ScriptDbEntry {
     void *class_image;   /* +0x0: class database image read from the script file */
     void *motion_data;   /* +0x4: extra-motion pack read next to the script file (.fpk) */
@@ -298,8 +295,7 @@ const char lightSetColorMethodName[] = "setColor";
 
 const char lightSetDirection2MethodName[] = "setDirection2";
 
-/* EUC-JP text below means "event in progress". */
-/* Event running. */
+/* EUC-JP text meaning "event in progress". */
 const char func_observer_debug_text[16] =
     "\xa5\xa4\xa5\xd9\xa5\xf3\xa5\xc8\xbc\xc2\xb9\xd4\xc3\xe6";
 
@@ -331,14 +327,11 @@ static unsigned int s_nScriptTalkLock = 0;
 
 const char lightClassName[8] = "light";
 
-/* Proposal: per-function JNI method-signature literals. Each is a duplicate
- * function-local `static const char sig[]`, so the assembler disambiguates
- * with the original ELF's own dup-static suffixing: "sig.2"/"sig.3"/"sig.4". */
+/* JNI method signatures; the original ELF symbols are sig.2, sig.3 and sig.4. */
 static const char sig_2[4] = "()V";
 
 static const char sig_3[5] = "(I)V";
 
-/* "(II)V"  @ 0x004da478, ELF name "sig.4" */
 static const char sig_4[6] = "(II)V";
 
 static void *windowOwner = 0;
@@ -388,8 +381,7 @@ int getEmptyVM(ScriptObserverTask *observer);
 
 extern XglPadRecord PadData[2];
 
-/* Reused TU-local declaration (src/core/main-0025a9c0/private.h and every
- * other GameLoopState-family accepted source in this unit). */
+/* Game loop state, defined in another file. */
 extern ScriptGameLoopState GameLoopState;
 
 extern ScriptRenderState sRender;
@@ -409,6 +401,7 @@ static u32 heapUsed;
 
 static int lightSave;
 
+/* Initializes the JS runtime and registers the light class with its native methods. */
 static void initJS(int state)
 {
     int class_id;
@@ -420,6 +413,7 @@ static void initJS(int state)
     JS_classAddMethod(class_id, lightSetDirection2MethodName, JS_classLight_setDirection2);
 }
 
+/* Calls method on the stage VM with argument, when method is not null. */
 void SCRIPT_test(SceneObject argument, JavaMethod *method)
 {
     JNI_initThread(stageVM);
@@ -542,6 +536,7 @@ void SCRIPT_frameLock2Battle(void)
     s_nScriptFrameLockEntry = 1;
 }
 
+/* Recreates the default, stage and event VMs and loads the native class. */
 void SCRIPT_reset(void)
 {
     JThread **event_vm;
@@ -563,6 +558,10 @@ void SCRIPT_reset(void)
     JNI_loadNativeClass();
 }
 
+/*
+ * Sets up the JNI heap, the two event file buffers and both script databases
+ * in heap_base, creates the VMs and returns the address after the class images.
+ */
 void *SCRIPT_init(void *heap_base)
 {
     unsigned char *cursor = heap_base;
@@ -620,6 +619,7 @@ void *SCRIPT_init(void *heap_base)
     return cursor;
 }
 
+/* Starts the actor's talk method when talk is not locked, the scene is active and the actor is a Chr. */
 void SCRIPT_execTalkto(void *actor)
 {
     Actor *record = (Actor *)actor;
@@ -638,6 +638,7 @@ void SCRIPT_execTalkto(void *actor)
     }
 }
 
+/* Starts the actor's touch method under the same conditions as SCRIPT_execTalkto. */
 void SCRIPT_execTouchto(void *actor)
 {
     Actor *record = (Actor *)actor;
@@ -656,6 +657,10 @@ void SCRIPT_execTouchto(void *actor)
     }
 }
 
+/*
+ * Creates the observer task that runs method_name on the actor. It uses the
+ * (Enepc) signature when the class has it, else the (Enepc, Window) one with a new window.
+ */
 void createTalkTask(void *actor, const char *method_name)
 {
     JThread *thread;
@@ -719,6 +724,10 @@ void createTalkTask(void *actor, const char *method_name)
     talktoObserver(task);
 }
 
+/*
+ * Observer task step that calls the talk method on the stage VM. The task is
+ * removed when the call finishes or the talk is cancelled.
+ */
 void talktoObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags = task->owner->flags;
@@ -761,13 +770,7 @@ void talktoObserver(ScriptObserverTask *task)
         }
     }
 
-    /*
-     * The method is read back from the task before the argument array is
-     * filled: the original loads it (lw a1,60(s2)) ahead of the stageVM
-     * argument, which only happens when the array stores separate the read
-     * from the call (a read in the call itself, attempt-4d6f277fff4a form
-     * 08, is scheduled after the stageVM load).
-     */
+    /* The method is read from the task before the argument array is filled; the original keeps this order. */
     method = task->method;
     arguments[0] = receiver;
     arguments[1] = ((Actor *)object)->java_object;
@@ -784,6 +787,7 @@ void talktoObserver(ScriptObserverTask *task)
     }
 }
 
+/* Ends a talk early: closes its window, clears the talk flags and removes the observer task. */
 void talkCancel(ScriptObserverTask *task)
 {
     TComponent *window;
@@ -803,6 +807,7 @@ void talkCancel(ScriptObserverTask *task)
     xglTaskRemove(&task->task);
 }
 
+/* Queues an attrObserver task that calls the stage's entered method with attribute, unless one is running. */
 void SCRIPT_execEntered(int attribute)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
@@ -830,6 +835,7 @@ void SCRIPT_execEntered(int attribute)
     }
 }
 
+/* Calls method_name with no arguments on the stage object, through a func observer task. */
 void CallMethod(const char *method_name)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
@@ -855,13 +861,13 @@ void CallMethod(const char *method_name)
             task->method_signature = call_method_signature_void;
             task->invocation_state = 0;
             funcObserver(task);
-            /* separate load keeps the funcObserver call out of tail position:
-             * without it (form 11) GCC emits a sibling `j funcObserver` */
+            /* The load after the call keeps funcObserver out of tail position, as in the original. */
             started = task->invocation_state;
         }
     }
 }
 
+/* Like CallMethod, passing argument1 as one int argument. */
 void CallMethod_I(const char *method_name, int argument1)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
@@ -888,13 +894,13 @@ void CallMethod_I(const char *method_name, int argument1)
             task->argument1 = argument1;
             task->invocation_state = 0;
             funcObserver(task);
-            /* separate load keeps the funcObserver call out of tail position:
-             * without it (form 11) GCC emits a sibling `j funcObserver` */
+            /* The load after the call keeps funcObserver out of tail position, as in the original. */
             started = task->invocation_state;
         }
     }
 }
 
+/* Like CallMethod, passing argument1 and argument2 as two int arguments. */
 void CallMethod_II(const char *method_name, int argument1, int argument2)
 {
     ScriptDbEntry *entry = &scriptDB[currentScriptDB];
@@ -922,16 +928,16 @@ void CallMethod_II(const char *method_name, int argument1, int argument2)
             task->argument2 = argument2;
             task->invocation_state = 0;
             funcObserver(task);
-            /* separate load keeps the funcObserver call out of tail position:
-             * without it (form 11) GCC emits a sibling `j funcObserver` */
+            /* The load after the call keeps funcObserver out of tail position, as in the original. */
             started = task->invocation_state;
         }
     }
 }
 
-/* Drop the task from the scheduler and leave the task body. The usual
- * do/while (0) statement-macro idiom; its loop notes are part of the
- * original's code generation. */
+/*
+ * Observer task step that calls a script method on an event VM. Each early
+ * exit removes the task; the do { } while (0) exits are kept as in the original.
+ */
 void funcObserver(ScriptObserverTask *task)
 {
     unsigned int owner_flags;
@@ -1013,6 +1019,7 @@ void funcObserver(ScriptObserverTask *task)
     GameLoopState.flags |= GAME_LOOP_FLAG_FUNC_CALLED;
 }
 
+/* Assigns a free event VM to the observer and marks it in use. Returns 0 when none is free. */
 int getEmptyVM(ScriptObserverTask *observer)
 {
     int slot;
@@ -1040,6 +1047,7 @@ int SCRIPT_load2(const char *path)
     return loadScriptCD2(&scriptDB[(currentScriptDB + 1) & 1], path);
 }
 
+/* Sets the debug database addresses and loads the script at path into the inactive database. */
 void SCRIPT_load_DBG(const char *path)
 {
     ScriptDbEntry *entry;
@@ -1060,6 +1068,7 @@ void SCRIPT_load_DBG(const char *path)
     loadScript(nextEntry, base, path);
 }
 
+/* Returns the last occurrence of ch in the first length bytes of string, or 0. */
 static char *getStrIndex(char *string, unsigned int length, int ch)
 {
     int index = (int)(length - 1U);
@@ -1075,11 +1084,13 @@ static char *getStrIndex(char *string, unsigned int length, int ch)
     return 0;
 }
 
+/* Replaces the text from the last '.' of path onward with ext. */
 static char *replacePathExt(char *path, const char *ext)
 {
     return strcpy(getStrIndex(path, strlen(path), '.'), ext);
 }
 
+/* Observer task step that calls the stage's entered method with the task's attribute. */
 void attrObserver(ScriptObserverTask *task)
 {
     SceneObject object = task->object;
@@ -1125,6 +1136,7 @@ void attrObserver(ScriptObserverTask *task)
     }
 }
 
+/* Runs the pause screen when START is pressed. Returns 1 when TRIANGLE skips the event, else 0. */
 static int PauseSkipCheck(void)
 {
     if ((GameLoopState.flags & 0x90000000) != 0)
@@ -1144,6 +1156,7 @@ static int PauseSkipCheck(void)
     xglSleep();
     PartyTimePauseStart();
 
+    /* Waits until START resumes the event or TRIANGLE skips it. */
     if (!(PadData[0].pressed & PAD_TRIANGLE)) {
         for (;;) {
             if (GameLoopState.input_delay != 0) {
@@ -1172,6 +1185,10 @@ static int PauseSkipCheck(void)
     return 0;
 }
 
+/*
+ * Scene observer step: fades out once the event is pending, then resets the
+ * scene state and cameras and removes the task.
+ */
 void sceneObserver2(ScriptSceneTask *task)
 {
     JThread *thread;
@@ -1256,6 +1273,10 @@ void sceneObserver2(ScriptSceneTask *task)
     xglTaskRemove(&task->task);
 }
 
+/*
+ * Scene observer step. The first run creates the stage object and its VM. Later
+ * runs fade out once the event is pending, then reset the scene and remove the task.
+ */
 void sceneObserver(XglTaskPrefix *task_prefix)
 {
     ScriptSceneTask *task = (ScriptSceneTask *)task_prefix;
@@ -1296,6 +1317,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
     if (!(thread->flags & SCENE_THREAD_CALL_PENDING))
         return;
 
+    /* Starts the fade out once, then waits until the fade time has elapsed. */
     if (task->fade_started == 0) {
         task->fade_started = 1;
         if (s_nScriptFrameLockEntry == 0) {
@@ -1327,6 +1349,7 @@ void sceneObserver(XglTaskPrefix *task_prefix)
         nmlModelSendSignalEventFinish();
         s_nScriptEventSkipEntry = 0;
     }
+    /* Resets the scene flags, then reloads the map, actor and message systems. */
     s_nScriptFadeOutTime = SCRIPT_DEFAULT_FADE_FRAMES;
     s_nScriptChangeTime = SCRIPT_SCENE_CHANGE_FRAMES;
     s_nScriptFrameLockEntry = 0;
@@ -1395,6 +1418,11 @@ extern void TMENU_setItem(MenuNativeScriptView *menu, int index, const char *tex
 int DB_lightSave(ScriptFileSelect *state);
 void DB_evtMonitor(ScriptMenuTask *task);
 
+/*
+ * Debug light editor step. The first run picks the light set (SQUARE selects
+ * the second) and saves and clears the actor light flags. TRIANGLE starts a
+ * save; CROSS restores the flags and exits.
+ */
 static void DB_light(ScriptMenuTask *task)
 {
     XglPadRecord *pad = PadData;
@@ -1447,6 +1475,10 @@ static void DB_light(ScriptMenuTask *task)
     }
 }
 
+/*
+ * Debug menu step for the VirtualM switches: builds the item list on the first
+ * run and toggles the selected switch. Cancel closes the menu.
+ */
 static void DB_vmSwitch(ScriptMenuTask *task)
 {
     MenuNativeScriptView *menu = task->window;
@@ -1505,6 +1537,10 @@ static void DB_vmSwitch(ScriptMenuTask *task)
     }
 }
 
+/*
+ * Debug stage select: a map slider, then an entrance slider. Confirming the
+ * entrance loads that map at it. Cancelling a slider ends the step.
+ */
 static int DB_stageSelect(ScriptMenuTask *task)
 {
     MenuNativeScriptView *slider;
@@ -1564,6 +1600,7 @@ static int DB_stageSelect(ScriptMenuTask *task)
     }
 }
 
+/* Debug memory display: draws the heap usage bar and label each frame. CROSS closes it. */
 void DB_memory(ScriptMenuTask *task)
 {
     XglPadRecord *pad = PadData;
@@ -1620,6 +1657,10 @@ void DB_memory(ScriptMenuTask *task)
     }
 }
 
+/*
+ * Light file dialog: LEFT and RIGHT pick the lgtNN.rc number, CIRCLE loads it
+ * and SQUARE saves the current lights into it. Returns 1 when the dialog closes.
+ */
 int DB_lightSave(ScriptFileSelect *state)
 {
     char path[512];
@@ -1668,6 +1709,7 @@ int DB_lightSave(ScriptFileSelect *state)
     return 0;
 }
 
+/* Debug file dialog: runs the chosen .evt file through SCRIPT_load_DBG and SCRIPT_exec, or the chosen .rc file through JS_exec. */
 static int DB_scriptFileSelect(ScriptMenuTask *task)
 {
     ScriptFileSelect *browser;
@@ -1716,6 +1758,7 @@ extern void EXM_GetWindPara(EXM_WindState *params);
 extern void EXM_SetWindStruct(EXM_WindState *params);
 extern void EXM_SetWindPara(EXM_WindState *params);
 
+/* Debug wind editor: loads the wind parameters on first run and updates them each frame. CROSS applies them and exits. */
 static int DB_wind(ScriptMenuTask *task)
 {
     XglPadRecord *pad = &PadData[1];
@@ -1739,8 +1782,10 @@ static int DB_wind(ScriptMenuTask *task)
     }
 }
 
-/* Queue a debug menu task for `callback` and give it the owner and an empty
- * window, the way every debug entry point does. */
+/*
+ * Debug menu step: builds the item list on the first run. The selected item
+ * queues its debug task or enters the cursor tool, then this task ends.
+ */
 void SCRIPT_debugMenu(ScriptMenuTask *task)
 {
     MenuNativeScriptView *menu = task->window;
@@ -1866,6 +1911,11 @@ void SCRIPT_debugMenu(ScriptMenuTask *task)
     xglTaskRemove(&task->task);
 }
 
+/*
+ * Loads a script's class image from path, then its motion pack (.fpk) and PDB
+ * (.arc) beside it. Returns the skip count, or the negative read result when
+ * the class image cannot be read.
+ */
 int loadScriptCD(ScriptDbEntry *entry, const char *path)
 {
     char full_path[SCRIPT_PATH_MAX];
@@ -1904,6 +1954,11 @@ int loadScriptCD(ScriptDbEntry *entry, const char *path)
     return result;
 }
 
+/*
+ * Like loadScriptCD, but the motion pack and PDB are loaded from the mtnpack
+ * path using the script's base name. Returns the PDB address, or the negative
+ * read size when the class image cannot be read.
+ */
 int loadScriptCD2(ScriptDbEntry *entry, const char *path)
 {
     ScriptPathBuffer resource_path;
@@ -1937,6 +1992,11 @@ int loadScriptCD2(ScriptDbEntry *entry, const char *path)
     return (int)entry->pdb;
 }
 
+/*
+ * Reads the class image of the script at path_base + path into the entry, then
+ * its motion pack and PDB. Returns the class search result, or 0 when a file
+ * cannot be opened or read.
+ */
 const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *path)
 {
     struct ScriptImageHeaderBytes {
@@ -2011,6 +2071,11 @@ const char *loadScript(ScriptDbEntry *entry, const char *path_base, const char *
     return result;
 }
 
+/*
+ * Event monitor step, drawn while the monitor switch is on: prints the current
+ * VM's method and frames, then the selected actor (mode 0) or map unit. R2
+ * switches between the two lists; LEFT and RIGHT change the selection.
+ */
 void DB_evtMonitor(ScriptMenuTask *task)
 {
     char model_path[256];
@@ -2067,6 +2132,7 @@ void DB_evtMonitor(ScriptMenuTask *task)
     }
 };
 
+    /* Mode 0 lists actors; any other mode lists map units. */
     mode = debug->mode;
     switch (mode) {
     case 0: {
@@ -2211,6 +2277,10 @@ void DB_evtMonitor(ScriptMenuTask *task)
     DB_cmode(0);
 }
 
+/*
+ * Switches to the script loaded into the other database and starts its scene.
+ * Returns 0 when that script has no active class.
+ */
 ScriptDbEntry *SCRIPT_exec(void)
 {
     ScriptDbEntry *entry;
@@ -2229,6 +2299,7 @@ ScriptDbEntry *SCRIPT_exec(void)
     JNI_loadClassDB(entry->class_slot, 0);
     entry = &scriptDB[currentScriptDB];
     PLAY_setupDefault(PLAY_getCurrent());
+    /* Without an active class, only the main actor is created. */
     if (entry->active == 0) {
         Actor *actor;
 
@@ -2265,6 +2336,7 @@ ScriptDbEntry *SCRIPT_exec(void)
         JNI_pushFrame();
         JNI_loadNativeClass();
     }
+    /* A skip count of 1 parks the cameras and starts the stage from the class image. */
     if (entry->skip_count != 0) {
         if (entry->skip_count == 1) {
             Actor *actor;
@@ -2325,6 +2397,7 @@ ScriptDbEntry *SCRIPT_exec(void)
         return entry;
     }
 
+    /* Otherwise the scene fades in and its cameras are reset. */
     XTK_setResourceID(2);
     nmlModelSetGlobalPointLightReset();
     nmlModelSetFadeIn((int)GameLoopState.fade_frames, 0);
@@ -2392,6 +2465,10 @@ ScriptDbEntry *SCRIPT_exec(void)
     return entry;
 }
 
+/*
+ * Like SCRIPT_exec, but the scene that is not skipped runs under a
+ * sceneObserver2 task.
+ */
 ScriptDbEntry *SCRIPT_exec2(void)
 {
     ScriptDbEntry *entry;
@@ -2470,6 +2547,7 @@ ScriptDbEntry *SCRIPT_exec2(void)
         }
         return entry;
     }
+    /* Otherwise the event scene fades in and starts under a sceneObserver2 task. */
     XTK_setResourceID(2);
     GameLoopState.kind = GAME_MODE_EVENT;
     GameLoopState.flags |= GAME_LOOP_FLAG_EVENT_SCENE;
@@ -2532,6 +2610,7 @@ void *XTK_getWindowOwner(void)
     return windowOwner;
 }
 
+/* Returns the data value of the file at path in the current script's PDB, or 0 when it is missing. */
 int XTK_findFile(const char *path)
 {
     ScriptPdbFile *file;

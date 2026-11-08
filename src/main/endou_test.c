@@ -29,8 +29,8 @@
 #define ENDOU_MODEL_PAD ((EndouModelPadState *)&PadData)
 
 /* Held SELECT in the low half and pressed START in the high half of the pad
- * snapshot (PadData +0x28) leave a test screen. One spelling per literal type
- * the code compares with. */
+ * snapshot (PadData +0x28) leave a test screen. The three spellings are the
+ * signed, unsigned and 64-bit forms of the same value. */
 #define ENDOU_EXIT_CHORD 0x08000100
 #define ENDOU_EXIT_CHORD_U 0x08000100U
 #define ENDOU_EXIT_CHORD_ULL 0x08000100ULL
@@ -269,8 +269,8 @@ typedef struct ShopDataRecord {
     u16 values[0xb8];
 } ShopDataRecord;
 
-/* eMessageTest's three windows (and msg_11) are 0x50 bytes apart/long, and
- * EMessageParam is 0x44 bytes: the message plus the tail the original reserves. */
+/* EMessageParam is 0x44 bytes; this window adds a reserved 0xc-byte tail, so each
+ * window is 0x50 bytes. The windows arrays and msg_11 use this size. */
 typedef struct EMessageTestWindow {
     EMessageParam message;
     u8 unmodeled_44[0xc];
@@ -281,8 +281,8 @@ typedef struct UmnEventTextRecord {
     const char *message_text;
 } UmnEventTextRecord;
 
-/* Partial view of TyaUmlDispParam (src/main/tya_uml.c): 0x40 bytes here and used
- * as a windows[2] array, so it cannot take the owner size. */
+/* Partial view of TyaUmlDispParam (include/ov02/tya_uml.h): 0x40 bytes here and used
+ * as a windows[2] array, so it does not take the owner's 0x30-byte size. */
 typedef struct TyaUmlDispParamMailView {
     int mode;
     u8 unmodeled_04[4];
@@ -985,7 +985,7 @@ const char characterText[8] = "\245\255\245\343\245\351";
 
 static int TopMode_86 = 0;
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
+/* Raw words; the layout of this storage is not recovered. */
 static unsigned int TestEnv_49[48];
 
 static BgTestEnvironment TestEnv_54;
@@ -1301,6 +1301,10 @@ static inline void endModelCameraPosition(StudioCamera *camera,
     camera->position.vector.z = z;
 }
 
+/*
+ * Applies a test lighting profile to a studio light: the ambient intensity,
+ * then the three parallel lights.
+ */
 static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
                                               EndouTestLighting profile)
 {
@@ -1314,9 +1318,13 @@ static __inline__ void EndouApplyModelLighting(StudioLight **light_slot,
     xglLightDirection(*light_slot, 2, &profile.direction[2]);
 }
 
+/*
+ * Test menu loop: shows the test list and runs the test whose pad button is
+ * pressed, until the exit chord is held.
+ */
 void EndouTest(void)
 {
-    /* Initialize the CPU-owned packet before the renderer flushes it. */
+    /* Set the clear color used by each frame. */
     ENDOU_CLEAR_ENV->color_r = 0;
     ENDOU_CLEAR_ENV->color_g = 0x40;
     ENDOU_CLEAR_ENV->color_b = 0;
@@ -1396,6 +1404,10 @@ void EndouTest(void)
     }
 }
 
+/*
+ * Loads the event text overlay and shows its messages in a message window,
+ * advancing pages with R1, until the exit chord is held.
+ */
 void TextTest(void)
 {
     EMessageParam message;
@@ -1437,6 +1449,10 @@ void TextTest(void)
     }
 }
 
+/*
+ * Shop debug test: shows the shop records for the selected shop and runs
+ * MenuShopMain on it. Exits on Cross or the exit chord.
+ */
 void ShopTest(void)
 {
     unsigned int ab_column_offset;
@@ -1475,6 +1491,10 @@ void ShopTest(void)
         if ((pressed & PAD_CROSS) != 0)
             break;
 
+        /*
+         * Mode 0 browses the shop records; mode 1 runs the shop menu for the
+         * selected shop.
+         */
         switch (menu_open) {
         case 0: {
             u16 repeated;
@@ -1580,6 +1600,10 @@ void SeisanTest(void)
     }
 }
 
+/*
+ * Model test: loads the model with its motion and accessory actor, then runs
+ * the pad-driven viewer until the exit chord is held.
+ */
 void ModelTest(void) {
     StudioLight *light;
     u8 **work_end = &WorkEnd;
@@ -1635,6 +1659,7 @@ void ModelTest(void) {
     u8 *resource_buffer;
     u8 *accessory_resource_buffer;
 
+    /* Set up the two studio cameras. */
     temp_2 = xglStudioGetCamera2(0);
     temp_2->rotation.vector.x = 0.0f;
     temp_2->rotation.vector.y = 0.0f;
@@ -1651,6 +1676,7 @@ void ModelTest(void) {
     temp_2_2->rotation.vector.x = 0.0f;
     GameResourceInit(GAME_RESOURCE_BASE_ADDRESS, GAME_RESOURCE_BUFFER_SIZE);
     ACT_init();
+    /* Create the main actor and load its model files. */
     temp_2_3 = ACT_create(-1, 0x2101);
     ACT_initMotion(temp_2_3);
     {
@@ -1689,6 +1715,7 @@ void ModelTest(void) {
     ACT_allocMatrix(temp_2_3, -1);
     ACT_setModelWrapper(temp_2_3, 0);
     ACT_setMotion(temp_2_3, 1);
+    /* Create the second actor and load its model files. */
     temp_2_12 = ACT_create(-1, 1);
     ACT_initMotion(temp_2_12);
     {
@@ -1726,6 +1753,7 @@ void ModelTest(void) {
     ACT_allocMatrix(temp_2_12, -1);
     ACT_setModelWrapper(temp_2_12, 0);
     ACT_setMotion(temp_2_12, 1);
+    /* Create the accessory actor and load its files. */
     temp_23_9 = ACT_create(-1, 0x3003);
     {
     char sp2E0[128] = "\0";
@@ -1762,6 +1790,10 @@ void ModelTest(void) {
     ACT_setModelWrapper(temp_23_9, 0);
     ACT_setArms(temp_23_9, temp_2_3, 0x108U, 0);
     {
+        /*
+         * Each frame: the pad moves the model and camera, then the model, grid
+         * lines and message are drawn.
+         */
         while ((PadData.buttons.button_state & ENDOU_EXIT_CHORD) != ENDOU_EXIT_CHORD) {
             var_3_2 = ENDOU_MODEL_PAD->pressed;
             if (var_3_2 & PAD_R1) {
@@ -1789,6 +1821,10 @@ void ModelTest(void) {
             unsigned char column_alphas[ENDOU_GRID_ROWS];
             unsigned char row_alphas[ENDOU_GRID_COLUMNS];
             DoublewordAlignedVector4 quad_words[4];
+            /*
+             * Triangle scales the model; without it the same inputs move its
+             * position.
+             */
             if (temp_4 & PAD_TRIANGLE) {
                 if (temp_4 & PAD_RIGHT) {
                     temp_2_3->scale.x += 0.1f;
@@ -1920,6 +1956,10 @@ void ModelTest(void) {
                     }
                 }
             }
+            /*
+             * Copy the alpha tables, then project the grid points to screen
+             * space.
+             */
             __builtin_memcpy(column_alphas, modelTestColumnAlphaTable,
                              sizeof(column_alphas));
             __builtin_memcpy(row_alphas, modelTestRowAlphaTable, sizeof(row_alphas));
@@ -2023,6 +2063,7 @@ void ModelTest(void) {
                 (line12_9 + point_index)->vertex.terminator = 0;
                 }
             }
+            /* Submit the seven grid line sets to the print layer. */
             endPrintExtFunc(0xFFFFF0, END_PRINT_CMD_LINE_RAW, line00_3);
             endPrintExtFunc(0xFFFFF1, END_PRINT_CMD_LINE_RAW, line01_4);
             endPrintExtFunc(0xFFFFF2, END_PRINT_CMD_LINE_RAW, line02_5);
@@ -2033,6 +2074,7 @@ void ModelTest(void) {
             __builtin_memcpy(quad_words, modelTestQuadWordTable, sizeof(quad_words));
             endPrintExtFunc(0, 0x6A, NULL);
             endPrintExtFunc(0, 0x6C, NULL);
+            /* Show the next message when the timer runs out. */
             if (*message_time == 0) {
                 eMessageSet(&msg_11.message, msg00_14[no_13]);
                 msg_11.message.mode = EMESSAGE_MODE_LINE_START;
@@ -2058,6 +2100,10 @@ void ModelTest(void) {
     }
 }
 
+/*
+ * Battle window debug test: opens and closes the battle window variants from
+ * the pad, until the exit chord is held.
+ */
 void BattleWindowTest(void)
 {
     EndouBattleWindowParams window;
@@ -2137,6 +2183,10 @@ void BattleWindowTest(void)
     }
 }
 
+/*
+ * Number, sprite and line display test: sets up the displays and a camera, then
+ * redraws them each frame until the exit chord is held.
+ */
 void eNumberTest(void) {
     EndouPrintLinePoint line[3];
     XglClock sp60;
@@ -2152,6 +2202,7 @@ void eNumberTest(void) {
     int cursor_pressed;
     EndouPrintPoint *cursor;
 
+    /* Initialize the sprites, ribbons, lines, cursor and text tags. */
     eSpriteSet(&spr_22[0], 0x200);
     eSpriteSet(&spr_22[1], 0x200);
     eSpriteSet(&spr_22[2], 0x200);
@@ -2195,6 +2246,7 @@ void eNumberTest(void) {
         number_order = 0xFFFFFE;
         sprite_order = 0x02FFFFF0;
         do {
+        /* Each frame: submit the number, sprite, ribbon and line displays. */
             xglFontDebugPrintf(0, 0, eNumberTestLabel);
             d_28.uv = 0xE00;
             d_28.vertices[0].x = 0x100;
@@ -2409,6 +2461,10 @@ void eNumberTest(void) {
             d_44.points[2].x = 0xA0;
             d_44.points[3].x = 0xA0;
             d_44.format = 0x1A11;
+            /*
+             * Three line strips, each with four colored points. START and SELECT
+             * pick the draw mode of each.
+             */
             line_23[1].count = 4;
             line_23[1].points[0].x = 0xB4;
             line_23[1].points[0].y = 0x46;
@@ -2523,6 +2579,10 @@ void eNumberTest(void) {
     }
 }
 
+/*
+ * Per-frame model test update: opens the model on first use, then runs its
+ * control.
+ */
 void eModelTestMain(EModelTestState *unit)
 {
     if (unit->isReady == 0) {
@@ -2537,6 +2597,10 @@ void eModelTestMain(EModelTestState *unit)
     MenuModelControl(unit);
 }
 
+/*
+ * Model test: loads the menu model overlay and runs the model test unit until
+ * the exit chord is held.
+ */
 void eModelTest(void)
 {
     void *model_id;
@@ -2563,6 +2627,10 @@ void ePrintTest(void)
 {
 }
 
+/*
+ * Message window test: shows two message windows and a current message, and
+ * lets the pad change its text, page and mode, until the exit chord is held.
+ */
 void eMessageTest(void)
 {
     EMessageTestWindow windows[2];
@@ -2652,6 +2720,10 @@ void BgTest(void)
     sceVif1PkRef(packet, &TestEnv_47, ENDOU_BG_ENV_QWORDS, 0, 0, 0);
 }
 
+/*
+ * Loads two texture files into the work area, then uploads the textures and
+ * draws them each frame until the exit chord is held.
+ */
 void TexturTest(void)
 {
     u8 *work_start = WorkEnd;
@@ -2734,6 +2806,10 @@ void UmnPrintTest(void)
 {
 }
 
+/*
+ * Mail display test: shows two text windows, scrolls and changes the mode of
+ * the first one with the pad, until the exit chord is held.
+ */
 void UmnMailDispTest(void)
 {
     TyaUmlDispParamMailView windows[2];
@@ -2797,6 +2873,7 @@ void UmnMailDispTest(void)
     }
 }
 
+/* Font draw callback: writes the VIF packet that reloads the test texture. */
 static void e_test(FontDrawCursor *cursor, void *argument)
 {
     sceVif1PkCloseDirectHLCode(cursor->packet);
@@ -2809,6 +2886,10 @@ static void e_test(FontDrawCursor *cursor, void *argument)
     xglFontReloadTexture(cursor, 0);
 }
 
+/*
+ * Texture reload test: loads the floor file, then draws kanji text through the
+ * reload callback until the exit chord is held.
+ */
 void ReLoadTest(void)
 {
     xglRenderClearFrame();
@@ -2826,6 +2907,10 @@ void ReLoadTest(void)
     }
 }
 
+/*
+ * CD event callback: copies a looked-up file name, stores a scaled file size,
+ * sleeps while progress events arrive, and stops on a not-found or read error.
+ */
 static void endCallback(int result, int amount)
 {
     switch (result) {
@@ -2864,6 +2949,10 @@ static void endCallback(int result, int amount)
     }
 }
 
+/*
+ * File load test: reads the menu file through the CD callback, then draws the
+ * test texture until the exit chord is held.
+ */
 void FileLoadTest(void)
 {
     void (*previous_callback)(int, int);
@@ -2905,6 +2994,10 @@ void FileLoadTest(void)
     xglCdSetCallback(previous_callback);
 }
 
+/*
+ * JPEG test: saves a thumbnail into the source buffer, decodes it, and shows
+ * the image until the exit chord is held.
+ */
 void JpegTest(void)
 {
     JpegTestDisplay display;
@@ -2947,6 +3040,10 @@ void JpegTest(void)
     }
 }
 
+/*
+ * UML test: reads the UML test file, converts its backslash-coded fields into
+ * text, and shows the result until the exit chord is held.
+ */
 void UmlTest(void)
 {
     unsigned int source_byte;
@@ -3040,6 +3137,10 @@ test_character:
     }
 }
 
+/*
+ * Party debug page: moves the roster cursor, toggles the take-AGWS flag of the
+ * selected member on Circle, and draws the roster.
+ */
 void PauseMenuPagePartyDebugTakeAgws(void)
 {
     int i;
@@ -3083,6 +3184,10 @@ void PauseMenuPagePartyDebugTakeAgws(void)
     xglFontDebugPrintf(8, 0xc0, takeAgwsControlsLabel);
 }
 
+/*
+ * Party debug page: moves the roster cursor, toggles the locked-party flag of
+ * the selected member on Circle, and draws the roster.
+ */
 void PauseMenuPagePartyDebugLockParty(void)
 {
     int i;
@@ -3126,6 +3231,10 @@ void PauseMenuPagePartyDebugLockParty(void)
     xglFontDebugPrintf(8, 0xc0, toggleControlsLabel);
 }
 
+/*
+ * Party debug page: moves the roster cursor, toggles the out-friend flag of the
+ * selected member on Circle, and draws the roster.
+ */
 void PauseMenuPagePartyDebugOutFriend(void)
 {
     int i;
@@ -3169,6 +3278,10 @@ void PauseMenuPagePartyDebugOutFriend(void)
     xglFontDebugPrintf(8, 0xc0, toggleControlsLabel);
 }
 
+/*
+ * Party debug page: moves the roster cursor, toggles the friend flag of the
+ * selected member on Circle, and draws the roster.
+ */
 void PauseMenuPagePartyDebugFriend(void)
 {
     int i;
@@ -3212,6 +3325,10 @@ void PauseMenuPagePartyDebugFriend(void)
     xglFontDebugPrintf(8, 0xc0, friendControlsLabel);
 }
 
+/*
+ * Party debug page: Up/Down selects a battle member row, and Left/Right
+ * changes the character or attack position of that row.
+ */
 void PauseMenuPagePartyDebugAttacker(void)
 {
     PartyDataPrefix *party;
@@ -3274,6 +3391,9 @@ void PauseMenuPagePartyDebugAttacker(void)
     xglFontDebugPrintf(8, 0xc0, attackerControlsLabel);
 }
 
+/*
+ * Party debug menu: Square moves to the next page, then runs the current page.
+ */
 void PauseMenuPagePartyDebug(void)
 {
     xglFontDebugPrintf(8, 0x10, partyDebugTitleLabel);

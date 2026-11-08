@@ -5,11 +5,8 @@
 #define SOUND_STREAM_SAMPLE_RATE 48000
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in the TU
- * map (src/main/runtime.c, src/main/window.c) show; these wrappers only
- * need the tag.
+ * The script VM's per-thread context (JThread, declared in src/main/chr.h).
+ * These natives never read the context.
  */
 typedef struct JThread JThread;
 
@@ -44,14 +41,10 @@ typedef struct SoundStreamPlayCall {
     int pan;
 } SoundStreamPlayCall;
 
-/* xglSoundSequenceFadeOut is defined in main/tu098 (src/main/xgl_sound.c). */
+/* xglSoundSequenceFadeOut is defined in src/main/xgl_sound.c. */
 extern void xglSoundSequenceFadeOut(int time);
 
-/*
- * xglSoundEffectParamID is not yet recovered (still INCLUDE_ASM in
- * main/tu098, src/main/xgl_sound.c); declared with the (sound_id, volume,
- * pan, flags) shape src/ov12/xrg_sound.h and this call site agree on.
- */
+/* Declared with the (sound_id, volume, pan, flags) shape used by src/ov12/xrg_sound.h. */
 extern void xglSoundEffectParamID(int sound_id, int volume, int pan, int flags);
 
 void Java_xeno_Sound_sequencePlay__I(JThread *thread, int *arguments,
@@ -94,6 +87,11 @@ void Java_xeno_Sound_effectStop__I(JThread *thread, int *arguments,
     xglSoundEffectStopID(*arguments, 0);
 }
 
+/*
+ * Opens the VAG stream for Sound.streamPlay. The source id is written as six decimal digits into
+ * data\sound\vda\s<id>.vdm for ids below 1000000 (mono) or .vds above that (stereo). The pitch is
+ * scaled from 48 kHz into the driver's 4.12 format.
+ */
 void Java_xeno_Sound_streamPlay__IIII(JThread *thread,
                                       SoundStreamPlayCall *arguments,
                                       unsigned int *result)

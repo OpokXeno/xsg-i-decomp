@@ -37,7 +37,7 @@ enum {
     ETHER_STATE_EVOLVE_SLOT = 0x74,
     ETHER_STATE_EVOLVE_CONFIRM = 0x76,
     ETHER_STATE_EVOLVE_DONE = 0x78,
-    ETHER_STATE_TRANSFER_ENTRY = 0x80, /* listed by the sub-screens, never entered */
+    ETHER_STATE_TRANSFER_ENTRY = 0x80, /* named in the sub-screens' case lists; nothing here sets it */
     ETHER_STATE_TRANSFER_TARGET = 0x82,
     ETHER_STATE_TRANSFER_CONFIRM = 0x84,
     ETHER_STATE_TRANSFER_DONE = 0x86,
@@ -109,8 +109,6 @@ enum {
 #define ETHER_TINT_BRIGHT (-128) /* 0x80 stored in a signed char */
 #define MENU_TEXT_TYPE_CHARACTER 0x60000 /* text id: type in the high halfword */
 
-/* WindowDX.state, EMessageParam.mode and ECursolMainData.state values. */
-
 
 /* Block states shared by every ether-menu part. */
 #define ETHER_BLOCK_INIT 0
@@ -118,7 +116,7 @@ enum {
 
 typedef struct EtherStatus {
     unsigned char unmodeled_00[2];
-    short flags; /* +2; tested as the 0x4000 acquisition bit */
+    short flags; /* +2; bit 0x4000 is ETHER_FLAG_NO_TRANSFER */
     short capCost;        /* +4 */
     short tecId;          /* +6 */
     short pointCost;      /* +8 */
@@ -396,8 +394,8 @@ typedef struct EtherTargetStatusWork {
     unsigned char unmodeled_4f58[0x4F64 - 0x4F58];
 } EtherTargetStatusWork;
 
-/* MenuEtherList: the two ether list windows (window[1] shows list 1, opened
- * in menu state 132) with the marks and point numbers drawn over window[0]. */
+/* MenuEtherList: the two ether list windows. window[1] shows list 1, and the
+ * marks and point numbers are drawn over window[0]. */
 typedef struct EtherMenuListsWork {
     unsigned char state;
     unsigned char unmodeled_01;
@@ -492,16 +490,10 @@ extern const char etherTransferRenderTitle[];
 void WindowSPSet(WindowSPCursor *cursor);
 void WindowSPMain(WindowSPCursor *cursor);
 void WindowSPSelectJump(WindowSPCursor *cursor, int selection);
-/*
- * The retail ELF names these ov01 data-table accessors (still assembler in
- * their own TU, src/ov01/data_unit_org_get.c) dataEthGet (0x00a1a488) and
- * dataTecGet (0x00a1a378); until that TU recovers them, the synthetic
- * linker script only binds their scaffold func_<VA> spelling.
- */
-/* dataEthGet */
+/* dataEthGet: the ether status record for an ether id. */
 extern EtherStatus *func_A1A488(int etherId);
 
-/* dataTecGet */
+/* dataTecGet: the TEC status record for a tec id. */
 extern TecStatus *func_A1A378(short tecId);
 
 extern MenuTextEntry *func_A2C5A8(unsigned int etherId);
@@ -563,8 +555,8 @@ static const char * msg01_2_0036DC20[] = { etherYesNoText, etherConfirmText };
 
 static const char * msg00_3_0036DC28[] = { etherPointsText, etherWtText };
 
-/* Genuine conversion: the colour bytes of this .rodata text are rewritten at
- * run time (MenuEtherExMain), as through the original's char string literal. */
+/* The colour bytes of this text are rewritten at run time (MenuEtherExMain),
+ * so the element type is not const. */
 static char * msg01_4_0036DC30[] = { (char *)etherSetSearchText };
 
 short MenuEtherParty[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -573,7 +565,7 @@ static inline EtherInfoWork *EtherInfoWorkGet(EtherInfoWork **slot) {
     return *slot;
 }
 
-/* The four-byte record of an ether (its slot ethers), or 0 outside 1..80. */
+/* Returns the four-byte record of an ether id, or 0 when the id is outside 1..80. */
 unsigned char *MenuEtherDataGet(int etherId)
 {
     unsigned char (*records)[4] = MenuEtherDataBuf;
@@ -585,6 +577,8 @@ unsigned char *MenuEtherDataGet(int etherId)
     return records[etherId - 1];
 }
 
+/* Returns 1 when the ether may be transferred (its no-transfer flag is clear),
+ * or 0 for an id outside 1..80. */
 int MenuEtherJoutoCheck(int etherId) {
     etherId &= 0xFFFF;
     if ((unsigned int)(etherId - 1) >= ETHER_COUNT) {
@@ -593,6 +587,7 @@ int MenuEtherJoutoCheck(int etherId) {
     return (func_A1A488(etherId)->flags & ETHER_FLAG_NO_TRANSFER) < 1;
 }
 
+/* Returns 1 when the character has at least the ether's point cost, else 0. */
 int MenuEtherCharPointCheck(unsigned short chrNo, unsigned short etherId) {
     int etherPoints = func_A19210(chrNo)->points;
 
@@ -602,6 +597,8 @@ int MenuEtherCharPointCheck(unsigned short chrNo, unsigned short etherId) {
     return 1;
 }
 
+/* Maps an ether id to a number from 1 to 7 by its id range, or 0 when no
+ * range matches. */
 int MenuEtherWhoCheck(int etherId) {
     int checkedEtherId = etherId & 0xFFFF;
 
@@ -629,6 +626,7 @@ int MenuEtherWhoCheck(int etherId) {
     return 0;
 }
 
+/* Returns 1 when etherId is set in one of the character's ether slots. */
 int MenuEtherSetCheck(unsigned short chrNo, unsigned short etherId) {
     EtherUnitRecord *character = func_A191C0(chrNo);
     int i;
@@ -645,6 +643,8 @@ signed char MenuEtherTypeGet(int etherId) {
     return func_A1A378(func_A1A488((unsigned short)etherId)->tecId)->type;
 }
 
+/* Returns how an ether can be used: ETHER_USE_SINGLE, ETHER_USE_PARTY,
+ * ETHER_USE_SELF, or ETHER_USE_NONE. */
 int MenuEtherUseCheck(short etherId) {
     switch ((unsigned short)etherId) {
     case 1:
@@ -661,6 +661,7 @@ int MenuEtherUseCheck(short etherId) {
     }
 }
 
+/* Recomputes capUsed for characters 1 to 7 from the cap cost of their set ethers. */
 void MenuEtherCapSet(void) {
     int chrNo;
     for (chrNo = 1; chrNo < 8; chrNo++) {
@@ -680,6 +681,8 @@ void MenuEtherCapSet(void) {
     }
 }
 
+/* Runs the E.Pts header window and its six tab messages, sliding them to the
+ * positions chosen by the current menu state. */
 void MenuEtherPasMain(void) {
     EtherPasWork *pas = MenuEtherPas;
     int tabLength[6];
@@ -725,6 +728,7 @@ void MenuEtherPasMain(void) {
         tabTarget[i] = 288;
     }
 
+    /* Slide targets for the header window and the tabs, by menu state. */
     switch (MenuWork.state) {
     case ETHER_STATE_CHARACTER:
     case ETHER_STATE_COMMAND:
@@ -856,6 +860,9 @@ char etherOfText[8] = "of ";
 
 char etherQuestionText[8] = "?";
 
+/* Runs the info window at the bottom of the ether menu. It shows the help line
+ * for the current menu state (extra hints while the circle-button help is on)
+ * and slides the window in or out. */
 void MenuEtherInfoMain(void) {
     EtherInfoWork *screen = EtherInfoWorkGet(&MenuEtherInfo);
     const char *capHelp = etherCapLimitText;
@@ -917,6 +924,7 @@ void MenuEtherInfoMain(void) {
         screen->helpHeld = 0;
     }
 
+    /* Help line for the current menu state. */
     switch (MenuWork.state) {
     case ETHER_STATE_CHARACTER:
         eMessageCpy(text, characterHelp.text[0]);
@@ -1090,6 +1098,8 @@ char etherMenuTitleText[5] = "Menu";
 
 char etherSelectTitleText[7] = "Select";
 
+/* Runs the ether command menu (window[0]) and its confirm window (window[1]),
+ * and slides both into place for the current menu state. */
 void MenuEtherMenuMain(void) {
     EtherMenuScreen *work = MenuEtherMenu;
     short target[2];
@@ -1134,6 +1144,7 @@ void MenuEtherMenuMain(void) {
     case ETHER_BLOCK_RUN:
         target[1] = ETHER_OFFSCREEN_RIGHT;
         target[0] = ETHER_OFFSCREEN_RIGHT;
+        /* Pick the slide target and the cursor for the current menu state. */
         switch (MenuWork.state) {
         case ETHER_STATE_COMMAND:
             if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
@@ -1183,16 +1194,17 @@ void MenuEtherMenuMain(void) {
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-/* JP: ： Set Search
- * EN: : Set Search */
+/* Text: a full-width colon (\241\247) followed by Set Search. */
 const char etherSetSearchText[20] = "\014\200\200\200\036\000\241\247 Set Search";
 
 /* Text: \x01Wt */
 char etherWtText[8] = "\x01Wt";
 
-/* Text: \x1E\x2EPts */
+/* Text: \x01E.Pts */
 char etherPointsText[8] = "\x01" "E.Pts";
 
+/* Runs the two detail rows (E.Pts, and cap used of cap max) and the message
+ * line. The message is dimmed while no ether is set. */
 void MenuEtherExMain(void)
 {
   EtherDetailWork *screen = MenuEtherEx;
@@ -1269,6 +1281,7 @@ void MenuEtherExMain(void)
 
   }
 
+  /* Slide, draw and fill in the two rows: row 0 shows the points, row 1 the cap used out of ETHER_CAP_MAX. */
   for (i = 0; i < 2; i++)
   {
     /* The row's widget updates use the initialized screen work. */
@@ -1334,6 +1347,8 @@ const EtherL1R1SpriteIdPair etherL1R1SpriteTable[1] = { { .id = { 274, 272 } } }
 
 const EtherL1R1SlideStep etherL1R1SlideTable[1] = { { .side = { 1, -1 } } };
 
+/* Runs the L1 and R1 sprites of the command menu. L1 or R1 kicks the matching
+ * sprite's slide offset, which then eases back to zero. */
 void MenuEtherL1R1Main(void) {
     EtherL1R1Work *self = MenuEtherL1R1;
     EtherL1R1SpriteIdPair spriteIds;
@@ -1398,6 +1413,9 @@ void MenuEtherL1R1Main(void) {
     }
 }
 
+/* Runs the party status windows: lays out one window per party member, slides
+ * them to their state's positions, and moves the selected member's window to
+ * the fixed selected position. */
 void MenuEtherStatusMain(void) {
     EtherPartyStatusWorkEarly *screen = MenuEtherStatus;
     short targetX[8];
@@ -1463,6 +1481,7 @@ void MenuEtherStatusMain(void) {
         targetPanelX[i] = 0;
     }
 
+    /* Slide targets for the windows, by menu state. */
     switch (MenuWork.state) {
     case ETHER_STATE_CHARACTER:
         if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
@@ -1555,6 +1574,7 @@ void MenuEtherStatusMain(void) {
         break;
     }
 
+    /* Move each window toward its target, then draw it. */
     for (i = 0; i < MenuWork.partyCount; i++) {
         if (screen->header.verticalFirst == 0) {
             MoveSlide(&screen->window[i].width, &targetWidth[i], 3.0f);
@@ -1591,6 +1611,8 @@ void MenuEtherStatusMain(void) {
     }
 }
 
+/* Runs the target status windows used by item use and transfer: lays out the
+ * party windows, scrolls the target list, and draws the frames and cursors. */
 void MenuEtherStatusMain2(void)
 {
     EtherTargetStatusWork *screen = MenuEtherStatus2;
@@ -1660,6 +1682,7 @@ void MenuEtherStatusMain2(void)
             targetX[i] = -272;
             targetY[i] = i * 104 + 64;
         }
+        /* Target list layout for the menu state. */
         switch (MenuWork.state) {
         case ETHER_STATE_USE_LIST:
             screen->active = 1;
@@ -1811,6 +1834,7 @@ void MenuEtherStatusMain2(void)
         if (screen->active == 0) {
             return;
         }
+        /* Draw the scroll frame, the target windows and the cursors. */
         if (screen->drawFrame != 0) {
             for (i = 0; i < 2; i++) {
                 endPrintExtFunc(screen->color, END_PRINT_CMD_Z_SCISSOR,&screen->frame[0][i]);
@@ -1910,6 +1934,8 @@ const char etherListEPointsTitleText[12] = "List\003\234E.Pts";
 /* Text: List{x 666}E.Pts */
 const char etherListSubTitleText[12] = "List\003\232E.Pts";
 
+/* Runs the two ether list windows: configures them on first entry and sets
+ * their positions for the current menu state. */
 void MenuEtherListMain(void)
 {
     short targetX[2];
@@ -2080,6 +2106,7 @@ void MenuEtherListMain(void)
         MoveSlide(&screen->window[i].x, &targetX[i], 3.0f);
         WindowSPMain(&screen->window[i]);
     }
+    /* Icon and number for each visible row, when numbers are shown. */
     if (screen->showNumbers != 0) {
         unsigned int iconIndex = 0;
         int displayRow;
@@ -2117,6 +2144,8 @@ const char etherTransferRenderTitle[14] = "TransferEther";
 
 char etherResultTitleText[8] = "Result";
 
+/* Runs the result window of the ether menu: its messages, numbers and cursor
+ * for the evolve slot and transfer views. */
 void MenuEtherListMain2(void) {
     EtherResultWork *screen = MenuEtherList2;
     WindowDX *window;
@@ -2170,6 +2199,7 @@ void MenuEtherListMain2(void) {
         targetX = ETHER_OFFSCREEN_RIGHT;
         targetY = 144;
     }
+    /* Slide target and text for the menu state. */
     switch (MenuWork.state) {
     case ETHER_STATE_EVOLVE_SLOT:
         if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER)) {
@@ -2255,6 +2285,8 @@ void MenuEtherListMain2(void) {
     eCursolMain(&screen->cursor);
 }
 
+/* Rebuilds the Use list rows: name, amount, and a status (usable, short of
+ * E.Pts, or battle only). */
 void MenuEtherListMake00(void) {
     MenuListEntry *rows = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
@@ -2281,6 +2313,8 @@ void MenuEtherListMake00(void) {
     }
 }
 
+/* Rebuilds the Equip list rows: the cap cost of each ether, flagged when it
+ * would exceed the cap, and marked when it is already set. */
 void MenuEtherListMake01(void) {
     int i;
     MenuListEntry *rows = MenuListGet(0);
@@ -2314,6 +2348,8 @@ void MenuEtherListMake01(void) {
     }
 }
 
+/* Rebuilds the E.Pts list rows: the point cost of each ether, flagged when this
+ * character cannot use it. */
 void MenuEtherListMake02(int listIndex) {
     MenuListEntry *rows = MenuListGet(listIndex);
     int *sortRow = MenuSortAddrGet(listIndex);
@@ -2340,6 +2376,8 @@ void MenuEtherListMake02(int listIndex) {
     }
 }
 
+/* Rebuilds the transfer list for the target character and flags the selected
+ * ether. The ether's mask bit is set only while the list is sorted. */
 void MenuEtherListMake03(int listIndex) {
     MenuListEntry *rows = MenuListGet(listIndex);
     int *sortRow = MenuSortAddrGet(listIndex);
@@ -2363,6 +2401,8 @@ void MenuEtherListMake03(int listIndex) {
     }
 }
 
+/* Sets or removes the ether in the selected Equip list row, then packs the set
+ * ethers to the front of the slots. Returns 0 when the ether cannot be set. */
 int MenuEtherEquip(void) {
     MenuListEntry *rows = MenuListGet(0);
     int *sortRow = MenuSortAddrGet(0);
@@ -2487,6 +2527,7 @@ void MenuEther(void)
             }
         }
     }
+    /* Enter a new state when nextState changed, and count the wait frames down. */
     if (MenuWork.state != MenuWork.nextState) {
         MenuWork.state = MenuWork.nextState;
         MenuWork.flags |= MENU_FLAG_ENTER;
@@ -2775,7 +2816,7 @@ void MenuEther(void)
         }
         break;
 
-    /* Transfer: pick the ether. */
+    /* E.Pts: pick the ether to evolve or transfer. */
     case ETHER_STATE_EPTS_LIST:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuSortSet(0, ETHER_SORT_KIND, MenuWork.chrNo);
@@ -2828,7 +2869,7 @@ void MenuEther(void)
         }
         break;
 
-    /* Transfer: the command for the ether (slot, give, back). */
+    /* E.Pts: the action for the ether (evolve, transfer, back). */
     case ETHER_STATE_EPTS_ACTION:
         if (MenuWork.wait != 0) {
             break;
@@ -2883,7 +2924,7 @@ void MenuEther(void)
         }
         break;
 
-    /* Transfer to a slot: pick the slot. */
+    /* Evolve: pick one of the ether's slot ethers. */
     case ETHER_STATE_EVOLVE_SLOT:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             unsigned char *slots = MenuEtherDataGet(MenuWork.etherId);
@@ -2921,7 +2962,7 @@ void MenuEther(void)
         }
         break;
 
-    /* Transfer to a slot: confirm. */
+    /* Evolve: confirm the slot ether. */
     case ETHER_STATE_EVOLVE_CONFIRM:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuWork.confirmCursor = 0;
@@ -3063,6 +3104,7 @@ void MenuEther(void)
         ChangeTopLevel(0);
         break;
     }
+    /* Run the sub-screens for this frame. */
     EtherTreeMain();
     MenuEtherPasMain();
     MenuEtherInfoMain();

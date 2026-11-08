@@ -19,6 +19,7 @@ Play *PLAY_getCurrent(void)
     return &playControl;
 }
 
+/* Resets `play` to its defaults: no camera, the default end time and frame step, and empty observers. */
 void PLAY_setupDefault(Play *play)
 {
     int i;
@@ -38,6 +39,11 @@ void PLAY_setupDefault(Play *play)
     }
 }
 
+/*
+ * Prepares the play for a run. With a camera selected, every studio camera is
+ * deactivated except the selected one, whose mode is set. With a source, the
+ * start and end times are taken from its first and last frames.
+ */
 void PLAY_setup(Play *play)
 {
     StudioCamera *studio_camera;
@@ -76,6 +82,10 @@ void PLAY_setTimeChart(Play *play, void *timeChart)
     play->timeChart = timeChart;
 }
 
+/*
+ * Stores an observer (argument, method, key index and chart index) in the first
+ * free observer slot. Does nothing when every slot is in use.
+ */
 void PLAY_setObserver(Play *play, int chart_index, int key_index,
                       SceneObject argument, JavaMethod *method)
 {
@@ -98,10 +108,17 @@ void PLAY_setObserver(Play *play, int chart_index, int key_index,
     }
 }
 
+/* Empty. */
 void PLAY_loadCamera(void)
 {
 }
 
+/*
+ * Advances the current play while it is enabled: moves the camera along its
+ * source, steps the time (from the pad in manual mode, otherwise by frameStep),
+ * wraps or clamps the time at the ends, and calls the observers for each curve
+ * that reports a key at the current time (curves of chart 1 always call).
+ */
 void PLAY_ctrl(void)
 {
     Play *play;
@@ -143,6 +160,7 @@ void PLAY_ctrl(void)
             }
         }
 
+        /* Manual time: the stick scrubs the time, and the frame readout is printed while it is pushed or the show-frame button is held. */
         if (play->flags & PLAY_FLAG_MANUAL_TIME) {
             frame_step = play->frameStep;
             if (pad_data->buttons.half_28 & PLAY_PAD_FAST) {
@@ -177,6 +195,7 @@ void PLAY_ctrl(void)
             play->currentTime = play->currentTime + play->frameStep;
         }
 
+        /* Wrap or clamp the time at the end, then at the start. */
         current_time = play->currentTime;
         end_time = play->endTime;
         if (end_time < current_time) {
@@ -199,6 +218,7 @@ void PLAY_ctrl(void)
             }
         }
 
+        /* Sample each observer's curves at the current time. */
         observer_frame_step = PLAY_SECONDS_PER_FRAME;
         for (observer = play->observers, observer_index = 31;
              observer_index >= 0; observer_index--, observer++) {
@@ -225,12 +245,18 @@ void PLAY_ctrl(void)
     }
 }
 
+/* Returns the play's callback parameter block, with its class reference set to xeno.util.TCHParams. */
 TCHParams *PLAY_getCallBackParams(Play *play)
 {
     play->callbackParams.class_ref = classJava_xeno_util_TCHParams->classPointer;
     return &play->callbackParams;
 }
 
+/*
+ * Samples the curves of `curve_set` at `frame`, storing the curve index and
+ * value in `result`. Returns 1 at the first curve that reports a key (or at the
+ * first curve when stop_after_first is 1), otherwise 0.
+ */
 int PLAY_checkTCH(TCHParams *result, PlayTCHCurveSet *curve_set,
                   int stop_after_first, float frame)
 {

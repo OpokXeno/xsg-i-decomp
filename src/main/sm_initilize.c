@@ -35,6 +35,7 @@ static unsigned int nMemCell;
 
 static SmMemInfoStorage stMemInfo;
 
+/* Fills the statistics for an all-free pool, whose whole size is the largest block. */
 static void smInitMemInfo(SmMemInfo *info)
 {
     unsigned int pool_bytes = (nMemCell + 1) * sizeof(MemCell);
@@ -47,6 +48,7 @@ static void smInitMemInfo(SmMemInfo *info)
     info->largestBlockBytes = pool_bytes;
 }
 
+/* Turns pool, poolSize bytes in 16-byte cells, into one free block and resets the statistics. */
 void smInitilize(MemCell *pool, unsigned int poolSize)
 {
     unsigned int totalCells = poolSize >> 4;
@@ -62,6 +64,11 @@ void smInitilize(MemCell *pool, unsigned int poolSize)
     smInitMemInfo(&stMemInfo.info);
 }
 
+/*
+ * Allocates size bytes, rounded up to SM_ALLOC_ALIGNMENT. Uses the smallest
+ * free block that fits (stopping at an exact fit) and splits off the rest.
+ * Returns 0, after printing the info, when no block fits.
+ */
 void *smAlloc(unsigned int size)
 {
     unsigned int requested_cell_count;
@@ -114,6 +121,7 @@ void *smAlloc(unsigned int size)
     return &best_cell[1];
 }
 
+/* Frees an allocation and merges it with free neighbours. A null pointer is ignored. */
 void smFree(void *allocation)
 {
     MemCell *cell;
@@ -148,6 +156,7 @@ void smFree(void *allocation)
     }
 }
 
+/* Walks the cell list, stopping at the first cell whose tag is neither free nor used. */
 void smPrintInfo(void)
 {
     MemCell *cell = pmcHead;

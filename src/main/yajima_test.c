@@ -52,7 +52,7 @@
 #define SCE_TRUNC 0x400
 #define SCE_DIR_MODE_RWX 0x1ff
 
-/* sceDevctl commands: hdd0 (HDIOC_STATUS is spelled by its printf) and pfs. */
+/* sceDevctl commands for the hdd0 and pfs devices. */
 #define HDIOC_DEV9OFF 0x4806
 #define HDIOC_STATUS 0x4807
 #define PDIOC_ZONESZ 0x5001
@@ -167,7 +167,7 @@ enum YajimaMenuAction {
 #define XTX_IMAGE_DATA_OFFSET 0x20
 #define XTX_BMP_BUFFER 0x01410000
 #define XTX_SCRATCH_BUFFER 0x01810000
-/* GS VRAM the XTX textures are loaded to (0xE0000 bytes = block 0x3800). */
+/* GS VRAM address the XTX textures are loaded to. */
 #define XTX_GS_VRAM_OFFSET 0xE0000
 #define XTX_GS_VRAM_BLOCK 0x3800
 
@@ -384,11 +384,9 @@ typedef struct XtxImageEntry {
 } XtxImageEntry;
 
 /*
- * TestEnv_34 is a 6-entry, 0x10-byte-stride vertex template (matches its
- * config/symbols/main.txt size 0x60); FontTestLine only touches the x/y of
- * the last two entries (the line's two endpoints), so the rest of each entry
- * and every earlier entry (set elsewhere, still unresolved in this TU) stays
- * unmodeled.
+ * Entry of TestEnv_34, a template of six 0x10-byte vertices. FontTestLine
+ * sets only x and y of the last two entries (the line's endpoints); the
+ * remaining bytes are not modeled.
  */
 typedef struct TestLineVertex {
     int x;
@@ -471,10 +469,7 @@ typedef struct MemcardTestWork {
     int file;
 } MemcardTestWork;
 
-/* "hdd0:" (0x004DA2D0) and "hdd:" (0x004DA2E0): HddTestFormat's record spelled
- * the first one hdd_device_name, which HddTestShutdown's record uses for the
- * second. The merged TU keeps hdd_device for 0x004DA2D0 (canon, HddTest.c).
- */
+/* Device name strings: "hdd0:" (hdd_device), "hdd:" (hdd_device_name) and "pfs:" (pfs_device_name). */
 static char hdd_device[];
 
 static char hdd_device_name[];
@@ -490,15 +485,14 @@ static char hdd_partition_size[];
 static const char hdd_subcommand_format[];
 static const char hdd_close_result_format[];
 
-/* "pfs1:" (0x004DA2F0): HddTestMakeYourSaves' record calls it pfs_mount_point,
- * the mount/unmount records hdd_mount_point; one object, one name here. */
+/* Mount point string "pfs1:", used by the mount, unmount and zone-size queries. */
 static char hdd_mount_point[];
 
 static const char hdd_mount_result_format[];
 static const char hdd_unmount_result_format[];
 static const char hdd_your_saves_directory[];
 
-/* "make YourSaves:%d\n" (0x004C0B70). */
+/* "make YourSaves:%d\n" format. */
 static const char hdd_mkdir_result_format[];
 
 static const char hdd_zone_size_format[];
@@ -527,19 +521,16 @@ static char menu_cursor[];
 static const char *name_47[];
 
 /*
- * "%s:%d\n" (0x004DA2F8), the per-directory mkdir report of HddTest1024Save
- * and HddTestDummyFolder. Their records also call it hdd_mkdir_result_format,
- * which in this TU is the 0x004C0B70 string, so it is named apart here. While
- * .sdata stays scaffold-owned the only name the link has for the object is
- * the splat label of its data piece.
+ * "%s:%d\n" format, the per-directory mkdir report of HddTest1024Save and
+ * HddTestDummyFolder. It is a different string from hdd_mkdir_result_format,
+ * so it is named apart here.
  */
 static char fileLineFormat[];
 
 /*
- * PadData (0xd0-byte object at 0x490d90) through HddTest's raw view: it reads
- * the pad state as one doubleword at +40 and halfwords at +42/+44, which no
- * field view of the shared header covers (config/header-canon.json PadData,
- * byte_required src/io/main-00256190/HddTest.c).
+ * PadData read through a raw view: the pad state is read as one doubleword at
+ * +40 and halfwords at +42 and +44, which no field view of the shared header
+ * covers.
  */
 extern PadDataRawView PadData;
 
@@ -728,12 +719,7 @@ static void HddTestMountCommon(void);
 static void HddTestMakeYourSaves(void);
 static void HddTestUnmountCommon(void);
 
-/* xtxdec_sleep (below) is still INCLUDE_ASM; declare it so xtxdec_error does
- * not see an implicit declaration. */
 static int xtxdec_sleep(void);
-
-/* xtxdec_sub is still INCLUDE_ASM; declare it here so XtxDecode does not
- * see an implicit declaration. */
 static int xtxdec_sub(char *filename);
 
 extern int sceRead(int descriptor, void *buffer, int bytes);
@@ -1425,6 +1411,8 @@ static void testfunc(XglPacket **packet) {
     sceVif1PkAddDirectDataN(*packet, TestEnv_0_0036A030, 9);
 }
 
+/* Adds the two-byte characters of the scenario text that the nisui font table lacks,
+ * then writes the table to nisuiHostPath. */
 static void FontTestSub(void)
 {
     unsigned char *table = (unsigned char *)DEBUG_BUFFER_BASE;
@@ -1468,6 +1456,7 @@ static void FontTestSub(void)
     }
 }
 
+/* First font test page: sample strings, animated values and character grids. */
 static void FontTestP0(void)
 {
     int i;
@@ -1486,6 +1475,7 @@ static void FontTestP0(void)
     xglFontDebugPrintf(16, 16, smallCharacterTestText);
     xglFontDebugPrintf(16, 32, test000Text);
     xglFontDebugPrintf(16, 48, test001Text);
+    /* Bounce rate_2_004D9F60 between 0 and 128. */
     rate_2_004D9F60 += dir_3;
     if (rate_2_004D9F60 <= 0) {
         dir_3 = 1;
@@ -1507,6 +1497,7 @@ static void FontTestP0(void)
     txt_11[1] = 32;
     txt_11[3] = 0;
     xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
+    /* Print each character of the four grid tables at its own offset. */
     table = xy3_12;
     for (i = 0, offset = 2; i < table[0]; i++, offset += 2) {
         txt_11[1] = table[offset] + 32;
@@ -1535,6 +1526,7 @@ static void FontTestP0(void)
         FlushCache(0);
         xglFontPrint(0, 0, FONT_COLOR_WHITE,(char *)txt_11);
     }
+    /* Bounce rate_8 between 2 and 127. */
     rate_8 += dir_9;
     if (rate_8 < 2) {
         dir_9 = 1;
@@ -1556,6 +1548,7 @@ static void FontTestP0(void)
     xglFontDebugPrintf(96, 176, test_25);
 }
 
+/* Second font test page: the test strings test00_26 to test07_33. */
 static void FontTestP1(void)
 {
     if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_CIRCLE) {
@@ -1577,6 +1570,7 @@ static void FontTestP1(void)
     xglFontDebugPrintf(16, 100, test07_33);
 }
 
+/* Sends a horizontal line of TestEnv_34 from x0 to x0 + width * 16, on a row set by yIndex. */
 static void FontTestLine(int xIndex, int yIndex, int width)
 {
   int x0;
@@ -1592,6 +1586,7 @@ static void FontTestLine(int xIndex, int yIndex, int width)
   nmlModelDirectSend(1, TestEnv_34, 6);
 }
 
+/* Third font test page: left and right change width_35; test lines are drawn at that width and at each string's width. */
 static void FontTestP2(void)
 {
     int character;
@@ -1626,6 +1621,7 @@ static void FontTestP2(void)
     }
 }
 
+/* Font test loop: left and right on the pad switch the page until the exit combo is held. */
 static void FontTest(void)
 {
     int page = 0;
@@ -1658,6 +1654,7 @@ static void FontTest(void)
     }
 }
 
+/* Appends six vertices: a fixed one, then the two corners of rect at depth rect->depth - 1. */
 static void UmlDispTestSub(XglPacket **packet, UmlDispRect *rect)
 {
     int x0 = rect->x * 0x10;
@@ -1679,6 +1676,10 @@ static void UmlDispTestSub(XglPacket **packet, UmlDispRect *rect)
     sceVif1PkAddDirectDataN(*packet, TestEnv_42, 6);
 }
 
+/*
+ * UML display test. The file list selects a number (triangle dumps the UMN header
+ * records); circle opens the selected file's detail view, which scrolls and draws it.
+ */
 static void UmlDispTest(void)
 {
     TyaUmlDispParamTestView param;
@@ -1710,6 +1711,7 @@ static void UmlDispTest(void)
         save = (SaveDataDebug *)SaveData;
         xglFontDebugPrintf(0, 0, umlDispFormat, number);
         if (detail == 0) {
+            /* File list: dump the header records on triangle, toggle flags on R1 and R2. */
             if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
                 record = (UmlHeaderRecord *)DEBUG_BUFFER_BASE;
                 xglCdReadFile(umnHeaderPath, record, 0, 0);
@@ -1763,6 +1765,7 @@ static void UmlDispTest(void)
                 param.scroll_y = 0;
             }
         } else {
+            /* Detail view: scroll with the pad, then draw the file. */
             if (PAD_U16_AT(PAD_OFS_REPEATED) & PAD_UP) {
                 param.scroll_y -= UML_SCROLL_STEP;
             }
@@ -1802,6 +1805,7 @@ static void UmlDispTest(void)
     }
 }
 
+/* Database browser test: runs tyaUmlDatabaseMain until the exit combo is held or it returns nonzero. */
 static void DatabaseTest(void)
 {
     unsigned char work0[416];
@@ -1850,6 +1854,7 @@ static void DatabaseTest(void)
     xglSoundLoadRequestSmd(0, 0);
 }
 
+/* Movie player test: up and down select a movie from name_43, and circle plays it. */
 static void XenoMovieCheck(void)
 {
     char path[256];
@@ -1889,6 +1894,7 @@ static void XenoMovieCheck(void)
     xglFontLoad(1, 0);
 }
 
+/* Formats the hdd device, then the pfs common partition. */
 static void HddTestFormat(void)
 {
     int format_size;
@@ -1902,6 +1908,7 @@ static void HddTestFormat(void)
     printf(hdd_pfs_format_result_format, status);
 }
 
+/* Closes all pfs partitions, then turns the HDD device off. */
 static void HddTestShutdown(void)
 {
     printf(hdd_shutdown_message);
@@ -1909,6 +1916,7 @@ static void HddTestShutdown(void)
     sceDevctl(hdd_device_name, HDIOC_DEV9OFF, 0, 0, 0, 0);
 }
 
+/* Opens hdd_full_path and adds sub-partitions until sceIoctl2 reports an error. */
 static void HddTestHddFull(void)
 {
     int handle;
@@ -1928,6 +1936,7 @@ static void HddTestHddFull(void)
     printf(hdd_close_result_format, status);
 }
 
+/* Mounts the common partition at hdd_mount_point. */
 static void HddTestMountCommon(void)
 {
     int status;
@@ -1936,6 +1945,7 @@ static void HddTestMountCommon(void)
     printf(hdd_mount_result_format, status);
 }
 
+/* Unmounts hdd_mount_point. */
 static void HddTestUnmountCommon(void)
 {
     int status;
@@ -1944,6 +1954,7 @@ static void HddTestUnmountCommon(void)
     printf(hdd_unmount_result_format, status);
 }
 
+/* Creates the Your Saves directory, then prints the zone size and free zones of the mount point. */
 static void HddTestMakeYourSaves(void)
 {
     int zone_size;
@@ -1957,6 +1968,7 @@ static void HddTestMakeYourSaves(void)
     printf(hdd_zone_free_format, zone_free);
 }
 
+/* Mounts, creates 1024 numbered folders with their attribute set, then unmounts. Stops at the first failure. */
 static void HddTest1024Save(void)
 {
     int status;
@@ -1984,8 +1996,7 @@ static void HddTest1024Save(void)
             printf(hdd_mkdir_status_format, hdd_1024_directory_name, status);
             break;
         }
-        /* Only the 32-bit attribute scalar at byte 4 is caller-evidenced;
-           sceChstat copies the complete 64-byte raw record. */
+        /* Set only the 32-bit attribute word (byte 4); sceChstat copies the full 64-byte record. */
         directory_status[SCE_STAT_ATTRIBUTE_WORD] = 0xc4a7;
         status = sceChstat(hdd_1024_directory_name, directory_status, SCE_CST_ATTR);
         if (status < 0) {
@@ -1996,6 +2007,7 @@ static void HddTest1024Save(void)
     HddTestUnmountCommon();
 }
 
+/* Mounts, creates 256 numbered folders (stopping at the first failure), then unmounts. */
 static void HddTestDummyFolder(void)
 {
     int folder_number;
@@ -2019,6 +2031,7 @@ static void HddTestDummyFolder(void)
     HddTestUnmountCommon();
 }
 
+/* Fills the free zones of the mount point with a dummy file, written in chunks from the debug buffer. */
 static void HddTestDummySave(void)
 {
     int zone_size;
@@ -2074,6 +2087,7 @@ static void HddTestMakeYS(void)
     HddTestUnmountCommon();
 }
 
+/* HDD test menu: checks the HDD status, then runs the selected hdd_test_menu action until the exit combo. */
 static void HddTest(void)
 {
     int status;
@@ -2139,6 +2153,11 @@ static const char *mt_GetPortName(int port)
     return name_47[port];
 }
 
+/*
+ * Memory card and HDD test: a state machine over the card ports and the HDD.
+ * Each state draws its screen and handles the pad; the states are listed in
+ * MemcardTestState.
+ */
 static void MemcardTest(void)
 {
     unsigned short port_status[2];
@@ -2188,6 +2207,7 @@ static void MemcardTest(void)
         /* xglMcMain returns both ports' status halfwords as one word. */
         *(unsigned int *)port_status = xglMcMain();
         xglFontDebugPrintf(64, 0, "%4x %4x", port_status[0], port_status[1]);
+        /* A card port whose status is neither ready nor busy returns the test to INIT. */
         if (port >= 0 && port < MC_PORT_HDD) {
             if (port_status[port] != MC_PORT_READY && port_status[port] != MC_PORT_BUSY) {
                 state = MCTEST_STATE_INIT;
@@ -2195,6 +2215,7 @@ static void MemcardTest(void)
         }
         xglFontDebugPrintf(0, 16, "%2x", state);
 
+        /* Each case draws one screen and handles its pad input. */
         switch (state) {
         case MCTEST_STATE_INIT:
             state = MCTEST_STATE_SELECT_PORT;
@@ -2301,6 +2322,7 @@ static void MemcardTest(void)
             }
             break;
 
+        /* Load flow: list the card, pick a file, then read it into SaveData. */
         case MCTEST_STATE_LOAD_LIST:
             list_request.file = -1;
             list_request.data = found;
@@ -2363,6 +2385,7 @@ static void MemcardTest(void)
             }
             break;
 
+        /* Save flow: query free space, pick a file, check it, then create or overwrite it and write. */
         case MCTEST_STATE_SAVE_QUERY_FREE:
             xglMcRequest(port, MC_REQ_FREE_SPACE, 0, &work.result);
             state = MCTEST_STATE_SAVE_CHECKING_FREE;
@@ -2461,6 +2484,7 @@ static void MemcardTest(void)
             }
             break;
 
+        /* Format and unformat flows: confirm, run the card request, then report the result. */
         case MCTEST_STATE_FORMAT_INIT:
             state = MCTEST_STATE_FORMAT_CONFIRM;
             /* fall through */
@@ -2542,6 +2566,7 @@ static void MemcardTest(void)
             }
             break;
 
+        /* HDD flow: the same load and save steps as the card, through the xglHddMc* calls. */
         case MCTEST_STATE_HDD_LOAD_LIST:
             hdd_list_request.card = -1;
             hdd_list_request.found = found;
@@ -2657,6 +2682,7 @@ static void MemcardTest(void)
             break;
         }
 
+        /* Triangle fills the save flags with random bytes. */
         if (PAD_U16_AT(PAD_OFS_PRESSED) & PAD_TRIANGLE) {
             flags = SAVE_FLAGS;
             for (i = 0; i < SAVE_FLAGS_COUNT; i++) {
@@ -2698,6 +2724,7 @@ const char fontLabel[8] = "FONT";
 
 static char selectText[8] = "SELECT";
 
+/* Returns the start of the line after the next newline, or 0 at the end of the text. */
 static char *xtxdec_nextline(char *text)
 {
     while (*text != '\n') {
@@ -2709,6 +2736,7 @@ static char *xtxdec_nextline(char *text)
     return (unsigned char)*text ? text : 0;
 }
 
+/* Parses the decimal number at text into *value (when value is not null), then returns the position after the next comma. */
 static char *xtxdec_getdec(char *text, int *value)
 {
     int number = 0;
@@ -2729,6 +2757,7 @@ static char *xtxdec_getdec(char *text, int *value)
     return text + 1;
 }
 
+/* Stores value as four little-endian bytes. */
 static void xtxdec_put4byte(LittleEndianWord *destination, int value)
 {
     (*destination)[0] = value;
@@ -2737,6 +2766,11 @@ static void xtxdec_put4byte(LittleEndianWord *destination, int value)
     (*destination)[3] = value >> 24;
 }
 
+/*
+ * Decodes the XTX image named by filename: loads its textures to the GS, then
+ * writes each entry of the list file as a BMP file on host0. Returns -1 when the
+ * list or image file is missing or malformed.
+ */
 static int xtxdec_sub(char *filename)
 {
     char path[256];
@@ -2812,6 +2846,7 @@ static int xtxdec_sub(char *filename)
                            (void *)(XTX_IMAGE_BUFFER + XTX_IMAGE_DATA_OFFSET + entry->data_offset));
         entry++;
     }
+    /* One BMP file per list line. */
     while (line != 0) {
         dst = path;
         for (src_name = h_50; *src_name != 0; src_name++)
@@ -2840,6 +2875,7 @@ static int xtxdec_sub(char *filename)
         line = xtxdec_getdec(line, &origin_x);
         line = xtxdec_getdec(line, &origin_y);
         printf(xtxEntryFormat, path, bits_per_pixel, left, top, width, height, origin_x, origin_y);
+        /* Read the palette from VRAM: 16 entries at 4 bpp, 256 at 8 bpp. */
         switch (bits_per_pixel) {
         default:
             palette_size = 0;
@@ -2865,6 +2901,7 @@ static int xtxdec_sub(char *filename)
             palette_size = 1024;
             break;
         }
+        /* Reorder each palette entry into BMP byte order (B, G, R, 0). */
         palette = (unsigned char *)XTX_SCRATCH_BUFFER;
         for (i = 0; i < palette_size; i += 4) {
             out[0] = palette[i + 2];
@@ -2873,6 +2910,7 @@ static int xtxdec_sub(char *filename)
             out[3] = 0;
             out += 4;
         }
+        /* Copy the rows from the last to the first. */
         for (i = height - 1; i >= 0; i--) {
             j = 0;
             switch (bits_per_pixel) {
@@ -2891,6 +2929,7 @@ static int xtxdec_sub(char *filename)
                 out += j;
             }
         }
+        /* Fill the BMP headers; i is the total file size. */
         i = out - bmp;
         out = (unsigned char *)(XTX_BMP_BUFFER + BMP_OFS_INFO_HEADER);
         vram_dst = (unsigned char *)XTX_BMP_BUFFER;
@@ -2921,6 +2960,7 @@ static int xtxdec_sub(char *filename)
     return status;
 }
 
+/* Draws the XTX status line; returns 1 when the exit combo is held. */
 static int xtxdec_sleep(void)
 {
     if ((PAD_U64_AT(PAD_OFS_HELD) & PAD_EXIT_COMBO) == PAD_EXIT_COMBO) {
@@ -2931,6 +2971,7 @@ static int xtxdec_sleep(void)
     return 0;
 }
 
+/* Shows message at row y until circle is pressed or the exit combo is held. */
 static void xtxdec_error(int y, const char *message)
 {
     while (xtxdec_sleep() == 0) {
@@ -2941,6 +2982,7 @@ static void xtxdec_error(int y, const char *message)
     }
 }
 
+/* Decodes the files named on the command line one after another, then shows the finished message. */
 static void XtxDecode(void)
 {
     int i;
@@ -2977,6 +3019,7 @@ static void XtxDecode(void)
     xtxdec_error(y, xtxFinishedText);
 }
 
+/* Calls a list of tya functions with zero arguments. */
 static void Dummy(void)
 {
     tyaCaptureStart(0, 0);
@@ -2987,6 +3030,7 @@ static void Dummy(void)
     tyaDrawGauge(0);
 }
 
+/* Test menu entry point: shows the menu and runs the chosen test until the menu returns -1. */
 void YajimaTest(void)
 {
     int selection;

@@ -12,6 +12,11 @@ void nmlModelSetBackBufferClear(void);
 
 const char stagePeerFieldName[8] = "peer";
 
+/*
+ * Native Stage.start(int, Object). With action 1, takes the method name from
+ * the second argument, resets the peer thread to run that method and marks it
+ * running.
+ */
 void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
                                                  StageNativeSlot *arguments,
                                                  unsigned int *failure_result)
@@ -55,6 +60,7 @@ void Java_xeno_Stage_start__ILjava_lang_Object_(SceneVm *thread,
     }
 }
 
+/* Native Stage.stop(): clears the running flag of the peer thread. */
 void Java_xeno_Stage_stop__(JThread *thread, StageObjectCall *arguments,
                             u32 *failure_result)
 {
@@ -77,6 +83,7 @@ void Java_xeno_Stage_stop__(JThread *thread, StageObjectCall *arguments,
     }
 }
 
+/* Native Stage.play(String): loads the named script and runs it on the calling thread. */
 void Java_xeno_Stage_play__Ljava_lang_String_(JThread *thread,
                                               StagePlayCall *arguments)
 {
@@ -113,6 +120,11 @@ void Java_xeno_Stage_setColor__FFF(JThread *thread, StageColorCall *arguments)
     GameLoopState.color_b = arguments->b;
 }
 
+/*
+ * Native Stage.setFade(int, int, float, float, float): stores the fade mode,
+ * duration and colour, clamps the colour channels to 0..1 and the duration to
+ * at least one frame, then starts the fade script.
+ */
 void Java_xeno_Stage_setFade__IIFFF(JThread *thread, StageFadeCall *arguments)
 {
     int channel;
@@ -143,6 +155,10 @@ void Java_xeno_Stage_setFade__IIFFF(JThread *thread, StageFadeCall *arguments)
     SCRIPT_fade(arguments->duration_frames);
 }
 
+/*
+ * Native Stage.setEventFade: passes the first four arguments to
+ * nmlModelSetFadeInInterrupt, then sets up a fade from the last four.
+ */
 void Java_xeno_Stage_setEventFade__IFFFIFFF(JThread *thread,
                                              StageNativeSlot *arguments)
 {
@@ -164,6 +180,7 @@ void Java_xeno_Stage_setFrameRender__II(JThread *thread, StageFrameRenderCall *a
     nmlModelSetBackBuffer(arguments->model_id, arguments->count, -1, 0);
 }
 
+/* Native Stage.setFadeCancel(int): cancels the fade-in (2), fade-out (1) or both (0). */
 void Java_xeno_Stage_setFadeCancel__I(JThread *thread, StageIntCall *arguments)
 {
     switch (arguments->value) {
@@ -180,6 +197,10 @@ void Java_xeno_Stage_setFadeCancel__I(JThread *thread, StageIntCall *arguments)
     }
 }
 
+/*
+ * Native Stage.setVisible(int, boolean): shows or hides one part of the current
+ * model. A negative part index applies the visibility to all parts.
+ */
 void Java_xeno_Stage_setVisible__IZ(JThread *thread, StageVisibleCall *arguments)
 {
     StageModel *model = GameLoopState.model;
@@ -200,6 +221,10 @@ void Java_xeno_Stage_setVisible__IZ(JThread *thread, StageVisibleCall *arguments
     }
 }
 
+/*
+ * Native Stage.setCFBG: draw type 0 clears the background mode; types 1 and 2
+ * run the matching background draw routine.
+ */
 void Java_xeno_Stage_setCFBG__II_F(JThread *thread, StageCFBGCall *arguments)
 {
     StageBackground *background = arguments->background;
@@ -228,6 +253,10 @@ void Java_xeno_Stage_renderCommand__I(JThread *thread, StageIntCall *arguments)
     GameLoopState.render_command = arguments->value;
 }
 
+/*
+ * Native Stage.setBgColor(float, float, float): packs the 0..1 red, green and
+ * blue values into a 0x00BBGGRR colour and sets it as the render clear colour.
+ */
 void Java_xeno_Stage_setBgColor__FFF(JThread *thread, StageBgColorCall *arguments)
 {
     xglRenderClearColor(

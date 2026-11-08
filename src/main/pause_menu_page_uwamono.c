@@ -18,7 +18,7 @@
 
 /* MapUnit serials below this are map parts; from it up they are models. */
 #define UWAMONO_SERIAL_MODEL_BASE 0x1000
-/* MapUnit flags: unit is loaded; unit is hidden by a hide trigger. */
+/* MapUnit flags: 0x10000 loaded, 0x100000 hidden. */
 #define UWAMONO_UNIT_LOADED 0x10000
 #define UWAMONO_UNIT_HIDDEN 0x100000
 /* GameLoopState.flags bit toggled by the "shooting flag" row. */
@@ -51,7 +51,7 @@ enum {
 /* DebDispItemBox lists ItemBoxTbl entries eight to a page. */
 #define ITEM_BOX_PAGE_ROWS 8
 #define ITEM_BOX_PAGE_COUNT 76
-/* Event flag of treasure chest id: base + id (set once the chest was opened). */
+/* Event flag of item box entry id: base + id, set once that entry has been obtained. */
 #define ITEM_BOX_OBTAINED_FLAG_BASE 0x79EC7
 
 /* Field-object markers are drawn only inside this GS-space window, relative to this origin. */
@@ -212,6 +212,11 @@ const char eventItemListText[24] = "\xA5\xA4\xA5\xD9\xA5\xF3\xA5\xC8\xA5\xA2\xA5
  * EN: Treasure chest contents list */
 const char treasureChestListText[16] = "\xCA\xF5\xC8\xA2\xC3\xE6\xBF\xC8\xB0\xEC\xCD\xF7";
 
+/*
+ * Draws the field-object debug page and handles its input. Up and Down move the
+ * cursor, Right sets and Left clears the flag of the highlighted row, and Circle
+ * opens the event item or treasure list.
+ */
 void PauseMenuPageUwamono(void)
 {
     static int cursol = 0;
@@ -281,6 +286,10 @@ const char pressCrossToReturnText[16] = "\xA1\xDF\xA5\xDC\xA5\xBF\xA5\xF3\xA4\xC
 
 const char eventItemRowFormat[16] = "%3d %s %c";
 
+/*
+ * Draws one page of the event item list, four rows at a time. Up and Down
+ * page through the list, and Cross returns to the field-object page.
+ */
 void DebDispEvtItem(void)
 {
     static int page = 0;
@@ -319,6 +328,10 @@ const char eventItemNameFormat[4] = "%s";
 
 static int page_2 = 0;
 
+/*
+ * Draws one page of the item box list, eight rows at a time. Up and Down page
+ * through the list, and Cross returns to the field-object page.
+ */
 void DebDispItemBox(void)
 {
     int row;
@@ -348,6 +361,7 @@ void DebDispItemBox(void)
         name = GetItemName(category, ItemBoxTbl[id].index);
         if (name == 0)
             name = "NULL";
+        /* Item entries show their count; money entries show the amount instead. */
         if (money == 0) {
             HexToStr(count, amount_text);
             xglFontDebugPrintf(4, y, "%3d %s", id, name);
@@ -383,6 +397,10 @@ void DebDispItemBox(void)
         debmode = UWAMONO_DEBUG_MENU;
 }
 
+/*
+ * Draws the label of each loaded map unit that projects into the marker window:
+ * its part or model number, then one line per detail for its kind.
+ */
 void DispDebugUwamono(void)
 {
     int screen[3];
@@ -433,6 +451,7 @@ void DispDebugUwamono(void)
              * EN: Model 0x%4x */
             xglFontDebugPrintf(x, y, "\015\000\245\342\245\307\245\3530x%4x", unit->serial);
         }
+        /* Kind-specific detail lines, each 12 below the previous one (y + 12, y + 24, ...). */
         switch (info->kind) {
         case UWAMONO_DOOR:
             /* JP: ドア
@@ -552,6 +571,10 @@ void DispDebugUwamono(void)
     }
 }
 
+/*
+ * Computes the collision outline of each visible map unit: the corners of a box
+ * shape, or a DispPillar call for a circle shape.
+ */
 void DispCollUwamono(void)
 {
     DoublewordVector4 bottom[4];
@@ -582,6 +605,7 @@ void DispCollUwamono(void)
             continue;
         if (MapUnit[i].flags & UWAMONO_UNIT_HIDDEN)
             continue;
+        /* Sound units set the w of their position when bounds_shown is 0, or compute two bottom corners when it is set. */
         if (MapUnit[i].serial == MAP_UNIT_SOUND) {
             unit = &MapUnit[i];
             position = unit->position;
@@ -599,6 +623,7 @@ void DispCollUwamono(void)
                 bottom[1].vector.w = 0.0f;
             }
         } else if (info->shape != 0 && (MapUnit[i].flags & UWAMONO_UNIT_LOADED)) {
+            /* Other loaded units: a box shape computes four bottom and four top corners, a circle calls DispPillar. */
             unit = &MapUnit[i];
             rotation = unit->matrix;
             position = unit->position;
@@ -640,8 +665,12 @@ void DispCollUwamono(void)
     }
 }
 
-/* DispCollUwamono supplies its eight color words in a2; this helper does
- * not consume them in the original implementation. */
+/*
+ * Computes the corner points of a circular pillar around base, stepping by
+ * step over 17 angular segments, and sets base->w to 1. DispCollUwamono
+ * supplies its eight color words in a2; this helper does not consume them in
+ * the original implementation.
+ */
 void DispPillar(Vector4 *base, Vector4 *step, const int *colors)
 {
     DoublewordVector4 corners[4];

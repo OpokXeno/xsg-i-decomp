@@ -57,6 +57,7 @@ static int dbCH = DB_LINE_HEIGHT;
 
 static int dbMODE = 0;
 
+/* Resets the tcamera table, sets camera 0's offsets and constraints, and activates only studio camera 0. */
 void GAME_initCamera(void)
 {
     StudioCamera *studio_camera;
@@ -97,6 +98,7 @@ void GAME_initLight(void)
     xglLightSetDefault(light);
 }
 
+/* Returns the last occurrence of `character` in the first `length` bytes of `string`, or 0. */
 char *STR_indexReverse(char *string, int length, int character)
 {
     int index = (int)((unsigned int)length - 1U);
@@ -112,6 +114,7 @@ char *STR_indexReverse(char *string, int length, int character)
     return 0;
 }
 
+/* Copies pad `pad_index`'s button words masked by `button_mask` into `result`, and clears its flags. */
 void PAD_getKey(PADKeyResult *result, int pad_index, unsigned int button_mask)
 {
     PADControllerState *pad = &PadData[pad_index];
@@ -135,6 +138,7 @@ void DB_cmode(int mode)
     dbMODE = mode;
 }
 
+/* Sets the debug text cursor to (x * 2, y * 2) and restores the default line height. */
 void DB_reset(int x, int y)
 {
     dbCX = x << 1;
@@ -142,6 +146,7 @@ void DB_reset(int x, int y)
     dbCH = DB_LINE_HEIGHT;
 }
 
+/* Sets the debug text cursor to (x * 2, y * 2) with a line height of line_height * 2. */
 void DB_reset2(int x, int y, int line_height)
 {
     dbCX = x << 1;
@@ -155,6 +160,7 @@ void DB_incPos(int x, int y)
     dbCY += y;
 }
 
+/* Prints `text` at the debug cursor while debug text is enabled. */
 void DB_params(const char *text)
 {
     if ((xglFontGetFlags() & DB_FONT_FLAGS_ON) == DB_FONT_FLAGS_ON) {
@@ -162,6 +168,10 @@ void DB_params(const char *text)
     }
 }
 
+/*
+ * Formats a line and prints it at the debug cursor while debug text is enabled, then
+ * moves the cursor down one line.  The text is drawn only in mode 0.
+ */
 void DB_println(const char *format, ...)
 {
     va_list args;
@@ -178,6 +188,7 @@ void DB_println(const char *format, ...)
     }
 }
 
+/* Formats a line, prints it at the debug cursor, moves the cursor down one line, and returns 0. */
 int DB_printf(const char *format, ...)
 {
     va_list args;
@@ -194,6 +205,10 @@ int DB_printf(const char *format, ...)
     return 0;
 }
 
+/*
+ * Writes `path` to `destination`.  A path longer than `max_width` is shortened to its
+ * first directory, "...", and its last component.
+ */
 void DB_pathGetShortPath(char *destination, const char *path, int max_width)
 {
     extern char *strrchr(const char *string, int character);
@@ -218,6 +233,7 @@ void DB_pathGetShortPath(char *destination, const char *path, int max_width)
     }
 }
 
+/* Returns the part of `path` after its last slash, or `path` itself when it has no slash. */
 char *DB_pathFindName(char *path)
 {
     char *slash = strrchr(path, '/');

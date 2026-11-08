@@ -32,6 +32,11 @@ unsigned int SsdSpuWaveMalloc(const SsdWaveFileHeader *header, unsigned int addr
 int SsdDisposeWaveData(SsdWaveBank *wave);
 void SsdSetWaveToVoiceControl(SsdVoice *voice, SsdWaveBank *bank, short sample_index);
 
+/*
+ * Loads a wave bank from a file image into SPU memory: checks the signature and that
+ * the bank is not loaded yet, reserves SPU memory, starts the body transfer, then
+ * copies the sample and program metadata into a new bank linked at the tail of the list.
+ */
 int SsdAddWaveData(void *data, int size, int spu_address)
 {
     SsdWaveFileHeader *header;
@@ -61,6 +66,7 @@ int SsdAddWaveData(void *data, int size, int spu_address)
             SsdWork.wave_transfer.callback(SSD_WAVE_RESULT_FAILED, SsdWork.wave_transfer.argument);
         return header->bank_id;
     }
+    /* Walk the chunk list for the sample and program metadata; the data after the END chunk is the body. */
     program_data = 0;
     sample_data = 0;
     program_size = 0;
@@ -93,6 +99,7 @@ int SsdAddWaveData(void *data, int size, int spu_address)
             SsdWork.wave_transfer.callback(SSD_WAVE_RESULT_FAILED, SsdWork.wave_transfer.argument);
         return SSD_ERROR_NO_SPU_MEMORY;
     }
+    /* Send the body bytes already in this buffer; SsdNextWaveData continues after them. */
     transfer_size = size - header->body_offset;
     SsdSpuDmaWrite(spu_address, chunk, transfer_size,
                    SsdWork.wave_transfer.callback, SsdWork.wave_transfer.argument);
@@ -115,6 +122,7 @@ int SsdAddWaveData(void *data, int size, int spu_address)
     metadata += sample_size;
     wave->programs = metadata;
     SsdMemoryCopy(metadata, program_data, program_size);
+    /* Link the bank at the tail with interrupts off, so the list is never seen half-updated. */
     CpuDisableIntr();
     tail = &SsdWork.wave_banks;
     while (*tail != 0)
@@ -126,6 +134,7 @@ int SsdAddWaveData(void *data, int size, int spu_address)
     return wave->bank_id;
 }
 
+/* Sends the next block of wave body data to the SPU, at the address after the previous transfer. */
 int SsdNextWaveData(void *data, int size)
 {
     SsdWaveTransferState *state = &SsdWork.wave_transfer;
@@ -141,6 +150,12 @@ int SsdNextWaveData(void *data, int size)
     return state->bank_id;
 }
 
+/*
+ * Allocates SPU memory for the wave body and returns its address, or 0 when none is free.
+ * SSD_WAVE_ADDRESS_ANY lets the allocator choose; otherwise the header's address is used:
+ * in a registered segment when it matches a segment mode, else as a dynamic address when
+ * the header's dynamic-address flag is set, else as a fixed address.
+ */
 unsigned int SsdSpuWaveMalloc(const SsdWaveFileHeader *header, unsigned int address)
 {
     unsigned int size;
@@ -174,6 +189,7 @@ unsigned int SsdSpuWaveMalloc(const SsdWaveFileHeader *header, unsigned int addr
     return result;
 }
 
+/* Frees the loaded wave bank with the given id, or reports it as not found. */
 int SsdDisposeWaveBank(unsigned short bank)
 {
     int result;
@@ -188,6 +204,7 @@ int SsdDisposeWaveBank(unsigned short bank)
     return result;
 }
 
+/* Unlinks a wave bank from the list, frees its SPU memory, then frees the bank itself. */
 int SsdDisposeWaveData(SsdWaveBank *wave)
 {
     SsdWaveBank *cursor = SsdWork.wave_banks;
@@ -214,6 +231,7 @@ int SsdDisposeWaveData(SsdWaveBank *wave)
     return 0;
 }
 
+/* Returns the bank id when a wave bank with that id is loaded, else -1. */
 int SsdCheckWaveData(int bank)
 {
     SsdWaveBank *wave;
@@ -244,6 +262,10 @@ SsdWaveBank *SsdGetWSPtrBank(int bank)
     return 0;
 }
 
+/*
+ * Copies a sample's start and loop addresses, envelope, volume, pan and base pitch
+ * into the voice, and clears its transpose. Does nothing when bank is null.
+ */
 void SsdSetWaveToVoiceControl(SsdVoice *voice, SsdWaveBank *bank, short sample_index)
 {
     SsdWaveSample *sample;
@@ -268,6 +290,7 @@ void SsdSetWaveToVoiceControl(SsdVoice *voice, SsdWaveBank *bank, short sample_i
     }
 }
 
+/* Stores the callback and its argument for wave transfers. */
 void SsdSetWaveTransCallback(SsdWaveTransferCallback callback, void *argument)
 {
     SsdWork.wave_transfer.callback = callback;

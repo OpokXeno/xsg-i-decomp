@@ -3,7 +3,6 @@
 #include "main/xgl_dma.h"
 #include "ov01/data_unit_org_get.h"
 #include "main/end_print.h"
-/* Only a .lit4 literal in the original (0x004D7E7C); no storage object. */
 #define ETHER_TREE_NODE_Z 65535.0f
 
 /* Table counts and byte sizes of the arena carved by EtherTreeInit. */
@@ -47,7 +46,7 @@
  * (EtherTreeObjectSet clears 0x2300 bytes of it; EtherTreeObjectGet matches a
  * 16-bit id at offset 0). EtherTreeObjectP is the fill cursor into that table:
  * EtherTreeObjectWorkGet hands out the current record and advances it by one.
- * No function claimed here reads a record, so the record type stays opaque.
+ * No function in this file reads a record, so the record type stays opaque.
  */
 typedef struct EtherTreeObjectData EtherTreeObjectData;
 
@@ -90,13 +89,13 @@ typedef struct EtherTreeNodeTransform {
 } EtherTreeNodeTransform;
 
 /*
- * EtherTreeCenterSet, EtherTreeToCenterSet and EtherTreeCenterMove (this
- * unit, main/tu179) all read or write this struct through EtherTreeSystem.
+ * EtherTreeCenterSet, EtherTreeToCenterSet and EtherTreeCenterMove all read
+ * or write this struct through EtherTreeSystem.
  * flags bit 0 gates EtherTreeCenterSet, EtherTreeCenterMove and
  * EtherTreeDraw; EtherTreeCenterSet sets bit 1 and EtherTreeCenterMove
  * tests it before sliding centerX/centerY toward targetCenterX/
- * targetCenterY with subMoveSlide. Bytes no function claimed here writes or
- * reads stay unmodeled.
+ * targetCenterY with subMoveSlide. Bytes that no function in this file
+ * writes or reads stay unmodeled.
  */
 typedef struct EtherTreeSystemData {
     unsigned char flags;
@@ -128,15 +127,15 @@ struct EtherTreeColorTable {
 
 /*
  * EtherTreeRight is a 2-entry array of "right panel" object-highlight slot
- * records (indexed by index*0x40 in EtherTreeRightSet, this unit, so each
- * record is 0x40 bytes). flags bit 0 marks the slot active; every function
+ * records (indexed by index*0x40 in EtherTreeRightSet, so each record is
+ * 0x40 bytes). flags bit 0 marks the slot active; every function
  * here is itself gated by EtherTreeSystem->flags bit 0. mode drives a
  * 4-state open/close animation (subEtherTreeRightMain): 0 idle, 1 opening
  * (counter counts up by 8 to 48, then mode becomes 2), 2 held open (counter
  * pinned at 48), 3 closing (counter counts down by 8 to 0, then flags bit 0
  * is cleared and mode returns to 0). object is the EtherTreeObjectGet()
- * record the slot currently tracks (EtherTreeRightSet, this unit;
- * EtherTreeRightTargetChange). Bytes no function claimed here writes or
+ * record the slot currently tracks (EtherTreeRightSet and
+ * EtherTreeRightTargetChange). Bytes that no function in this file writes or
  * reads stay unmodeled.
  */
 typedef struct EtherTreeRightData {
@@ -159,8 +158,8 @@ typedef struct EtherTreeRightData {
  * EtherTreeBlack is the fade-to-black slot: this unit provides the same
  * Set/ModeChange/Main/Draw family for it as for EtherTreeRight. mode drives
  * its animation and counter is the frame timer (EtherTreeBlackModeChange,
- * EtherTreeBlackMain); EtherTreeBlackSet resets both to idle. Bytes no
- * function claimed here writes or reads stay unmodeled.
+ * EtherTreeBlackMain); EtherTreeBlackSet resets both to idle. Bytes that no
+ * function in this file writes or reads stay unmodeled.
  */
 typedef struct EtherTreeBlackData {
     unsigned char unmodeled_00;
@@ -171,7 +170,7 @@ typedef struct EtherTreeBlackData {
 
 typedef AlignedVector4 EtherTreeLine2Corner;
 
-/* EtherTreeLineColorGet (this unit) fills the four colour bytes at 0x10. */
+/* EtherTreeLineColorGet fills the four colour bytes at 0x10. */
 typedef struct EtherTreeLine2Vertex {
     float x;
     float y;
@@ -191,8 +190,8 @@ typedef struct EtherTreeLine2Line {
  * every function in this file by EtherTreeSystem->flags bit 0.
  * selectedIndex is the index EtherTreeLine2SelectChange last latched;
  * changing it replays EtherTreeLine2ModeChange(0) (close) before
- * EtherTreeLine2ModeChange(1) (open) on the new index. Bytes no function
- * claimed here writes or reads stay unmodeled.
+ * EtherTreeLine2ModeChange(1) (open) on the new index. Bytes that no function
+ * in this file writes or reads stay unmodeled.
  */
 typedef struct EtherTreeLine2Data {
     unsigned char flags;
@@ -244,13 +243,6 @@ extern EtherTreeObjectData *EtherTreeObjectGet(int id);
 extern void *memset(void *destination, int value, unsigned int count);
 extern void subEtherTreeRightMain(EtherTreeRightData *record);
 extern void EtherTreeLineColorGet(unsigned char *color, int colorIndex);
-/*
- * Build the three lines of the block: line[i] runs from corner from[i] to
- * corner to[i], each offset by the tree node and the screen centre and
- * scaled, and both of its vertices sit one unit in front of the node plane.
- * corner walks the four floats the pair needs (from[i].x, from[i].y,
- * to[i].x, to[i].y) and index walks the three line[] records.
- */
 extern void subLine2_DrawType_1(EtherTreeLine2Data *line2);
 
 extern void EtherTreeObjectDraw(void);
@@ -303,6 +295,7 @@ const struct EtherTreeColorTable etherTreeLineColorTable __attribute__((aligned(
       { 0xa0, 0xa0, 0x40, 0x80 } }
 };
 
+/* Resets the border and fill colours to grey (border alpha 0) and returns the fill colour. */
 static inline unsigned char *subRightPalettePrepare(EtherTreeRightData *record)
 {
     record->borderColor[3] = 0;
@@ -325,6 +318,10 @@ static inline int subLine2SelectForY(EtherTreeLine2Data *line2,
     return *selection = line2->selectedIndex;
 }
 
+/*
+ * Moves line2's second target height to the child and its third segment to the
+ * child's position, shifted 28.5 units left, and sets counter to 3.
+ */
 static inline void subLine2SettleYAtChild(EtherTreeLine2Data *line2,
                                          int selectedIndex,
                                          EtherTreeObjectData **children)
@@ -353,11 +350,8 @@ EtherTreeObjectData *EtherTreeObjectWorkGet(void)
 }
 
 /*
- * EtherTreeFirstDataGet (main:0x002b9f30) reads firstDataIndex (offset 0x02,
- * u16). EtherTreeTargetChange (main:0x002ba750) reads the EtherTreeObjectGet
- * result into targetObject (offset 0x50) and its negated x/y into
- * targetNodeX/targetNodeY (offsets 0x40/0x44, always) and, when its mode
- * argument is 1, also into nodeX/nodeY (offsets 0x30/0x34).
+ * Returns the EtherTreeFirstData entry selected by firstDataIndex (offset
+ * 0x02, u16), which is 1-based.
  */
 void *EtherTreeFirstDataGet(void)
 {
@@ -385,10 +379,10 @@ void EtherTreeLineColorGet(unsigned char *color, int colorIndex)
 }
 
 /*
- * sub2ParentChildSet and subParentChildSet (main/tu179, main:0x002b9ff8 and
- * main:0x002ba0a8) build the tree by id: for up to 3 children looked up
- * through MenuEtherDataGet/EtherTreeFirstDataGet, a non-zero id claims the
- * next EtherTreeObjectWorkGet() record (id set, childCount incremented,
+ * sub2ParentChildSet and subParentChildSet build the tree by id. For up to 3
+ * children looked up through MenuEtherDataGet/EtherTreeFirstDataGet, a non-zero
+ * id claims the next EtherTreeObjectWorkGet() record (id set, childCount
+ * incremented,
  * stored into children[i]) and recurses; a zero id clears children[i].
  * sub2ParentChildSet also sets each child's parent back to itself; the root
  * built by subParentChildSet leaves its own children's parent unset.
@@ -442,6 +436,11 @@ void subParentChildSet(void)
     }
 }
 
+/*
+ * Lays out the subtree under object and returns its leaf count. Children sit 57
+ * units right of their parent and one unit deeper; each node's y is pushed away
+ * from 0 by 36 units per extra leaf below it.
+ */
 int subPosSet(EtherTreeObjectData *object)
 {
     int total;
@@ -497,6 +496,7 @@ int subPosSet(EtherTreeObjectData *object)
     return total;
 }
 
+/* Makes each position absolute by adding the parent's x and y, recursively. */
 void subPosSet2(EtherTreeObjectData *object, Vector4 *parentPosition)
 {
     AlignedVector4 position;
@@ -517,6 +517,7 @@ void subPosSet2(EtherTreeObjectData *object, Vector4 *parentPosition)
     object->position = position;
 }
 
+/* Sets each node with two or three children to the midpoint of its first and last child's y. */
 void subPosSet3(void)
 {
     float midpointScale = 0.5f;
@@ -544,6 +545,7 @@ void subPosSet3(void)
     }
 }
 
+/* Stores in *y the y of the last node reached by following last children. */
 void sub2JoutoYGet(EtherTreeObjectData *object, float *y)
 {
     if (object->childCount != 0)
@@ -552,6 +554,10 @@ void sub2JoutoYGet(EtherTreeObjectData *object, float *y)
         *y = object->position.y;
 }
 
+/*
+ * Lays out the jouto objects in a grid of four columns, starting 72 units below
+ * the bottom of the tree, and stores the grid's root in joutoObjects.
+ */
 void subJoutoPosSet(void)
 {
     unsigned short firstDataIndex = EtherTreeSystem->firstDataIndex;
@@ -588,6 +594,7 @@ void subJoutoPosSet(void)
     root->childCount = count;
 }
 
+/* Refreshes an object's set, dimmed and display-type flags from the menu data. Id 0 is skipped. */
 void EtherTreeParaSet(EtherTreeObjectData *object)
 {
     unsigned short firstDataIndex = EtherTreeSystem->firstDataIndex;
@@ -649,6 +656,10 @@ void EtherTreeLineSet(void)
     } while (--count >= 0);
 }
 
+/*
+ * Points the tree target at the object with the given id. targetNode takes the
+ * object's negated x and y; with mode 1, node takes them too.
+ */
 void EtherTreeTargetChange(int id, int mode)
 {
     EtherTreeObjectData *object = EtherTreeObjectGet(id);
@@ -680,6 +691,12 @@ void EtherTreeWorkClear(void)
     memset(EtherTreeRight, 0, ETHER_TREE_RIGHT_TABLE_SIZE);
 }
 
+/*
+ * Rebuilds the tree for firstDataIndex: clears the object and line tables, then
+ * lays out the objects and points the target at the first entry. Returns after
+ * the clears, without laying out, when all 16 learned-ether bytes of the
+ * character record are zero.
+ */
 void EtherTreeObjectSet(int firstDataIndex)
 {
     EtherTreeCharacterRecord *etherData;
@@ -721,6 +738,10 @@ void EtherTreeObjectSet(int firstDataIndex)
     EtherTreeSystem->node.scale = 1.0f;
 }
 
+/*
+ * Moves the centre to (x, y) when the tree is active and every axis in axisMask
+ * (bit 0 x, bit 1 y) is not yet at its target. Sets flags bit 1 on success.
+ */
 void EtherTreeCenterSet(float x, float y, int axisMask)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -759,6 +780,10 @@ void subMoveSlide(float *position, float *target, float rate)
     }
 }
 
+/*
+ * Slides the centre and the node toward their targets at rate 0.4 per call,
+ * once the tree is active and the centre has been set (flags bits 0 and 1).
+ */
 void EtherTreeCenterMove(void)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -781,6 +806,7 @@ void EtherTreeCenterMove(void)
     }
 }
 
+/* Activates right-panel slot index on the object with the given id and resets its colours. */
 void EtherTreeRightSet(int id, int index)
 {
     EtherTreeRightData *record = &EtherTreeRight[index];
@@ -803,6 +829,11 @@ void EtherTreeRightSet(int id, int index)
     record->height = initialAlpha;
 }
 
+/*
+ * Requests an animation mode for right-panel slot index. While opening or open,
+ * requests 1 and 2 are ignored; while closing, requests 3 and 0 are ignored.
+ * An idle slot accepts any mode.
+ */
 void EtherTreeRightModeChange(int mode, int index)
 {
     EtherTreeRightData *record = &EtherTreeRight[index];
@@ -845,6 +876,7 @@ void EtherTreeRightTargetChange(int id, int index)
     }
 }
 
+/* Advances one right-panel slot's open/close animation by a frame. */
 void subEtherTreeRightMain(EtherTreeRightData *record)
 {
     if (EtherTreeSystem->flags & 1) {
@@ -886,6 +918,7 @@ void EtherTreeRightMain(void)
     }
 }
 
+/* Eases the slot toward its object and draws it as a circle at the resulting screen position. */
 void subRightDraw(EtherTreeRightData *record)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -931,6 +964,7 @@ void EtherTreeBlackSet(void)
     EtherTreeBlack->counter = (EtherTreeBlack->mode = 0);
 }
 
+/* Requests an animation mode for the black fade, with the rules of EtherTreeRightModeChange. */
 void EtherTreeBlackModeChange(int mode)
 {
     EtherTreeBlackData *record = EtherTreeBlack;
@@ -961,6 +995,10 @@ void EtherTreeBlackModeChange(int mode)
     return;
 }
 
+/*
+ * Draws the fade as a full-screen ribbon of four corners (512 x 448) at the node
+ * depth plus 2, with alpha set to counter and black colour.
+ */
 void EtherTreeBlackDraw(void)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -993,6 +1031,10 @@ void EtherTreeBlackDraw(void)
     }
 }
 
+/*
+ * Steps the fade counter: mode 1 counts up by 8 to ETHER_TREE_FADE_MAX and holds
+ * there, mode 3 counts down by 8 to 0 and then goes idle.
+ */
 void EtherTreeBlackMain(void)
 {
     EtherTreeBlackData *record = EtherTreeBlack;
@@ -1021,6 +1063,10 @@ void EtherTreeBlackMain(void)
     }
 }
 
+/*
+ * Makes object id the source of the second line block and stores selectionType.
+ * Each child slot's to and from corners take the object's position.
+ */
 void EtherTreeLine2Set(int id, int selectionType)
 {
     EtherTreeLine2Data *record = EtherTreeLine2;
@@ -1043,6 +1089,11 @@ void EtherTreeLine2Set(int id, int selectionType)
     }
 }
 
+/*
+ * Requests a mode for the second line block. Entering mode 1 resets the counter
+ * and snaps the corners to the object's position. Requests 1 and 2 are ignored
+ * while already open; request 3 is ignored while closing or idle.
+ */
 void EtherTreeLine2ModeChange(int mode)
 {
     EtherTreeLine2Data *record = EtherTreeLine2;
@@ -1098,12 +1149,10 @@ static inline float *line2EndpointY(EtherTreeLine2Data *line2, unsigned int inde
 }
 
 /*
- * subLine2_DrawType_1 (this unit, main:0x002bb448) draws the block's three
- * lines: each one runs from a corner of from[] to the matching corner of
- * to[], both offset by the tree node and the screen centre and scaled by
- * EtherTreeSystem, and both vertices of the pair take line colour 3 before
- * the pair goes to endPrintExtFunc(0, END_PRINT_CMD_ETHER_LINE, ...). The bytes it leaves alone
- * stay unmodeled.
+ * Draws the block's three lines. Each runs from a corner of from[] to the
+ * matching corner of to[], both offset by the tree node and the screen centre
+ * and scaled by the node scale; both vertices sit at the node z minus 1. Both
+ * vertices of a pair take line colour 3 before the pair goes to endPrintExtFunc.
  */
 void subLine2_DrawType_1(EtherTreeLine2Data *line2)
 {
@@ -1141,6 +1190,10 @@ void EtherTreeLine2Draw(void)
     subLine2_DrawType_1(line2);
 }
 
+/*
+ * One open step for a line2 with a single child: moves to[0].x right by 4 per
+ * call and returns 1 once it reaches the child's x.
+ */
 int subLine2_OpenType_0(EtherTreeLine2Data *line2)
 {
     unsigned char counter = line2->counter;
@@ -1167,6 +1220,10 @@ int subLine2_OpenType_0(EtherTreeLine2Data *line2)
     }
 }
 
+/*
+ * One open step for a line2 with two or three children. Returns 1 once the
+ * last segment reaches the selected child, and 0 while the step is still running.
+ */
 int subLine2_OpenType_1(EtherTreeLine2Data *line2)
 {
     EtherTreeObjectData *object = line2->object;
@@ -1196,6 +1253,7 @@ int subLine2_OpenType_1(EtherTreeLine2Data *line2)
     case 2: {
         int ySelection = subLine2SelectForY(line2, &selectedIndex);
 
+        /* Step to[1].y toward the selected child's height, then settle on that child. */
         if (ySelection == 0) {
             EtherTreeObjectData **directionChildren = children = object->children;
             EtherTreeObjectData *directionChild = directionChildren[0];
@@ -1233,6 +1291,7 @@ pending:
     return 0;
 }
 
+/* Advances the second line block's open and close state machine by one frame. */
 void EtherTreeLine2Main(void)
 {
     EtherTreeLine2Data *record = EtherTreeLine2;
@@ -1278,6 +1337,7 @@ void EtherTreeLine2Main(void)
     }
 }
 
+/* Pulses the lamp brightness between 0 and 128, then draws the lamp beside the object's sprite. */
 void sub2ObjectLampDraw(EtherTreeObjectData *object)
 {
     EtherTreeSprite *lamp = &object->lamp;
@@ -1312,6 +1372,10 @@ void sub2ObjectLampDraw(EtherTreeObjectData *object)
     endPrintExtFunc(0, END_PRINT_CMD_SPRITE,lamp);
 }
 
+/*
+ * Draws every object flagged 0x08: its sprite is placed from the node and centre,
+ * dimmed when flagged 0x10, and its lamp is drawn when flagged 0x02.
+ */
 void EtherTreeObjectDraw(void)
 {
     EtherTreeObjectData *objects = EtherTreeObject;
@@ -1362,6 +1426,11 @@ void EtherTreeObjectDraw(void)
     } while (i < 80);
 }
 
+/*
+ * Draws the segments of one tree line, transformed by the node and centre. The
+ * count depends on the object's child count: none for 0, one for 1, five for 2
+ * and six for 3.
+ */
 void subTreeLineDraw(EtherTreeLineData *line, const int *colorIndices)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -1389,10 +1458,12 @@ void subTreeLineDraw(EtherTreeLineData *line, const int *colorIndices)
     }
 }
 
+/* Draw handler for line type 0, which draws nothing. */
 void subTreeLineDraw_type_0(void)
 {
 }
 
+/* Draw handler for a one-child line: object to its child, coloured by the child's active flag. */
 void subTreeLineDraw_type_1(void *context)
 {
     EtherTreeLineGeometry *line = context;
@@ -1406,6 +1477,11 @@ void subTreeLineDraw_type_1(void *context)
     subTreeLineDraw(context, &colorIndex);
 }
 
+/*
+ * Draws the branching line for an object with two children: a horizontal stub,
+ * then a vertical junction and a horizontal branch to each child. Colours follow
+ * each child's active flag.
+ */
 void subTreeLineDraw_type_2(void *context)
 {
     EtherTreeLineGeometry *line = context;
@@ -1460,6 +1536,10 @@ void subTreeLineDraw_type_2(void *context)
     subTreeLineDraw(context, colorIndices);
 }
 
+/*
+ * Draws the branching line for an object with three children: the stub and two
+ * branches reach children 0 and 2, and a straight segment reaches child 1.
+ */
 void subTreeLineDraw_type_3(void *context)
 {
     EtherTreeLineGeometry *line = context;
@@ -1520,6 +1600,7 @@ void subTreeLineDraw_type_3(void *context)
     subTreeLineDraw(context, colorIndices);
 }
 
+/* Draws each line record that has an object, through the handler for its child count. */
 void EtherTreeLineDraw(void)
 {
     EtherTreeLineData *records = EtherTreeLine;
@@ -1534,6 +1615,7 @@ void EtherTreeLineDraw(void)
     } while (--remaining >= 0);
 }
 
+/* Draws the cursor sprite on the target object, scaled by the node. */
 void EtherTreeCursolDraw(void)
 {
     EtherTreeSystemData *system = EtherTreeSystem;
@@ -1558,10 +1640,8 @@ void EtherTreeCursolDraw(void)
 }
 
 /*
- * EtherTreeDraw (this unit, main:0x002bc4f0) stores WindowTexAddrGet(2)'s
- * result at +0x70 (sw $2,112($6)) and hands its address to endPrintExtFunc;
- * nothing else in this allocation touches the span between it and
- * targetCenterY, so it stays unmodeled.
+ * Draws the whole tree when it is active: stores the window texture address,
+ * draws the objects, lines, cursor and panels, then reloads the font texture.
  */
 void EtherTreeDraw(void)
 {
@@ -1579,6 +1659,10 @@ void EtherTreeDraw(void)
     endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_RELOAD, 0);
 }
 
+/*
+ * Carves the tree's tables out of the arena at arenaBase, aligned to 16 bytes,
+ * clears them and returns the first address past them.
+ */
 unsigned char *EtherTreeInit(int arenaBase)
 {
     unsigned char *addr = (unsigned char *)((arenaBase + 0xf) & ~0xf);
@@ -1600,16 +1684,23 @@ unsigned char *EtherTreeInit(int arenaBase)
     return addr;
 }
 
+/* Non-zero for ether indices 13 to 16. */
 static int RoboEtherCheck(int etherIndex)
 {
     return (unsigned int) (etherIndex - 13) < 4U;
 }
 
+/*
+ * Per-frame driver of the tree. Maps MenuWork.state to the set-up, open/close
+ * and transfer steps, then runs the centre, line, right-panel and fade
+ * animations and draws the tree.
+ */
 void EtherTreeMain(void)
 {
     unsigned char *modeFlag = &EtherTreeSystem->unmodeled_01;
 
     switch (MenuWork.state) {
+    /* Equip opens the tree panels on enter; the ether list closes them. */
     case ETHER_TREE_STATE_EQUIP:
     case ETHER_TREE_STATE_EPTS_LIST:
     {
@@ -1652,6 +1743,7 @@ void EtherTreeMain(void)
         }
         break;
     }
+    /* Evolve slot opens the line2 and right panels on the slot cursor. */
     case ETHER_TREE_STATE_EVOLVE_SLOT:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             EtherTreeLine2Set(MenuWork.etherId, 0);
@@ -1700,6 +1792,7 @@ void EtherTreeMain(void)
             EtherTreeRightModeChange(ETHER_TREE_MODE_OPEN,0);
         }
         break;
+    /* Calls func_A194E0, rebuilds the target character's tree, then clears the ether's bit in its learnedEther. */
     case ETHER_TREE_STATE_TRANSFER_CONFIRM:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             EtherTreeCharacterRecord *character;

@@ -116,6 +116,7 @@ static const char *msg00_0_00A10888 = "Environmental Simulator";
 const char simulationDebugLabel[] =
     "\245\267\245\337\245\345\245\354\241\274\245\267\245\347\245\363";
 
+/* Object task for the simulation window and its message. It opens them in UMN_TASK_INIT and slides them in and out with the tab state. */
 void tskUmnSimulationPas(UmnObjectTask *task, void *data)
 {
     UmnSimulationPasWork *work = data;
@@ -170,6 +171,7 @@ void tskUmnSimulationPas(UmnObjectTask *task, void *data)
                 targets.window = -312;
             }
 
+            /* Slides the window and message toward their targets, then draws the message inside the window's scissor area. */
             if (work->state != 0) {
                 MoveSlide(&work->window.x, &targets.window, 3.0f);
                 WindowDXMain(&work->window);
@@ -192,6 +194,7 @@ void tskUmnSimulationPas(UmnObjectTask *task, void *data)
     }
 }
 
+/* Object task for the information bar. While a list entry is selected it shows that simulation's name and period text, and it slides in and out with the tab state. */
 void tskUmnSimulationInfo(UmnObjectTask *task, void *data)
 {
     UmnInfoWork *work = data;
@@ -265,6 +268,7 @@ void tskUmnSimulationInfo(UmnObjectTask *task, void *data)
         }
     }
 }
+/* Object task for the simulation list window. It fills the items from the unlocked simulations and runs the open, slide, select and close states. */
 void tskUmnSimulationList(UmnObjectTask *task, void *data)
 {
     UmnSimulationListWork *list = data;
@@ -286,6 +290,7 @@ void tskUmnSimulationList(UmnObjectTask *task, void *data)
             list->body.slide[1] = 112;
             list->body.color = 0x00FFFF00;
 
+            /* One row per listed simulation, followed by an empty end row. */
             for (i = 0; i < UmnWork.simulation.list_count; i++) {
                 list->body.items[i].name = ListText[i];
                 if ((GameLoopState.flags & GAME_FLAG_ON_EVENT_SYMBOL) != 0) {
@@ -361,6 +366,7 @@ void tskUmnSimulationList(UmnObjectTask *task, void *data)
             break;
         }
 
+        /* Keeps the window at the slide position while the list is open. */
         if (list->opened != 0) {
             list->body.window.x = list->body.slide[0];
             list->body.window.y = list->body.slide[1];
@@ -368,6 +374,7 @@ void tskUmnSimulationList(UmnObjectTask *task, void *data)
         }
     }
 }
+/* Runs one frame of the simulation menu. On open it creates the three object tasks and counts the unlocked simulations; while active it handles selection and cancel; on leave it sets the chosen script and returns to the top level. */
 int UmnSimulation(void)
 {
     unsigned char state = UmnWork.tab_state;
@@ -417,6 +424,7 @@ int UmnSimulation(void)
         UmnWork.wait = UMN_WAIT_OPEN;
         /* The newly armed countdown is handled by the active state. */
 
+    /* Circle picks the selected simulation (a buzzer when it cannot start); Cross cancels. */
     case UMN_STEP_ACTIVE:
         if (UmnWork.wait == 0) {
             if (UmnWork.simulation.list_index >= 0 && (PadData.half_2a & PAD_CIRCLE) != 0) {

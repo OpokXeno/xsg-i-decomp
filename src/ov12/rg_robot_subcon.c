@@ -15,16 +15,17 @@
 #define RG_ROBOT_DIR8_NUM 8
 
 
-/* ov12:0x00a51e08 contains the assertion expression "pGeom != NIL". */
+/* Text: assertion expression "pGeom != NIL". */
 static const char robotSubconAssertGeomNotNil[16] = "pGeom != NIL";
-/* ov12:0x00a51e18 contains the source filename "../rg_robot_subcon.euc.c". */
+/* Text: source file name "../rg_robot_subcon.euc.c". */
 static const char robotSubconSourcePath[32] = "../rg_robot_subcon.euc.c";
 
-/* ov12:0x00a51e38 contains "0 <= nDir8 && nDir8 < 8". */
+/* Text: assertion expression "0 <= nDir8 && nDir8 < 8". */
 static const char robotSubconAssertDir8InRange[24] = "0 <= nDir8 && nDir8 < 8";
-/* ov12:0x00a51e50 contains "unknown damage dir %d". */
+/* Text: format string "unknown damage dir %d". */
 static const char robotSubconUnknownDamageDirFormat[24] = "unknown damage dir %d";
 
+/* Adds a force along the normalized direction, scaled by scale, to a geometry point. */
 void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale)
 {
     RgVector force;
@@ -37,6 +38,7 @@ void RgRobSubAcceralate(RgGeomPoint *geometry, RgVector direction, float scale)
     RgGeomPointAddForce(geometry, force);
 }
 
+/* Scales the linear velocity and the rotational velocity of a geometry point. */
 void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                    float rotational_scale)
 {
@@ -52,6 +54,10 @@ void RgRobSubBreak(RgGeomPoint *geometry, float linear_scale,
                          RgGeomRobotGetRotVel(&geometry->geom) * rotational_scale);
 }
 
+/*
+ * Sets the rotational velocity toward a target position, clamped to speed.
+ * Returns the signed angle to the target, wrapped to [-pi, pi].
+ */
 float RgRobSubTargetting(RgGeomPoint *geometry,
                          RgVector targetPosition, float speed,
                          float turnRate)
@@ -90,6 +96,10 @@ float RgRobSubTargetting(RgGeomPoint *geometry,
     return angle;
 }
 
+/*
+ * Steers toward targetGeometry (see RgRobSubTargetting), passing deltaTime on as
+ * the turn rate. Returns 0 when targetGeometry is null.
+ */
 float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
                      float speed, float deltaTime)
 {
@@ -104,6 +114,7 @@ float RgRobSubHoming(RgGeomPoint *geometry, RgGeomPoint *targetGeometry,
     return 0.0f;
 }
 
+/* Faces the geometry point toward direction on the XZ plane; a zero vector leaves it unchanged. */
 void RgRobSubDirTo(RgGeomPoint *geometry, RgVector direction)
 {
     if (geometry == 0) {
@@ -115,6 +126,7 @@ void RgRobSubDirTo(RgGeomPoint *geometry, RgVector direction)
     RgGeomRobotSetRotate(&geometry->geom, atan2f(direction[0], direction[2]));
 }
 
+/* Returns the advance or dash motion ID for the velocity direction, quantized to eight directions. */
 int RgRobSubGetAdvanceMot(RgGeomPoint *geometry, int dash)
 {
     static int s_aeAdvMotID[RG_ROBOT_DIR8_NUM] = { RG_MOT_ADV_F, RG_MOT_ADV_FL, RG_MOT_ADV_L, RG_MOT_ADV_BL, RG_MOT_ADV_B,
@@ -137,7 +149,7 @@ int RgRobSubGetAdvanceMot(RgGeomPoint *geometry, int dash)
     return s_aeAdvMotID[direction];
 }
 
-/* No roll motion when the rotational force is exactly zero. */
+/* Returns the roll motion for the rotational force: right when negative, left when positive, none at zero. */
 int RgRobSubGetRollMotion(RgGeomPoint *geometry)
 {
     float rotForce;
@@ -152,6 +164,7 @@ int RgRobSubGetRollMotion(RgGeomPoint *geometry)
     return RG_MOT_NONE;
 }
 
+/* Returns the damage motion for a hit direction, quantized to four directions. */
 int RgRobSubGetDamageMotion(RgGeomPoint *geometry, RgVector direction)
 {
     float angle;

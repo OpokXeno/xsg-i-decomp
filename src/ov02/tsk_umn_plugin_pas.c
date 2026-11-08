@@ -91,12 +91,12 @@ extern void xglFontDebugHex(int x, int y, int value, int digits);
 static const char *msg00_0_00A10C40 = pluginTitleText;
 unsigned char plugin_folder[UMN_PLUGIN_SLOTS] = { 0 };
 static const char pluginEmptyText[8] = "";
-/* The original EUC-JP debug label spells プラグイン. */
 /* JP: プラグイン
  * EN: Plugin */
 static const char pluginDebugLabel[16] =
     "\xA5\xD7\xA5\xE9\xA5\xB0\xA5\xA4\xA5\xF3";
 
+/* Object task for the plug-in caption window and its message. It opens them in UMN_TASK_INIT and slides them in and out with the tab state. */
 void tskUmnPluginPas(UmnObjectTask *task, void *work_opaque)
 {
     struct UmnPluginPasWork *work = work_opaque;
@@ -152,6 +152,7 @@ void tskUmnPluginPas(UmnObjectTask *task, void *work_opaque)
                 } else {
                     slide_targets[0] = -272;
                 }
+                /* Moves the window and label, then draws the label inside the caption's scissor area. */
                 if (work->initialized != 0) {
                     MoveSlide(&work->window.x, &slide_targets[0], 3.0f);
                     WindowDXMain(&work->window);
@@ -174,6 +175,7 @@ void tskUmnPluginPas(UmnObjectTask *task, void *work_opaque)
     }
 }
 
+/* Object task for the plug-in description bar. It shows the description of the selected plug-in and slides with the tab state. */
 void tskUmnPluginInfo(UmnObjectTask *task, void *work_opaque)
 {
     struct UmnPluginInfoWork *work = work_opaque;
@@ -227,6 +229,7 @@ void tskUmnPluginInfo(UmnObjectTask *task, void *work_opaque)
     }
 }
 
+/* Object task for the plug-in list window. It fills the items from plugin_folder, stores the selected plug-in in UmnWork.entry, and runs the open, slide and close phases. */
 void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
 {
     struct UmnPluginListWork *work = work_opaque;
@@ -267,6 +270,7 @@ void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
                 work->phase = UMN_PLUGIN_LIST_FILL;
             }
             break;
+        /* Fills the items from the unlocked plug-ins, shows the window, then starts the slide-in. */
         case UMN_PLUGIN_LIST_FILL:
             for (i = 0; i < UmnWork.count; i++) {
                 unsigned char plugin_id = plugin_folder[i];
@@ -325,6 +329,7 @@ void tskUmnPluginList(UmnObjectTask *task, void *work_opaque)
     xglFontDebugPrintf(0, 16, pluginListPhaseDebugFormat, work->phase);
 }
 
+/* Object task for the plug-in counter ribbon. It shows the list cursor and the number of unlocked plug-ins, and slides in and out with the tab state. */
 void tskUmnPluginExWin(UmnObjectTask *task, void *work_opaque)
 {
     struct UmnPluginExWin *work = work_opaque;
@@ -383,6 +388,7 @@ void tskUmnPluginExWin(UmnObjectTask *task, void *work_opaque)
     }
 }
 
+/* Runs one frame of the plug-in menu. On open it creates the four object tasks and builds plugin_folder from the unlocked plug-ins; Cross leaves the menu, and leaving returns to the top level. */
 void UmnPlugin(void)
 {
     switch (UmnWork.tab_state) {
@@ -394,6 +400,7 @@ void UmnPlugin(void)
         unsigned char *folder_cursor;
         UmnMailSaveData *save;
 
+        /* Creates the four object tasks in the work area after UmnWorkEnd. */
         UmnObjectTaskCreate(tskUmnPluginPas, task_work);
         task_work += 968;
         UmnObjectTaskCreate(tskUmnPluginInfo, task_work);
@@ -406,6 +413,7 @@ void UmnPlugin(void)
         UmnWork.list_cursor = 0;
         memset(folder_cursor, 0, sizeof(plugin_folder));
         unlocked_plugins = save->plugin_unlock_flags;
+        /* plugin_folder receives the unlocked plug-ins in ascending order. */
         for (plugin_index = 0; plugin_index < UMN_PLUGIN_SLOTS; plugin_index++) {
             if (((int)unlocked_plugins >> plugin_index) & 1) {
                 *folder_cursor++ = plugin_index;
@@ -422,7 +430,7 @@ void UmnPlugin(void)
     case UMN_STEP_OPEN:
         UmnWork.tab_state = UMN_STEP_ACTIVE;
         UmnWork.wait = UMN_WAIT_OPEN;
-        /* Continue through the entry timer check. */
+        /* Falls through to the wait check. */
     case UMN_STEP_ACTIVE:
         if (UmnWork.wait == 0 &&
             (PadData.half_2a & PAD_CROSS) != 0) {
@@ -433,7 +441,7 @@ void UmnPlugin(void)
     case UMN_STEP_LEAVE:
         UmnWork.tab_state = UMN_STEP_LEAVE_WAIT;
         UmnWork.wait = UMN_WAIT_LEAVE;
-        /* Continue through the exit timer check. */
+        /* Falls through to the wait check. */
     case UMN_STEP_LEAVE_WAIT:
         if (UmnWork.wait == 0) {
             UmnChangeTopLevel(0);

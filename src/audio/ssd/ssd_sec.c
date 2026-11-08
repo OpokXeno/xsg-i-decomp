@@ -15,6 +15,7 @@ int SsdUnlinkEffectSet(SsdEffectData *effect);
 void SsdLinkEffectSet(SsdEffectData *effect);
 void SsdSetMidiDevicePriority(SsdMidiDevice *device, unsigned char priority);
 
+/* Creates the effect sequence: track_count tracks, each on its own fixed voice from first_voice. */
 SsdSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice)
 {
     SsdSequence *sequence = SsdNewPtr(sizeof(*sequence));
@@ -54,6 +55,10 @@ SsdSequence *SsdMakeEffectSequenceRec(int track_count, int first_voice)
     return sequence;
 }
 
+/*
+ * Registers an effect data set and returns its file ID, or -1 on failure.
+ * A set whose file ID is already registered is not added again.
+ */
 int SsdAddEffectData(SsdEffectData *effect)
 {
     int error = (short)SsdCheckData(effect, SSD_EFFECT_DATA_SIGNATURE);
@@ -77,6 +82,7 @@ int SsdAddEffectData(SsdEffectData *effect)
     return -1;
 }
 
+/* Stops the effects of a registered data set, unlinks it and frees its memory. */
 void SsdDisposeEffectData(int file_id)
 {
     SsdEffectData *effect = SsdGetFileIDToEffectData(file_id);
@@ -100,6 +106,7 @@ void SsdLinkEffectSet(SsdEffectData *effect)
     CpuEnableIntr();
 }
 
+/* Removes an effect data set from the linked list; reports an error when it is not listed. */
 int SsdUnlinkEffectSet(SsdEffectData *effect)
 {
     SsdEffectData *current;
@@ -127,6 +134,7 @@ int SsdUnlinkEffectSet(SsdEffectData *effect)
     return 0;
 }
 
+/* Returns file_id when an effect data set with that ID is registered, otherwise -1. */
 int SsdCheckEffectData(int file_id)
 {
     SsdEffectData *effect = SsdWork.effect_sets;
@@ -144,6 +152,7 @@ void SsdPlayEffectNormal(unsigned int effect, int mode)
     SsdPlayEffectParam(effect, SSD_MIDI_VALUE_MAX, SSD_PANPOT_CENTER, mode);
 }
 
+/* Updates the matching playing effects; starts the effect when none of them changed. */
 void SsdSetPlayEffectParam(unsigned int effect, int volume, int pan, int mode)
 {
     int result = SsdSetEffectParam(effect, volume, pan, mode);
@@ -152,6 +161,10 @@ void SsdSetPlayEffectParam(unsigned int effect, int volume, int pan, int mode)
         SsdPlayEffectParam(effect, volume, pan, mode);
 }
 
+/*
+ * Starts an effect. effect_id holds the file ID in its high 16 bits and the
+ * effect index in its low 16 bits.
+ */
 void SsdPlayEffectParam(unsigned int effect_id, int volume, int pan, int mode)
 {
     SsdEffectData *effect = SsdWork.effect_sets;
@@ -204,6 +217,10 @@ void SsdPlayEffectParam(unsigned int effect_id, int volume, int pan, int mode)
         SsdPlaySeqEffectNormal(&play);
 }
 
+/*
+ * Initializes the tracks of an effect from first_track and activates them.
+ * Returns first_track.
+ */
 int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
 {
     SsdSequence *sequence;
@@ -233,6 +250,7 @@ int SsdPlaySeqEffectNormal(SsdEffectPlayParam *play)
     output_volume = mapped_volume * SSD_CHANNEL_VOLUME_DEFAULT * SSD_MIDI_VALUE_MAX /
         (SSD_MIDI_VALUE_MAX * SSD_MIDI_VALUE_MAX);
     offsets = entry->track_offsets;
+    /* One pass per track; an offset of 0 leaves that track deactivated. */
     do {
         unsigned short offset = *offsets++;
 
@@ -321,6 +339,7 @@ void SsdStopWave(int effect, int mode)
     SsdStopEffect(effect, mode);
 }
 
+/* Starts one track on sample start_track of the bank and returns it, or 0 on error. */
 SsdTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
 {
     SsdWaveBank *bank = SsdGetWSPtrBank(play->bank_id);
@@ -334,6 +353,7 @@ SsdTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
     int output_volume;
     int invalid_sample;
 
+    /* A missing bank, or a sample that is out of range or silent, fails the request. */
     if (bank == 0) {
         SsdErrorProc(SSD_ERROR_NO_EFFECT_BANK, play->effect_id);
         return 0;
@@ -402,6 +422,7 @@ SsdTrack *SsdPlayWaveEffectNormal(SsdEffectPlayParam *play)
     return track;
 }
 
+/* Updates volume and pan on the active tracks of effect_id (and mode, when nonzero). Returns 1 if any changed. */
 int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode)
 {
     SsdSequence *sequence = SsdWork.effect_sequence;
@@ -448,6 +469,11 @@ int SsdSetEffectParam(unsigned int effect_id, int volume, int pan, int mode)
     return changed;
 }
 
+/*
+ * Finds play->track_count consecutive free tracks and sets play->first_track.
+ * Stops the same effect first. When no run is free, stops the oldest track
+ * whose priority does not exceed the request. Returns -1 if none can be stopped.
+ */
 int SsdSaechSeqFreeTrack(SsdEffectPlayParam *play)
 {
     SsdSequence *sequence;
@@ -470,6 +496,7 @@ int SsdSaechSeqFreeTrack(SsdEffectPlayParam *play)
         search_limit = first_index - SSD_EFFECT_LOW_TRACK_COUNT;
     }
     first = &sequence->tracks[first_index];
+    /* Search for a free run; if there is none, stop a victim track and search again. */
     for (;;) {
         int position = search_limit;
         SsdTrack *track = first;
@@ -539,6 +566,7 @@ void SsdStopEffect(int effect, int mode)
     SsdFadeoutEffect(effect, 0, mode);
 }
 
+/* Fades out every active track that is not playing effect_id (and mode, when nonzero). */
 void SsdContinueOneEffect(unsigned int effect_id, int duration, int mode)
 {
     SsdSequence *sequence = SsdWork.effect_sequence;
@@ -570,6 +598,7 @@ void SsdStopEffectFileID(int file_id)
     SsdFadeoutEffectFileID(file_id, 0);
 }
 
+/* Fades out the active tracks of effect_id (and mode, when nonzero). */
 void SsdFadeoutEffect(unsigned int effect_id, int duration, int mode)
 {
     SsdSequence *sequence = SsdWork.effect_sequence;
@@ -596,6 +625,7 @@ void SsdFadeoutEffect(unsigned int effect_id, int duration, int mode)
     CpuEnableIntr();
 }
 
+/* Fades out the active tracks that belong to file_id. */
 void SsdFadeoutEffectFileID(int file_id, int duration)
 {
     SsdSequence *sequence = SsdWork.effect_sequence;
@@ -612,6 +642,7 @@ void SsdFadeoutEffectFileID(int file_id, int duration)
     CpuEnableIntr();
 }
 
+/* Fades a track out over duration, or cuts it off at once when duration is 0. */
 void SsdFadeoutStopEffectTrack(SsdTrack *track, int duration)
 {
     if (duration != 0) {
@@ -642,6 +673,7 @@ int SsdCheckPlayEffectAll(void)
     return 0;
 }
 
+/* Returns 1 when effect_id is playing (and mode matches, when nonzero), otherwise 0. */
 int SsdCheckPlayEffect(unsigned int effect_id, int mode)
 {
     SsdSequence *sequence = SsdWork.effect_sequence;

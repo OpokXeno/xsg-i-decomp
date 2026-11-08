@@ -60,16 +60,10 @@
     ((u64)(a) | ((u64)(b) << 2) | ((u64)(c) << 4) | ((u64)(d) << 6) | \
      ((u64)(fix) << 32))
 
-/* One frame of the fade-out: present the image, program the ALPHA_1
- * register of a TestEnv packet with the new fade level, send the packet
- * and wait for the next frame. The original's schedule keeps this block
- * apart from the per-frame outcome check that follows it (no instruction
- * of the alpha update is hoisted above that check); a do/while(0)
- * statement macro reproduces that barrier. Receipt: attempt-68a6449851d1
- * forms 03 (plain statements, hoists slti/addiu above the outcome bne at
- * 0x00254078) vs 04 (wrapped in do{...}while(0), keeps the original
- * schedule) - the wrapper is what keeps the order, not a coincidence of
- * that one build. */
+/* One frame of the fade-out: present the image, set the ALPHA_1 fade level
+ * in a TestEnv packet, send the packet and wait for the next frame. The
+ * do/while (0) wrapper keeps this block apart from the outcome check that
+ * follows it, so no part of the alpha update moves above that check. */
 #define DRAW_FADE_FRAME(env, alpha)                                     \
     do {                                                                \
         DrawImage((void *)IMAGE_FRAME_BUFFER);                          \
@@ -172,6 +166,7 @@ static GameOverDmaPacket12 TestEnv5 = { .words = {
 
 static char name_6[0x15] = "data\\yajima\\im00.jpg";
 
+/* Sends the packet that presents the frame buffer as the displayed image. */
 static void DrawImage(void *framebuffer)
 {
     XglPacket *packet;
@@ -187,6 +182,7 @@ static void DrawImage(void *framebuffer)
     sceVif1PkRef(packet, FlushEnv_2_00369D40.words, 3, 0, 0, 0);
 }
 
+/* Sends the packet that draws the back fill over the frame, with alpha clamped to 0 or more. */
 static void DrawBack(int alpha)
 {
     u64 nonnegative_alpha;
@@ -202,6 +198,7 @@ static void DrawBack(int alpha)
     sceVif1PkRef(xglPacketGetCurrent(), TestEnv_3_00369D70.words, 10, 0, 0, 0);
 }
 
+/* Sends a direct packet that copies the screen-height source rectangle of the frame, sized from sRender. */
 static int copyframe(void)
 {
     XglPacket *packet;
@@ -253,15 +250,9 @@ static void GameEnd(void)
     u32 framebuffer = IMAGE_FRAME_BUFFER;
     u32 jpeg_source = IMAGE_LOAD_BUFFER;
     int alpha;
-    /* One local serves as the fade-in hold counter and then as the prompt
-     * outcome (both live in $16 = s0 in the original; a separate outcome
-     * local is allocated after the fade-out invariants instead). Receipt:
-     * attempt-68a6449851d1 forms 04 and 05 (the same source: the wrapped
-     * DRAW_FADE_FRAME and a separate state/choice local; 05 changed only
-     * the header pins) keep the outcome in s4 and first differ
-     * at 0x00253fa4 (`addiu s4,zero,2` vs `addiu s0,zero,2`); merging the
-     * fade-in counter and the outcome into one local is what puts the
-     * outcome back in s0. */
+    /* One local serves as both the fade-in hold counter and the prompt
+     * outcome. Sharing it keeps both in the same register;
+     * a separate outcome local would be allocated to another register. */
     int count;
     int buttons;
 
@@ -292,6 +283,7 @@ static void GameEnd(void)
         xglSleep();
     }
 
+    /* Save prompt: circle saves; cross asks to quit, and a second circle confirms it. */
     for (;;) {
         DrawImage((void *)framebuffer);
         xglFontPrint(PROMPT_TEXT_X, PROMPT_TEXT_Y, -1, GameEndSaveQuestion);
@@ -322,8 +314,8 @@ static void GameEnd(void)
     }
 
     if (count == END_CHOICE_QUIT) {
-        /* Fade to black through the TestEnv.4 ALPHA_1 packet.  The original
-         * re-checks the outcome every frame (bne s0,s3 after xglSleep). */
+        /* Fade to black through the TestEnv.4 ALPHA_1 packet. The outcome is
+         * re-checked after every frame. */
         alpha = GAME_OVER_FADE_OUT_START;
         for (;;) {
             DRAW_FADE_FRAME(TestEnv4.words, alpha);
@@ -360,6 +352,7 @@ void GameOver(void)
 
     copyframe();
     framebuffer = IMAGE_FRAME_BUFFER;
+    /* Read and decode the game-over image into the frame buffer. */
     xglCdReadFile(GameOverImagePath, (void *)IMAGE_LOAD_BUFFER, 0, 1);
     memset(&jpeg, 0, sizeof(jpeg));
     jpeg.source = IMAGE_LOAD_BUFFER;
@@ -423,6 +416,10 @@ void GameOver(void)
     xglSleep();
 }
 
+/*
+ * Shows the intermission image of chapter, fades it in and holds it, then
+ * offers the save prompt: circle opens the save menu, cross continues.
+ */
 void Intermission(int chapter)
 {
     JpegDecodeRequest jpeg;
@@ -465,6 +462,7 @@ void Intermission(int chapter)
         xglSleep();
     }
 
+    /* Save prompt for the intermission: circle opens the save menu, cross continues. */
     for (;;) {
         DrawImage((void *)framebuffer);
         xglFontPrint(PROMPT_TEXT_X, PROMPT_TEXT_Y, -1, gameOverSavePromptText);

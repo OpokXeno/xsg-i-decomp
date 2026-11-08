@@ -7,7 +7,7 @@
 #include "main/sef.h"
 #include "main/sef_print.h"
 
-/* A key field halfway between two keys: blend is the 8-bit fraction. */
+/* Interpolates one key field between key0 and key1; blend is the 8-bit fraction. */
 #define SDV_BLEND(dest, field) \
     (dest) = (key1->field == key0->field ? key0->field : (key0->field + (((key1->field - key0->field) * blend + 128) >> 8)) & 0xffff)
 
@@ -303,6 +303,7 @@ void sdvInitAmbient(void)
     _sdvAmbState = 0;
 }
 
+/* Saves the current ambient and map colors, then resets the ambient fade. */
 void sdvSaveAmbient(void)
 {
     void *ambient = xglStudioGetLight2();
@@ -324,6 +325,10 @@ void sdvSaveAmbient(void)
     _sdvAmbState = 0;
 }
 
+/*
+ * Sets the ambient state. Without force, the state changes only for effect
+ * category 0xE or effect 0xB25, and not for effect numbers 0x8FC to 0x9B1.
+ */
 static void sdvSetAmbStateSub(int state, int effect_no, int force)
 {
     if (force != 0) {
@@ -360,6 +365,10 @@ void sdvRestoreAmbient(void)
     sdvSetAmbient(_sdvMapRgb, _sdvAmbient);
 }
 
+/*
+ * Advances the ambient fade by one frame and applies the resulting colors.
+ * State 1 counts the frame up to 20; state 2 counts it down to 0.
+ */
 void sdvExecAmbient(void)
 {
     Vector4 map_rgb;
@@ -394,7 +403,7 @@ void sdvExecAmbient(void)
         float divisor = 20.0f;
 
         parameter = (float)_sdvAmbFrame / divisor;
-        /* These constrained operations implement the eight evidenced COP2 instructions. */
+        /* Halve the RGB of both saved colors with VU0; the interpolation below moves toward these. */
         __asm__ __volatile__(
             "lqc2 vf1, 0(%1)\n\t"
             "mfc1 $8, %0\n\t"
@@ -421,6 +430,10 @@ void sdvExecAmbient(void)
     }
 }
 
+/*
+ * Advances a sequence by one frame. Returns the position that fires this frame,
+ * 1024 at the end marker, or -1.
+ */
 int sdvExecSeqTbl(SdvSequence *sequence)
 {
     int result = -1;
@@ -454,6 +467,10 @@ int sdvExecSeqTbl(SdvSequence *sequence)
     return result;
 }
 
+/*
+ * Advances a key cursor by one frame. Returns the position that fires this frame,
+ * 1024 at the end marker, or -1. Same logic as sdvExecSeqTbl.
+ */
 int sdvProgressKey(const short *sequence, SdvKeyCursor *cursor, int stride)
 {
     int result = -1;
@@ -487,6 +504,10 @@ void sdvPlaySound(int sound_id, int unused, int flags)
     xglSoundEffectNormalID(sound_id, 0);
 }
 
+/*
+ * Advances the sequence and plays the sound of the event that fires. The event
+ * is remembered as the last sound when its latch is positive.
+ */
 void sdvScheduleSound(SdvSequence *sequence)
 {
     struct SdvSoundEvent {
@@ -525,6 +546,11 @@ void sdvScheduleSound(SdvSequence *sequence)
     }
 }
 
+/*
+ * Picks a camera script from table for script_base: the fifth candidate in an
+ * entry-boss battle, otherwise a weighted roll over the first four. Fills choice
+ * and returns the chosen candidate, or 0 when none is chosen.
+ */
 int sdvSelectCamera(SdvCameraChoice *choice, int script_base,
                     unsigned short *table)
 {
@@ -572,6 +598,11 @@ int sdvSelectCamera(SdvCameraChoice *choice, int script_base,
     return chosen;
 }
 
+/*
+ * Fills a camera parameter block from a selection code. Kind 0 takes a position
+ * scaled by 0.01 from position; kind 1 takes an actor and part; kinds 2 and 3
+ * take the source and target actors with part 15.
+ */
 static void sdvSetCameraParam(void *camera_data, int selection, const short *position)
 {
     SdvCameraParam *camera = camera_data;
@@ -650,6 +681,10 @@ static void sdvSetCameraParam(void *camera_data, int selection, const short *pos
     }
 }
 
+/*
+ * Clears a camera offset, then fills it from vec: kind 1 stores a position
+ * scaled by 0.01, kind 2 stores angles.
+ */
 static void sdvSetCameraOffset(SdvCamOffset *cam, int kind,
                                const int16_t *vec)
 {
@@ -670,6 +705,10 @@ static void sdvSetCameraOffset(SdvCamOffset *cam, int kind,
     }
 }
 
+/*
+ * Advances the camera parameter track in data by one keyframe step and sends the
+ * parameters for kind to the camera. Returns the frame from sdvProgressKey.
+ */
 int sdvProgressPrm(int kind, void *data, int size)
 {
     typedef struct SdvCameraParameters {
@@ -719,6 +758,7 @@ int sdvProgressPrm(int kind, void *data, int size)
             return frame;
         }
 
+        /* Parameters for the current keyframe. */
         if (time_delta <= 0 || frame == 0 || current[0] == 0x1000 ||
             next[0] == 0x400) {
             has_camera_params = 0;
@@ -746,6 +786,7 @@ int sdvProgressPrm(int kind, void *data, int size)
             }
         }
 
+        /* Transition from this keyframe toward the next one. */
         if (time_delta > 0 && next[0] < 0x400) {
             memset(&transition, 0, 0xC0);
             transition.source_byte_3 = (signed char)((unsigned short)current[1] >> 8);
@@ -777,6 +818,10 @@ int sdvProgressPrm(int kind, void *data, int size)
     return frame;
 }
 
+/*
+ * Advances the position, angle and offset tracks of a camera task during battle.
+ * Without a scale track, default parameters are sent instead.
+ */
 void sdvScheduleCamera(SdvCameraTask *task)
 {
     float params[44];
@@ -802,6 +847,11 @@ void sdvScheduleCamera(SdvCameraTask *task)
     }
 }
 
+/*
+ * Projects a special effect's offset to screen coordinates and returns 1 on success.
+ * Part 3 is copied directly with a fixed screen offset; other parts go through the
+ * camera transform and return 0 when clipped.
+ */
 static int sdvTransOffset(SdvScreenPoint *screen, SdvScreenPoint *offset,
                           SdvSpecialSlot *slot, SdvSpecialKey *key)
 {
@@ -874,6 +924,7 @@ void sdvInitSpecialWork(void)
     memset(_sdvSpecialBuf, 0, sizeof(_sdvSpecialBuf));
 }
 
+/* Resets each active special work slot through GameDefocusSet. */
 void sdvClearSpecialWork(void)
 {
     int i;
@@ -886,6 +937,10 @@ void sdvClearSpecialWork(void)
     }
 }
 
+/*
+ * Claims a free special work slot and returns its index, or -1 when none is free.
+ * Kind 0 uses only slot 0; other kinds use slots 1 to 7.
+ */
 static int sdvAllocSpecialWork(int kind)
 {
     int slot;
@@ -912,6 +967,10 @@ static inline void sdvCopyKey(SdvSpecialKey *destination, const SdvSpecialKey *s
     ((SdvKeyBytes *)destination)->key = ((const SdvKeyBytes *)source)->key;
 }
 
+/*
+ * Advances a special effect. When the sequence fires, the next free slot takes the
+ * event's key table. Then every active slot steps its key track and blends between keys.
+ */
 void sdvExecSpecial(SdvSpecial *special)
 {
     int index;
@@ -926,6 +985,7 @@ void sdvExecSpecial(SdvSpecial *special)
         return;
     }
     index = sdvExecSeqTbl(&special->sequence);
+    /* Start a free slot from the event that fired. */
     if ((unsigned int)index < 1024) {
         scheduler = sefGetNowScheduler();
         for (n = 0; n < 7; n++) {
@@ -955,6 +1015,7 @@ void sdvExecSpecial(SdvSpecial *special)
         }
     }
 
+    /* Step each active slot's key track and blend between its two current keys. */
     for (n = 0; n < special->sequence.position && n < 7; n++) {
         const SdvSpecialKey *keys;
         const SdvSpecialKey *key0;
@@ -999,6 +1060,10 @@ void sdvExecSpecial(SdvSpecial *special)
     }
 }
 
+/*
+ * Draws the active slots of a special effect. Each slot's key is sent to
+ * GameDefocusSet with a parameter block for its kind; keys with zero alpha are skipped.
+ */
 void sdvDrawSpecial(SdvSpecial *special)
 {
     int params[16];
@@ -1019,6 +1084,7 @@ void sdvDrawSpecial(SdvSpecial *special)
         }
         key = &slot->key;
         params[0] = 0;
+        /* One parameter block per display kind; kinds without a case draw nothing. */
         switch (slot->table->kind) {
         case 7:
             if (key->color[3] == 0) {
@@ -1194,6 +1260,10 @@ void sdvDrawSpecial(SdvSpecial *special)
     }
 }
 
+/*
+ * Creates an alter for the sequence event that fires. Copies the event's parameters
+ * and up to two image pairs as texture descriptors, then calls sdvCreateAlter.
+ */
 void sdvScheduleAlter(SdvSequence *sequence, SdvAlterRequest *request)
 {
     struct SdvAlterImagePair {
@@ -1258,6 +1328,7 @@ void sdvScheduleAlter(SdvSequence *sequence, SdvAlterRequest *request)
 
     event = (struct SdvAlterEvent *)(sequence->event_address
         + event_index * sequence->stride * 2);
+    /* Copy the event's parameters, then add the image pairs as texture descriptors. */
     memset(&parameters, 0, sizeof(parameters));
     parameters.request = *request;
     parameters.life = event->life;
@@ -1286,6 +1357,7 @@ void sdvScheduleAlter(SdvSequence *sequence, SdvAlterRequest *request)
     image_alpha_bits = (unsigned long long)0x8000 << 19;
     mapper_index = sefSearchMapperIndex(request->effect_no);
     image_index = &event->images[0].secondary_index;
+    /* Each valid primary and secondary image pair becomes one texture descriptor. */
     for (remaining_pairs = 1; remaining_pairs >= 0; remaining_pairs--) {
         primary_index = image_index[-1];
         secondary_index = image_index[0];
@@ -1327,6 +1399,10 @@ void sdvInitAlter(SdvAlter *alter)
     sefMemZero(alter, sizeof(*alter));
 }
 
+/*
+ * Claims a free alter slot and returns its id (serial << 16 | index), or -1 when
+ * all 16 slots are in use.
+ */
 int sdvCreateAlter(SdvAlterParameters *parameters)
 {
     int index;
@@ -1355,6 +1431,7 @@ void sdvDestroyAlter(SdvAlter *alter)
     sefMemZero(alter, sizeof(*alter));
 }
 
+/* Destroys the alter named by alter_id, if its serial still matches; stale ids are ignored. */
 void sdvKillAlter(int alter_id)
 {
     int index;
@@ -1371,6 +1448,10 @@ void sdvKillAlter(int alter_id)
     sdvDestroyAlter(&_sdvAlter[index]);
 }
 
+/*
+ * Advances an alter by one frame: its sample count grows while life lasts and
+ * shrinks after it ends. The alter is destroyed when life goes negative.
+ */
 void sdvExecAlter(SdvAlter *alter)
 {
     int target_selector;
@@ -1386,6 +1467,7 @@ void sdvExecAlter(SdvAlter *alter)
     } else {
         alter->cursor -= alter->parameters.shrink;
     }
+    /* Record one trail sample per endpoint, then advance the level phase. */
     if (alter->cursor > 0) {
         for (i = 0; i < 2; i++) {
             int selector = alter->parameters.selector[i];
@@ -1468,6 +1550,10 @@ const float McMathUnitMatrix[4][4] = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 };
 
+/*
+ * Draws one alter into packet as a strip of Hermite-interpolated segments, one per
+ * pair of trail samples. Also advances its image animation and texture phase.
+ */
 void sdvDrawAlter(SdvAlter *alter, SGsPacket *packet)
 {
     HermiteVector tangent[2];
@@ -1514,6 +1600,7 @@ void sdvDrawAlter(SdvAlter *alter, SGsPacket *packet)
         s_step = alter->parameters.length / (count - 1);
         s_step *= 0.25f;
     }
+    /* Textured packet when the alter has images, plain packet otherwise. */
     if (alter->parameters.image_count != 0) {
         SGsOpenGifPacket(packet, 92, 3822, 3);
         alter->parameters.image_timer++;
@@ -1549,6 +1636,7 @@ void sdvDrawAlter(SdvAlter *alter, SGsPacket *packet)
         :
         : "r"(view), "r"(camera->viewMatrix)
         : "$8", "$9", "$10", "$11", "memory");
+    /* One strip segment per pair of trail samples, from the newest sample back. */
     for (i = 0; i < count - 1; i++) {
         current = (head - i) & 0x7f;
         if (i == 0)
@@ -1652,6 +1740,7 @@ void sdvExecAlters(void)
     }
 }
 
+/* Draws every active alter of category; the environment is initialized before the first one. */
 void sdvDrawAlters(int category)
 {
     int i;

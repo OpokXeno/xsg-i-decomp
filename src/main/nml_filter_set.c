@@ -23,18 +23,18 @@ struct NmlFilterGsRegisterEntry {
     u64 registerId;
 };
 
-/* Six original cube faces, each containing four corner indices. */
+/* Six cube faces, each as four corner indices. */
 struct NmlFilterCubeFaces {
     int vertices[6][4];
 };
 
-/* One scratchpad write contains two of the owner's actual GS slots. */
+/* One scratchpad entry holds a GS payload and the register slot it is written to. */
 struct NmlFilterGsPair {
     GsTag payload;
     GsTag registerSlot;
 };
 
-/* The projection helper's VFT0I/SQC2 output is integer GS coordinates. */
+/* Four integers in GS units (x, y, u, v), 16-byte aligned. */
 typedef int NmlFilterGridVector[4] __attribute__((aligned(16)));
 
 enum {
@@ -63,13 +63,11 @@ extern struct NmlStealthDescriptor s_inStealthUnitDat;
 static void nmlModelSetFilterGunosys(const LayoutStore *model, int flags, int count);
 static void nmlModelSetFilterStealth(const LayoutStore *model, int flags);
 
-/* Defining-owner interface; normal header transport remains an integration need. */
 extern void packet_gs_entry64(u32 registerId, const u64 *value);
 
 extern void nmlPacketAddGsFBA(int value);
 extern void nmlPacketAddGsZbuf(int zBuffer);
 extern void *nmlPacketSetAttributeAlloc16N(int records);
-/* Private owner proposals; original data stays unchanged scaffolding. */
 static void _WeightToGlobalPlaceVec(Vector4 *destination,
     const Matrix4 *jointMatrix, const Matrix4 *jointAuxMatrix);
 
@@ -111,6 +109,8 @@ static int _CurRotTransPersClip(Vector4 *destination, const Vector4 *vector)
         ((u64)(point)->displaced.y << 16) | NML_GS_XYZF_FAR_Z); \
 } while (0)
 
+/* Builds the GS packet for the displaced 4x5 grid: the grid points move on circles
+ * whose phase depends on count, and the grid is drawn as triangle strips. */
 static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int count)
 {
     int entryCount = 0;
@@ -124,6 +124,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
     int column;
     int remaining;
 
+    /* Fixed state: texture, alpha, clamp, test and colour entries. */
     packet[0].registerSlot.value = NML_GS_REG_TEXFLUSH;
     packet[0].payload.value = 0;
     entryCount = 1;
@@ -165,6 +166,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
             }
         }
     }
+    /* Displace each grid point on a circle whose phase depends on count and grid index. */
     for (row = 0; row < 4; ++row) {
         for (column = 0; column < 5; ++column) {
             struct NmlFilterGridPoint *point = &grid[row][column];
@@ -182,6 +184,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
             point->displaced[NML_GRID_Y] = point->original[NML_GRID_Y] + displacementY;
         }
     }
+    /* One triangle strip per grid row, with two vertices per grid column. */
     for (row = 0; row < 3; ++row) {
         packet[entryCount].payload.value = NML_GS_PRIM_TRISTRIP | NML_GS_PRIM_TME | NML_GS_PRIM_ABE | NML_GS_PRIM_FST;
         packet[entryCount].registerSlot.value = NML_GS_REG_PRIM;
@@ -239,7 +242,6 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
 #undef NML_FILTER_EMIT
 #undef NML_FILTER_VERTEX
 
-/* Original read-only data remains scaffolding, with no recovery credit. */
 /* One strip vertex: its UV entry, then its XYZ entry whose register slot holds
  * the clip flags of the vertex and of the two before it in the strip. */
 #define NML_STEALTH_VERTEX(vertex, entryIndex, clipFlags) { \
@@ -259,6 +261,7 @@ static void nmlModelSetFilterGunosys(const LayoutStore *modelArg, int flags, int
 
 #define NML_STEALTH_CLIP(vertex) (geometry->uv[vertex].clipFlags)
 
+/* Sends the GS packets for the stealth parts, one strip per part, then the outline sprite. */
 static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 {
     struct NmlStealthTint baseTint = { { 0.5f, 1.0f, 0.8f, 1.0f } };
@@ -345,6 +348,7 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
         nmlPacketAddGsFlushWide();
     }
 
+    /* Outline sprite, drawn once after all parts. */
     outlineColor[0] = baseTint.channels[0] * 128.0f;
     outlineColor[1] = baseTint.channels[1] * 128.0f;
     outlineColor[2] = baseTint.channels[2] * 128.0f;
@@ -386,6 +390,7 @@ static void nmlModelSetFilterStealth(const LayoutStore *model, int flags)
 #undef NML_STEALTH_CLIP
 #undef NML_STEALTH_VERTEX
 
+/* Loads the four rows of a 4x4 matrix into VU0 registers vf10 to vf13. */
 static void _WeightToGlobalPlaceInit(float matrix[4][4])
 {
     __asm__ __volatile__(
@@ -399,6 +404,7 @@ static void _WeightToGlobalPlaceInit(float matrix[4][4])
     );
 }
 
+/* Computes a joint's global position from its two matrices and stores it in destination. */
 static void _WeightToGlobalPlaceVec(Vector4 *destination,
     const Matrix4 *jointMatrix, const Matrix4 *jointAuxMatrix)
 {
@@ -501,6 +507,8 @@ static float _VectorLengthSQ(const Vector4 *first, const Vector4 *second)
     xyz[outside].y = (int)(fraction * (float)xyz[1 - outside].y + complement * (float)xyz[outside].y); \
 }
 
+/* Builds the stealth outline geometry for one part from its two joints (or a fallback
+ * segment), then projects it and clips it against the frame edges. */
 void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
     LayoutStore *model, float widthScale)
 {
@@ -531,6 +539,7 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
     int index;
     union NmlStealthUV *uv;
 
+    /* Endpoints come from the two joints, or from the model centre when a joint index is out of range. */
     geometry = nmlPacketSetAttributeAlloc16N(31);
     model->fields.stealthParts[partIndex] = geometry;
     firstEndpoint = &geometry->endpoints[0];
@@ -593,6 +602,7 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
     secondDepth = geometry->xyz[1].z;
     secondY = (float)geometry->xyz[1].y;
 
+    /* Outline vertices on both sides of the segment, then blended rings between them. */
     NML_STEALTH_EDGE(6, 0, firstY, firstDepth, -, descriptor->firstWidth);
     NML_STEALTH_EDGE(12, 0, firstY, firstDepth, +, descriptor->firstWidth);
     NML_STEALTH_EDGE(7, 1, secondY, secondDepth, -, descriptor->secondWidth);
@@ -655,12 +665,14 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
     NML_STEALTH_EXTEND_UV(12, -, descriptor->longitudinalStretch[3]);
     NML_STEALTH_EXTEND_UV(13, +, descriptor->longitudinalStretch[3]);
 
+    /* Shift the UVs by the frame size offset and mark each of the 14 vertices with clip flag 4. */
     uv = &geometry->uv[0];
     for (index = 0; index < 14; index++, uv++) {
         uv->u -= (4096 - sRender.frameWidth) * 8;
         uv->v -= (4096 - sRender.frameHeight) * 8;
         uv->clipFlags = 4;
     }
+    /* Clip each segment against the left, top, right and bottom frame edges. */
     uv = &geometry->uv[0];
     {
         union NmlStealthXYZ *xyz = &geometry->xyz[0];
@@ -739,6 +751,7 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
 #undef NML_STEALTH_EXTEND_UV
 #undef NML_STEALTH_CLIP_ENDPOINT
 
+/* Sends the packet of each filter bit set in model->fields.packetFilterFlags, clearing the bit first. */
 void nmlFilterSetPacket(LayoutStore *model, int count)
 {
     int flags;
@@ -759,6 +772,7 @@ void nmlFilterSetPacket(LayoutStore *model, int count)
     }
 }
 
+/* Block-transfers the display buffer at displayBufferBase into the framebuffer page. */
 void nmlFilterSetFrameToBuffer(int displayBufferBase)
 {
     struct NmlFilterGsRegisterEntry *gsEntry3f;
@@ -800,6 +814,7 @@ void nmlFilterSetFrameToBuffer(int displayBufferBase)
     nmlPacketAddGsFlush();
 }
 
+/* Block-transfers the framebuffer page into the frame buffer at frameBufferBase. */
 void nmlFilterSetBufferToFrame(int frameBufferBase)
 {
     struct NmlFilterGsRegisterEntry *gsEntry3f;
@@ -841,6 +856,7 @@ void nmlFilterSetBufferToFrame(int frameBufferBase)
     nmlPacketAddGsFlush();
 }
 
+/* Draws the framebuffer page as a full-screen textured sprite; opacity scales its alpha. */
 void nmlFilterSetBufferRender(float opacity)
 {
     struct NmlFilterGsRegisterEntry *entry;
@@ -886,6 +902,7 @@ void nmlFilterSetBufferRender(float opacity)
     nmlPacketAddGsFlush();
 }
 
+/* Draws a full-screen sprite with fixed alpha into the frame. */
 void nmlFilterSetFrameAlphaClear(void)
 {
     struct NmlFilterGsRegisterEntry *gsEntry42;
@@ -926,6 +943,7 @@ void nmlFilterSetFrameAlphaClear(void)
     nmlPacketAddGsFlush();
 }
 
+/* Draws a full-screen sprite with fixed alpha. frameBase is not used. */
 void nmlFilterSetTexClear(int frameBase)
 {
     struct NmlFilterGsRegisterEntry *gsEntry42;
@@ -964,6 +982,7 @@ void nmlFilterSetTexClear(int frameBase)
     nmlPacketAddGsFlush();
 }
 
+/* Sets up the Z buffer and frame buffer packets, then draws a full-screen sprite with Z test always. */
 void nmlFilterBackClear(void)
 {
     struct NmlFilterGsRegisterEntry *gsEntry47;
@@ -1000,6 +1019,8 @@ void nmlFilterBackClear(void)
     nmlPacketAddGsFlush();
 }
 
+/* Draws the flat circle shadow as a full-screen sprite whose alpha comes from
+ * model->fields.circleShadowScale. Does nothing when model is null. */
 void nmlFilterSetFlatRender(LayoutStore *model)
 {
     struct NmlFilterRenderView *render;
@@ -1042,6 +1063,7 @@ void nmlFilterSetFlatRender(LayoutStore *model)
         gsEntry8[0].value = 0;
         gsEntry8[1].value = clampRegisterId;
         alphaPayload.value = ((u64)(int)(model->fields.circleShadowScale * 128.0f) << 32) | NML_GS_ALPHA_FIXED;
+        /* Alpha, test, colour, primitive and the sprite corners. */
         gsEntry42 = (GsTag *)(SCRATCHPAD_BASE + 0x40);
         gsEntry47First = (GsTag *)(SCRATCHPAD_BASE + 0x50);
         gsEntry1 = (GsTag *)(SCRATCHPAD_BASE + 0x60);
@@ -1082,6 +1104,8 @@ void nmlFilterSetFlatRender(LayoutStore *model)
     }
 }
 
+/* Fills a sprite with an alpha computed from model->fields.texMapSize and textureTransparency,
+ * then draws textured sprites and a final line strip. frameBase is the texture page of the frame. */
 void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
 {
     struct NmlFilterGsPair *packet = (struct NmlFilterGsPair *)SCRATCHPAD_BASE;
@@ -1097,6 +1121,7 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     remaining = 4;
     mapAlpha = (float)model->fields.texMapSize;
     fillWeight = model->fields.textureTransparency;
+    /* Fill pass: a sprite whose colour carries the computed alpha. */
     packet[0].payload.value = NML_GS_TEST_ZALWAYS | NML_GS_TEST_ATE | NML_GS_TEST_AFAIL_FB_ONLY | NML_GS_TEST_DATE;
     packet[0].registerSlot.value = NML_GS_REG_TEST_1;
     alphaBits = ((u64)(fillScale - ((fillScale - (fillScale - mapAlpha)) * fillWeight)) << 24);
@@ -1126,6 +1151,7 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     }
     nmlPacketAddGsFlush();
 
+    /* Texture pass: the frame page as texture for the sprite draws below. */
     packet[0].payload.value = 0x24020000 | (frame << 5) | 0x2000000640000000ULL;
     packet[0].registerSlot.value = NML_GS_REG_TEX0_1;
     {
@@ -1239,6 +1265,7 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     }
     nmlPacketAddGsFlush();
 
+    /* Final pass: a line strip drawn with a colour-only test. */
     do {
         testRegister = NML_GS_REG_TEST_1;
         packet[0].payload.value = NML_GS_TEST_COLOR_ONLY;
@@ -1282,6 +1309,8 @@ void nmlFilterSetTexFillDraw(int frameBase, LayoutStore *model)
     nmlPacketAddGsFlush();
 }
 
+/* Draws each face of the box between minimum and maximum that needs no clipping.
+ * Faces that need clipping are skipped; the return value is 1 when any was skipped. */
 int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
 {
     int facingCamera[6];
@@ -1313,6 +1342,7 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     corners[4].y = corners[5].y = corners[6].y = corners[7].y = minimum->y;
     corners[0].y = corners[1].y = corners[2].y = corners[3].y = maximum->y;
 
+    /* Flag each face by where the camera position lies relative to the box bounds. */
     if (minimum->x < cameraPosition->vector.x)
         facingCamera[0] = 1;
     if (cameraPosition->vector.x < maximum->x)
@@ -1428,6 +1458,7 @@ int nmlFilterSetVolumeCubeRender(Vector4 *minimum, Vector4 *maximum)
     } \
     nmlPacketAddGsFlush(); \
 }
+    /* Faces with facingCamera 0 are drawn first, with FBA 1; the rest follow with FBA 0. */
     for (iteration = 0; iteration < 6; iteration++) {
         if (facingCamera[iteration] == 0) {
             if (faceClip[iteration] != 0) {

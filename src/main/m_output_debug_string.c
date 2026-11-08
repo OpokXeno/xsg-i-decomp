@@ -18,6 +18,7 @@ const char debugMessageWarnFormat[] = "\033[1;35mMDMSG:\033[m %s\n";
 
 static char dstr[DEBUG_STRING_BUFFER_SIZE];
 
+/* Prints a message through vprintf, wrapped in the info tag; format and the variadic arguments are as for printf. */
 void MOutputDebugString(const char *format, ...)
 {
     va_list args;
@@ -28,6 +29,7 @@ void MOutputDebugString(const char *format, ...)
     va_end(args);
 }
 
+/* Same as MOutputDebugString, wrapped in the warning tag. */
 void MOutputDebugStringWarn(const char *format, ...)
 {
     va_list args;

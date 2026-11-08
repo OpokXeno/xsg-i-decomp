@@ -21,8 +21,8 @@
 /* Value reported when the slider is cancelled. */
 #define TSLIDER_CANCELLED (-1)
 
-/* EUC-JP lead bytes: first byte of a two-byte character (0xA0 and up) and of a
- * JIS X 0208 character (0xA1). */
+/* EUC-JP lead byte of a JIS X 0208 character. Inside markup, such a byte and the
+ * byte after it are copied as a pair. */
 #define EUC_FIRST_JIS_LEAD 161
 
 typedef struct TsliderLiteralPool {
@@ -37,6 +37,8 @@ const TsliderLiteralPool tsliderLiteralTable = {
     ""
 };
 
+/* Creates a slider component in the requested slot and sets its default geometry,
+ * value range and state. Returns 0 when no component could be created. */
 TComponent *TSLIDER_create(int requestedSlot)
 {
     TComponent *window;
@@ -60,6 +62,7 @@ TComponent *TSLIDER_create(int requestedSlot)
     return window;
 }
 
+/* Clamps the value to the slider's range and sets the pixel width from the digit count. */
 void TSLIDER_init(TComponent *slider)
 {
     int value = slider->value;
@@ -77,8 +80,11 @@ void TSLIDER_init(TComponent *slider)
     slider->pixelWidth = slider->max_digits * digitWidth + 0x10;
 }
 
+/* Advances the slider state machine once per frame: the open and close transitions
+ * and the pad handling in the input state. */
 void TSLIDER_updateDefault(TComponent *slider)
 {
+    /* Entering a state arms its wait; the state logic runs on a later frame. */
     if ((slider->flags & TCOMP_FLAG_WAIT) == 0) {
         switch (slider->state) {
         case TCOMP_STATE_OPENING:
@@ -156,6 +162,7 @@ void TSLIDER_updateDefault(TComponent *slider)
     }
 }
 
+/* Draws the current value as full-width digits, indented by the digit cells it does not use. */
 void TSLIDER_drawDefault(TComponent *window)
 {
     unsigned char digits[0x10];
@@ -183,6 +190,10 @@ void TSLIDER_drawDefault(TComponent *window)
     }
 }
 
+/*
+ * Appends the query texts to the menu's text block, one row per line, and records the
+ * widest row. Items after an all-zero entry are added as menu items.
+ */
 void TMENU_addQuery2(MenuNativeQueryView *menu, char **texts, int count)
 {
     unsigned char *out = menu->textEnd;
@@ -202,6 +213,7 @@ void TMENU_addQuery2(MenuNativeQueryView *menu, char **texts, int count)
     }
     firstItem = -1;
     lines = 0;
+    /* Copy each text, dropping [...] markup and splitting it at newlines. */
     for (i = 0; i < count; i++) {
         unsigned char *src = (unsigned char *) texts[i];
 
@@ -272,6 +284,7 @@ void TMENU_addQuery2(MenuNativeQueryView *menu, char **texts, int count)
             }
         }
     }
+    /* Size the window from the widest row, then place one row pointer per line. */
     textBlockEnd = menu->textEnd;
     textWidth = menu->rowWidth * HALFWIDTH_CHAR_WIDTH;
     windowWidth = menu->textStart == 0 ? textWidth + 56 : textWidth + 136;
@@ -314,6 +327,8 @@ void TWIN_initScene(TComponent *window)
     window->y = TWIN_SCENE_Y;
 }
 
+/* Creates a text window holding the text followed by the close command, and returns
+ * its state field. */
 void *createItemGetWin(const char *text)
 {
     TComponent *window;

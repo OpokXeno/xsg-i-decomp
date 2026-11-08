@@ -12,34 +12,27 @@
  * The VM thread list node, `JThread` in include/main/jni.h. The functions
  * below read these members of it (its `previous` at +0x04 is not read here):
  *
- *   +0x08 next           JTHREAD_info, JTHREAD_get (lw a1,8(a1) at
- *                        0x00305970) and JTHREAD_cntl (lw s0,8(s0) at
- *                        0x003058f8/0x0030590c/0x0030592c) all walk it from
- *                        jthreadTop.
- *   +0x0c kind           JTHREAD_cntl runs a node's reset hook only when
- *                        this is nonzero (lbu v0,12(s0) at 0x003058fc).
- *   +0x0d wait_kind      JTHREAD_waitFor switches on `wait_kind & 0xf`
- *                        (lbu v0,13(a1) at 0x00305734).
- *   +0x10 object         JTHREAD_get compares it with its own argument
- *                        (lw v1,16(a1) at 0x00305964).
+ *   +0x08 next           walked from jthreadTop by JTHREAD_info, JTHREAD_get
+ *                        and JTHREAD_cntl.
+ *   +0x0c kind           JTHREAD_cntl runs a runnable node's reset hook only
+ *                        when this is nonzero.
+ *   +0x0d wait_kind      JTHREAD_waitFor switches on `wait_kind & 0xf`.
+ *   +0x10 object         JTHREAD_get compares it with its own argument.
  *   +0x14 reset          the per-node hook JTHREAD_cntl calls with the node
- *                        itself (lw v0,20(s0); jalr v0 at
- *                        0x00305910/0x0030591c).
+ *                        itself.
  *   +0x24 flags          JTHREAD_cntl only considers nodes carrying bit
- *                        0x10 (lw v0,36(s0) at 0x003058e0); JTHREAD_waitFor
- *                        updates it once a wait is satisfied.
+ *                        0x10; JTHREAD_waitFor updates it once a wait is
+ *                        satisfied.
  *   +0x30 wait_target    what JTHREAD_waitFor's node waits on, per
- *                        wait_kind (lw at 0x00305760/0x00305788/0x003057a8/
- *                        0x003057e0/0x00305800).
+ *                        wait_kind.
  *   +0x34 wait_parameter the wait's second operand: a frame count or a
- *                        motion number (lw at 0x00305764/0x00305804).
+ *                        motion number.
  */
 
 
 /*
  * One entry of a thread's symbol chain: JTHREAD_getSymbol scans a flat
- * array of these, terminated by a zero `valid` word (lw 4(a0) at
- * 0x00305888/0x003058a4).
+ * array of these, terminated by a zero `valid` word.
  */
 typedef struct JThreadSymbol {
     int id;    /* +0x00 */
@@ -211,10 +204,10 @@ void JTHREAD_init(void)
 }
 
 /*
- * Blocks the calling thread's script method until the condition its own
- * wait_kind names is satisfied, then clears flag 0x4 (and, for the actor
- * waits, 0x1 too) and sets flag 0x2 on it. Out-of-range wait_kind values do
- * nothing.
+ * Checks the wait that the thread's wait_kind names. Once the wait is
+ * satisfied, it clears the call-running flag (0x4) or, for the actor and game
+ * waits, the busy flags (0x5), and sets the woken flag (0x2). Unknown
+ * wait_kind values do nothing.
  */
 void JTHREAD_waitFor(JThread *thread)
 {
@@ -269,6 +262,7 @@ void JTHREAD_waitFor(JThread *thread)
     }
 }
 
+/* Walks the thread list from jthreadTop without using the nodes. */
 void JTHREAD_info(void)
 {
     JThread *thread = jthreadTop;
@@ -296,6 +290,11 @@ JThreadSymbol *JTHREAD_getSymbol(JThreadSymbol *symbols, int id)
     return 0;
 }
 
+/*
+ * Runs the reset hook of each runnable node with a nonzero kind. When
+ * jthreadResetFunc is set, the walk stops early, then that function is called
+ * once and cleared.
+ */
 void JTHREAD_cntl(void)
 {
     JThread *node = jthreadTop;

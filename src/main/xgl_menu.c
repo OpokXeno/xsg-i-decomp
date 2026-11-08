@@ -22,7 +22,7 @@
 #define XGL_MENU_SELECT_WRITE_BACK 1   /* entry->select_flags: write result at once */
 #define XGL_MENU_RESULT_LIMIT 0x100000 /* below: a result value; above: a node pointer */
 
-/* Port records retain the original 0x68-byte stride. */
+/* Pad records keep the original 0x68-byte stride. */
 typedef struct MenuPadRecord {
     unsigned char unmodeled_00[0x32];
     unsigned short direction_pressed;
@@ -56,6 +56,10 @@ const char xglMenuHddPath[8] = "hdd:";
 /* Original four-byte object; its element type is unresolved. */
 unsigned char ActiveMenuNo[4] = { 0 };
 
+/*
+ * Opens a menu from `params` in `slot`, or in the first inactive slot when
+ * `slot` is -1. Returns the slot used, or -1 when no slot is free.
+ */
 int xglMenuOpen(int slot, XglMenuParams *params)
 {
     XglMenuListData *list;
@@ -119,6 +123,10 @@ static void xglMenuDrawType0(XglMenuEntry *entry, XglMenuDrawContext *context) {
     entry->active = 0;
 }
 
+/*
+ * Draws the rows of the node at `level`, indenting and recursing into the
+ * sub-list opened by the row that is the current item.
+ */
 static void xglMenuDrawType1Sub(XglMenuEntry *entry,
                                 XglMenuDrawContext *context, unsigned int level)
 {
@@ -155,6 +163,10 @@ static void xglMenuDrawType1Sub(XglMenuEntry *entry,
     }
 }
 
+/*
+ * Advances the list menu's state (opening, running on pad input, closing) and
+ * then draws the rows of the current level.
+ */
 static void xglMenuDrawType1(XglMenuEntry *entry,
                              XglMenuDrawContext *context)
 {
@@ -181,6 +193,7 @@ static void xglMenuDrawType1(XglMenuEntry *entry,
         }
         break;
     case XGL_MENU_ACTIVE_RUNNING:
+        /* Cursor moves skip rows whose next value is -1. */
         if ((PadData[0].direction_repeated & PAD_UP) != 0) {
             selected_item = node->selected_item;
             do {
@@ -210,6 +223,7 @@ static void xglMenuDrawType1(XglMenuEntry *entry,
             } while (node->rows[selected_item].next.result == -1);
             node->selected_item = selected_item;
         }
+        /* Confirm: a small value is a result, anything larger is a sub-list node to open. */
         if ((PadData[0].direction_pressed & PAD_CIRCLE) != 0) {
             if (node->rows[node->selected_item].next.result < XGL_MENU_RESULT_LIMIT) {
                 entry->result_value =
@@ -282,6 +296,7 @@ static void xglMenuDrawType1(XglMenuEntry *entry,
     xglMenuDrawType1Sub(entry, context, 0);
 }
 
+/* Draws the active entries, last table entry first. */
 void xglMenuDraw(void)
 {
     XglMenuEntry *entry = menutbl;

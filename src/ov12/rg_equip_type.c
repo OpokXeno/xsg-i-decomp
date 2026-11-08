@@ -26,7 +26,7 @@ const char equipTypeBackText[] = "back";
 
 const char equipTypeUnknownText[] = "?\?\?";
 
-/* Declared here: rodata strings and scaffold-owned data defined elsewhere. */
+/* Declared here, defined after the functions below: the assert, weapon and mount name strings. */
 extern const char equipTypeAssertCopyPointersNotNil[];  /* CopyRgEquip assert text */
 extern const char equipTypeAssertMountCountBelowMax[];  /* mount-count assert text */
 extern const char equipTypeAssertMountCountNotNegative[];  /* "nMount >= 0" */
@@ -35,7 +35,7 @@ extern const char equipTypeAssertTypeInRangeLoose[];  /* "RG_EQUIP_TYPE_MIN <= e
 extern const char equipTypeWeaponNameBmp45vx[];  /* weapon name "BMP45VX" */
 extern const char equipTypeWeaponNameSmp53ag[];  /* weapon name "SMP53AG" */
 extern const char equipTypeWeaponNameCb85vx[];  /* weapon name "CB85VX" */
-/* The eight mount position names, in RgEquipMountPos order. */
+/* The eight mount position names, indexed by the values RgEquipMountPos returns. */
 extern const char equipMountLeftHandText[];
 extern const char equipMountLeftElbowText[];
 extern const char equipMountLeftShoulderText[];
@@ -47,6 +47,7 @@ extern const char equipMountBackRightText[];
 /* Maps each mount position to its equip type. */
 static int s_aePosToType[RG_EQUIP_POS_NUM];
 
+/* Returns the joint id of a mount position, or -1 for RG_EQUIP_POS_INVALID. */
 int RgEquipPosToJntID(int ePos)
 {
     if ((unsigned int)ePos + 1u >= 9u) {
@@ -67,6 +68,7 @@ void InitRgEquip(RgEquip *pEquip)
     pEquip->activeMount = 0;
 }
 
+/* Copies the mount list of pSrc into pDst. */
 void CopyRgEquip(RgEquip *pDst, RgEquip *pSrc)
 {
     int i;
@@ -82,6 +84,7 @@ void CopyRgEquip(RgEquip *pDst, RgEquip *pSrc)
     }
 }
 
+/* Appends a mount of type eType at position ePos with the given position mask. */
 void RgEquipAddMount(RgEquip *pEquip, unsigned int eType, int ePos,
                      unsigned int posMask)
 {
@@ -105,6 +108,10 @@ void RgEquipAddMount(RgEquip *pEquip, unsigned int eType, int ePos,
     pEquip->mounts[mountIndex].posMask = posMask;
 }
 
+/*
+ * Rebuilds the mount list for the positions in posMask. Each equip type that has
+ * a position in the mask gets one mount, at its highest matching position.
+ */
 void RgEquipSetDefault(RgEquip *pEquip, unsigned int posMask)
 {
     int eType;
@@ -141,6 +148,7 @@ void RgEquipSetDefault(RgEquip *pEquip, unsigned int posMask)
     }
 }
 
+/* Returns 1 when the equip has a mount of type eType, else 0. */
 int RgEquipIsEquipable(RgEquip *pEquip, int eType)
 {
     int mountIndex;
@@ -156,6 +164,10 @@ int RgEquipIsEquipable(RgEquip *pEquip, int eType)
     return 0;
 }
 
+/*
+ * Returns a bitmask of the equip types whose mount positions overlap those of
+ * eType. Bit eType is set when its equip is active.
+ */
 int RgEquipCheckConfrict(RgEquip **ppEquip, unsigned int eType)
 {
     unsigned int mask[RG_EQUIP_TYPE_NUM];
@@ -196,6 +208,7 @@ int RgEquipCheckConfrict(RgEquip **ppEquip, unsigned int eType)
     return result;
 }
 
+/* Returns the name of an equip type (left, right, back), or a placeholder. */
 const char *RgEquipTypeString(int eType)
 {
     if ((unsigned int)eType >= RG_EQUIP_TYPE_NUM) {
@@ -213,6 +226,7 @@ const char *RgEquipTypeString(int eType)
     }
 }
 
+/* Returns the first mount of type eType, or null. */
 static RgEquipMount *_GetMountData(RgEquip *pEquip, int eType)
 {
     unsigned int mountIndex;
@@ -228,6 +242,10 @@ static RgEquipMount *_GetMountData(RgEquip *pEquip, int eType)
     return 0;
 }
 
+/*
+ * Returns the mount position of eType (RG_EQUIP_POS_INVALID when not mounted).
+ * For character 4, the three weapons named in pszWepName mount at back-right.
+ */
 int RgEquipMountPos(RgEquip *pEquip, unsigned int eType, int charID,
                     const char *pszWepName)
 {
@@ -242,7 +260,6 @@ int RgEquipMountPos(RgEquip *pEquip, unsigned int eType, int charID,
     if (pMount != 0) {
         ePos = pMount->pos;
     }
-    /* Character 4 carries these three weapons on the back-right mount. */
     if (charID == 4 && pszWepName != 0) {
         if (strcmp(pszWepName, equipTypeWeaponNameBmp45vx) == 0
             || strcmp(pszWepName, equipTypeWeaponNameSmp53ag) == 0) {
@@ -254,6 +271,10 @@ int RgEquipMountPos(RgEquip *pEquip, unsigned int eType, int charID,
     return ePos;
 }
 
+/*
+ * Returns the name of the mount position of eType. Back equips, and equips with
+ * no known position, get the type name instead.
+ */
 const char *RgEquipMountPosString(RgEquip *pEquip, unsigned int eType,
                                   int charID, const char *pszWepName)
 {

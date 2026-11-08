@@ -13,6 +13,10 @@ typedef struct SsdMeasureEvent {
 void SsdLfoOn(SsdTrack *track, int index);
 void SsdLfoOff(SsdTrack *track, int index);
 
+/*
+ * Handles an unrecognized sequence opcode: reports it, deactivates the track,
+ * cuts its channel and steps back one byte.
+ */
 unsigned char *SsdSeqDummy(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
@@ -90,6 +94,10 @@ unsigned char *SsdSeqDelta3(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/*
+ * Sets the track to rest for the 16-bit duration that follows, and clears the
+ * channel's slur and sustain flags.
+ */
 unsigned char *SsdSeqRest(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
@@ -104,6 +112,7 @@ unsigned char *SsdSeqRest(SsdSequence *sequence, SsdTrack *track,
     return events + 2;
 }
 
+/* Sets the track's wait from the 16-bit value that follows and marks it as a note. */
 unsigned char *SsdSeqTie(SsdSequence *sequence, SsdTrack *track,
                        unsigned char *events)
 {
@@ -112,6 +121,10 @@ unsigned char *SsdSeqTie(SsdSequence *sequence, SsdTrack *track,
     return events + 2;
 }
 
+/*
+ * Ends the track: returns to the saved repeat point when one is set, otherwise
+ * cuts the channel and clears the track flags.
+ */
 unsigned char *SsdSeqStop(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
@@ -130,6 +143,7 @@ unsigned char *SsdSeqStop(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* Saves the current position and octave as the track's repeat point. */
 unsigned char *SsdSeqRepeat(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
@@ -140,6 +154,7 @@ unsigned char *SsdSeqRepeat(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* Moves the event pointer by the signed 16-bit displacement that follows. */
 unsigned char *SsdSeqJump(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
@@ -147,6 +162,11 @@ unsigned char *SsdSeqJump(SsdSequence *sequence, SsdTrack *track,
     return events + (short)(displacement - 1);
 }
 
+/*
+ * Compares the sequence signal with the byte that follows the opcode. On a
+ * match it jumps by the 16-bit displacement after that byte; otherwise it
+ * skips the whole operand.
+ */
 unsigned char *SsdSeqIf(SsdSequence *sequence, SsdTrack *track,
                       unsigned char *events)
 {
@@ -189,6 +209,7 @@ unsigned char *SsdSeqOctaveDown(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* Opens a loop on the next nesting level; the byte that follows is its count. */
 unsigned char *SsdSeqLoopTop(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
@@ -201,6 +222,10 @@ unsigned char *SsdSeqLoopTop(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/*
+ * Ends a loop pass: while repeats remain, records this point as the escape
+ * target and jumps back to the loop start; otherwise pops the loop.
+ */
 unsigned char *SsdSeqLoopEnd(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
@@ -216,6 +241,7 @@ unsigned char *SsdSeqLoopEnd(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* On the last pass of the innermost loop, jumps to its escape point and pops it. */
 unsigned char *SsdSeqLoopEscape(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
@@ -250,6 +276,10 @@ unsigned char *SsdSeqTempoRelative(SsdSequence *sequence,
     return events + 1;
 }
 
+/*
+ * Changes the tempo toward the target over the given duration, or sets it at
+ * once when the duration is 0.
+ */
 unsigned char *SsdSeqTempoChange(SsdSequence *sequence,
                                SsdTrack *track,
                                unsigned char *events)
@@ -300,6 +330,10 @@ unsigned char *SsdSeqPosition(SsdSequence *sequence, SsdTrack *track,
     return events + 2;
 }
 
+/*
+ * Fades the master volume to the target over the given number of seconds, or
+ * sets it at once when that is 0.
+ */
 unsigned char *SsdSeqMasterFader(SsdSequence *sequence,
                                 SsdTrack *track,
                                 unsigned char *events)
@@ -362,6 +396,10 @@ unsigned char *SsdSeqProgramChange(SsdSequence *sequence,
     return events + 1;
 }
 
+/*
+ * Turns random-key note selection on between the two note bytes that follow,
+ * or off when the first byte is zero.
+ */
 unsigned char *SsdSeqRandomNote(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
@@ -376,12 +414,14 @@ unsigned char *SsdSeqRandomNote(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* No-op handler: the opcode takes no operands. */
 unsigned char *SsdSeqADSRReset(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
     return events;
 }
 
+/* No-op handler: skips the three operand bytes. */
 unsigned char *SsdSeqADSRMode(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
@@ -544,6 +584,10 @@ unsigned char *SsdSeqGateTime(SsdSequence *sequence, SsdTrack *track,
     return events + 1;
 }
 
+/*
+ * Turns the channel's sustain on for values at or above the MIDI switch-on
+ * value. Turning it off sends a key-off to the channel.
+ */
 unsigned char *SsdSeqSustaion(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
@@ -619,6 +663,7 @@ unsigned char *SsdSeqNoiseOff(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* Stores the reverb depth, delay and feedback from the three operand bytes and applies them. */
 unsigned char *SsdSeqReverbParameter(SsdSequence *sequence, SsdTrack *track,
                                   unsigned char *events)
 {
@@ -634,6 +679,7 @@ unsigned char *SsdSeqReverbParameter(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* Turns the channel's dry and reverb effects on or off from the two flag bytes. */
 unsigned char *SsdSeqReverbSet(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
@@ -705,6 +751,7 @@ unsigned char *SsdSeqDetune(SsdSequence *sequence, SsdTrack *track,
     return events + 2;
 }
 
+/* Sets the channel's pitch bend from the two operand bytes and cancels any pitch ramp. */
 unsigned char *SsdSeqBender(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
@@ -721,6 +768,11 @@ unsigned char *SsdSeqBender(SsdSequence *sequence, SsdTrack *track,
     return events + 2;
 }
 
+/*
+ * Starts a pitch ramp over the duration. A nonzero operand is an offset from
+ * the current pitch; zero ramps to no pitch. Does nothing when the duration or
+ * the difference is zero.
+ */
 unsigned char *SsdSeqSweep(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {
@@ -747,6 +799,7 @@ unsigned char *SsdSeqSweep(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* Sets the vibrato fade step from the duration byte; a zero duration gives the full step. */
 unsigned char *SsdSeqVibrateFade(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
@@ -760,6 +813,10 @@ unsigned char *SsdSeqVibrateFade(SsdSequence *sequence, SsdTrack *track,
     return events + 1;
 }
 
+/*
+ * Enables the vibrato LFO as a triangle wave from the depth, rate and delay
+ * bytes. Does nothing when depth or rate is zero.
+ */
 unsigned char *SsdSeqVibrate1(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
@@ -790,6 +847,11 @@ unsigned char *SsdSeqVibrate1(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/*
+ * Enables the vibrato LFO with the waveform from the operand bytes; the
+ * continuous flag in the waveform byte selects a looping cycle. Does nothing
+ * when depth or speed is zero.
+ */
 unsigned char *SsdSeqVibrate2(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {
@@ -854,6 +916,7 @@ unsigned char *SsdSeqBenderOff(SsdSequence *sequence, SsdTrack *track,
     return events;
 }
 
+/* Sets the channel's expression and recomputes its volume from the channel, expression and fader volumes. */
 unsigned char *SsdSeqExpression(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
@@ -897,6 +960,10 @@ unsigned char *SsdSeqVolumeRelative(SsdSequence *sequence,
     return events + 1;
 }
 
+/*
+ * Ramps the track volume toward the signed target over the duration, from the
+ * current volume. Does nothing when the duration or the difference is zero.
+ */
 unsigned char *SsdSeqVolumeFade(SsdSequence *sequence, SsdTrack *track,
                                unsigned char *events)
 {
@@ -926,6 +993,7 @@ unsigned char *SsdSeqVolumeFade(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* Sets the tremolo fade step from the duration byte; a zero duration gives the full step. */
 unsigned char *SsdSeqTremoloFade(SsdSequence *sequence, SsdTrack *track,
                                 unsigned char *events)
 {
@@ -938,6 +1006,10 @@ unsigned char *SsdSeqTremoloFade(SsdSequence *sequence, SsdTrack *track,
     return events + 1;
 }
 
+/*
+ * Enables the tremolo LFO as a single triangle from the depth, period and fade
+ * bytes. Does nothing when depth or period is zero.
+ */
 unsigned char *SsdSeqTremolo1(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
@@ -965,6 +1037,11 @@ unsigned char *SsdSeqTremolo1(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/*
+ * Enables the tremolo LFO with the waveform from the operand bytes; the
+ * continuous flag in the waveform byte selects a looping cycle. Does nothing
+ * when depth or period is zero.
+ */
 unsigned char *SsdSeqTremolo2(SsdSequence *sequence, SsdTrack *track,
                             unsigned char *events)
 {
@@ -1053,6 +1130,10 @@ unsigned char *SsdSeqPanpotRelative(SsdSequence *sequence,
     return events + 1;
 }
 
+/*
+ * Starts a pan ramp toward the target over the duration. Does nothing when the
+ * duration or the difference is zero.
+ */
 unsigned char *SsdSeqPanpoMove(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
@@ -1080,6 +1161,7 @@ unsigned char *SsdSeqPanpoMove(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* Sets the shake fade step from the duration byte; a zero duration gives the full step. */
 unsigned char *SsdSeqShakeFade(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
@@ -1092,6 +1174,10 @@ unsigned char *SsdSeqShakeFade(SsdSequence *sequence, SsdTrack *track,
     return events + 1;
 }
 
+/*
+ * Enables the shake LFO as a pan triangle from the depth, period and fade
+ * bytes. Does nothing when depth or period is zero.
+ */
 unsigned char *SsdSeqShake1(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
@@ -1119,6 +1205,11 @@ unsigned char *SsdSeqShake1(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/*
+ * Enables the shake LFO with the waveform from the operand bytes; the
+ * continuous flag in the waveform byte selects a looping cycle. Does nothing
+ * when depth or period is zero.
+ */
 unsigned char *SsdSeqShake2(SsdSequence *sequence, SsdTrack *track,
                           unsigned char *events)
 {
@@ -1178,6 +1269,10 @@ static __inline__ int SsdLfoSingleCycleFlag(int waveform)
     return !(waveform & SSD_LFO_OPERAND_CONTINUOUS) << 4;
 }
 
+/*
+ * Selects the LFO slot from the first operand byte and sets its waveform,
+ * target and destination. Its depth, period and delay are cleared.
+ */
 unsigned char *SsdSeqLFOProcess(SsdSequence *sequence, SsdTrack *track,
                               unsigned char *events)
 {
@@ -1203,6 +1298,7 @@ unsigned char *SsdSeqLFOProcess(SsdSequence *sequence, SsdTrack *track,
     return events + 3;
 }
 
+/* Sets the depth and period of the selected LFO from the operand bytes. */
 unsigned char *SsdSeqLFOParameter(SsdSequence *sequence,
                                 SsdTrack *track,
                                 unsigned char *events)
@@ -1224,6 +1320,7 @@ unsigned char *SsdSeqLFOParameter(SsdSequence *sequence,
     return events + 3;
 }
 
+/* Sets the selected LFO's delay and fade step from the two operand bytes. */
 unsigned char *SsdSeqLFODelay(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
@@ -1257,6 +1354,10 @@ void SsdLfoOff(SsdTrack *track, int index)
 {
 }
 
+/*
+ * Resets the track and its channel to their defaults, cuts the channel and
+ * clears its LFO state.
+ */
 unsigned char *SsdSeqAllReset(SsdSequence *sequence, SsdTrack *track,
                              unsigned char *events)
 {
@@ -1315,6 +1416,10 @@ unsigned char *SsdSeqSMPTEOffset(SsdSequence *sequence, SsdTrack *track,
     return events + 5;
 }
 
+/*
+ * Turns skip mode on or off from the operand byte, and sets the master tempo
+ * to the skip or normal speed to match.
+ */
 unsigned char *SsdSeqSkip(SsdSequence *sequence, SsdTrack *track,
                          unsigned char *events)
 {

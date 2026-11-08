@@ -80,8 +80,8 @@ typedef struct CameraCFPedestalHokanArgs {
 
 /*
  * The game loop's own record, as far as this unit reads it: only the
- * halfword camera_change latches the matched studio camera index into,
- * at +0xc8 (sh at 0x002fb5e0). Nothing before it is read or written here.
+ * halfword activeCameraIndex at +0xc8 is written, by camera_change. Nothing
+ * before it is read or written here.
  */
 typedef struct {
     unsigned char unmodeled_00[0xc0];
@@ -104,16 +104,14 @@ typedef union CameraFieldValue {
 
 extern CameraLoopState GameLoopState;
 
-/* This TU's own .lit4 copy of the fov-scale seed 1.2, stored at CameraWork
- * +0x12b4 (docs above CameraWork in camera.h). */
-/* The engine's camera table (main:0x00465e10, size 0x9600 = 8 * 0x12c0):
- * TCAMERA_get (still asm, src/main/tcamera.c) indexes it the same way. */
+/* The engine's camera table: eight CameraWork records of 0x12c0 bytes each.
+ * TCAMERA_get in src/main/tcamera.c indexes it the same way. */
 extern CameraWork tcamera[];
 
 const char cameraPeerFieldName[];
 
-/* TCAMERA setters are defined in tcamera.c. Their callers
- * pass the studio camera in a0 and scalar/xyz floats in f12/f13/f14. */
+/* TCAMERA setters are defined in tcamera.c. Each takes the studio camera
+ * first, then its scalar or xyz float values. */
 extern void TCAMERA_setRotate(TCamera *camera, float x, float y, float z);
 extern void TCAMERA_setRoll(TCamera *camera, float roll);
 extern void TCAMERA_setTranslate(TCamera *camera, float x, float y, float z);
@@ -121,9 +119,8 @@ extern void TCAMERA_setFov(TCamera *camera, float fov);
 extern void TCAMERA_setView(TCamera *camera, float x, float y, float z);
 extern JavaField *lookupClassField(void *class_object, void *name, int flags);
 /*
- * getRotateX__/getRotateY__/getRotateZ__ each keep their own .lit4 copy of
- * the radian-to-degree divisor (bits 0x40490fdb, pi); the scaffold still
- * owns the pool and did not merge the three entries.
+ * Rotation getters: return one axis of the studio camera rotation, converted
+ * from radians to degrees.
  */
 void Java_xeno_Camera_getRotateX__(JavaEnvironment *environment,
                                    CameraGetterArgs *arguments, float *result)
@@ -170,6 +167,7 @@ void Java_xeno_Camera_getTranslateZ__(JavaEnvironment *environment,
     *result = xglStudioGetCamera2(arguments->camera->camera_id)->position.vector.z;
 }
 
+/* Java native: starts a spline on the field-of-view channel from the float sample array. */
 void Java_xeno_Camera_fovSPL__aFI(JavaEnvironment *environment,
                                   CameraSplineRequest *request, void *result)
 {
@@ -187,6 +185,7 @@ void Java_xeno_Camera_fovSPL__aFI(JavaEnvironment *environment,
     camera->fov.spline.first_key = -1;
 }
 
+/* Makes studio camera camera_id the only active one and records its index in the game loop state. */
 static void camera_change(int camera_id)
 {
     StudioCamera *studio_camera;
@@ -209,6 +208,10 @@ void Java_xeno_Camera_change__(JavaEnvironment *environment, CameraGetterArgs *a
     camera_change(arguments->camera->camera_id);
 }
 
+/*
+ * Starts a spline on the view channel. selection 0 sets only the spline; 1 also
+ * stores the key range from the request.
+ */
 static void CAMERA_rotateSPL(int selection, JavaEnvironment *environment,
                              CameraSplineRequest *request, void *result)
 {
@@ -223,13 +226,9 @@ static void CAMERA_rotateSPL(int selection, JavaEnvironment *environment,
     camera->mode[CAMERA_CHANNEL_VIEW] = CAMERA_MODE_ROTATE_SPLINE;
     camera->frame[CAMERA_CHANNEL_VIEW] = 0;
 
-    /* The view channel's spline payload is at camera + 0x4d0: the four channel
-     * payloads are 0x4a0 apart (TCAMERA_update passes +0x30, +0x4d0, +0x970 and
-     * +0xe10 to the channel handlers) and nothing evidences the internal extent
-     * of a payload, so the offset cannot become a CameraWork member without
-     * inventing the span in between.
-     * A rotation key is four floats -- one weight plus x, y and z, SplinePoint
-     * in src/main/spl.h -- so the array's float count >> 2 is its key count. */
+    /* The spline is the spline member of the view channel payload (CameraWork.view,
+     * +0x4d0). A rotation key is four floats (weight, x, y, z; see SplinePoint in
+     * src/main/spl.h), so the float count >> 2 gives the key count. */
     switch (selection) {
     case 0:
         SPL_init(&camera->view.spline, weight_mode,
@@ -286,6 +285,10 @@ void Java_xeno_Camera_create__I(JavaEnvironment *environment,
     *result = camera;
 }
 
+/*
+ * Java native: sets a constant translation channel from x, y and z. A Chr or Unit
+ * peer supplies the reference position from its actor.
+ */
 void Java_xeno_Camera_transCNS__Ljava_lang_Object_FFF(JavaEnvironment *environment,
                                                        VMSlot *arguments,
                                                        void *result)
@@ -337,6 +340,10 @@ void Java_xeno_Camera_transCNS__Ljava_lang_Object_FFF(JavaEnvironment *environme
     }
 }
 
+/*
+ * Starts a spline on the translation channel. selection 1 offsets the weight
+ * mode by 2 and stores the key range from the request.
+ */
 static void CAMERA_transSPL(int selection, JavaEnvironment *environment,
                             CameraSplineRequest *request, void *result)
 {
@@ -382,6 +389,10 @@ void Java_xeno_Camera_transSPL__aFIII(JavaEnvironment *environment,
     CAMERA_transSPL(1, environment, request, result);
 }
 
+/*
+ * Java native: sets a constant view channel (look-at point) from x, y and z. A Chr
+ * or Unit peer supplies the reference position from its actor.
+ */
 void Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF(JavaEnvironment *environment,
                                                       VMSlot *arguments,
                                                       void *result)
@@ -433,6 +444,7 @@ void Java_xeno_Camera_viewCNS__Ljava_lang_Object_FFF(JavaEnvironment *environmen
     }
 }
 
+/* Starts a spline on the view channel; selection 1 also stores the key range. */
 static void CAMERA_viewSPL(int selection, JavaEnvironment *environment,
                            CameraSplineRequest *request, void *result)
 {
@@ -478,6 +490,7 @@ void Java_xeno_Camera_viewSPL__aFIII(JavaEnvironment *environment,
     CAMERA_viewSPL(1, environment, request, result);
 }
 
+/* Java native: starts a spline on the roll channel from the float sample array. */
 void Java_xeno_Camera_rollSPL__aFI(JavaEnvironment *environment,
                                    CameraSplineRequest *request, void *result)
 {
@@ -590,6 +603,10 @@ void Java_xeno_Camera_setView__FFF(JavaEnvironment *environment, VMSlot *argumen
     }
 }
 
+/*
+ * Java native: sets the studio camera state. In the peer state the Chr peer's
+ * actor is stored in camera->peer, or NULL when no peer is given.
+ */
 void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
                                                  CameraStartArgs *arguments,
                                                  void *result)
@@ -608,11 +625,8 @@ void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
             if (JNI_isInstanceOf(peer, classJava_xeno_Chr) != 0) {
                 peer_field = lookupClassField(classJava_xeno_Chr,
                                               loadConstString(cameraPeerFieldName, -1), 0);
-                /* `peer` is a field of the Java class xeno.Chr, so its
-                 * position inside the object is the offset the JVM hands
-                 * back at run time, exactly as CHR_sclX (src/main/chr.c)
-                 * reads its own peer field. CameraWork names the
-                 * native camera's destination peer slot. */
+                /* The offset of the Chr peer field is only known at run time, from
+                 * lookupClassField. */
                 field_value = (void *)(peer + peer_field->offset);
                 camera->peer =
                     field_value->actor;
@@ -623,6 +637,11 @@ void Java_xeno_Camera_start__ILjava_lang_Object_(JavaEnvironment *environment,
     }
 }
 
+/*
+ * Java native: sets the first three angles (degrees, converted to radians and
+ * wrapped to one turn) and angle_w of one CF camera definition, or of all of them
+ * when camera_index is negative.
+ */
 void Java_xeno_Camera_setCFAngle__IFFFF(JavaEnvironment *environment,
                                         CameraCFAngleArgs *arguments)
 {
@@ -675,6 +694,7 @@ void Java_xeno_Camera_setCFAngle__IFFFF(JavaEnvironment *environment,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/* Java native: as setCFAngle, and also stores the perspective converted to radians. */
 void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
                                              CameraCFAnglePersArgs *arguments)
 {
@@ -730,6 +750,10 @@ void Java_xeno_Camera_setCFAnglePers__IFFFFF(JavaEnvironment *environment,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/*
+ * Java native: sets the yaw and pitch interpolation frames of one CF camera
+ * definition, or of all of them when camera_index is negative.
+ */
 void Java_xeno_Camera_setCFHokan__IFF(JavaEnvironment *environment,
                                       CameraCFHokanArgs *arguments)
 {
@@ -758,6 +782,10 @@ void Java_xeno_Camera_setCFHokan__IFF(JavaEnvironment *environment,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/*
+ * Java native: sets the lock mode and lock position of one CF camera definition,
+ * or of all of them when camera_index is negative.
+ */
 void Java_xeno_Camera_setCFLock__IIFFF(JavaEnvironment *environment,
                                        CameraCFLockArgs *arguments)
 {
@@ -792,6 +820,10 @@ void Java_xeno_Camera_setCFLock__IIFFF(JavaEnvironment *environment,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/*
+ * Java native: sets the offset and the two offset parameter mode/value pairs of one
+ * CF camera definition, or of all of them when the index is negative.
+ */
 void Java_xeno_Camera_setCFOffset__IFFFIFIF(JThread *thread,
                                             VMSlot *arguments, VMSlot *result)
 {
@@ -835,6 +867,7 @@ void Java_xeno_Camera_setCFOffset__IFFFIFIF(JThread *thread,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/* Java native: sets the camera mode, flags it as changed and makes studio camera 0 active. */
 void Java_xeno_Camera_setMode__I(JavaEnvironment *environment,
                                  CameraSetModeArgs *arguments)
 {
@@ -851,6 +884,10 @@ void Java_xeno_Camera_getMode__(JavaEnvironment *environment, void *arguments, i
     *result = GameLoopState.cameraMode;
 }
 
+/*
+ * Java native: sets the pedestal parameters of one CF camera definition. A selector
+ * whose low byte is 0xff applies to all of them; its top nibble selects the mode.
+ */
 void Java_xeno_Camera_setCFPedestal__IFFFFFFFF(JavaEnvironment *environment,
                                                CameraCFPedestalArgs *arguments)
 {
@@ -886,6 +923,7 @@ void Java_xeno_Camera_setCFPedestal__IFFFFFFFF(JavaEnvironment *environment,
         }
         scale = arguments->scale;
         definition->parameters.pedestal[3] = scale;
+        /* The angles are converted from degrees only when scale is 2.0. */
         if (scale == 2.0f) {
             definition->parameters.pedestal[0] = arguments->angles[0] / 180.0f * 3.1415927f;
             definition->parameters.pedestal[1] = arguments->angles[1] / 180.0f * 3.1415927f;
@@ -900,6 +938,7 @@ void Java_xeno_Camera_setCFPedestal__IFFFFFFFF(JavaEnvironment *environment,
     GameLoopState.hokanFlags |= GAME_CAMERA_FLAG_MODE_CHANGED;
 }
 
+/* Java native: sets or clears the pedestal interpolation flag of one CF camera definition, or of all of them. */
 void Java_xeno_Camera_setCFPedestalHokan__II(JavaEnvironment *environment,
                                              CameraCFPedestalHokanArgs *arguments)
 {
@@ -934,6 +973,10 @@ void Java_xeno_Camera_changeID__III(JavaEnvironment *environment, CameraChangeID
     GameCameraChangeID(arguments->id, arguments->id2, arguments->id3);
 }
 
+/*
+ * Java native: sets the fog parameters and colour of one CF camera definition, or of
+ * all of them when the index is negative. Colour components are converted from ints.
+ */
 void Java_xeno_Camera_setFog__IFFFFIIII(JThread *thread,
                                         VMSlot *arguments, VMSlot *result)
 {
@@ -971,6 +1014,7 @@ void Java_xeno_Camera_setFog__IFFFFIIII(JThread *thread,
     }
 }
 
+/* Java native: clears the fog parameters and colour of one CF camera definition, or of all of them. */
 void Java_xeno_Camera_resetFog__I(JThread *thread, VMSlot *arguments, VMSlot *result)
 {
     CfCameraDefinition *definition;

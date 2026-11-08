@@ -4,15 +4,14 @@
  * +0 is an unsigned joint index or 0xff end marker; +1/+2 are signed
  * parameters. The first token supplies the base joint and axis scales.
  * Subsequent tokens supply another joint, blending scale and component.
- * Original OBJECT sizes establish stream capacity, not active token count. */
+ * The array length is the stream capacity, not the number of active tokens. */
 typedef struct ShadowDefinitionToken {
     unsigned char joint_or_end;
     signed char parameter_1;
     signed char parameter_2;
 } ShadowDefinitionToken;
 
-/* DrawDropShadow selects a stream when (actor_flags & mask) == value,
- * reading mask/value with lhu and the pointer with lw, then advancing 8. */
+/* DrawDropShadow selects a stream when (actor_flags & mask) == value. */
 typedef struct DropShadowDefinition {
     unsigned short mask;
     unsigned short value;

@@ -79,7 +79,6 @@ static unsigned int col2[4] = { 0xa0, 0x00, 0x00, 0xff };
 
 static unsigned int col3[4] = { 0x00, 0x90, 0x90, 0xff };
 
-/* Original TU-local pointer storage remains in the unchanged scaffold. */
 static StudioCamera * pCamera_004DC65C;
 
 static float radius;
@@ -106,6 +105,7 @@ static void swapf(float *left, float *right)
     *right = value;
 }
 
+/* Returns non-zero when the XZ segment line_start-line_end crosses lower-upper. */
 static int CheckIntersect(Vector4 *line_start, Vector4 *line_end,
                           Vector4 *lower, Vector4 *upper)
 {
@@ -165,6 +165,7 @@ static int CheckIntersect(Vector4 *line_start, Vector4 *line_end,
     return result;
 }
 
+/* Stores where the segment reaches plane x in *intersection. Returns 0 when x is constant along it. */
 static int GetIntersectionPointLineX(float *intersection, const float *line_start,
                                      const float *line_end, float x)
 {
@@ -177,6 +178,7 @@ static int GetIntersectionPointLineX(float *intersection, const float *line_star
     return 1;
 }
 
+/* Stores where the segment reaches plane z in *intersection. Returns 0 when z is constant along it. */
 static int GetIntersectionPointLineZ(float *intersection, const float *line_start,
                                      const float *line_end, float z)
 {
@@ -189,6 +191,7 @@ static int GetIntersectionPointLineZ(float *intersection, const float *line_star
     return 1;
 }
 
+/* Returns the sign (1, -1 or 0) of the XZ cross product of p1-p0 and p3-p2. */
 static int CheckSlope(const Vector4 *p0, const Vector4 *p1,
                       const Vector4 *p2, const Vector4 *p3)
 {
@@ -202,6 +205,7 @@ static int CheckSlope(const Vector4 *p0, const Vector4 *p1,
     return -1;
 }
 
+/* Returns 1 when point lies strictly inside the XZ box spanned by lower and upper. */
 static int CheckInBox(const Vector4 *point, const Vector4 *lower,
                       const Vector4 *upper)
 {
@@ -211,6 +215,12 @@ static int CheckInBox(const Vector4 *point, const Vector4 *lower,
     return 0;
 }
 
+/*
+ * Tests the XZ segment line_start to line_end against the box between
+ * box_corner_a and box_corner_b, grown by line_start->w. Returns 1 on a hit
+ * and stores the hit point when hit_position is not null. Mode 1 keeps the
+ * coordinate along the hit face at the segment end.
+ */
 static int CheckBallBoxCollision(Vector4 *hit_position,
                                  const BallBoxCollisionArgs *args, int mode)
 {
@@ -259,6 +269,7 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
             return 0;
         swapf(&frame.bounds[0].x, &frame.bounds[1].x);
     }
+    /* Which face region of the box the segment start lies beside. */
     line_start = args->line_start;
     side = 0;
     if (line_start->z <= frame.bounds[0].z)
@@ -270,6 +281,7 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
     else if (frame.bounds[1].x <= line_start->x)
         side |= COLLI_SIDE_X_HIGH;
 
+    /* Find the crossing with the box face the segment must pass through. */
     switch (side) {
     case COLLI_SIDE_Z_LOW:
         intersection = GetIntersectionPointLineZ(&fraction_cell.value, &args->line_start->x,
@@ -368,6 +380,7 @@ static int CheckBallBoxCollision(Vector4 *hit_position,
     default:
         return 0;
     }
+    /* Interpolate the hit point, backed off slightly along the segment. */
     if (hit_position) {
         fraction_cell.value -= 0.001f;
         switch (mode) {
@@ -413,6 +426,7 @@ static inline void SetPlanarPoint(Vector4 *point, float x, float z)
     point->y = 0.0f;
 }
 
+/* Sets up the studio camera, the two boxes and the two test particles. */
 static int InitTest(void)
 {
     xglStudioInit();
@@ -446,6 +460,7 @@ static int InitTest(void)
     return 1;
 }
 
+/* Debug collision test loop: the pad moves a particle and the boxes are tested until SELECT+START. */
 void ColliTest(void)
 {
     BallBoxCollisionArgs collision;
@@ -476,6 +491,7 @@ void ColliTest(void)
         ppNextStart(particle);
 
         position = &particle->position;
+        /* The d-pad moves the particle in the XZ plane. */
         if (PadData.movement & PAD_UP)
             position->z -= move_step;
         if (PadData.movement & PAD_DOWN)
@@ -485,6 +501,7 @@ void ColliTest(void)
         if (PadData.movement & PAD_RIGHT)
             position->x += move_step;
 
+        /* Mode 0 tests the particle's path against both boxes; mode 1 tests the segment between the two particles. */
         switch (mode_004DB9D8) {
         case 0:
         default:
@@ -530,6 +547,7 @@ void ColliTest(void)
         }
         ppNextEnd(particle);
 
+        /* Circle advances the mode and copies the current position into the other particle. */
         if (PadData.state.halves.pressed & PAD_CIRCLE) {
             switch (mode_004DB9D8) {
             case 0:

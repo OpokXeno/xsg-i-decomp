@@ -24,10 +24,10 @@
 #define CARD_MODEL_ARENA_BASE 0x01900000
 #define CARD_MODEL_AT(offset) ((void *)(CARD_MODEL_ARENA_BASE + (offset)))
 
-/* Cards a hand holds at most before one must be discarded (`slti $2,$8,7`, 0x00a250d4). */
+/* Cards a hand holds at most before one must be discarded. */
 #define CGP_HAND_LIMIT 7
 
-/* Layout CGPCheckTeMax gives the hand's card list window (stores at 0x00a250f8..0x00a25118). */
+/* Layout CGPCheckTeMax gives the hand's card list window. */
 #define CGP_HAND_LIST_BASE_COLOR 7
 #define CGP_HAND_LIST_CURSOR_COLOR 15
 #define CGP_HAND_LIST_X 0x150
@@ -36,12 +36,12 @@
 #define CGP_HAND_LIST_ROWS 10
 
 /* Phases of a turn: 0..6 belong to side 0 and 7..13 to the other side. */
-#define CGP_PHASE_COUNT 14           /* `slti $2,$3,0xE`, 0x00a25a74 */
-#define CGP_SIDE1_FIRST_PHASE 7      /* `addiu $2,$0,7`, 0x00a25aa0 */
+#define CGP_PHASE_COUNT 14
+#define CGP_SIDE1_FIRST_PHASE 7
 
 /* Sound ids CGPNextTurnSub plays. */
-#define CGP_SE_NEXT_TURN 0x20001     /* a new turn and the switch to the other side (0x00a25a90, 0x00a25ab4) */
-#define CGP_SE_NEXT_PHASE 6          /* every other phase change (`addiu $4,$0,6`, 0x00a25aa8) */
+#define CGP_SE_NEXT_TURN 0x20001     /* a new turn and the switch to the other side */
+#define CGP_SE_NEXT_PHASE 6          /* every other phase change */
 
 
 
@@ -49,7 +49,7 @@
 #define CGP_ERR_NOT_ENOUGH_POINTS 12
 #define CGP_ERR_CARDS_TO_PLAY 14         /* "Move Error: There are cards still available to play." */
 
-/* Cards 7, 9 and 10..13 are paired with the card seven ids below them (`addiu $8,$5,-0x7`, 0x00a2817c). */
+/* Cards 7, 9 and 10..13 are paired with the card seven ids below them. */
 #define CGP_PAIRED_CARD_OFFSET 7
 
 /*
@@ -64,14 +64,14 @@
 #define CGP_AREA_PLAYER_DISPOSAL 6
 #define CGP_AREA_PLAYER_HAND 9
 
-/* Frames the interrupt message of a new phase stays up (`addiu $3,$0,0x2D`, 0x00a25ad4). */
+/* Frames the interrupt message of a new phase stays up. */
 #define CGP_INTERRUPT_MESS_FRAMES 45
 
 
-/* Text colour of the card game's font strings (`ori $6,$0,0xFFF0`, 0x00a21efc and 0x00a2ddc8). */
+/* Text colour of the card game's font strings. */
 #define CGP_TEXT_COLOR 0xFFF0
 
-/* Vertical distance between the text lines of one error message (`addiu $16,$20,0x18`, 0x00a21f7c). */
+/* Vertical distance between the text lines of one error message. */
 #define CGP_ERROR_MESS_LINE_PITCH 24
 
 /* Fixed EE runtime addresses of the textures the game screen draws with. CGP_PANEL_TEXTURE is the one texture
@@ -91,41 +91,41 @@
 #define CGP_TURN_NUMBER_MODEL ((void *) 0x01921800)   /* turn counter number frame, 0.05 in front of the plate */
 #define CGP_INFO_PANEL_SIDE_MODEL 0x01DAD700           /* side nameplate, lit 1P or 2P */
 
-/* Fixed EE runtime address of the message window model (`lui $4,0x1DA2` + `ori $4,$4,0x2B00`, 0x00a2214c..0x00a22154). */
+/* Fixed EE runtime address of the message window model. */
 #define CGP_ERROR_MESS_MODEL ((void *) 0x01DA2B00)
 
-#define CARD_EFFECT_COUNT 64                  /* `slti $2,$23,0x40`, 0x00a2506c */
-#define CARD_EFFECT_SE_HIT 0x20008            /* 0x00a23b0c */
+#define CARD_EFFECT_COUNT 64
+#define CARD_EFFECT_SE_HIT 0x20008
 #define CARD_EFFECT_SE_BURST 0x2000A
-#define CARD_EFFECT_ALPHA 0x48                /* nmlModelSetAlpha argument, 0x00a246ec */
-#define CARD_EFFECT_SPRITE_MODEL ((void *) 0x01A00000)   /* entry model of an unscaled effect sprite, 0x00a24a00 */
-#define CARD_EFFECT_SCALED_MODEL ((void *) 0x01A00800)   /* entry model after xglMatrixScale, 0x00a246f0 */
+#define CARD_EFFECT_ALPHA 0x48                /* nmlModelSetAlpha argument */
+#define CARD_EFFECT_SPRITE_MODEL ((void *) 0x01A00000)   /* entry model of an unscaled effect sprite */
+#define CARD_EFFECT_SCALED_MODEL ((void *) 0x01A00800)   /* entry model after xglMatrixScale */
 
-/* Animation strips: frame n of a strip is at base + n * frame size (sll/addu chains, 0x00a239d0 and 0x00a23b9c). */
+/* Animation strips: frame n of a strip is at base + n * frame size. */
 #define CARD_EFFECT_SMALL_FRAME 0x1480        /* 41 * 128 */
 #define CARD_EFFECT_LARGE_FRAME 0x1D80        /* 59 * 128 */
 #define CARD_EFFECT_FRAME(base, index, size) ((void *) ((base) + (index) * (size)))
-#define CARD_EFFECT_STRIP_TRAVEL_1 0x1BF0000  /* 0x00a239e4 */
-#define CARD_EFFECT_STRIP_TRAVEL_2 0x1C04000  /* 0x00a23a18 */
-#define CARD_EFFECT_STRIP_TRAVEL_3 0x1A14000  /* 0x00a23a4c */
-#define CARD_EFFECT_STRIP_TRAVEL_4 0x1A01000  /* 0x00a23a78 */
-#define CARD_EFFECT_STRIP_BURST_1 0x1BD8000   /* 0x00a23bac */
-#define CARD_EFFECT_STRIP_BURST_2 0x1AA0000   /* 0x00a23c18 */
-#define CARD_EFFECT_STRIP_BURST_3 0x1A85000   /* 0x00a23c88 */
-#define CARD_EFFECT_STRIP_BURST_4 0x1A67000   /* 0x00a23cfc */
-#define CARD_EFFECT_STRIP_FADE 0x1A28000      /* 0x00a23d90 */
-#define CARD_EFFECT_STRIP_SWIRL 0x1A40000     /* code 10, 0x00a249b4 */
+#define CARD_EFFECT_STRIP_TRAVEL_1 0x1BF0000
+#define CARD_EFFECT_STRIP_TRAVEL_2 0x1C04000
+#define CARD_EFFECT_STRIP_TRAVEL_3 0x1A14000
+#define CARD_EFFECT_STRIP_TRAVEL_4 0x1A01000
+#define CARD_EFFECT_STRIP_BURST_1 0x1BD8000
+#define CARD_EFFECT_STRIP_BURST_2 0x1AA0000
+#define CARD_EFFECT_STRIP_BURST_3 0x1A85000
+#define CARD_EFFECT_STRIP_BURST_4 0x1A67000
+#define CARD_EFFECT_STRIP_FADE 0x1A28000
+#define CARD_EFFECT_STRIP_SWIRL 0x1A40000     /* code 10 */
 
 /* Damage digits: model n of a digit set is at base + (n << 10). */
-#define CARD_EFFECT_DIGIT_TEXTURE ((void *) 0x1C990A0)   /* 0x00a24b90 */
-#define CARD_EFFECT_DIGITS_FIRST 0x1C8A400    /* code 12 while phase is 0, 0x00a24b60 */
-#define CARD_EFFECT_DIGITS 0x1C8CC00          /* 0x00a24b7c */
+#define CARD_EFFECT_DIGIT_TEXTURE ((void *) 0x1C990A0)
+#define CARD_EFFECT_DIGITS_FIRST 0x1C8A400    /* code 12 while phase is 0 */
+#define CARD_EFFECT_DIGITS 0x1C8CC00
 #define CARD_EFFECT_DIGIT_MODEL(base, n) ((void *) ((base) + ((n) << 10)))
 
 /* Arena the card game loads its model, texture and effect files into (see CPISMdlLst). */
 #define CGP_ARENA(offset) CARD_MODEL_AT(offset)
 
-#define CGP_FLAG_HELD_TRIANGLE 0x80   /* triangle was held when the game started (`addiu $2,$0,0x80`, 0x00a25254) */
+#define CGP_FLAG_HELD_TRIANGLE 0x80   /* triangle was held when the game started */
 /* Steps of the information panel's animation (infoPanelPhase, CardPlayDispInfo): it appears scaled up and shrinks in,
  * waits, slides toward its corner and rests there; the draw fades it in during CGP_INFO_PANEL_ZOOM. */
 #define CGP_INFO_PANEL_INIT 0
@@ -134,21 +134,20 @@
 #define CGP_INFO_PANEL_SLIDE 3
 #define CGP_INFO_PANEL_SETTLE 4
 
-#define CGP_EFFECT_COUNT 64           /* `addiu $6,$0,0x3F`, 0x00a2526c counts down to zero */
-#define CGP_QUEUE_SLOTS 40            /* `addiu $6,$0,0x27`, 0x00a25308 */
-#define CGP_QUEUE_SIDE_DISTANCE 160   /* halfwords from the enemy's queue back to the player's (`sh $4,-0x140($2)`, 0x00a25314) */
+#define CGP_EFFECT_COUNT 64           /* counts down to zero */
+#define CGP_QUEUE_SLOTS 40
+#define CGP_QUEUE_SIDE_DISTANCE 160   /* halfwords from the enemy's queue back to the player's */
 
-/* Rotation vector the stage starts from (lui/ori 0xBF666666 at 0x00a25354, lui 0xC1A00000 at 0x00a25348). */
+/* Rotation vector the stage starts from. */
 #define CGP_ROT_STAGE_START_X (-0.9f)
 #define CGP_ROT_STAGE_START_Y (-20.0f)
 #define CGP_ROT_STAGE_COOLDOWN 20          /* frames before the stage may rotate again (CGPRotStageSub and CardGameProc) */
 
-/* A top card of one of these ids attacks with the power of the base card. */
 /* CardDefinition.kind: a battle card is paid from playPoints[0] and a situation card from playPoints[1]; the
  * situation card is the one CardPlayDesertOperation removes; an event card cannot be played from the hand
- * (error 11) and is the one the hand discard step accepts (`kind & 2`). */
-/* CardLayerStack.flags bit set on a locked battle slot (`andi $2,$2,0x2`, 0x00a2ea70 and 0x00a2eba8; error CGP_ERR_SLOT_LOCKED). */
-/* Operation card 122 in play on the defending side lowers the attack power (`addiu $5,$0,0x7A`, 0x00a288b0). */
+ * (error 11) and is the one the hand discard step accepts. */
+/* CardLayerStack.flags bit set on a locked battle slot. */
+/* Operation card 122 in play on the defending side lowers the attack power. */
 
 /*
  * The cursor of a controller steps over the board zones (CGP_AREA_*), four
@@ -160,16 +159,15 @@
 #define CGP_PILE_BROWSE 2             /* the cards of the pile are walked one by one */
 
 /*
- * Cursor slot that stands for a pile: slot 3 of the player's hand zone (the
- * `ld` at 0x00a26c14 compares zone and slot with 0x00090003 << 32) and slot 0
- * of the enemy's hand zone (the `ld` at 0x00a26c64 requires both to be zero).
+ * Cursor slot that stands for a pile: slot 3 of the player's hand zone and slot 0
+ * of the enemy's hand zone.
  */
 #define CGP_PLAYER_PILE_SLOT 3
 
-/* Highlight of the cursor over a hand (`lui $1,0x3E33`, 0x00a26db4). */
+/* Highlight of the cursor over a hand. */
 #define CGP_HAND_HIGHLIGHT 0.175f
 
-/* Card id bits 8..11 are cleared before the preview draws the card (`andi $2,$3,0xF0FF`, 0x00a270e0). */
+/* Card id bits 8..11 are cleared before the preview draws the card. */
 #define CGP_CARD_ID_MASK 0xF0FF
 
 /*
@@ -183,59 +181,58 @@
  */
 #define CGP_CARD_MODE_ICON 0
 #define CGP_CARD_MODE_FULL 5
-#define CGP_PREVIEW_FULL_Y 0.369f     /* `lui $1,0x3EBC`, 0x00a270f4 */
-#define CGP_PREVIEW_FULL_Z 0.5f       /* `lui $1,0x3F00`, 0x00a27100 */
-#define CGP_PREVIEW_FULL_SCALE 1.1f   /* `lui $1,0x3F8C`, 0x00a270e4 */
-#define CGP_PREVIEW_SMALL_Y 0.096f    /* `lui $1,0x3DC4`, 0x00a27164 */
-#define CGP_PREVIEW_SMALL_Z 0.48f     /* `lui $1,0x3EF5`, 0x00a27170 */
-#define CGP_PREVIEW_SMALL_SCALE 0.55f /* `lui $1,0x3F0C`, 0x00a27154 */
-#define CGP_PREVIEW_SIDE_X 1.904f     /* small side cards stand this far from the middle (`lui $1,0x3FF3`, 0x00a271f8) */
-#define CGP_PREVIEW_ZOOMED_X 0.9f     /* enlarged side cards (`lui $1,0x3F66`, 0x00a2724c) */
-#define CGP_PREVIEW_FRAME_Z 0.29f     /* frame model behind a small side card (`lui $1,0x3E94`, 0x00a272c4) */
-#define CGP_PREVIEW_FRAME_TEXTURE CARD_MODEL_AT(0x39800)  /* `lui $4,0x193`, 0x00a272fc */
-#define CGP_PREVIEW_FRAME_RIGHT CARD_MODEL_AT(0x29800)    /* 0x00a27308 */
-#define CGP_PREVIEW_FRAME_LEFT CARD_MODEL_AT(0x2B000)     /* 0x00a27448 */
+#define CGP_PREVIEW_FULL_Y 0.369f
+#define CGP_PREVIEW_FULL_Z 0.5f
+#define CGP_PREVIEW_FULL_SCALE 1.1f
+#define CGP_PREVIEW_SMALL_Y 0.096f
+#define CGP_PREVIEW_SMALL_Z 0.48f
+#define CGP_PREVIEW_SMALL_SCALE 0.55f
+#define CGP_PREVIEW_SIDE_X 1.904f     /* small side cards stand this far from the middle */
+#define CGP_PREVIEW_ZOOMED_X 0.9f     /* enlarged side cards */
+#define CGP_PREVIEW_FRAME_Z 0.29f     /* frame model behind a small side card */
+#define CGP_PREVIEW_FRAME_TEXTURE CARD_MODEL_AT(0x39800)
+#define CGP_PREVIEW_FRAME_RIGHT CARD_MODEL_AT(0x29800)
+#define CGP_PREVIEW_FRAME_LEFT CARD_MODEL_AT(0x2B000)
 
 /* Situation cards CGPChkOpePlayable checks the board for before they may be discarded (switch cases 0x8B, 0x8D, 0x8F). */
 
 
 /*
  * While this operation card is in play a dying CARD_ATTR_GNOSIS card goes to
- * the discard (sute) pile instead of the junk pile (`addiu $5,$0,0x82`, 0x00a29648).
+ * the discard (sute) pile instead of the junk pile.
  */
 
 /*
  * A card leaving the board slides to its pile in this many frames: the move
- * record's timer (`addiu $7,$0,0xA`, 0x00a296d0) and the divisor of its
- * per-frame step (`div.s` by 10.0f, 0x00a29728).
+ * record's timer and the divisor of its per-frame step.
  */
 #define CGP_PILE_MOVE_FRAMES 10
-#define CGP_PILE_MOVE_Z 0.12f        /* height of the sliding card, 0x3DF5C28F (`lui`, 0x00a29688) */
-#define CGP_SUTE_PILE_X 1.265f       /* discard pile position, 0x3FA1EB85 (`lui`, 0x00a296a8) */
-#define CGP_SUTE_PILE_Y (-1.81f)     /* 0xBFE7AE14 (`lui`, 0x00a296c0) */
+#define CGP_PILE_MOVE_Z 0.12f        /* height of the sliding card */
+#define CGP_SUTE_PILE_X 1.265f       /* discard pile position */
+#define CGP_SUTE_PILE_Y (-1.81f)
 
 /*
  * Attack types CardChkAttackType reports for the card in play and the battle
  * command an attack runs under (CGPBattleSub attacks only when they agree).
  */
-#define CGP_ATTACK_FRONT 1        /* front slots only, at the opposing card (`addiu $2,$0,1`, 0x00a2a160) */
-#define CGP_ATTACK_PIERCE 2       /* also hits the card behind its target (`addiu $2,$0,2`, 0x00a2a168) */
-#define CGP_ATTACK_SUPPORT 3      /* strikes the stack passed as `support` (`addiu $2,$0,3`, 0x00a29de8) */
-#define CGP_ATTACK_DIRECT 4       /* no target card (`addiu $2,$0,4`, 0x00a29f00) */
+#define CGP_ATTACK_FRONT 1        /* front slots only, at the opposing card */
+#define CGP_ATTACK_PIERCE 2       /* also hits the card behind its target */
+#define CGP_ATTACK_SUPPORT 3      /* strikes the stack passed as `support` */
+#define CGP_ATTACK_DIRECT 4       /* no target card */
 
-#define CGP_STACK_TOP_LAYER 39    /* highest layer searched for the top card (`addiu $16,$0,0x27`, 0x00a29cb4) */
+#define CGP_STACK_TOP_LAYER 39    /* highest layer searched for the top card */
 
-#define CGP_HAND_FLAG_NO_DAMAGE 0x01   /* CardHand.commandFlags bit 0 (`andi $2,$2,0x1`, 0x00a2a4f4) */
-#define CGP_LIFE_WEAR_LIMIT 64         /* a stacked card below this life wears down (`slti $2,$2,0x40`, 0x00a29eb8) */
-#define CGP_POWER_MAX 99               /* `addiu $2,$0,0x63`, 0x00a2a3d8 */
+#define CGP_HAND_FLAG_NO_DAMAGE 0x01   /* CardHand.commandFlags bit 0 */
+#define CGP_LIFE_WEAR_LIMIT 64         /* a stacked card below this life wears down */
+#define CGP_POWER_MAX 99
 
-#define CGP_SE_ATTACK 0x20004          /* 0x00a2a244 */
-#define CGP_SE_ATTACK_ALT 0x20009      /* 0x00a2a24c */
-#define CGP_SE_FRONT_ATTACK 0x20002    /* 0x00a2a218 */
-#define CGP_SE_FRONT_ATTACK_ALT 0x20005 /* 0x00a2a1ec */
-#define CGP_SE_DIRECT_ATTACK 0x20007   /* 0x00a2a4b4 */
-#define CGP_SE_DIRECT_VOLUME 60        /* `addiu $5,$0,0x3C`, 0x00a2a4b8 */
-#define CGP_SE_DIRECT_PAN 64           /* `addiu $6,$0,0x40`, 0x00a2a4c4 */
+#define CGP_SE_ATTACK 0x20004
+#define CGP_SE_ATTACK_ALT 0x20009
+#define CGP_SE_FRONT_ATTACK 0x20002
+#define CGP_SE_FRONT_ATTACK_ALT 0x20005
+#define CGP_SE_DIRECT_ATTACK 0x20007
+#define CGP_SE_DIRECT_VOLUME 60
+#define CGP_SE_DIRECT_PAN 64
 
 /* Steps of CGPDrawFaseProc (command.phaseTimer). */
 #define CGP_DRAW_STEP_BEGIN 0
@@ -252,13 +249,13 @@
 #define CGP_DRAW_STEP_DRAW 31
 #define CGP_DRAW_STEP_DRAW_WAIT 32
 
-/* Interrupt message the fase shows on entry (`addiu $7,$0,0x16`, 0x00a2a79c). */
+/* Interrupt message the fase shows on entry. */
 #define CGP_DRAW_INTERRUPT_MESS 22
-/* Exchanges of the opening hand a side is offered (`addiu $2,$0,0x3`, 0x00a2a78c). */
+/* Exchanges of the opening hand a side is offered. */
 #define CGP_DRAW_EXCHANGES 3
-/* Cards drawn for the opening hand (the loop counts 5 down to 0, 0x00a2aa5c..0x00a2aa70). */
+/* Cards drawn for the opening hand. */
 #define CGP_DRAW_HAND_SIZE 6
-/* Frames the draw step waits after each card (`addiu $2,$0,0x32`, 0x00a2af44). */
+/* Frames the draw step waits after each card. */
 #define CGP_DRAW_WAIT_FRAMES 50
 
 /*
@@ -271,13 +268,9 @@
 #define CGP_ERR_EXCHANGE_ONE 35
 #define CGP_ERR_ADD_TO_HAND 26
 
-/* Cards and operation cards whose presence the fase reacts to (the ids the CardPlayCnt* calls and slot tests use). */
-
 /*
- * Operation card whose duration is refilled from its definition while a card with
- * CARD_ATTR_GNOSIS (tested at 0x00a2fbb8) stands on the board (`addiu $20,$0,0x84`, 0x00a2fb50;
- * definitions[132].operationDuration is `lbu 0x12A2($2)`, 0x00a2fc28);
- * CGPDrawFaseProc highlights it on the board (`addiu $23,$0,0x84`, 0x00a2aca8).
+ * Operation card 132 (0x84): its duration is refilled from definitions[132].operationDuration
+ * while a card with CARD_ATTR_GNOSIS stands on the board. CGPDrawFaseProc highlights it on the board.
  */
 
 /* Operation slot rows of the cursor (CGP_AREA_* continued). */
@@ -298,20 +291,18 @@
 #define CGP_MOVE_STEP_NEXT_TURN 21
 
 /* Cursor modes CardCursorActive takes. */
-#define CGP_CURSOR_SELECTABLE 4       /* `addiu $6,$0,4`, 0x00a2b43c */
-#define CGP_CURSOR_BLOCKED 3          /* a Gnosis card while Hilbert Effect is in play (`addiu $23,$0,3`, 0x00a2b430; `movn`, 0x00a2b498) */
+#define CGP_CURSOR_SELECTABLE 4
+#define CGP_CURSOR_BLOCKED 3          /* a Gnosis card while Hilbert Effect is in play */
 #define CGP_CURSOR_PICKED 2           /* the card that was picked up */
 #define CGP_CURSOR_TARGET 1           /* a slot it can be moved to */
 
-/* CardSaveData.flags bits that make the side's moves automatic (0x00a2b1dc, 0x00a2b1f4). */
+/* CardSaveData.flags bits that make the side's moves automatic. */
 #define CGP_SAVE_FLAG_SIDE0_AUTO 0x08
 #define CGP_SAVE_FLAG_SIDE1_AUTO 0x04
 
-#define CGP_ERR_NO_MOVABLE_CARD 6     /* `addiu $6,$0,6`, 0x00a2b20c */
-#define CGP_ERR_NO_CARD_THERE 11      /* hand area chosen, `addiu $6,$0,0xB`, 0x00a2b734 */
-#define CGP_ERR_MOVE_REFUSED 15       /* `addiu $6,$0,0xF`, 0x00a2b5ec */
-
-/* Cards and operation cards that stop a move (CardPlayCntBtl / CardPlayCntOpe arguments). */
+#define CGP_ERR_NO_MOVABLE_CARD 6
+#define CGP_ERR_NO_CARD_THERE 11      /* hand area chosen */
+#define CGP_ERR_MOVE_REFUSED 15
 
 /*
  * Steps of CGPSetFaseProc (command.phaseTimer): the fase in which the side puts hand cards on the
@@ -329,36 +320,36 @@
 #define CGP_SET_STEP_PUT_DOWN 13      /* "Where do you want to put it?" */
 #define CGP_SET_STEP_PAIRED_SLOT 20
 
-/* CGPDisposeSub's result for a card that finds no free slot (`addiu $2,$0,0xF`, 0x00a2bd9c). */
+/* CGPDisposeSub's result for a card that finds no free slot. */
 #define CGP_DISPOSE_NO_FREE_SLOT 15
 
 #define CGP_CARD_FLAG_RESET 14        /* its layer flag is cleared unless the side has exactly one battle card */
 
-#define CGP_ERR_FLAG_RESET 0x25       /* `addiu $6,$0,0x25`, 0x00a2bd1c */
-#define CGP_ERR_NO_WEAPON_TARGET 2    /* `addiu $6,$0,2`, 0x00a2beb4 */
+#define CGP_ERR_FLAG_RESET 0x25
+#define CGP_ERR_NO_WEAPON_TARGET 2
 
-/* Cursor zones the sorted hand starts on: the zone beside the hand while the hand is empty (0x00a2bc58, 0x00a2bc78). */
+/* Cursor zones the sorted hand starts on: the zone beside the hand while the hand is empty. */
 #define CGP_AREA_PLAYER_NO_HAND 8
 #define CGP_AREA_ENEMY_NO_HAND (-1)
 
-/* CardCursorActive mode that lights a slot as selectable (`addiu $6,$0,1`, 0x00a2bfa0). */
+/* CardCursorActive mode that lights a slot as selectable. */
 #define CGP_CURSOR_LIGHT 1
-/* CGCPHandDispSub2/3 mode of the hand while a card is picked (`addiu $7,$0,5`, 0x00a2bf14). */
+/* CGCPHandDispSub2/3 mode of the hand while a card is picked. */
 #define CGP_HAND_DISP_PICK 5
 
-#define CGP_SET_DISCARD_TEXT_X 143    /* `addiu $4,$0,0x8F`, 0x00a2c308 */
-#define CGP_SET_DISCARD_COUNT_X 363   /* `addiu $4,$0,0x16B`, 0x00a2c350 */
-#define CGP_SET_PUT_DOWN_TEXT_X 160   /* `addiu $4,$0,0xA0`, 0x00a2c5fc */
-#define CGP_SET_PROMPT_Y 213          /* `addiu $5,$0,0xD5` */
-#define CGP_SET_TEXT_COLOR 0xFFF8     /* `ori $6,$0,0xFFF8` */
+#define CGP_SET_DISCARD_TEXT_X 143
+#define CGP_SET_DISCARD_COUNT_X 363
+#define CGP_SET_PUT_DOWN_TEXT_X 160
+#define CGP_SET_PROMPT_Y 213
+#define CGP_SET_TEXT_COLOR 0xFFF8
 #define CGP_ZENKAKU_GLYPH_SIZE 2      /* full-width digit tables hold two bytes per glyph */
 
-/* Prompt panel: model and texture of the card frame, placed 0.91 in front for the discard prompt (0x00a2c35c..0x00a2c3e0). */
+/* Prompt panel: model and texture of the card frame, placed 0.91 in front for the discard prompt. */
 #define CGP_SET_PROMPT_MODEL ((void *) 0x01DAAC00)
 #define CGP_SET_PROMPT_SCALE_X 1.5f
 #define CGP_SET_PROMPT_Z 0.91f
 
-/* A card put on the board starts its slide at this height and takes ten frames (0x00a2c6f8, 0x00a2c818). */
+/* A card put on the board starts its slide at this height and takes ten frames. */
 #define CGP_PLACE_START_Z 0.12f
 #define CGP_PLACE_FRAMES 10
 #define CGP_PLACE_SLIDE_DIVISOR 10.0f
@@ -370,27 +361,25 @@
  * Message ids the command steps hand to CGPSetErrorMess / CGPDispErrorMess /
  * CGPDispErrorMessPlus (rows of ErrorMessTbl).
  */
-#define CGP_ERR_COMMAND_FAILED 13      /* "Command Error", `addiu $6,$0,0xD`, 0x00a2ce18 */
+#define CGP_ERR_COMMAND_FAILED 13      /* "Command Error" */
 
-/* Sound CardSetEffect starts with an operation effect (`lui $8,2` / `ori $8,$8,8`, 0x00a2d720). */
+/* Sound CardSetEffect starts with an operation effect. */
 #define CGP_SE_COMMAND_EFFECT 0x20008
 
-/* Card kind and definition flag the discard step looks for (`lbu`/`lhu`/`andi $2,$2,4`, 0x00a2d1d4..0x00a2d1e4). */
-
-/* Prompt "Cards to be discarded" of command 131 (xglFontPrint 0x00a2ce38 / 0x00a2cf90) and its card model. */
+/* Prompt "Cards to be discarded" of command 131 and its card model. */
 #define CGP_DISCARD_PROMPT_X 0x8F
 #define CGP_DISCARD_PROMPT_Y 0xD5
 #define CGP_DISCARD_PROMPT_COLOR 0xFFF8
 #define CGP_DISCARD_PROMPT_MODEL ((void *) 0x01DAAC00)
-#define CGP_DISCARD_PROMPT_SCALE_X 1.5f   /* 0x3FC00000, 0x00a2ce50 */
+#define CGP_DISCARD_PROMPT_SCALE_X 1.5f
 
-/* Life command 139 takes off the card it targets (`addiu $3,$3,-3`, 0x00a2d6dc). */
+/* Life command 139 takes off the card it targets. */
 #define CGP_TARGET_LIFE_LOSS 3
 
 /* Frames Rhine Maiden pays its cost cards for, and Unknown Armament waits before and after its effect. */
-#define CGP_COST_REPEAT 4              /* `addiu $2,$0,4`, 0x00a2d960 */
-#define CGP_EFFECT_DELAY 10            /* `addiu $3,$0,0xA`, 0x00a2da50 */
-#define CGP_EFFECT_HOLD 15             /* `addiu $3,$0,0xF`, 0x00a2da94 */
+#define CGP_COST_REPEAT 4
+#define CGP_EFFECT_DELAY 10
+#define CGP_EFFECT_HOLD 15
 
 /* Cursor modes CardCursorActive takes for the selectable cards of these commands. */
 #define CGP_CURSOR_PICK 1
@@ -400,33 +389,33 @@
  * (CardViewProc draws the same ones) and the cursor frame model that CardMainInit
  * loads from game\\Cur_WakuW.lex, which the prompt reuses as its frame.
  */
-#define CGP_CARD_BACKDROP_MODEL ((void *) 0x01DA5600)     /* lui/ori 0x00a2dc28 */
-#define CGP_ANSWER_FRAME_MODEL ((void *) 0x01D12000)      /* lui/ori 0x00a2dda8 */
+#define CGP_CARD_BACKDROP_MODEL ((void *) 0x01DA5600)
+#define CGP_ANSWER_FRAME_MODEL ((void *) 0x01D12000)
 
-#define CGP_ANSWER_PROMPT_X 0x7C               /* `addiu $4,$0,0x7C`, 0x00a2ddbc */
-#define CGP_ANSWER_PROMPT_Y 0x82               /* `addiu $5,$0,0x82`, 0x00a2ddc0 */
-#define CGP_ANSWER_HINT_X 0x18                 /* `addiu $4,$0,0x18`, 0x00a2ddf0 */
-#define CGP_ANSWER_HINT_Y 0x127                /* `addiu $5,$0,0x127`, 0x00a2ddf8 */
+#define CGP_ANSWER_PROMPT_X 0x7C
+#define CGP_ANSWER_PROMPT_Y 0x82
+#define CGP_ANSWER_HINT_X 0x18
+#define CGP_ANSWER_HINT_Y 0x127
 
 /*
  * Answer cards are drawn in a row: each one 0.5663 wide in x and 0.02 higher in z than
  * the one before, starting at -1.4193; the right-hand panel is shifted by half a pitch.
  */
-#define CGP_ANSWER_CARD_PITCH 0.5663f          /* 0x3F10F909, 0x00a2dbc8 */
-#define CGP_ANSWER_CARD_START_X (-1.4193f)     /* 0xBFB5AB9F, 0x00a2de90 */
-#define CGP_ANSWER_CARD_STEP_Z 0.02f           /* 0x3CA3D70A, 0x00a2dea0 */
-#define CGP_ANSWER_PANEL_SHIFT 0.28315f        /* 0x3E90F909, 0x00a2de34 */
-#define CGP_ANSWER_ROW_Y 0.25f                 /* 0x3E800000, 0x00a2dfc8 */
-#define CGP_ANSWER_CARD_SCALE 0.35f            /* 0x3EB33333, 0x00a2de08 */
+#define CGP_ANSWER_CARD_PITCH 0.5663f
+#define CGP_ANSWER_CARD_START_X (-1.4193f)
+#define CGP_ANSWER_CARD_STEP_Z 0.02f
+#define CGP_ANSWER_PANEL_SHIFT 0.28315f
+#define CGP_ANSWER_ROW_Y 0.25f
+#define CGP_ANSWER_CARD_SCALE 0.35f
 
-/* Placement of the prompt's backdrop and of the card being answered (0x00a2db70..0x00a2dc88). */
-#define CGP_BACKDROP_Z 0.1f                    /* 0x3DCCCCCD */
-#define CGP_BACKDROP_SCALE_Y 0.75f             /* 0x3F400000 */
-#define CGP_MAIN_CARD_X (-1.9785f)             /* 0xBFFD3F7D */
-#define CGP_MAIN_CARD_Z 0.01f                  /* 0x3C23D70A */
-#define CGP_MAIN_CARD_SCALE 0.4f               /* 0x3ECCCCCD */
+/* Placement of the prompt's backdrop and of the card being answered. */
+#define CGP_BACKDROP_Z 0.1f
+#define CGP_BACKDROP_SCALE_Y 0.75f
+#define CGP_MAIN_CARD_X (-1.9785f)
+#define CGP_MAIN_CARD_Z 0.01f
+#define CGP_MAIN_CARD_SCALE 0.4f
 
-/* Cards in the second row face the other way: a half turn about z (0x40490FDB, 0x00a2df08). */
+/* Cards in the second row face the other way: a half turn about z. */
 #define CGP_HALF_TURN 3.1415927f
 
 /*
@@ -461,40 +450,34 @@
 #define CGP_COMM_STEP_ENEMY_OPERATION 41
 
 /* Messages of CGPCommFaseSub (CGPSetErrorMess / CGPDispErrorMess reasons). */
-#define CGP_MESS_JUNK_COUNTED 0x24     /* card 14 takes the junk count, `addiu $6,$0,0x24`, 0x00a2e600 */
-#define CGP_ERR_NO_PLAYABLE_CARD 30    /* `addiu $6,$0,0x1E`, 0x00a2e90c */
-#define CGP_ERR_NOT_PLAYABLE 17        /* CGPChkPlayable refused the card, `addiu $6,$0,0x11`, 0x00a2eb0c */
-#define CGP_ERR_NOT_DISCARDABLE 18     /* hand card without kind bit 1, `addiu $6,$0,0x12`, 0x00a2eb60 */
-#define CGP_ERR_SLOT_LOCKED 38         /* battle slot with flag 2 set, `addiu $6,$0,0x26`, 0x00a2ebb8 */
-#define CGP_ERR_WRONG_AREA 19          /* `addiu $6,$0,0x13`, 0x00a2ebd0 */
-#define CGP_ERR_ANSWERS_DONE 29        /* `addiu $6,$0,0x1D`, 0x00a2f9cc */
-#define CGP_MESS_ANSWER_OFFER 22       /* shown to the answering side, `addiu $5,$0,0x16`, 0x00a2ee98 */
-#define CGP_MESS_ANSWER_NOTE 28        /* `addiu $5,$0,0x1C`, 0x00a2f89c */
+#define CGP_MESS_JUNK_COUNTED 0x24     /* card 14 takes the junk count */
+#define CGP_ERR_NO_PLAYABLE_CARD 30
+#define CGP_ERR_NOT_PLAYABLE 17        /* CGPChkPlayable refused the card */
+#define CGP_ERR_NOT_DISCARDABLE 18     /* hand card without kind bit 1 */
+#define CGP_ERR_SLOT_LOCKED 38         /* battle slot with flag 2 set */
+#define CGP_ERR_WRONG_AREA 19
+#define CGP_ERR_ANSWERS_DONE 29
+#define CGP_MESS_ANSWER_OFFER 22       /* shown to the answering side */
+#define CGP_MESS_ANSWER_NOTE 28
 
-#define CGP_PAD_DISMISS 0x00F0         /* any face button closes the answer note (`andi $2,$17,0xF0`, 0x00a2f8a0) */
+#define CGP_PAD_DISMISS 0x00F0         /* any face button closes the answer note */
 
-#define CGP_COMMAND_CARD_Z 0.02f       /* 0x3CA3D70A, 0x00a2efcc */
-#define CGP_COMMAND_CARD_SCALE 0.355f  /* 0x3EB5C28F, 0x00a2efbc */
-#define CGP_DEGREES_HALF_TURN 180.0f   /* 0x43340000, 0x00a2f118 */
-#define CGP_COMMAND_BACK_MODEL ((void *) 0x01D0C000) /* lui/ori 0x00a2f1ec */
+#define CGP_COMMAND_CARD_Z 0.02f
+#define CGP_COMMAND_CARD_SCALE 0.355f
+#define CGP_DEGREES_HALF_TURN 180.0f
+#define CGP_COMMAND_BACK_MODEL ((void *) 0x01D0C000)
 
 /*
  * CardLayerStack.flags bit CGPBattleAfterEffect sets on an attacking stack; the
- * end phase clears it on every slot of the side (`andi $2,$2,0xFD`, 0x00a2fadc).
+ * end phase clears it on every slot of the side.
  */
-
-/* Operation cards CardPlayCntOpe counts; ids as in the other CardPlayCntOpe tests of this TU. */
 
 /*
  * An operation card with a duration below this counts down once per end phase;
- * higher durations never expire (`slti $2,$2,0x40`, 0x00a2fb70).
+ * higher durations never expire.
  */
 #define CGP_OPE_PERMANENT_DURATION 64
 
-/* Cards that regain life at the end phase (`addiu $2,$0,6`, 0x00a2fed4; `0xD`, 0x00a2fedc; `0x4D`, 0x00a300d4). */
-
-/* The foe's battle card that makes this side play command 77 on the same slot (`addiu $2,$0,0x36`, 0x00a30204;
- * `addiu $5,$0,0x4D`, 0x00a3021c). */
 
 /* CardSetEffect codes of the attack and damage effects: CardDispEffect plays codes 1-4 as a travelling strip
  * followed by a burst, 21-24 and 31-34 as the variants after one and several destroyed cards, and 11/15/16 as the
@@ -513,8 +496,8 @@
 #define CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED 34
 #define CGP_EFFECT_SWIRL 10            /* swirl around a card (strip CARD_EFFECT_STRIP_SWIRL) */
 #define CGP_EFFECT_DAMAGE 11
-#define CGP_EFFECT_NUMBER 12           /* number that rises over a card, 0x00a2fe8c */
-#define CGP_SE_REGEN 0x2000D           /* `lui $8,2` 0x00a2fe84 */
+#define CGP_EFFECT_NUMBER 12           /* number that rises over a card */
+#define CGP_SE_REGEN 0x2000D
 
 /* CardEffect.phase of the attack effects 1-4 (travel, burst, check whether the card was destroyed, fade), of
  * the delayed attack effects 21-24 and 31-34 (travel, hold, burst, check, fade) and of the damage numbers
@@ -540,14 +523,7 @@
 
 
 /*
- * Steps of CGPBattleFaseProc (command.phaseTimer). The values are the entries of its
- * switch jump table jtbl_00A4F4C0 (0x00a4f4c0, dispatched at 0x00a312cc..0x00a312e8 on the
- * s16 phaseTimer, 62 entries, every other entry goes to the end label 0x00a31138):
- * 0 -> 0x00a302f0, 1 -> 0x00a304d0, 5 -> 0x00a30560, 10 -> 0x00a305d8, 11 -> 0x00a30640,
- * 20 -> 0x00a30698, 21 -> 0x00a30718, 22 -> 0x00a307f0, 30 -> 0x00a30870, 31 -> 0x00a30908,
- * 32 -> 0x00a30950, 40 -> 0x00a30998, 41 -> 0x00a30b58, 42 -> 0x00a30c78, 43 -> 0x00a30e50,
- * 50 -> 0x00a30f28, 51 -> 0x00a30fb8, 52 -> 0x00a31038, 60 -> 0x00a310e0, 61 -> 0x00a31108.
- * The names describe what the code at each target does.
+ * Steps of CGPBattleFaseProc (command.phaseTimer), the values of its switch on the s16 phaseTimer.
  */
 #define CGP_BATTLE_STEP_BEGIN 0            /* check that a battle can take place */
 #define CGP_BATTLE_STEP_COMMAND 1          /* queued battle command, then the front attacks */
@@ -570,28 +546,26 @@
 #define CGP_BATTLE_STEP_CLOSE 60
 #define CGP_BATTLE_STEP_CLOSE_WAIT 61
 
-/* Foe battle cards that strike back during this side's battle (`addiu $5,$0,0x5`, 0x00a30304; `0xC`, 0x00a30314). */
-/* Operation card in play on either side that stops the battle (`addiu $5,$0,0x7D`, 0x00a3044c). */
-/* Card whose attack is followed by its queued command (`addiu $4,$0,0x4C`, 0x00a30744). */
-/* Support card that plays CARD_COMMAND_GARGOYLE_TRIGGER after its attacks (`addiu $4,$0,0x20`, 0x00a30d84;
- * `addiu $5,$0,0x49`, 0x00a30dcc). */
-/* A support card's second layer below this life wears down after the attacks (`slti $2,$2,0x50`, 0x00a30d24). */
+/* Foe battle cards that strike back during this side's battle. */
+/* Operation card in play on either side that stops the battle. */
+/* Card whose attack is followed by its queued command. */
+/* Support card that plays CARD_COMMAND_GARGOYLE_TRIGGER after its attacks. */
+/* A support card's second layer below this life wears down after the attacks. */
 #define CGP_SUPPORT_WEAR_LIMIT 80
 
-/* Error messages of the phase (`addiu $6,$0,6`, 0x00a303ac; `0x14`, 0x00a30410; `0x15`, 0x00a310bc). */
+/* Error messages of the phase. */
 #define CGP_ERR_NO_BATTLE 6
 #define CGP_ERR_BATTLE_BLOCKED 20
 #define CGP_ERR_BATTLE_DONE 21
-/* Value shown with CGP_ERR_BATTLE_BLOCKED while command.recoveryApplied is set (`addiu $7,$0,0x5C`, 0x00a30418). */
+/* Value shown with CGP_ERR_BATTLE_BLOCKED while command.recoveryApplied is set. */
 
-/* Frames the phase waits after an attack (`addiu $2,$0,0x1E`) and after a strong support effect (`0x2D`, 0x00a30ab8). */
+/* Frames the phase waits after an attack  and after a strong support effect. */
 #define CGP_BATTLE_WAIT_FRAMES 30
 #define CGP_BATTLE_SUPPORT_WAIT_FRAMES 45
-/* Frames of the slide of the command window and of the closing wait (`addiu $3,$0,0xA`, 0x00a30510). */
+/* Frames of the slide of the command window and of the closing wait. */
 #define CGP_BATTLE_SLIDE_FRAMES 10
 
-/* CardSetEffect codes and sound of a charged support card (`addiu $6,$0,0x21`, 0x00a30ad0; `0x17`, 0x00a30b20;
- * `lui $8,2` + `ori $8,$8,6`, 0x00a30ab0). Power 3 or more shows the strong effect. */
+/* CardSetEffect codes and sound of a charged support card. Power 3 or more shows the strong effect. */
 #define CGP_EFFECT_SUPPORT_STRONG 33
 #define CGP_EFFECT_SUPPORT 23
 #define CGP_SUPPORT_STRONG_POWER 3
@@ -601,10 +575,10 @@
 #define CGP_MESS_HAND_FULL 0x2B
 /* Error message of the discard prompt ("Throw away this card?"). */
 #define CGP_ERR_DISCARD_CONFIRM 25
-/* Frames the hand list stays inert after it opens (`addiu $3,$0,0x19`, 0x00a312f8). */
+/* Frames the hand list stays inert after it opens. */
 #define CGP_DISCARD_INPUT_DELAY 25
 
-/* Where the enlarged card of the discard selection is drawn (0x3EBCED91 and 0x3E99999A, 0x00a313d4..0x00a313e4). */
+/* Where the enlarged card of the discard selection is drawn. */
 #define CGP_DISCARD_PREVIEW_Y 0.369f
 #define CGP_DISCARD_PREVIEW_Z 0.3f
 
@@ -616,20 +590,19 @@
 #define CGP_END_STEP_CONFIRM 4
 #define CGP_END_STEP_NEXT_TURN 10
 
-/* Halfword index of command.input[0].held in CardGameWork (+0x5AD0 / 2). The loop that flips the pads walks the
- * work area as halfwords (measured: pointers formed as &work->command.input[n].held + k make GCC keep both words
- * of a pass in one base register and drop four instructions of the original's byte-offset induction). */
+/* Halfword index of command.input[0].held in CardGameWork (+0x5AD0 / 2). The pad-flip loop walks the work area
+ * as halfwords: pointers formed as &work->command.input[n].held + k make GCC keep both words of a pass in one
+ * base register and drop four instructions of the byte-offset induction. */
 #define CARD_PAD_INPUT0_WORD 0x2D68
 #define CARD_CMD_INPUT_WORDS (sizeof(CardCommandInput) / sizeof(u16))
-/* 0xC000 sign-extended: the loop keeps it in $9 (addiu $9,$0,-0x4000, 0x00a315c4) ahead of the work + 8 base in $10. */
+/* 0xC000 sign-extended: the loop keeps it in $9 ahead of the work + 8 base in $10. */
 #define CARD_PAD_UP_PAIR (-0x4000)
 
 /*
  * CARD_PAD_FLIP(pad, mask, turned): flips the d-pad bits of the halfword `*pad` (two statements,
  * `turned` is a u16 temporary, `mask` is the 0xC000 pair as the sign-extended register constant the
  * loop keeps, see CARD_PAD_UP_PAIR). The 0xF000 d-pad nibble moves: the 0xC000 bit pair shifts left
- * by 2, the 0x3000 pair shifts right by 2, and the low 12 bits stay (PADFLIP, original
- * 0x00a315e0..0x00a31640).
+ * by 2, the 0x3000 pair shifts right by 2, and the low 12 bits stay.
  */
 #define CARD_PAD_FLIP(pad, mask, turned)                                     \
     turned = ((*(pad) & 0xF000) << 2) & mask;                                 \
@@ -637,31 +610,27 @@
 
 /* Situation cards CardGameProc checks on either side. D.S.S.S., Compulsory Sortie and Override Code refuse the end of
  * a turn while the turn's side still has a card to place and a disposal card that is a Gnosis (D.S.S.S.), a Realian
- * (Override Code) or any disposal card (Compulsory Sortie), waiting (`addiu $5,$0,0x91`, 0x00a31a68; `0x92`,
- * 0x00a319f0; `0x93`, 0x00a31afc). Analyze (`addiu $5,$0,0x79`, 0x00a32244 and 0x00a333b4) shows the hands. */
+ * (Override Code) or any disposal card (Compulsory Sortie), waiting. Analyze shows the hands. */
 
-/* Buttons that dismiss the error message window (`andi $2,$3,0xF0`, 0x00a3173c, on the pressed bits of the side's pad). */
+/* Buttons that dismiss the error message window. */
 #define CGP_PAD_FACE_BUTTONS 0x00F0
-/* Button that asks for the phase change (`andi $2,$23,0x80`, 0x00a31ce0). */
+/* Button that asks for the phase change. */
 #define CGP_PAD_SQUARE 0x0080
-/* Start button of either pad, which opens the menu (`andi $2,$2,0x800`, 0x00a31d28 for pad 0 and 0x00a31d64 for pad 1). */
+/* Start button of either pad, which opens the menu. */
 #define CGP_PAD_START 0x0800
-/* Button that turns the stage (`andi $2,$4,0x1` on cursorPressed, 0x00a32028). */
+/* Button that turns the stage. */
 #define CGP_PAD_ROTATE_STAGE 0x0001
-/* CardGameWork.flags bit that hides the hands (`andi $2,$3,0x80` on the flags halfword, 0x00a321e8 and 0x00a32354). */
+/* CardGameWork.flags bit that hides the hands. */
 #define CGP_FLAG_HIDE_HANDS 0x80
-/* Fixed EE runtime address of the model the error window of CardGameProc enters after the texture
- * (`lui $4,0x1DA8` + `ori $4,$4,0x8100`, 0x00a31714..0x00a3171c). */
+/* Fixed EE runtime address of the model the error window of CardGameProc enters after the texture. */
 #define CGP_GAME_MESS_MODEL ((void *) 0x01DA8100)
 #define PI_F 3.1415927f
 
 /*
- * Partial view of CardDefinition (measured: the canonical record carries u32
- * text offsets, which give it word alignment, and GCC then folds the kind and
- * flags tests of CGPCFPlayCommOperation into one word access; this TU's code
- * keeps them as a byte load and a halfword load. Nested ifs or a local
- * CardDefinition pointer keep the two loads but change the loop: it is no longer
- * strength reduced and one more local label appears).
+ * Partial view of CardDefinition. The canonical record carries u32 text offsets, which give it word
+ * alignment; GCC then folds the kind and flags tests of CGPCFPlayCommOperation into one word access,
+ * while this TU's code keeps a byte load and a halfword load. Nested ifs or a local CardDefinition
+ * pointer keep the two loads but stop the loop from being strength reduced.
  */
 typedef struct CardDefinitionView {
     u8 kind;
@@ -670,7 +639,7 @@ typedef struct CardDefinitionView {
     u8 unmodeled_04[0x20];
 } CardDefinitionView;
 
-/* Movement record fields used by the slot swap at 0x00a25b70. */
+/* Movement record fields used by the slot swap. */
 typedef struct CardMoveLayer {
     u8 powerPlus;
     u8 preservedByte01;
@@ -696,7 +665,7 @@ typedef struct CardMoveWork {
 
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
-/* The placement matrix as floats, or as four quadwords for the per-effect copy (lq/sq, 0x00a238e8). */
+/* The placement matrix as floats, or as four quadwords for the per-effect copy. */
 typedef union CardEffectMatrix {
     float m[4][4];
     Quadword q[4];
@@ -705,9 +674,8 @@ typedef union CardEffectMatrix {
 /*
  * A battle slot as the command code walks it, from the card stack on: the
  * stack, then the shunt position, 0x1BC bytes in all (partial view of
- * CardBoardSlot, measured: indexing a CardBoardSlot array instead puts the
- * slot's 12 byte head into every address and moves the base register, and
- * taking &slots[index].battle once into a local drops 22 instructions).
+ * CardBoardSlot). Indexing a CardBoardSlot array instead puts the slot's 12 byte
+ * head into every address and moves the base register.
  */
 typedef struct CGPStackSlot {
     CardLayerStack stack;
@@ -954,12 +922,9 @@ unsigned char CardDat[0x100] = {
 
 
 /*
- * Shunt one side's cards aside before the computer opponent moves
- * (CardEnemyMove, ov10 0x00a32570, passes it the player's or the enemy's
- * CardPlaySide). Every occupied slot hands its effect position to the shunt
- * position one slot record further on, the disposal board first and the
- * battle board after it; the last disposal slot writes CardPlaySide's
- * lastShuntPosition, the record that follows the disposal board.
+ * Copies each occupied slot's effect position into the shunt position of the next slot,
+ * the disposal board first and then the battle board. CardEnemyMove calls it before the
+ * computer opponent moves.
  */
 void CGPShuntPosSub(CardPlaySide *side)
 {
@@ -984,10 +949,9 @@ void CGPShuntPosSub(CardPlaySide *side)
 
 
 /*
- * Where the cards in play are moving to after the board shifted. Each occupied
- * slot keeps the point it was heading for, takes the shunt position of the slot
- * after it as its new effect position, and covers what is left of the way in ten
- * steps.
+ * Retargets the cards in play after the board shifted: each occupied slot keeps its old
+ * destination, takes the shunt position of the next slot as its new position, and steps
+ * there over ten frames.
  */
 void CGPRecalcPosSub(CardPlaySide *side)
 {
@@ -1027,10 +991,9 @@ void CGPRecalcPosSub(CardPlaySide *side)
 
 
 /*
- * Unknown Armament takes two life off every card standing on a battle or disposal
- * slot of either side, clamped at zero, and starts effects 5 and 13 at each of
- * those stacks, the card's own side for its own cards and the other side for
- * the opponent's.
+ * Unknown Armament takes two life off every card on a battle or disposal slot of either side,
+ * clamped at zero, and starts effects 5 and 13 on each of those stacks. Effects of the foe's
+ * cards are played for the other side.
  */
 void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide,
                    CardPlaySide *foeSide)
@@ -1083,6 +1046,7 @@ void CCO143ExecSub(s32 side, CardGameWork *work, CardPlaySide *ownSide,
 }
 
 
+/* Prints a side's deck, ten card ids per line, each row headed by its first index. */
 void CGPPrintYama(CardPlaySide *side)
 {
     s32 col;
@@ -1103,6 +1067,7 @@ void CGPPrintYama(CardPlaySide *side)
     printf(cgpPrintNewline);
 }
 
+/* Prints a side's junk pile, ten card ids per line, each row headed by its first index. */
 void CGPPrintJunk(CardPlaySide *side)
 {
     s32 col;
@@ -1127,6 +1092,7 @@ void CGPPrintJunk(CardPlaySide *side)
 
 
 
+/* Prints a side's sute pile, ten card ids per line, each row headed by its first index. */
 void CGPPrintSute(CardPlaySide *side)
 {
     s32 col;
@@ -1188,12 +1154,9 @@ void CGPSetErrorMessPlus(s32 side, CardGameWork *work, u8 reason, s16 value)
 
 
 /*
- * Draws the message of one error reason: the lines of its ErrorMessTbl row
- * (at most five, each printed between the font control strings cgpMessFontCode and
- * cgpMessColorCode as CardPlayDispInfo does for the phase message), then the message
- * window model at the given position (x, y, depth, w = 1), scaled by 1.35
- * across and lit for the side that caused the message (a negative side keeps
- * the current light). The model and its texture sit at fixed EE runtime addresses.
+ * Draws the lines of one ErrorMessTbl row, then the message window model at the given
+ * position, scaled 1.35 across and lit for the side that caused the message (a negative
+ * side keeps the current light).
  */
 void CGPDispErrorMessCore(s32 side, u16 reason, u16 x, u16 y, const float position[4])
 {
@@ -1240,6 +1203,7 @@ void CGPDispErrorMessCore(s32 side, u16 reason, u16 x, u16 y, const float positi
     nmlModelEntryCard(CGP_ERROR_MESS_MODEL);
 }
 
+/* Shows the error message at the right-hand screen position (x 1.1). */
 void CGPDispErrorMess3(s32 side, s32 reason)
 {
     float position[4];
@@ -1252,10 +1216,9 @@ void CGPDispErrorMess3(s32 side, s32 reason)
 }
 
 /*
- * Shows the message of CGPDispErrorMess3 (the right-hand message line) and, in
- * the lower left corner of that line, the card the message is about, at 0.8 scale.
- * CardDisp's last two arguments are the card's "owned" flag (1) and its display
- * mode (5); the other callers of CardDisp that draw a card icon pass 1 and 0.
+ * Shows the message of CGPDispErrorMess3 and the card it is about, at 0.8 scale, in the
+ * lower left corner of that line. CardDisp's last two arguments are the owned flag (1) and
+ * the display mode (5).
  */
 void CGPDispErrorMessPlus(s32 side, u16 reason, s32 cardId)
 {
@@ -1275,6 +1238,7 @@ void CGPDispErrorMessPlus(s32 side, u16 reason, s32 cardId)
     CardDisp(&matrix, cardId, 1, 5);
 }
 
+/* Shows the error message at the standard position for the side. */
 void CGPDispErrorMess(s32 side, s32 reason)
 {
     float position[4];
@@ -1286,6 +1250,7 @@ void CGPDispErrorMess(s32 side, s32 reason)
     CGPDispErrorMessCore(side, reason, 124, 164, position);
 }
 
+/* Shows the error message at the second fixed position (y 0.48). */
 void CGPDispErrorMess2(s32 side, s32 reason)
 {
     float position[4];
@@ -1298,11 +1263,9 @@ void CGPDispErrorMess2(s32 side, s32 reason)
 }
 
 /*
- * Draws everything the card game shows beside the board: the message line, the
- * error message of the side that caused it, the information panel of the phase
- * being played with the turn counter on it, and the seven phase-guide models of
- * the side whose phase is running. Phases 0..6 belong to the player and 7..13
- * to the opponent, and a negative phase means no side is playing.
+ * Draws the message line, the error message, the information panel with the turn counter,
+ * and the phase guide of the side whose phase is running. Phases 0..6 belong to the player
+ * and 7..13 to the opponent; a negative phase means no side is playing.
  */
 void CardPlayDispInfo(CardGameWork *workAddress)
 {
@@ -1323,6 +1286,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
     s32 tens;
     s32 i;
 
+    /* The interrupt and permanent messages replace the base message. */
     text = work->mess;
     if (work->interruptMess != 0) {
         text = work->interruptMess;
@@ -1331,6 +1295,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         text = work->permanentMess;
     }
 
+    /* Error message for the side that caused it, or for both sides when that side plays automatically. */
     if (work->errorMessKind != 0) {
         s32 bothSides;
 
@@ -1386,6 +1351,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
             flag = 0;
         }
     }
+    /* Animation step of the information panel. */
     switch (work->infoPanelPhase) {
     case CGP_INFO_PANEL_INIT:
     default:
@@ -1481,6 +1447,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         return;
     }
 
+    /* Information panel and its shadow, lit for player 1 when flag is 0 and for player 2 otherwise. */
     xglMatrixUnit(place);
     xglMatrixTrans(place, place, work->infoPanelPos);
     xglMatrixScale(place, place, work->infoPanelScale);
@@ -1542,6 +1509,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
     }
     nmlModelEntry(CGP_INFO_PANEL_SIDE_MODEL);
 
+    /* Turn counter: the plate, then the number frame and the two digit models. */
     pos[0] = 0.0f;
     pos[1] = 1.72f;
     pos[2] = 0.0f;
@@ -1593,6 +1561,7 @@ void CardPlayDispInfo(CardGameWork *workAddress)
         return;
     }
 
+    /* Phase guide of the side whose phase is running: one lamp model per phase of that side. */
     if (work->command.phase < CARD_PHASES_PER_SIDE) {
         area = CGPCursor2Area(workAddress);
         pos[1] = 1.53f;
@@ -1678,12 +1647,10 @@ void CardPlayDispInfo(CardGameWork *workAddress)
 }
 
 /*
- * Whether the Square request for the confirm prompt (CARD_FLOW_CONFIRM) is allowed
- * in the current phase; CardGameProc asks before it sets it (0x00a31ca8,
- * 0x00a31cec). Phases 0, 5, 6, 7, 12 and 13 never allow it and a phase outside
- * 0..13 always does. Phases 1 and 8 refuse it when their flag is set; phases 2,
- * 3, 4, 9, 10 and 11 refuse it then too and also once the phase timer has
- * reached 3.
+ * Whether the Square request for the confirm prompt (CARD_FLOW_CONFIRM) is allowed in the
+ * current phase. Phases 0, 5, 6, 7, 12 and 13 never allow it and a phase outside 0..13 always
+ * does. Phases 1 and 8 refuse it when their flag is set; phases 2, 3, 4, 9, 10 and 11 refuse it
+ * then too and also once the phase timer has reached 3.
  */
 s32 CGPChkFaseLock(CardGameWork *work)
 {
@@ -1728,10 +1695,9 @@ s32 CGPChkFaseLock(CardGameWork *work)
 }
 
 /*
- * Register one effect of the card game. The first entry of the work area's
- * effect table whose code is zero is taken, so nothing happens once all 64
- * are busy. position is where the effect starts (NULL leaves the start each
- * code picks for itself), stack the board slot it travels to.
+ * Registers one effect of the card game in the first free entry of the work's effect table
+ * (64 entries; nothing happens when all are busy). position is where the effect starts (NULL
+ * leaves the start each code picks), stack the board slot it travels to.
  */
 void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 soundId,
                    float *position, CardLayerStack *stack)
@@ -1768,6 +1734,7 @@ void CardSetEffect(s32 side, CardGameWork *workAddress, u8 code, s8 value, s32 s
     effect->velocity[3] = 1.0f;
     effect->position[3] = 1.0f;
 
+    /* Per-code start position, timer, sound and travel velocity. */
     switch (code) {
     case CGP_EFFECT_SWIRL:
         xglSoundEffectNormalID(CGP_SE_REGEN, 0);
@@ -2015,10 +1982,9 @@ void CDEMatrixSub(float matrix[4][4])
 
 
 /*
- * Draws and advances the 64 card-game effects of one side. Each effect starts
- * from a fresh copy of the caller's placement matrix; the matrix is read as
- * volatile, so the copy at the top of the loop is never moved into the loop
- * branch (the original keeps the epilogue `ld $16` there, 0x00a25070).
+ * Draws and advances the 64 card-game effects of one side. Each effect starts from a fresh
+ * copy of the caller's placement matrix; the matrix is read as volatile, so the copy at the top
+ * of the loop is never moved into the loop branch (the original keeps the epilogue there).
  */
 void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *matrix)
 {
@@ -2044,6 +2010,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
         row = matrix->q[3];
         local.q[3] = row;
 
+        /* Attack effects 1-4: travelling strip, burst, destroyed check, then fade. */
         switch (effect->code) {
         case CGP_EFFECT_FRONT_ATTACK:
         case CGP_EFFECT_PIERCE_ATTACK:
@@ -2190,6 +2157,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
+        /* Delayed attack effects 21-24: travel, hold, burst, destroyed check, then fade. */
         case CGP_EFFECT_FRONT_ATTACK_ONE_DESTROYED:
         case CGP_EFFECT_PIERCE_ATTACK_ONE_DESTROYED:
         case CGP_EFFECT_SUPPORT:
@@ -2323,6 +2291,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
+        /* Delayed attack effects 31-34: the same steps as 21-24. */
         case CGP_EFFECT_FRONT_ATTACK_MANY_DESTROYED:
         case CGP_EFFECT_PIERCE_ATTACK_MANY_DESTROYED:
         case CGP_EFFECT_DIRECT_ATTACK_MANY_DESTROYED:
@@ -2455,6 +2424,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
+        /* Strong support attack: travel, delay, then the burst repeated at four corners around the target. */
         case CGP_EFFECT_SUPPORT_STRONG:
             if (side != effect->side) {
                 break;
@@ -2605,6 +2575,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
             nmlModelSetAlpha(CARD_EFFECT_ALPHA);
             nmlModelEntryCard(CARD_EFFECT_SPRITE_MODEL);
             break;
+        /* Damage digits, drawn for the side other than the effect's own: wait, then show the value. */
         case CGP_EFFECT_DAMAGE:
             if (side == effect->side) {
                 break;
@@ -2723,6 +2694,7 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
                 break;
             }
             break;
+        /* Number effect: digits at the stack or at the bottom or top of the screen. */
         case CGP_EFFECT_NUMBER:
             if (side != effect->side) {
                 break;
@@ -2904,9 +2876,8 @@ void CardDispEffect(s32 side, CardGameWork *work, volatile CardEffectMatrix *mat
 }
 
 /*
- * Opens a card list window on the cards of a hand that has reached the hand
- * limit (CGPEndFaseProc, 0x00a3126c). Returns -1 once the window is laid out and
- * 0 when the hand is below the limit.
+ * Opens a card list window on the cards of a hand that has reached the hand limit. Returns
+ * -1 once the window is laid out and 0 when the hand is below the limit.
  */
 s32 CGPCheckTeMax(CardListWindow *list, CardHand *hand)
 {
@@ -2933,6 +2904,10 @@ s32 CGPCheckTeMax(CardListWindow *list, CardHand *hand)
     return 0;
 }
 
+/*
+ * Finishes a played command: takes the card from hand slot index (when index is not -1), pays
+ * its reserve cost and puts the card on the junk pile.
+ */
 void CGPCommFinishSub(CardGameWork *work, CardPlaySide *side, s32 index)
 {
     s32 cost;
@@ -2969,6 +2944,7 @@ void CardGameInit(CardGameWork *work)
     s32 i;
     s32 shown;
 
+    /* Game flags, command control and messages. */
     work->flags = 0;
     if (work->command.input[0].held & PAD_TRIANGLE) {
         work->flags = CGP_FLAG_HELD_TRIANGLE;
@@ -3021,6 +2997,7 @@ void CardGameInit(CardGameWork *work)
             queueCommand += 4;
         }
     }
+    /* Cursor, stage models and rotation. */
     CardCursorPassive(&work->cursor);
     CGPSetMessage(work, 0);
     work->command.slideDirection = 0;
@@ -3043,6 +3020,7 @@ void CardGameInit(CardGameWork *work)
     work->rotStageVector[1] = CGP_ROT_STAGE_START_Y;
     work->rotStageVector[2] = 0.0f;
     work->rotStageVector[0] = CGP_ROT_STAGE_START_X;
+    /* Model, texture and effect files of the card game. */
     CardFread(CGP_ARENA(0x0), "game\\E_L.lex");
     CardFread(CGP_ARENA(0x400), "game\\E_S.lex");
     CardFread(CGP_ARENA(0x800), "game\\down_L.lex");
@@ -3130,11 +3108,10 @@ void CardGameInit(CardGameWork *work)
 }
 
 /*
- * Starts the next phase: phases 0..6 are one side's and 7..13 the other's, and
- * after phase 13 the turn counter advances and the phases start over. Clears the
- * per-phase state, shows the phase's message and interrupt message and points the
- * help page at the phase's topic. Called by the computer player's phase handlers
- * (card_enemy.c) and the phase routines of this TU.
+ * Starts the next phase: phases 0..6 belong to one side and 7..13 to the other, and after
+ * phase 13 the turn counter advances. Clears the per-phase state and shows the phase's
+ * messages. Called by the computer player's phase handlers (card_enemy.c) and the phase
+ * routines of this TU.
  */
 void CGPNextTurnSub(CardGameWork *work)
 {
@@ -3294,12 +3271,10 @@ void CGPequipSub(CardGameWork *work, CardPlaySide *side, CardLayerStack *stack, 
 }
 
 /*
- * Whether one equipment card may be attached to one weapon card. Both cards
- * must be battle cards. A weapon that only a Mech can equip takes a Mech card,
- * except Lv 1 KOS-MOS, Durandal and Zohar Emulator, and Lv 10 KOS-MOS only on
- * the Third Armament; a weapon that only Humans and Realians can equip takes a
- * Human or Realian card, except the Ziggy cards and Albedo. Every other weapon
- * takes none.
+ * Whether one equipment card may be attached to one weapon card. Both must be battle cards.
+ * A Mech-only weapon takes a Mech card (not Lv 1 or Lv 10 KOS-MOS, Durandal or Zohar Emulator;
+ * Lv 10 KOS-MOS only on the Third Armament). A Human weapon takes a Human or Realian card, except
+ * the Ziggy cards and Albedo. Every other weapon takes none.
  */
 s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId)
 {
@@ -3339,16 +3314,7 @@ s32 CGPWeaponEquipChk(CardGameWork *work, s32 weaponId, s32 equipId)
     return allowed;
 }
 
-/*
- * Attaches the picked-up hand card (held: hand position and card id) to the
- * board card under the cursor (target), then confirms with the decide sound
- * and restarts the phase timer. Every refusal plays the buzzer instead.
- * The target must lie in the acting side's disposal or battle row and hold a
- * card. The Third Armament only attaches to Lv 10 KOS-MOS. A Mech weapon
- * attaches to a Mech card except Lv 1 and Lv 10 KOS-MOS, Durandal and Zohar
- * Emulator. A Human weapon needs a Human or Realian target other than the
- * Ziggy cards and Albedo.
- */
+/* Equips the held hand card to the target stack, plays the decide sound and restarts the phase timer. */
 static inline void CGPAttachHeldCard(CardGameWork *work, CardPlaySide *ownSide,
                                      CardLayerStack *stack, s32 handIndex)
 {
@@ -3357,6 +3323,12 @@ static inline void CGPAttachHeldCard(CardGameWork *work, CardPlaySide *ownSide,
     work->command.phaseTimer = 1;
 }
 
+/*
+ * Attaches the picked-up hand card (held) to the card under the cursor (target), which must hold a card
+ * in the acting side's disposal or battle row; every refusal plays the buzzer. The Third Armament attaches
+ * only to Lv 10 KOS-MOS, a Mech weapon to a Mech card except Lv 1 and Lv 10 KOS-MOS, Durandal and Zohar
+ * Emulator, and a Human weapon to a Human or Realian card other than the Ziggy cards and Albedo.
+ */
 void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CardCursorPosition held,
                          CardCursorPosition target)
 {
@@ -3413,12 +3385,10 @@ void CGPDisposeWeaponSub(s32 side, CardGameWork *work, CardCursorPosition held,
 }
 
 /*
- * Board area the cursor currently points at. The ten areas follow the cursor's
- * zone: the enemy hand is zone 0 (area 0 while the cursor is on one of its
- * cards, 1 once it is past them), zones 1 to 4 are the enemy board row (area 2
- * for its last column, 3 for its first, 4 otherwise), zones 5 to 8 the player
- * board row (areas 7, 6 and 5 the same way round) and zone 9 the player hand
- * (area 9 on a card, 8 past them).
+ * Board area the cursor points at. Zone 0 is the enemy hand (area 0 on one of its cards, 1 past
+ * them) and zone 9 the player hand (area 9 on a card, 8 past them). Zones 1..4 are the enemy board
+ * row (area 2 for its last column, 3 for its first, 4 otherwise) and zones 5..8 the player's
+ * (area 7 for its last column, 6 for its first, 5 otherwise).
  */
 s32 CGPCursor2Area(CardGameWork *work)
 {
@@ -3461,6 +3431,10 @@ s32 CGPCursor2Area(CardGameWork *work)
     return area;
 }
 
+/*
+ * Fills the cursor position for the area under the cursor: its slot index, the card id there and
+ * the card stacked on it (-1 when none).
+ */
 void CGPCursor2Pos(CardCursorPosition *position, CardGameWork *work)
 {
     position->cardId = -1;
@@ -3536,10 +3510,9 @@ void CGPCursor2Pos(CardCursorPosition *position, CardGameWork *work)
 
 
 /*
- * Clamps the cursor index to 0..3, resolves the cursor's zone/card (
- * CGPCursor2Pos), then for zones 2, 3, 6 and 7 sets the highlight position
- * to 0.175; for zones 4 and 5 sets it to 0.355 and rounds the cursor zone
- * down to the nearest odd value. Returns the resolved card id.
+ * Clamps the cursor index to 0..3 and resolves the card under the cursor (CGPCursor2Pos). Zones 2,
+ * 3, 6 and 7 get a highlight of 0.175; zones 4 and 5 get 0.355 and their cursor zone is rounded down
+ * to the nearest odd value. Returns the resolved card id.
  */
 s16 CGPCMSub(CardGameWork *work)
 {
@@ -3600,16 +3573,10 @@ static inline void CGPCursorToSlot(CardGameWork *work)
 }
 
 /*
- * Moves the cursor of one controller (side 0 or 1) over the board zones and
- * the two card piles and draws the card preview while the preview button is
- * held. Returns 1 when the preview was drawn.
- *
- * With a pile walked (cursorMoveStep) the pile's top card or the card under
- * the pile cursor is previewed; otherwise the pad steps the zone (up/down) and
- * the slot (left/right) and CGPCursor2Pos supplies the card under the cursor.
- * Entering the player's pile slot (zone 9, slot 3) or the enemy's (zone 0,
- * slot 0) starts walking that pile when it holds cards. A move that starts a
- * pile leaves the position's zone unset; the original reads it anyway.
+ * Moves one controller's cursor (side 0 or 1) over the board zones and the two card piles, and draws
+ * the card preview while the preview button is held (returns 1 when it was drawn). Entering the player's
+ * pile slot (zone 9, slot 3) or the enemy's (zone 0, slot 0) walks that pile when it holds cards; a move
+ * that starts a pile leaves the position's zone unset, as the original does.
  */
 s32 CGPCursorMove2(s32 side, CardGameWork *work)
 {
@@ -3750,6 +3717,7 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         if (work->cursorZone >= 10) {
             work->cursorZone = 0;
         }
+        /* Entering a pile slot starts walking that pile when it holds cards. */
         started = 0;
         if (prevZone != CGP_AREA_PLAYER_HAND && work->cursorZone == CGP_AREA_PLAYER_HAND &&
             work->cursorIndex == CGP_PLAYER_PILE_SLOT) {
@@ -3774,10 +3742,9 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
         if (started == 0) {
             area = CGPCursor2Area(work);
             /*
-             * flag now: the hand row is mirrored by the rotated stage, so left
-             * and right swap. Phases 1-3 of a side use the player hand row
-             * (zone 9) and phase 4 the other one (zone 0), see
-             * CGP_SIDE1_FIRST_PHASE for the phases of the second side.
+             * Left and right swap when the stage is rotated, because the hand row is mirrored.
+             * Phases 1-3 of a side use the player hand row (zone 9) and phase 4 the other one (zone 0);
+             * CGP_SIDE1_FIRST_PHASE gives the phases of the second side.
              */
             flag = 0;
             switch (work->command.phase) {
@@ -4002,10 +3969,9 @@ s32 CGPCursorMove2(s32 side, CardGameWork *work)
 }
 
 /*
- * Moves the cursor (CGPCursorMove2) and discards its result. Defined void, but
- * ov10/ccu_038_exec_sub.c declares it as returning s32 (ccu_038_exec_sub.h records
- * the measurement: with a void declaration the register allocation of the loops
- * after each of its seven calls changes), so it is not in include/ov10/cgp.h.
+ * Moves the cursor (CGPCursorMove2) and discards its result. It is void here, but
+ * ov10/ccu_038_exec_sub.h declares it as s32 for its callers, so it is not in
+ * include/ov10/cgp.h.
  */
 void CGPCursorMove(s32 flag, CardGameWork *work)
 {
@@ -4013,13 +3979,10 @@ void CGPCursorMove(s32 flag, CardGameWork *work)
 }
 
 /*
- * Put the cursor on one board area, undoing any movement in progress. The area
- * codes are the ones CGPCursor2Area returns, and slot picks the column inside
- * the area: areas 0 and 1 are the enemy hand, 2 and 3 the last and the first
- * column of the enemy board row, 4 its two middle columns, 5 the two middle
- * columns of the player board row, 6 and 7 its first and last column, and 8
- * and 9 the player hand. The cursor then takes the screen position of the hand
- * it stands in.
+ * Puts the cursor on a board area and slot, undoing any pile walk in progress. The area
+ * codes are the ones CGPCursor2Area returns: 0 and 1 the enemy hand, 2 and 3 the last and
+ * first column of the enemy board row, 4 its two middle columns, 5 the two middle columns
+ * of the player board row, 6 and 7 its first and last column, 8 and 9 the player hand.
  */
 void CGPSetCursor(CardGameWork *work, u16 area, u16 slot)
 {
@@ -4090,6 +4053,7 @@ const char cgpPrintJunkFormat[16] = "Junk[%2d]:";
 const char cgpPrintSuteFormat[16] = "Sute[%2d]:";
 const char cgpMessFontCode[8] = "\x0b\x0d";
 const char cgpMessColorCode[8] = "\x19\x03";
+/* Returns 1 when the command id is one of the entries of CGPCPTbl, otherwise 0. */
 s32 CGPChkPlayable(s16 command)
 {
     s32 i;
@@ -4103,6 +4067,8 @@ s32 CGPChkPlayable(s16 command)
 }
 
 
+/* Playability test for a command card: 0 when CGPChkPlayable refuses the id, otherwise it checks
+ * the cards in play on both sides. */
 s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
 {
     CardPlaySide *own;
@@ -4117,13 +4083,9 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
     if (playable == 0) {
         return 0;
     }
-    /* The two arms below are identical and emit no code. They stand for a join point
-     * between the playability test and the switch. The original object code keeps the
-     * player and enemy side base addresses in their own registers ($17 = work + 0x45C
-     * at 0x00a27680, $18 = work + 0x2F08 at 0x00a27674; the first sits in the delay slot of
-     * the CGPChkPlayable call at 0x00a2767c and both are used by the switch cases); without
-     * the join the compiler folds those offsets into the work pointer and the registers are
-     * lost. */
+    /* The two arms below are identical and emit no code. They mark a join point between the
+     * playability test and the switch; without it the compiler folds the side base offsets
+     * into the work pointer and the two base registers are lost. */
     if (command == 0) {
         found = 0;
         i = 0;
@@ -4195,6 +4157,7 @@ s32 CGPChkOpePlayable(s32 side, CardGameWork *work, s16 command)
     return 1;
 }
 
+/* Clears the end flag of every disposal slot of the side. */
 void CardPlayClearEndflg(CardPlaySide *side)
 {
     s32 i;
@@ -4234,6 +4197,8 @@ s32 CGPChkCardPlayCost(CardGameWork *work, CardPlaySide *side, s32 command)
     return cost;
 }
 
+/* Plays the hand card at index: a battle card runs its command and takes the first empty disposal
+ * slot; nothing happens when no slot is free. */
 void CardPlayDisployment(u16 side, CardGameWork *workAddress, CardPlaySide *ownSide, s32 index)
 {
     CardGameWork *work = workAddress;
@@ -4486,8 +4451,7 @@ s32 CGPDisposeSub(s32 side, CardGameWork *work, s32 index)
 /*
  * Moves the cursor (CGPCursorMove2) and resolves the card at its new
  * position (CGPCursor2Pos), then clears the resolved card id to -1 unless
- * the zone is 2 or 4 (nonzero flag) or 5 or 6 (zero flag). `unused` (the
- * second parameter) is forwarded by every caller but never read here.
+ * the zone is 2 or 4 (nonzero flag) or 5 or 6 (zero flag). `unused` is never read.
  */
 s16 CGPMoveSub(s32 flag, void *unused, CardGameWork *work)
 {
@@ -4598,7 +4562,7 @@ s32 CGPBattleBeforeEffect(s32 side, CardGameWork *work, s32 power, CardLayerStac
 
 /*
  * Extra battle effects the attacking card scores, added to the effect count
- * CGPBattleCalcuration keeps. A card whose stack carries flag 0x80 scores
+ * CGPBattleCalcuration keeps. An attacker whose stack has the no-damage flag scores
  * nothing at all. The MOMO cards score one for Kirschwasser standing anywhere on
  * their own battle row; they and the 100 Series score one more when the defending
  * card is a Gnosis, and any attacker stacking a Saber scores three for the
@@ -4771,7 +4735,6 @@ s32 CGPBAEsub(s32 side, CardGameWork *work, s32 power, CardLayerStack *attacker,
                 }
             }
             if (found != 0) {
-                /* the head of a side record is the play record of its hand */
                 junkIndex = CardPlayJunkCnt(foe) - 1;
                 if (junkIndex >= 0) {
                     card = foe->junk[junkIndex];
@@ -4865,11 +4828,11 @@ void CGPBattleAfterEffect(s32 side, CardGameWork *work, s32 effect, s32 operand,
 
 /*
  * Damage one attack deals. The attacker's effects raise the power, the
- * defender's lower it, and what is left is taken off the defending card. A
- * card stacked on the attacker that pierces (Proto Dora, AG-05, VX-7000 or Cannon) lets the damage
- * that destroys the defending card pass to the card behind it, which sets the
- * destroyed code to 1 for the defending card alone and to 2 for both. The
- * damage still left over is returned.
+ * defender's lower it, and what is left is taken off the defending card. A card
+ * stacked on the attacker that pierces (Proto Dora, AG-05, VX-7000 or Cannon) passes
+ * the damage beyond the defending card's life to the card behind it. *destroyed is set
+ * to 1 when the defending card is destroyed and to 2 when the card behind is too.
+ * The damage still left over is returned.
  */
 s32 CGPBattleCalcuration(s32 side, CardGameWork *work, s32 power, s32 *battleDone,
                          CardLayerStack *attacker, CardLayerStack *defender,
@@ -4988,8 +4951,7 @@ s32 CGPCalcPowerPlus(CardGameWork *work, CardLayerStack *card, s32 power)
  * Power a card gains or loses from the situation cards in play. Hilbert Effect
  * on either side costs a Gnosis card one point; every copy of Stim on this side
  * adds one to a Human, every copy of Mysterious Girl on either side one to a
- * Gnosis (the disc text says every card except Gnosis), and every copy of Zohar
- * one to any card. Albedo also gains a point while Kirschwasser stands on one of
+ * Gnosis, and every copy of Zohar one to any card. Albedo also gains a point while Kirschwasser stands on one of
  * this side's battle slots, and Hammer one for every battle slot holding a Mech.
  */
 s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
@@ -5066,8 +5028,8 @@ s32 CGPCalcPowerEnv(s32 side, CardGameWork *work, s32 power, s32 cardId)
  * the damage timer down or copies the life for display, and keeps the power in
  * line with the base card's definition while nothing is stacked on it. A base
  * card without life left (once the damage timer ran out) sends every card of the
- * stack to the discard or junk pile; a stacked card without life goes to the junk
- * pile. Each moved card gets a move record that slides it to the pile.
+ * stack to the discard pile under Gnosis Phenomenon and to the junk pile otherwise;
+ * a stacked card without life goes to the junk pile. Each moved card gets a move record that slides it to the pile.
  * `place` names the board area (CGP_AREA_*) and slot the stack stands on.
  */
 void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
@@ -5088,7 +5050,7 @@ void CGPHPCheckSub(CardDefinition *definitions, CardPlaySide *side,
         stack->layers[0].shownLife = stack->layers[0].life;
     }
     if (stack->layers[1].cardId < 0) {
-        /* powerLimit is compared as a signed byte (`lb`, 0x00a295f8). */
+        /* powerLimit is compared as a signed byte. */
         if (stack->powerLimit != definitions[stack->layers[0].cardId].basePower) {
             stack->power = definitions[stack->layers[0].cardId].basePower;
             stack->powerLimit = definitions[stack->layers[0].cardId].basePower;
@@ -5217,8 +5179,8 @@ void CGPRefreshFieldHP(CardGameWork *work)
  * command runs first; otherwise the top card of the stack decides the attack
  * type and power. When the command matches that type the slot is highlighted,
  * its countdown runs, and once it reaches zero the card attacks: the opposing
- * card (and for CGP_ATTACK_PIERCE the one behind it), the `support` stack, or the
- * other side directly. The damage left over is shown and paid from the foe's
+ * card (and the one behind it when that slot is occupied), the `support` stack, or
+ * the other side directly. The damage left over is shown and paid from the foe's
  * hand, one card per point of damage. Returns 1 when a queued command ran, otherwise 0.
  */
 s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
@@ -5442,6 +5404,8 @@ s32 CGPBattleSub(s32 side, u16 command, s32 slot, CardGameWork *work,
     return result;
 }
 
+/* Starts a stage rotation to stage when the save enables it, in the 2P battle phase, once the
+ * cooldown has run out. */
 void CGPRotStageSub(CardGameWork *work, u32 stage)
 {
     if ((work->save->flags & CARD_SAVE_ROTATE_STAGE) && work->fase == CARD_FASE_BATTLE_2P &&
@@ -5460,13 +5424,13 @@ void CGPRotStageSub(CardGameWork *work, u32 stage)
 
 
 
-/* Frames left to wait after a draw (`sb` 0x00a2af48, counted down `lbu`/`sb` 0x00a2afdc / 0x00a2afec). */
+/* Frames left to wait after a draw. */
 static u8 timer_1;
-/* Exchanges of the opening hand still on offer (set at 0x00a2a7a4, spent at 0x00a2aa94, tested at 0x00a2a81c). */
+/* Exchanges of the opening hand still on offer. */
 static u8 change_2;
-/* Hand index the exchange prompt and the draw steps highlight (`lb` 0x00a2a8b8, `sb` 0x00a2a7b0). */
+/* Hand index the exchange prompt and the draw steps highlight. */
 static s8 cardno_3;
-/* Cards still to pay for in the effect steps, then cards still to draw (`sw` 0x00a2a7a8, 0x00a2ac58, 0x00a2af6c). */
+/* Cards still to pay for in the effect steps, then cards still to draw. */
 static s32 cnt_0;
 
 /*
@@ -5607,7 +5571,7 @@ void CGPDrawFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide, CardPl
     {
         s32 slot;
 
-        /* Count the effect cards on the board: 1 for a disposal slot, 2 for a battle slot, both sides. */
+        /* Counts the Matthews cards on both sides: one point each in a disposal slot, two in a battle slot. */
         cnt_0 = 0;
         if (CardPlayCntDsp(ownSide, CARD_ID_MATTHEWS)) {
             cnt_0 += 1;
@@ -5791,6 +5755,10 @@ static inline void CGPMoveRefuse(s32 side, CardGameWork *work, s16 reason)
     xglSoundEffectNormalID(SE_BUZZER, 0);
 }
 
+/*
+ * Move phase for one side: picks a card from the disposal or battle row, lists the slots it can
+ * go to and moves it there. Lv 10 MOMO, Hilbert Effect and A Rat in a Trap refuse some moves.
+ */
 void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 {
     u16 pressed;
@@ -6088,14 +6056,12 @@ void CGPMoveFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 
 /* The hand card the cursor picked (CGPCursor2Pos fills it in step 1); every later step works on it. */
 static CardCursorPosition mas_6;
-/* Cards still to be discarded (`lw`/`sw` 0x00a2be14, 0x00a2c2fc, 0x00a2c4f8). */
+/* Cards still to be discarded. */
 static s32 OfferingCnt_7;
 
 /*
- * One call per frame for the side whose turn it is (called with the side, the work area and the side's
- * card record). zoneA, zoneB and zoneC are the cursor zones of the side: the hand, the disposal row and
- * the battle row for the pick and attach steps; the discard and put-down steps (11..13) use zoneA for
- * the disposal row and zoneB for the battle row.
+ * Set phase for one side, run once per frame. zoneA, zoneB and zoneC start as the side's hand,
+ * disposal row and battle row; the discard steps reassign zoneA and zoneB.
  */
 void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 {
@@ -6144,7 +6110,7 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
         work->cursor.selectionSubMode = 1;
         work->cursor.selectionMode = 1;
         work->command.phaseTimer++;
-        /* Card kinds in the order the hand shows them. */
+        /* Sort the hand by card kind: kinds 1, 4 and 2 first. */
         order[0] = 1;
         order[1] = 4;
         order[2] = 2;
@@ -6533,6 +6499,10 @@ void CGPSetFaseProc(s32 side, CardGameWork *work, CardPlaySide *ownSide)
 
 
 
+/*
+ * Runs the steps of one command card, selected by its card id and work->command.step, for the
+ * side given. Returns -1 when the command is finished.
+ */
 s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
 {
     CardPlaySide *own;
@@ -6545,7 +6515,6 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
     Matrix4 firstMatrix;
     float secondScale[4];
     Matrix4 secondMatrix;
-    /* The original static names are noted beside each. */
     static CardCursorPosition cursor;        /* cursor */
     static s16 card0[1];                    /* card0: first card picked to throw away */
     static s16 card1;                       /* card1: second card */
@@ -6614,6 +6583,7 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
+    /* Gnosify: needs two cards in hand; the player picks two different cards, which are discarded. */
     case CARD_ID_GNOSIFY:
     {
         s16 handCount = CardPlayHandCnt(&own->hand);
@@ -6979,6 +6949,7 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
         }
         break;
     }
+    /* Rhine Maiden: the foe pays CGP_COST_REPEAT cost cards, one per pass. */
     case CARD_ID_RHINE_MAIDEN:
         switch (work->command.step) {
         case 0:
@@ -7003,6 +6974,7 @@ s32 CGPCFPlayCommOperation(s16 side, CardGameWork *work, s16 command)
             break;
         }
         break;
+    /* Unknown Armament: waits CGP_EFFECT_DELAY frames before its effect. */
     case CARD_ID_UNKNOWN_ARMAMENT:
         switch (work->command.step) {
         case 0:
@@ -7223,7 +7195,7 @@ void CGPAnswerSub(CardGameWork *work, CardPlaySide *side, s32 cardIndex)
  * Commands one side's disposal slots play once its command phase ends. A slot
  * holding one of these cards whose stack carries flag 1 plays the command that
  * card ends the phase with: Bunnie, Testament, Allen, Tony, Gaignun and Margulis
- * each play their own trigger command (their E mark has been removed).
+ * each play their own trigger command.
  */
 void CGPCommFaseEndSub(s32 side, CardPlaySide *ownSide, CardGameWork *work)
 {
@@ -7295,6 +7267,11 @@ static s16 no_16;
 static s16 p1no_17;
 static s16 p2no_18;
 
+/*
+ * Command phase of one side, one step per frame (CGP_COMM_STEP_*): checks the junk pile for
+ * Flag Reset, sorts and picks a card from the hand, plays it and runs the answer steps of both
+ * sides. cpuTurn is set when the computer plays this side.
+ */
 void CGPCommFaseSub(s32 side, CardGameWork *work, u16 cpuTurn, u16 cpuFoe)
 {
     u8 order[3];
@@ -8043,7 +8020,7 @@ void CGPEndFaseSub(s32 side, CardPlaySide *ownSide, CardPlaySide *foeSide,
         }
         if (foeSide->operations[i] >= 0) {
             if (foeSide->operationDuration[i] < CGP_OPE_PERMANENT_DURATION) {
-                /* Tests the own side's operation card, not the foe's (0x00a2fc84). */
+                /* Tests the own side's operation card, not the foe's. */
                 if (ownSide->operations[i] == CARD_ID_COLLECTIVE) {
                     found = 0;
                     for (j = 0; j < CARD_BOARD_SLOTS; j++) {
@@ -8182,7 +8159,7 @@ static s32 i_19;
 static s32 j_20;
 /* Frames the phase still waits before its next step. */
 static u8 timer_21;
-/* Cleared when the support step starts; no reader found. */
+/* Cleared when the support step starts. */
 static u8 firstattack_22;
 
 
@@ -8356,6 +8333,7 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         }
         CGPRefreshFieldHP(work);
         return;
+    /* The foe's counter cards strike back at this side's slot. */
     case CGP_BATTLE_STEP_COUNTER:
     {
         s32 found;
@@ -8400,6 +8378,7 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         work->command.step = 0;
         work->command.phaseTimer = CGP_BATTLE_STEP_SUPPORT_CHARGE;
         break;
+    /* Support cards count their power down before they attack. */
     case CGP_BATTLE_STEP_SUPPORT_CHARGE:
         firstattack_22 = 0;
         if (ownSide->battle[i_19].battle.layers[0].cardId >= 0) {
@@ -8508,6 +8487,7 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
         }
         CGPRefreshFieldHP(work);
         return;
+    /* Direct attacks hit the other side without a target card. */
     case CGP_BATTLE_STEP_DIRECT:
         if (CGPBattleSub(side, CGP_ATTACK_DIRECT, i_19, work, ownSide, foeSide, 0)) {
             return;
@@ -8567,9 +8547,9 @@ void CGPBattleFaseProc(s32 side, CardGameWork *work)
 
 
 
-/* Hand index the discard selection stands on (read `lw` 0x00a31354, written 0x00a312fc). */
+/* Hand index the discard selection stands on. */
 static s32 Now_23;
-/* Frames left before the discard selection reacts (`lw` 0x00a31318, set to 25 at 0x00a31300). */
+/* Frames left before the discard selection reacts. */
 static s32 Timer_24;
 
 /*
@@ -8692,31 +8672,25 @@ void CGPEndFaseProc(s32 side, CardGameWork *work, CardListWindow *window)
 
 
 /*
- * Matrix copies below are the original's constrained lq/sq pairs (the sceVu0Copy shape, the
- * same form as tu001 CardMainInit). Per copy: 8 instructions, lq $2,off(src) then
- * sq $2,off(dest) for off = 0x00, 0x10, 0x20, 0x30. The original addresses are:
- *   0x00a32158..0x00a32174  models[4]  (dest $3)
- *   0x00a3217c..0x00a32198  models[5]  (dest $4)
- *   0x00a321c4..0x00a321e0  cursorMatrix (dest $18)
- *   0x00a3230c..0x00a32328  models[6]  (dest $3)
- *   0x00a32330..0x00a3234c  models[7]  (dest $4)
- * each is one __asm__ statement; $2 is the scratch GPR the original uses; "memory" orders the copy with the
- * surrounding accesses to the matrices.
+ * Matrix copies: each is one __asm__ statement of constrained lq/sq pairs through $2 (the same shape
+ * as the sceVu0Copy copies in tu001 CardMainInit). "memory" orders each copy with the surrounding
+ * accesses to the matrices.
  */
 
 /*
- * Pad-flip loop, original 0x00a315c8..0x00a31640: `addu $5,$17,$7` and `addu $6,$10,$7` add one
- * offset register to two bases, work and work + 8. The offset register $7 starts at 0x5AD0 and steps
- * by `addiu $7,$7,2` (k = 0..2), so it is the halfword index of input[0].held + k scaled by two
- * (CardGameWork viewed as u16 words); the enemy base work + 8 is the same view advanced by one
- * CardCommandInput (4 halfwords). Addressed through the structure members the compiler folds 0x5AD0
- * into each address and the shared offset register is lost.
+ * Pad-flip loop: one offset register is added to two bases, work and work + 8. The offset starts at
+ * 0x5AD0 and steps by 2 for k = 0..2, the halfword index of input[0].held + k (CardGameWork viewed as
+ * u16 words); the enemy base work + 8 is the same view advanced by one CardCommandInput (4 halfwords).
+ * Addressed through the structure members the compiler folds 0x5AD0 into each address and the shared
+ * offset register is lost.
  */
 
 
 
-/* Pad and flag bits CardGameProc tests. */
-
+/*
+ * Per-frame driver of the card game for the current command phase. Mode 0 draws the message
+ * panel; the boards are drawn in the other mode. Returns the result of the phase handler.
+ */
 s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round)
 {
     CardEffectMatrix matrix;
@@ -8750,6 +8724,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
         side = 1;
         break;
     }
+    /* On a rotated stage the d-pad bits of both players' input words are flipped. */
     if (work->rotStageId != 0) {
         s32 mask = CARD_PAD_UP_PAIR;
         u16 *playerWords = (u16 *) work;
@@ -8769,6 +8744,7 @@ s32 CardGameProc(s32 mode, CardListWindow *window, CardGameWork *work, s32 round
             CARD_PAD_FLIP(enemyPad, mask, turned);
         }
     }
+    /* Mode 0 draws the message panel, its interrupt message and the error message. */
     if (mode == 0) {
         offset[0] = 0.0f;
         offset[1] = 1.95f;

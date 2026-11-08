@@ -28,6 +28,7 @@ static void _EntryDB(RgSimpleDB *pDB, void *pDat, const char *pszName);
 static void *_GetDataDB(RgSimpleDB *pDB, int nDataID);
 static char *_GetDataDBName(RgSimpleDB *pDB, int nDataID);
 
+/* Allocates the data and name pointer arrays and one name buffer per slot. */
 static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size)
 {
     int i;
@@ -50,6 +51,7 @@ static void _InitDB(RgSimpleDB *pDB, int capacity, int entry_size)
     }
 }
 
+/* Frees the stored data and resets the entry count. The name buffers are kept. */
 static void _ClearDB(RgSimpleDB *pDB)
 {
     int i;
@@ -63,6 +65,7 @@ static void _ClearDB(RgSimpleDB *pDB)
     pDB->m_nNumOfData = 0;
 }
 
+/* Frees the stored data, the name buffers and both pointer arrays. */
 static void _DisposeDB(RgSimpleDB *pDB)
 {
     int i;
@@ -82,6 +85,7 @@ static void _DisposeDB(RgSimpleDB *pDB)
     pDB->m_apName = 0;
 }
 
+/* Returns the index of the entry named pszName, or -1 when there is none. */
 static int _GetDataID(RgSimpleDB *pDB, const char *pszName)
 {
     int i;
@@ -108,6 +112,7 @@ static int _GetDataSize(RgSimpleDB *pDB)
     return pDB->m_nNumOfData;
 }
 
+/* Appends pDat under pszName. Asserts that the name is new and that there is room. */
 static void _EntryDB(RgSimpleDB *pDB, void *pDat, const char *pszName)
 {
     int nIndex;
@@ -154,6 +159,7 @@ static char *_GetDataDBName(RgSimpleDB *pDB, int nDataID)
     return pDB->m_apName[nDataID];
 }
 
+/* Allocates a database with capacity slots and name buffers of entry_size bytes. */
 RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size)
 {
     RgSimpleDB *pDB;
@@ -166,6 +172,7 @@ RgSimpleDB *CreateRgSimpleDB(int capacity, int entry_size)
     return pDB;
 }
 
+/* Frees the database and its storage. */
 void DisposeRgSimpleDB(RgSimpleDB *pDB)
 {
     if (pDB == 0) {
@@ -208,10 +215,11 @@ void RgSimpleDBClear(RgSimpleDB *pDB)
     _ClearDB(pDB);
 }
 
-/* Scaffold data in the same rodata window. */
 extern const char simpleDbDumpHeaderFormat[];
+/* Bound to the assembler name simpleDbDumpEntryFormat, which is defined below. */
 extern const char rgSimpleDBDumpFormat[] __asm__("simpleDbDumpEntryFormat");
 
+/* Logs the database header and each entry's index, name and data pointer. */
 void RgSimpleDBDump(RgSimpleDB *pDB)
 {
     int i;

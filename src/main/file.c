@@ -21,9 +21,9 @@
 
 /* The file menu's state machine (FileWork->state, set from FileWork->command). */
 enum FileMenuState {
-    FILE_STATE_SELECT_DEVICE = 0x24,      /* memory card 1 / 2 / HDD / Cancel */
+    FILE_STATE_SELECT_DEVICE = 0x24,      /* memory card 1, memory card 2 or Cancel */
     FILE_STATE_CHECK_DEVICE = 0x25,       /* free space and save directory */
-    FILE_STATE_LOAD_SLOTS = 0x27,         /* read every slot's header */
+    FILE_STATE_LOAD_SLOTS = 0x27,         /* read the save data of every existing slot */
     FILE_STATE_SLOT_LIST = 0x28,          /* browse the three-panel slot list */
     FILE_STATE_SLOT_REJECTED = 0x29,      /* the chosen slot cannot be used */
     FILE_STATE_CONFIRM_SLOT = 0x2a,       /* yes/no for the chosen slot */
@@ -137,12 +137,12 @@ enum FilePanelState {
 #define FILE_SE_SAVE_DONE 0x19
 #define FILE_SE_LOAD_DONE 0x1a
 
-/* Slot list: the fast scroll repeats this many steps, and a pad press is
- * accepted again after this many frames (FileWork->menu_substate). */
+/* Slot list: a fast scroll takes this many steps. */
 #define FILE_FAST_SCROLL_STEPS 10
 
 /* Frames FileWork->menu_substate counts down before a state proceeds. */
 #define FILE_WAIT_FRAMES 16
+/* Frames the slot list waits after a cursor move before it accepts another. */
 #define FILE_INPUT_REPEAT_DELAY 4
 
 /* Yes/No prompts (FileWork->action_selection). */
@@ -195,7 +195,7 @@ enum FileLoadState {
 #define FILE_SLIDE_IN_X 544
 #define FILE_SELECT_HIDDEN_X (-258)
 
-/* Load progress gauge. */
+/* Progress gauge drawn during card and save-data requests. */
 #define FILE_GAUGE_Y 296
 #define FILE_GAUGE_WIDTH 256
 #define FILE_GAUGE_HEIGHT 8
@@ -204,7 +204,7 @@ enum FileLoadState {
 #define FILE_GAUGE_FILLED_GREEN 232
 #define FILE_GAUGE_FILLED_BLUE 205
 #define FILE_GAUGE_UNFILLED 64
-/* Steps of the card's save-folder creation (create_sub2's subphases). */
+/* Gauge steps of the card's save-folder creation (FILE_STATE_SAVE_CREATE). */
 #define FILE_CREATE_STEPS 7
 
 typedef struct FileThumbnailRequest {
@@ -225,7 +225,7 @@ typedef struct FileWorkCurrentSlotView {
 } FileWorkCurrentSlotView;
 
 
-/* Five decoder buffers are FILE_JPEG_SLOT_SIZE bytes apart; their signed object number is +1. */
+/* Five decoder buffers are FILE_JPEG_SLOT_SIZE bytes apart; their signed object number is at offset 1. */
 typedef struct FileJpegDecodeSlotView {
     unsigned char unmodeled_00;
     signed char number;
@@ -298,8 +298,7 @@ struct FileThumbnailContext {
     short x;
     short y;
     int color;
-    /* The window and the widgets drawn in it form one record at +0x0c: the
-       variable-index widget addresses split at its 16-byte offset units. */
+    /* The window and the widgets drawn in it form one record at +0x0c. */
     struct FileThumbnailBody {
         WindowDX window;
         ETagFontMainData labels[2];
@@ -482,7 +481,7 @@ typedef struct FileMenuPadData {
    load is not ordered before the short stores that precede it. The field
    itself stays an int: MenuFile's device-selection store must be an ordinary
    int store, which kills the gcse load of FileWork (an alias-set-0 int union
-   store does not, see reports/cc1-fsv10-swu.md). */
+   store does not). */
 typedef union FileCardNumber {
     int number;
 } FileCardNumber;
@@ -649,12 +648,17 @@ const char MenuItemCancelText[8] = "Cancel.";
 
 static struct FileLoadGauge gauge;
 
+/* Bumps the save version and recomputes the checksum. */
 static void VersionUpDate(SaveDataHeader *save_data)
 {
     save_data->version += 1;
     FileCheckSumGet((FileChecksumData *)save_data, (long long *)&save_data->checksum);
 }
 
+/*
+ * Converts a version 0 save record to version 1: copies the head and block
+ * fields, clears the added ones and bumps the version.
+ */
 static void VersionChange00To01(SaveDataVersions *save_data)
 {
     SaveData01 new_data;
@@ -668,10 +672,12 @@ static void VersionChange00To01(SaveDataVersions *save_data)
     VersionUpDate(&save_data->header);
 }
 
+/* Does nothing. */
 void FileVersionCheck(SaveDataHeader *save_data)
 {
 }
 
+/* Returns the slot index of number + offset, wrapped into the range of the save slots. */
 int FileObjectDataNoGet(int number, int offset)
 {
     number += offset;
@@ -682,6 +688,7 @@ int FileObjectDataNoGet(int number, int offset)
     return number - FILE_SLOT_COUNT;
 }
 
+/* Marks the save entries up to FILE_ENTRY_UNUSABLE as empty and frees every JPEG decoder buffer. */
 void FileObjectDataClear(void)
 {
     int i;
@@ -694,6 +701,7 @@ void FileObjectDataClear(void)
         FileJpegDec[i].number = -1;
 }
 
+/* Decodes the JPEG at source into destination through xglJpegDecode. */
 void FileThumbnailDecode(u32 source, u32 destination)
 {
     FileThumbnailRequest request;
@@ -708,6 +716,10 @@ void FileThumbnailDecode(u32 source, u32 destination)
     xglJpegDecode(&request);
 }
 
+/*
+ * Computes the checksum of a save record: a weighted sum of its bytes, taken
+ * with the stored checksum field cleared.
+ */
 void FileCheckSumGet(FileChecksumData *source, long long *checksum)
 {
     FileChecksumData local = *source;
@@ -733,6 +745,11 @@ int FileCheckSumCheck(FileChecksumData *data)
     return data->fields.stored_checksum == checksum;
 }
 
+/*
+ * Fills save entry number for a slot state: the saved game's chapter, map,
+ * time, party and thumbnail for an existing save, or a placeholder entry for
+ * a new, full or corrupt slot.
+ */
 void FileObjectDataInput(int number, int state)
 {
     FileObjectEntryView *entry = FileObjectData + number;
@@ -783,6 +800,7 @@ void FileObjectDataInput(int number, int state)
     entry->number = number;
 }
 
+/* Frees the JPEG decoder buffers whose object number is not one of the slots around the current slot. */
 void FileJpegCheck(void)
 {
     signed char valid_numbers[FILE_JPEG_BUFFERS];
@@ -807,6 +825,7 @@ void FileJpegCheck(void)
     }
 }
 
+/* Queues the thumbnail of object number for decoding into a free JPEG buffer; returns at once if a buffer already holds it. */
 void FileJpegDecode(int number)
 {
     FileObjectEntryView *entry = FileObjectData + number;
@@ -842,6 +861,7 @@ void FileJpegDecode(int number)
     }
 }
 
+/* Queues thumbnail decodes for the save slots around the current slot. */
 void FileObjectJpegSet(void)
 {
     int offset;
@@ -856,6 +876,7 @@ void FileObjectJpegSet(void)
     } while (offset < FILE_JPEG_BUFFERS - 1);
 }
 
+/* Re-queues the thumbnail of number when a JPEG buffer holds it, after its save data changed. */
 void FileObjectJpegDecChange(int number)
 {
     int i;
@@ -873,6 +894,11 @@ void FileObjectJpegDecChange(int number)
     }
 }
 
+/*
+ * Advances the load of every existing save slot by one step: reads the slot
+ * from the HDD or memory card and fills its entry. Returns 1 while the load
+ * runs and 0 once it has finished or failed.
+ */
 int FileObjectAllLoad(void)
 {
     struct FileHddLoadRequest {
@@ -950,6 +976,7 @@ int FileObjectAllLoad(void)
             FileWork->hdd_result = xglHddMcLoadMount();
         }
     }
+    /* Moves on to the next existing slot, or finishes when none is left. */
     case FILE_LOAD_NEXT_SLOT:
         gauge.current++;
         while (*load_index < FILE_SLOT_COUNT) {
@@ -966,6 +993,7 @@ int FileObjectAllLoad(void)
             }
             return 0;
         }
+    /* Starts the read of the slot at load_index. */
     case FILE_LOAD_REQUEST:
         if (FileWork->use_hdd) {
             hdd_request.slot = *load_index;
@@ -985,6 +1013,7 @@ int FileObjectAllLoad(void)
             tyaDrawGauge(&gauge);
             return 1;
         }
+    /* Stores the read result: the slot is loaded, or marked corrupt and the load fails. */
     case FILE_LOAD_RESULT:
         if (FileWork->use_hdd) {
             if (FileWork->hdd_result != 0) {
@@ -1029,10 +1058,15 @@ int FileObjectAllLoad(void)
     return 1;
 }
 
+/* Does nothing. */
 void FileSinkiSaveDataPush(void)
 {
 }
 
+/*
+ * Prepares the save buffer for writing: copies the snapshot thumbnail, sets
+ * the map name, unit count, scenario rank and time, then the checksum.
+ */
 void FileSaveDataPush(void)
 {
     long long checksum;
@@ -1079,6 +1113,7 @@ void TskObjectSet(TskObject *task, TskObjectWorker worker, void *data)
     task->state = 0;
 }
 
+/* Runs the task's worker each frame, starting it on the first call; removes the task once the file menu is done. */
 void tskTskMain(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
@@ -1099,6 +1134,7 @@ void tskTskMain(TskObject *task)
     worker(task, task->data);
 }
 
+/* Drives the top banner: slides in the action, card, HDD and format labels that the current FileWork->state uses, and hides the rest. */
 static void MenuFilePas(TskObject *task, void *data)
 {
     FilePasWork *work = data;
@@ -1203,6 +1239,10 @@ static void MenuFilePas(TskObject *task, void *data)
     }
 }
 
+/*
+ * Drives the info window: copies the message of the current FileWork->state
+ * into view->text and slides the window to the height and y it needs.
+ */
 static void MenuFileInfo(TskObject *task, void *data)
 {
     struct FileDeviceTexts device_text;
@@ -1526,11 +1566,16 @@ static void MenuFileInfo(TskObject *task, void *data)
     }
 }
 
+/*
+ * Drives the four selection windows: builds them on the first frame, then
+ * slides them to the targets of the current FileWork->state.
+ */
 static void tskFileSelect(TskObject *task, void *data)
 {
     struct FileSelectContext *const view = data;
     int i;
 
+    /* Sets color_state to 1 for each card entry whose status is none, PS1 or PocketStation, and to 0 otherwise. */
     void ListColorChage(void)
     {
         for (i = 0; i < 2; ++i) {
@@ -1615,6 +1660,7 @@ static void tskFileSelect(TskObject *task, void *data)
             }
             view->lists[0].selected = FileWork->device_selection;
             ListColorChage();
+            /* fall through */
         case FILE_STATE_CHECK_DEVICE:
         case 38:
         case FILE_STATE_LOAD_SLOTS:
@@ -1655,6 +1701,7 @@ static void tskFileSelect(TskObject *task, void *data)
     }
 }
 
+/* Drives the explanation text: shows it for the save, load and format states and slides it away otherwise. */
 static void tskFileEx(TskObject *task, void *data)
 {
     FileExplanation *text = data;
@@ -1705,6 +1752,10 @@ static void tskFileEx(TskObject *task, void *data)
     }
 }
 
+/*
+ * Draws one save-slot panel: state 0 builds its widgets once, state 2 places
+ * and draws them for the panel's slot each frame.
+ */
 void FileThumbnailDisp(struct FileThumbnailContext *panel)
 {
     int i;
@@ -1903,6 +1954,10 @@ if (party_count > 0) {
     }
 }
 
+/*
+ * Drives the slot-list panels: slides them in when the slot list opens, moves
+ * them through browse, expand, scroll and close, and draws the visible ones.
+ */
 static void tskFileData(TskObject *task, void *data)
 {
     int i;
@@ -2020,6 +2075,7 @@ static void tskFileData(TskObject *task, void *data)
                 view->state = FILE_PANEL_HIDDEN;
             break;
         }
+        /* Picks the next panel state from the file state, and scrolls the panels. */
         case FILE_PANEL_BROWSE:
             switch (FileWork->state) {
             case FILE_STATE_SELECT_DEVICE:
@@ -2143,6 +2199,10 @@ static void tskFileData(TskObject *task, void *data)
     }
 }
 
+/*
+ * Runs the file menu state machine for one frame: applies the pending command,
+ * waits out dispatch_delay, then runs the handler of FileWork->state.
+ */
 void MenuFile(void) {
     unsigned char delay;
     unsigned char state;
@@ -2240,6 +2300,7 @@ void MenuFile(void) {
         }
         break;
     }
+    /* Reads the free space and save directory of the chosen device, then picks the next state. */
     case FILE_STATE_CHECK_DEVICE:
     {
         int hdd_slot;
@@ -2420,6 +2481,7 @@ void MenuFile(void) {
     }
     case FILE_STATE_DONE:
         break;
+    /* Loads every slot of the chosen device, then opens the slot list. */
     case FILE_STATE_LOAD_SLOTS:
         if (FileWork->input_flags & FILE_INPUT_ENTER) {
             FileWork->selected_slot = FileExistCheckWork[MC_LATEST_SLOT_INDEX];
@@ -2474,6 +2536,7 @@ void MenuFile(void) {
             }
         }
         break;
+    /* Browses the slot list: the pad moves the cursor, circle picks a slot, cross returns to the device list. */
     case FILE_STATE_SLOT_LIST:
     {
         if (FileWork->input_flags & FILE_INPUT_ENTER) {
@@ -2726,6 +2789,7 @@ void MenuFile(void) {
         }
         break;
     }
+    /* Writes the save data to the selected slot, then updates the free space and the slot states: empty slots that fit another save are marked new. */
     case FILE_STATE_SAVE_WRITE:
     {
         int hdd_existing_slot;
@@ -2814,6 +2878,7 @@ void MenuFile(void) {
         }
         break;
     }
+    /* Creates the save folder for the selected slot before the data is written. */
     case FILE_STATE_SAVE_CREATE: {
         int create_result;
 
@@ -3208,6 +3273,7 @@ void MenuFile(void) {
         break;
     }
     FileWork->input_flags &= 0xfd;
+    /* Debug overlay: state, command, input flags, substate, slot and card values. */
     xglFontDebugHex(0, 0x48, FileWork->state, 2);
     xglFontDebugHex(0, 0x50, FileWork->command, 2);
     xglFontDebugHex(0, 0x58, FileWork->input_flags, 2);
@@ -3251,6 +3317,10 @@ void MenuFile(void) {
                        FileWork->request_result);
 }
 
+/*
+ * Builds the packet that draws the back texture in color: four RGBA bytes, or
+ * half intensity on every channel when color is (unsigned char *)-1.
+ */
 void endBackTexDraw(unsigned char *color)
 {
     signed char rgba[4];
@@ -3299,6 +3369,12 @@ void endBackTexDraw(unsigned char *color)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/*
+ * Runs the file menu from setup to teardown: work area, tasks, staging buffers
+ * and save data, then the state machine until it finishes, then the previous
+ * screen is restored. Returns 1 when FileWork->result stayed 0; cancelling a load or accepting a
+ * confirmation sets it to 1.
+ */
 int MenuFileMain(int menu_mode)
 {
     extern void exit(int status) __attribute__((noreturn));
@@ -3319,6 +3395,7 @@ int MenuFileMain(int menu_mode)
     endBackTexDraw((unsigned char *)-1);
     xglSleep();
 
+    /* The work area follows the main menu's work block, 0x80-aligned. */
     FileWork = (FileWorkBlock *)(((unsigned int)MenuWorkEndGet() + 0x7f) & ~0x7f);
     task_work = FileWork + 1;
     memset(FileWork, 0, sizeof(*FileWork));
@@ -3347,6 +3424,7 @@ int MenuFileMain(int menu_mode)
     buffer_end = FILE_STAGING_BASE;
     TskObjectSet((TskObject *)entry, tskFileData, task_work);
 
+    /* Staging buffers from FILE_STAGING_BASE: card data, system block, JPEG slots, object table. */
     FileCardDataBuf = (unsigned char *)buffer_end;
     buffer_end += FILE_CARD_DATA_BUF_SIZE;
     FileObjectDataSystem = (FileObjectSystem *)buffer_end;
@@ -3365,6 +3443,7 @@ int MenuFileMain(int menu_mode)
     memset(FileObjectData, 0, FILE_OBJECT_AREA_SIZE);
     buffer_end = ((buffer_end + FILE_STAGING_ALIGN + FILE_JPEG_AREA_SIZE + FILE_STAGING_ALIGN - 1) & ~(FILE_STAGING_ALIGN - 1)) + FILE_OBJECT_AREA_SIZE;
     images = FileObjectData;
+    /* Sets chapter, leader and play time of placeholder entries 99 to 101 to -1. */
     {
         int i;
 
@@ -3411,6 +3490,7 @@ int MenuFileMain(int menu_mode)
     FileWork->command = FILE_STATE_SELECT_DEVICE;
     FileWork->input_flags = FILE_INPUT_SKIP;
     FileWork->result = 0;
+    /* Runs the state machine each frame until FILE_STATE_DONE. */
     for (;; endPrintExtFunc(0, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_FLUSH, 0), MenuBgTaskMain(),
             xglTaskExecute(FileTask), xglSleep()) {
         GameSnapShotCheck();

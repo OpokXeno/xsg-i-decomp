@@ -34,6 +34,10 @@ static const char actorCharIdNameCb00[8] = "cb00";
 static const char actorCharIdNameBp00[8] = "bp00";
 static const char actorCharIdNameHg01[8] = "hg01";
 
+/*
+ * Returns the character ID for pszName, comparing names without case.
+ * Returns RG_ACTOR_CHAR_NOP when no name matches.
+ */
 int RgActorNameToCharID(const char *pszName) {
     int charID;
 
@@ -42,6 +46,7 @@ int RgActorNameToCharID(const char *pszName) {
         assert_prog(actorCharIdAssertNameNotNil, actorCharIdSourcePath, 19);
     }
 
+    /* Each known name is compared in turn; a match sets the ID. */
     if (strcasecmp(pszName, actorCharIdNameVx01) == 0) {
         charID = RG_ACTOR_CHAR_VX01;
     }
@@ -121,6 +126,7 @@ int RgActorNameToCharID(const char *pszName) {
     return charID;
 }
 
+/* Returns the name for charID, or 0 when charID has no name. */
 const char *RgActorCharIDToName(int charID) {
     if (charID == RG_ACTOR_CHAR_VX01) {
         return actorCharIdNameVx01;

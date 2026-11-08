@@ -11,12 +11,10 @@
 
 /*
  * The engine's actor record (`actor`, 64-entry array at main 0x0043c1e0,
- * 0xa70-byte stride; fuller evidence in src/main/near_dir.h,
- * src/main/enemy_2.h, src/main/set_motion.h and src/main/db_light_write.h,
- * which names the same two fields for the same reason). tyaCaptureShadow
- * only reads +0x00 flags (bits 0x8 and 0x20) and +0x86, the in-use id
- * ACT_create writes and ACT_update skips a slot on when it is zero; the
- * offsets between them are not evidenced by this TU and stay unmodeled.
+ * 0xa70-byte stride). tyaCaptureShadow only reads +0x00 flags (bits 0x8 and
+ * 0x20) and +0x86, the in-use id ACT_create writes and ACT_update skips a
+ * slot on when it is zero; the offsets between them are not evidenced by
+ * this file and stay unmodeled.
  */
 /* MapUnit[] entries are MapUnitRecord (include/main/exm_2.h); tyaCaptureUnit
  * reads its +0xA4 serial and tyaCaptureUnit2 its parent_peer owner. */
@@ -72,7 +70,7 @@
 
 #define GS_CSR_FINISH 0x10
 
-/* Partial view of GsDispEnv; the full type changes this object (xgl_render.c's own GsDispEnv definition keeps its GS register types .c-local). */
+/* Partial view of GsDispEnv; xgl_render.c's own GsDispEnv definition keeps its GS register types local to that file. */
 typedef struct {
     u8 unmodeled_00[0x38];
     u64 buffer_select;
@@ -172,6 +170,7 @@ static int alpha;
 
 static int transparency;
 
+/* Returns the framebuffer base page of the display buffer that DispEnv selects. */
 static int getfbp(void)
 {
     long long shifted_mode;
@@ -185,6 +184,10 @@ static int getfbp(void)
     return sRender.framebuffer_base_page[0] << 5;
 }
 
+/*
+ * Writes the scratchpad frame buffer to a 24-bit BMP file at path, converting
+ * each row through pixels. Returns 0 on success and 1 if the file cannot be opened.
+ */
 int tyaBmpOutput(char *path, u8 *pixels)
 {
     int fd;
@@ -227,6 +230,11 @@ int tyaBmpOutput(char *path, u8 *pixels)
     return 0;
 }
 
+/*
+ * Writes the scratchpad frame buffer to a SiPic file at path. Depth values go
+ * to the Z file at zpath when zpath is not empty. Returns 0 on success and 1
+ * if path cannot be opened.
+ */
 int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
 {
     u8 zbuffer[2048];
@@ -282,6 +290,7 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
         sceGsExecStoreImage(spr, end);
         out = SPR_RLE;
 
+        /* Run-length encode the colour row into SPR_RLE. */
         header = 0;
         count = 0;
         rowLimit = SPR_DEPTH;
@@ -334,6 +343,7 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
             *header = count - 1;
         }
 
+        /* Compute the output alpha byte of each pixel from its alpha, the depth row and the capture alpha. */
         for (pixel = SPR_COLOR, depth = SPR_DEPTH, n = 0; n < CAPTURE_WIDTH; n++, pixel++, depth++) {
             u32 value;
 
@@ -357,6 +367,7 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
             ((u8 *)pixel)[3] = ~value;
         }
 
+        /* Run-length encode the alpha bytes of the same row. */
         p = SPR_COLOR;
         header = 0;
         count = 0;
@@ -406,6 +417,7 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
         memcpy(dst, SPR_RLE, out - spr - SPR_RLE_OFFSET);
         dst = dst + (out - spr) - SPR_RLE_OFFSET;
 
+        /* Convert the depth row for the Z file, tracking the smallest and largest depth that is neither 0 nor RGB_MASK. */
         if (zfd != 0) {
             zp = SPR_DEPTH;
             zout = zbuffer;
@@ -441,6 +453,11 @@ int tyaSiPicOutput(char *path, char *zpath, u8 *pixels)
     return 0;
 }
 
+/*
+ * Capture task hook. START installs it, FRAME writes one picture (BMP for
+ * layer 0, SiPic otherwise) and advances the frame number in the file name,
+ * END removes it. Every command is passed on to the previous capture task.
+ */
 static int tyaCaptureMain(int command)
 {
     static unsigned char flag;
@@ -467,6 +484,7 @@ static int tyaCaptureMain(int command)
         }
         shifted_mode = (long long)(DispEnv.buffer_select << 7);
         selector = shifted_mode >> 32;
+        /* Wait for the GS to finish drawing before the frame buffer is read back. */
         if ((selector & 3) == 1) {
             while (!(*(volatile u64 *)GS_CSR_ADDRESS & GS_CSR_FINISH)) {
                 for (i = 0; i < 0x100000; i++) {
@@ -494,6 +512,7 @@ static int tyaCaptureMain(int command)
             }
             tyaSiPicOutput(outpath, buffer, TmpBuffer);
         }
+        /* Advance the four-digit frame number in the file name. */
         if (pnum[3] == '9') {
             pnum[3] = '0';
             if (pnum[2] == '9') {
@@ -510,6 +529,7 @@ static int tyaCaptureMain(int command)
         } else {
             pnum[3]++;
         }
+        /* Flag 2 ends the capture after this frame, so control falls through to TYA_CAPTURE_END. */
         if (flag != 2) {
             break;
         }
@@ -535,6 +555,7 @@ static void tyaCaptureNull(void)
 {
 }
 
+/* Draws the actors selected by the current layer, taking the capture alpha from each actor's draw environment. */
 static void tyaCaptureActor(void)
 {
     int i;
@@ -568,6 +589,7 @@ static void tyaCaptureActor(void)
     }
 }
 
+/* Draws the shadows of the actor selected by the current layer. */
 static void tyaCaptureShadow(void)
 {
     int i;
@@ -597,6 +619,10 @@ static void tyaCaptureUnit(void)
     }
 }
 
+/*
+ * Draws the map units whose parent_peer is the first active actor that matches
+ * the current layer. With no such actor, the comparison is against (Actor *)-1.
+ */
 static void tyaCaptureUnit2(void)
 {
     int i;
@@ -618,6 +644,11 @@ static void tyaCaptureUnit2(void)
     }
 }
 
+/*
+ * Starts a capture of the layer in the low bits of mode. The output name is
+ * built under host0:/home/xeno/capture/ from name. Layer 0 writes BMP frames,
+ * other layers write SiPic frames.
+ */
 void tyaCaptureStart(const char *name, int mode)
 {
     static char head[] = "host0:/home/xeno/capture/";
@@ -629,6 +660,7 @@ void tyaCaptureStart(const char *name, int mode)
     layer = mode & TYA_CAPTURE_LAYER_MASK;
     zpicf = mode & TYA_CAPTURE_ZPIC_FLAG;
     alpha = 0;
+    /* Build outpath as capture directory, name directory, layer prefix, frame number and extension. */
     dst = outpath;
     for (src = head; *src != '\0'; src++) {
         *dst++ = *src;
@@ -720,6 +752,7 @@ void tyaCaptureStart(const char *name, int mode)
     }
 }
 
+/* Ends the capture task and restores the font and game-loop flags that tyaCaptureStart changed. */
 void tyaCaptureEnd(void)
 {
     tyaCaptureMain(TYA_CAPTURE_END);

@@ -10,11 +10,10 @@
 #include "main/xgl_light.h"
 #include "main/xgl_packet.h"
 
-/* Partial view of the resource record RES_loadFile hands back for a map:
- * MapReset (0x00246598, still INCLUDE_ASM) dereferences it at +0x04
- * (xglCullingMapSet argument), +0x0c (UnduInit argument) and +0x10 (second
- * argument to the still-unrecovered func_A1CFB8). Only those three offsets
- * are evidenced; the rest stays unmodeled. */
+/* Partial view of the resource record RES_loadFile returns for a map.
+ * MapReset reads it at +0x04 (xglCullingMapSet argument), +0x0c (UnduInit
+ * argument) and +0x10 (second argument to func_A1CFB8). The other fields are
+ * not modeled. */
 typedef struct {
     Matrix4 *place;
     int culling_map;
@@ -754,6 +753,7 @@ const char MapModelUdo02Name[16] = "MC_UDO02";
 
 const char MapModelUdo01Name[24] = "MC_UDO01";
 
+/* Returns the map file directory: the test, check or default path, chosen by UseTestPath. */
 const char *MAP_getPath(void)
 {
     int test_path = UseTestPath;
@@ -770,6 +770,7 @@ const char *MAP_getPath(void)
     return mapTestPath;
 }
 
+/* Fade task: sends the fade packet, steps tsk.state down, and clears the callback when the fade ends. */
 static void taskMapChange(void *task)
 {
     static MapTestPrimData TestPrim = { .unmodeled_00 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 81, 1, 128, 0, 0, 0, 64, 171, 144, 238, 238, 49, 53, 5, 0, 0, 0 }, .task_state_word = 274877907044ULL, .unmodeled_28 = { 66, 0, 0, 0, 0, 0, 0, 0, 5, 192, 127, 0, 252, 6, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 48, 7, 0, 0, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0 }, .vif_command_word = 0ULL, .unmodeled_58 = { 6, 0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 128, 0, 0, 0, 128, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 248, 111, 0, 0, 247, 113, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 32, 0, 0, 0, 28, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 248, 143, 0, 0, 247, 141, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0 } };
@@ -787,6 +788,7 @@ static void taskMapChange(void *task)
     }
 }
 
+/* Starts the map change fade, unless the fade countdown is still running. */
 void MapChangeFadeSet(void)
 {
     if (GameLoopState.fade_countdown <= 0) {
@@ -798,6 +800,7 @@ void MapChangeFadeSet(void)
     }
 }
 
+/* Resets the current map: initializes its Undu state and think data, sets its culling map, and makes the render colour white. */
 void MapReset(void)
 {
     UnduInit(GameLoopState.map_resource->undu_state);
@@ -814,6 +817,10 @@ void MapReset(void)
     GameLoopState.render_color[0] = 1.0f;
 }
 
+/*
+ * Switches to the loaded map resource map_id and places the player at the
+ * locator of entrance_id. Ids below 1000 start the change fade first.
+ */
 void MapChangeResource(int map_id, int entrance_id)
 {
     if (GameResource[map_id].state == RES_TYPE_MAP) {
@@ -841,12 +848,14 @@ void MapChangeResource(int map_id, int entrance_id)
     }
 }
 
+/* Starts the change fade, then loads map_id. */
 void MapChange(int map_id)
 {
     MapChangeFadeSet();
     MapChange2(map_id);
 }
 
+/* Loads map_id through the resource table and resets the map. Ids at or above MAP_ID_LIMIT are ignored. */
 void MapChange2(int map_id)
 {
     if ((unsigned int)map_id < MAP_ID_LIMIT) {
@@ -856,6 +865,7 @@ void MapChange2(int map_id)
     }
 }
 
+/* Returns the name of map_no, or of the current map when map_no is negative. Returns null when the table has no entry. */
 char *MapGetName(int map_no)
 {
     int table_index;
@@ -876,6 +886,7 @@ char *MapGetName(int map_no)
     return map_name;
 }
 
+/* Draws the current map: in draw mode 2 clears one render flag, then sets light, colour and texture and submits its culling model. */
 void MapDraw(void)
 {
     MapResource *resource = GameLoopState.map_resource;

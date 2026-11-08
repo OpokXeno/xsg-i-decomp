@@ -8,7 +8,7 @@
 #include "ov12/rg_weapon_db.h"
 
 
-/* Declared here: the assert text of _IsSpecWep, in the scaffold-owned data window. */
+/* Declared here: the assert text of _IsSpecWep, defined at the end of this file. */
 extern const char hissatuAssertNameNotNil[];
 
 /* Defined here: the assert strings and the weapon database names a special move needs. */
@@ -26,6 +26,7 @@ const char hissatuWeaponNameHmr55ag[8] = "HMR55AG";
 
 static int _IsSpecWep(RgWeapon *weapon, const char *weaponName);
 
+/* Returns 1 when weapon is the weapon named weaponName, has shots left and is not busy. */
 static int _IsSpecWep(RgWeapon *weapon, const char *weaponName)
 {
     RgWeaponEssence *essence;
@@ -46,6 +47,7 @@ static int _IsSpecWep(RgWeapon *weapon, const char *weaponName)
     return 1;
 }
 
+/* Returns 1 when weapon is absent or has the unarmed control kind. */
 static int _IsUnarmed(RgWeapon *weapon)
 {
     int isUnarmed;
@@ -57,6 +59,10 @@ static int _IsUnarmed(RgWeapon *weapon)
     return isUnarmed;
 }
 
+/*
+ * Returns 1 when the left and right weapons are ready and match the special move
+ * attackType. The back weapon must be absent or unarmed.
+ */
 int RgHissatuCheck(unsigned int attackType, RgWeapon *weapons[RG_EQUIP_TYPE_NUM])
 {
     RgWeapon *weapon0;
@@ -85,6 +91,7 @@ int RgHissatuCheck(unsigned int attackType, RgWeapon *weapons[RG_EQUIP_TYPE_NUM]
     if (RgWeaponIsNotBusy(weapon1) == 0) {
         return 0;
     }
+    /* Each attack type checks the weapon names, or the unarmed state, for both hands. */
     switch (attackType) {
     case 0:
         if (_IsSpecWep(weapon1, hissatuWeaponNameLm11vx) != 0) {

@@ -20,6 +20,7 @@ void RssdSamplingKeyoffCallbackProc(int status, int channel, int argument);
 void RssdSpuReadCallback(int status, void *argument);
 void RssdSpuReadNext(void *);
 
+/* Initializes the driver over the runtime memory the EE requested, then notifies the EE of its address and size. */
 void RssdInit(RssdRpcPacket *request)
 {
     int size;
@@ -44,6 +45,7 @@ void RssdInit(RssdRpcPacket *request)
     }
 }
 
+/* Starts reading SPU memory at the requested address into the transfer buffer, one chunk at a time. */
 void RssdSpuDirectRead(RssdRpcPacket *request)
 {
     int total = request->arguments[1];
@@ -58,6 +60,7 @@ void RssdSpuDirectRead(RssdRpcPacket *request)
     printf("Rssd spu read  SpuPtr=%06x  TransSize=%x\n", address, total);
 }
 
+/* Reports a finished chunk to the EE. In thread context the report carries no data; otherwise it is sent with the chunk's data after RssdSetFuncCallback registers RssdSpuReadNext. */
 void RssdSpuReadCallback(int status, void *argument)
 {
     RssdRpcPacket request;
@@ -72,6 +75,7 @@ void RssdSpuReadCallback(int status, void *argument)
     }
 }
 
+/* Starts the next chunk of a multi-chunk SPU read, at the address after the previous chunk. */
 void RssdSpuReadNext(void *argument)
 {
     /* The original walks the transfer words through a pointer to the last one. */
@@ -95,6 +99,7 @@ void RssdSpuReadNext(void *argument)
     }
 }
 
+/* Copies a wave data request into the transfer buffer and adds it as a wave bank; the bank's address and size go back in the arguments. */
 void RssdAddWaveData(RssdRpcPacket *request)
 {
     unsigned char *data;
@@ -115,6 +120,7 @@ void RssdAddWaveData(RssdRpcPacket *request)
     }
 }
 
+/* Like RssdAddWaveData, but passes the request to SsdNextWaveData. */
 void RssdNextWaveData(RssdRpcPacket *request)
 {
     unsigned char *data;
@@ -135,6 +141,7 @@ void RssdNextWaveData(RssdRpcPacket *request)
     }
 }
 
+/* Reports a finished wave transfer to the EE. */
 void RssdSpuDmaTransferCallback(int status, void *argument)
 {
     RssdRpcPacket request;
@@ -146,11 +153,13 @@ void RssdSpuDmaTransferCallback(int status, void *argument)
     }
 }
 
+/* Starts the sequence in the request and stores its result. */
 void RssdPlaySequenceData(RssdRpcPacket *request)
 {
     request->value = SsdPlaySequence(request->data, request->arguments[1], request->arguments[2]);
 }
 
+/* Adds sequence data and returns the free memory size and block count in the arguments. */
 void RssdAddSequenceData(RssdRpcPacket *request)
 {
     request->value = SsdAddSequenceData((SsdMusicData *)request->data);
@@ -158,6 +167,7 @@ void RssdAddSequenceData(RssdRpcPacket *request)
     request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
+/* Adds sequence effect data and returns the free memory size and block count in the arguments. */
 void RssdAddSeqEffectData(RssdRpcPacket *request)
 {
     request->value = SsdAddSeqEffectData((SsdMusicData *)request->data);
@@ -165,6 +175,7 @@ void RssdAddSeqEffectData(RssdRpcPacket *request)
     request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
+/* Adds effect data and returns the free memory size and block count in the arguments. */
 void RssdAddEffectData(RssdRpcPacket *request)
 {
     request->value = SsdAddEffectData((SsdEffectData *)request->data);
@@ -172,6 +183,7 @@ void RssdAddEffectData(RssdRpcPacket *request)
     request->arguments[1] = SsdGetMemoryBlockCount();
 }
 
+/* Initializes sampling and registers the DMA and keyoff callbacks that report to the EE. */
 void RssdInitSampling(RssdRpcPacket *request)
 {
     SsdInitSampling(request->arguments[0], request->arguments[1], request->arguments[2]);
@@ -179,15 +191,18 @@ void RssdInitSampling(RssdRpcPacket *request)
     SsdSetSampleKeyoffCallback(RssdSamplingKeyoffCallbackProc);
 }
 
+/* Transfers the request data into the sampling area of the channel in the arguments. */
 void RssdTransferSampling(RssdRpcPacket *request)
 {
     SsdTransferSampling(request->arguments[0], request->data, request->arguments[2]);
 }
 
+/* Does nothing. */
 void RssdTransferSamplingNext(RssdRpcPacket *request)
 {
 }
 
+/* Reports a finished sampling DMA to the EE. */
 void RssdSamplingDmaCallbackProc(int status, void *argument)
 {
     RssdRpcPacket request;
@@ -198,6 +213,7 @@ void RssdSamplingDmaCallbackProc(int status, void *argument)
         iRssdCallFunc(RSSD_EE_SAMPLING_DMA_DONE, &request, 0, 0);
 }
 
+/* Reports a sampling channel's keyoff to the EE. */
 void RssdSamplingKeyoffCallbackProc(int status, int channel, int argument)
 {
     RssdRpcPacket request;

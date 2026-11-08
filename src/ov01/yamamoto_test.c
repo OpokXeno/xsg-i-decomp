@@ -26,6 +26,7 @@ extern void debugBattleConfig(void);
 extern void testScreen(void);
 extern void battleProc(void);
 
+/* Test entry point: sets the clear colour, initializes the party data and then runs the battle test loop. */
 void YamamotoTest(void)
 {
     unsigned int clearGreen = 0x40;
@@ -51,6 +52,7 @@ void YamamotoTest(void)
     }
 }
 
+/* Draws a debug grid of horizontal and vertical lines, tinting the outer lines, and sends it as one packet. */
 void testScreen(void)
 {
     GrPacket packet;

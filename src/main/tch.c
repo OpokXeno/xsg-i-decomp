@@ -7,6 +7,10 @@ struct PlayTCHCurveSet;
 
 static void getInfoAddr(TimeChart *chart);
 
+/*
+ * Relocates a time chart in place: adds the chart's address to each record's name offset and to its
+ * pointer offsets, then marks the chart relocated. Callers run it on charts that are not yet relocated.
+ */
 static void getInfoAddr(TimeChart *chart)
 {
     TchEntry *entry;
@@ -45,6 +49,10 @@ static void getInfoAddr(TimeChart *chart)
     }
 }
 
+/*
+ * Returns the index of the first record whose name matches name over length bytes (a negative
+ * length uses strlen(name)), or -1.
+ */
 int TCH_getInfoID(TimeChart *chart, const char *name, int length)
 {
     int index;
@@ -72,6 +80,7 @@ int TCH_getInfoID(TimeChart *chart, const char *name, int length)
     return -1;
 }
 
+/* Returns the record at index, or 0 when index is out of range. */
 struct PlayTCHCurveSet *TCH_getInfo(void *timeChart, int index)
 {
     TimeChart *chart;

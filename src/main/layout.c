@@ -2,7 +2,7 @@
 #include "layout.h"
 #include "main/jni.h"
 
-/* UnduDataGetHeader keys: the layout map id is offset into the Undu map index space and the unit id is flagged as a by-index lookup. */
+/* UnduDataGetHeader keys: the map id is offset into the Undu map index space and the unit id is flagged for a by-index lookup. */
 #define LAYOUT_UNDU_MAP_BASE 0x200
 #define LAYOUT_UNDU_UNIT_FLAG 0x8000
 
@@ -15,6 +15,10 @@ static int defaultLayout;
 
 int layoutManagerId;
 
+/*
+ * Copies the layout entry for unit_id into a Unit object: the peer's position
+ * and yaw, then the px/py/pz/ry fields (ry in degrees).
+ */
 void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
 {
     LayoutHeader *header;
@@ -52,6 +56,11 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
         rotation[1] / 3.1415927f * 180.0f;
 }
 
+/*
+ * Copies the layout entry for unit_id into a Chr object: the peer's position
+ * and yaw (also set at peer+2532), then the px/py/pz/ry fields (ry in degrees).
+ * Sets flag 0x1000 in the peer at +1232.
+ */
 void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
 {
     LayoutHeader *header;
@@ -93,6 +102,10 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
         rotation[1] / 3.1415927f * 180.0f;
 }
 
+/*
+ * Copies the layout entry for unit_id into an Effect object: the peer's position
+ * and yaw when the peer exists, then the px/py/pz/ry fields (ry in degrees).
+ */
 void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
 {
     LayoutHeader *header;
@@ -128,6 +141,10 @@ void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
         header->locator.w / 3.1415927f * 180.0f;
 }
 
+/*
+ * Native for Layout.set(Object, int): applies the layout entry for unit_id to
+ * the target when it is a Chr, Unit or Effect; other classes are ignored.
+ */
 void Java_xeno_util_Layout_set__Ljava_lang_Object_I(JThread *thread,
                                                      LayoutSetArgs *arguments)
 {
@@ -153,6 +170,7 @@ void Java_xeno_util_Layout_set__Ljava_lang_Object_I(JThread *thread,
     }
 }
 
+/* Native for Layout.getManager(int): stores the id and returns the static defaultLayout object. */
 void Java_xeno_util_Layout_getManager__I(JThread *thread, int *id,
                                          void **result)
 {

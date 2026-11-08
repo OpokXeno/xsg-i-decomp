@@ -121,8 +121,7 @@ typedef struct TextureTransferHeader {
     u8 payload[1];
 } TextureTransferHeader;
 
-/* The original loads read PadData at +0x28 as a 64-bit snapshot and as
- * halfwords at +0x2a and +0x2c. */
+/* PadData is read as a 64-bit snapshot at +0x28, or as halfwords at +0x2a and +0x2c. */
 typedef struct SePacketPad {
     u8 unmodeled_00[0x28];
     union {
@@ -300,6 +299,10 @@ static TexTestSprite TestEnv_1_0036DDB0 = {
 
 static Actor *tActor;
 
+/*
+ * Shows the test menu until exit: circle, triangle and square run their tests,
+ * and cross or the exit button combination leaves the screen.
+ */
 void KarakamaTest(void)
 {
     SePacketPad *pad;
@@ -351,6 +354,10 @@ void KarakamaTest(void)
     xglRenderClearDepth();
 }
 
+/*
+ * Sets up the CF test scene on map KARAKAMA_CF_MAP_NO, then moves the test actor
+ * and its camera with the pad until the exit buttons are held.
+ */
 static void CfTest(void)
 {
     CfCamera *const camera;
@@ -367,6 +374,7 @@ static void CfTest(void)
     int map_no;
     CfGameLoopState *game;
 
+    /* Initialize the scene, then set up the camera and game loop state. */
     InitCf();
     printf(initCfCompleteFormat);
     xglStudioGetCamera((CfCamera **)&camera, 0);
@@ -406,6 +414,7 @@ static void CfTest(void)
     while ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) != KARAKAMA_EXIT_BUTTONS) {
         held = PadData.input.buttons.held;
         actor = tActor;
+        /* Move the actor: left/right change x, triangle/cross y, up/down z. */
         if (held & PAD_LEFT) {
             actor->position.x -= 0.1f;
         }
@@ -424,6 +433,7 @@ static void CfTest(void)
         if (held & PAD_DOWN) {
             actor->position.z += 0.1f;
         }
+        /* Aim the camera at the actor; triangle/cross change the distance, L2/R2 the height. */
         view = camera;
         view->target_x = actor->position.x;
         view->target_y = actor->position.y + 1.0f;
@@ -448,6 +458,7 @@ static void CfTest(void)
 
             xglFontDebugPrintf(8, 80, nameFormat, name);
         }
+        /* Print the actor's 32 collision bits, one line of eight bits each. */
         bits = tActor->collision_bits;
         acc = 0;
         for (i = 0; i < 32; i++) {
@@ -468,11 +479,13 @@ static void CfTest(void)
                 xglFontDebugPrintf((i & 0x18) * 6, (i & 8) >> 3, line);
             }
         }
+        /* Draw the map number, undulation height and actor position. */
         map_no = MapNo;
         xglFontDebugPrintf(8, 8, mapUndulationFormat, map_no, fptodp(tActor->translate_y));
         position_actor = tActor;
         xglFontDebugPrintf(8, 176, actorPositionFormat, fptodp(position_actor->position.x),
                            fptodp(position_actor->position.y), fptodp(position_actor->position.z));
+        /* Run the camera callback once the camera is in state 4. */
         xglStudioGetCamera(&camera_after, 0);
         if (camera_after->state == 4 && GameLoopState.camera_callback != 0) {
             GameLoopState.camera_callback();
@@ -485,6 +498,10 @@ static void CfTest(void)
     }
 }
 
+/*
+ * Plays test sounds from the loaded effect banks; the pad picks the sound id,
+ * pitch, volume and pan. Returns at once when the exit buttons are held.
+ */
 void SePacketTest(void)
 {
     int sound_id = 0;
@@ -508,6 +525,7 @@ void SePacketTest(void)
         xglFontDebugPrintf(0, 0, soundPacketTestText);
         xglFontDebugPrintf(0, 16, soundIdFormat, sound_id);
         xglFontDebugPrintf(0, 32, soundPitchVolumePanFormat, pitch, volume, pan);
+        /* Circle plays with the volume and pan; cross plays at volume 500. */
         pressed = PadData.input.buttons.pressed;
         if (pressed & PAD_CIRCLE) {
             xglMakeSePacket(124,
@@ -520,6 +538,7 @@ void SePacketTest(void)
                             (SoundWork.effect_banks[sound_id >> 16].handle << 16) +
                                 (sound_id & 0xffff), 500, pitch);
         }
+        /* Left/right and up/down step the id and pitch on repeat; triangle and square step the bank. */
         pressed = PadData.input.buttons.pressed;
         repeat = PadData.input.buttons.repeat;
         if (repeat & PAD_RIGHT) {
@@ -540,6 +559,7 @@ void SePacketTest(void)
         if (pressed & PAD_SQUARE) {
             sound_id -= KARAKAMA_SE_BANK_STEP;
         }
+        /* R1 raises the volume, R2 lowers it; L1 raises the pan and L2 lowers it. */
         held = PadData.input.buttons.held;
         lower_volume = held & PAD_R2;
         if (held & PAD_R1) {
@@ -556,6 +576,7 @@ void SePacketTest(void)
     } while ((PadData.input.snapshot & KARAKAMA_EXIT_BUTTONS) != KARAKAMA_EXIT_BUTTONS);
 }
 
+/* Draws a three-vertex Gouraud strip from scratchpad vertices, animated by FrameCount. */
 void PrimTest(void)
 {
     ScratchpadPrimitiveVertex *vertices = (ScratchpadPrimitiveVertex *)(SCRATCHPAD_BASE + KARAKAMA_PRIM_VERTICES_OFFSET);
@@ -586,6 +607,7 @@ void PrimTest(void)
     xglPrimAddGouraudStripN(packet, 3);
 }
 
+/* Creates the fixed set of test map units. */
 void SetMapUnitTest(void)
 {
     float row_x;
@@ -605,6 +627,10 @@ void SetMapUnitTest(void)
     CreateUwamono(0x7101, -12.0f, 10.0f, 18.0f, 0.0f);
 }
 
+/*
+ * Initializes the lighting, CD, resources and subsystems, then creates the test
+ * actor tActor at x -14 and z 18 with its motion loaded.
+ */
 void InitCf(void)
 {
     StudioLight *light;
@@ -640,6 +666,10 @@ void InitCf(void)
     tActor->flags |= KARAKAMA_ACTOR_FLAG_TEST;
 }
 
+/*
+ * Shows the test texture on a sprite and lets the pad cycle its GS pixel format,
+ * CLUT offset, flip and scroll until exit. Returns when the file cannot be read.
+ */
 static void TexTest(void)
 {
     int height;
@@ -656,6 +686,7 @@ static void TexTest(void)
     u16 pressed;
     u16 repeat;
 
+    /* Load the texture past WorkEnd, 16-byte aligned; WorkEnd is restored on exit. */
     texture = (TextureTransferHeader *)(((u32)WorkEnd + 15) & ~15U);
     xglRenderClearFrame();
     ClearEnv.red = 0;
@@ -703,9 +734,11 @@ static void TexTest(void)
         if (pressed & PAD_SELECT) {
             flip ^= 1;
         }
+        /* Upload the texture, then select the GS texture format for mode. */
         sceGsSyncPath(0, 0);
         TexTrans(texture);
         clut_offset &= 0x3FF;
+        /* tw ends as the exponent of the smallest power of two not below width. */
         for (tw = 0; (1 << tw) < width; tw++) {
         }
         switch (mode) {
@@ -742,6 +775,7 @@ static void TexTest(void)
                 ((u64)1 << GS_TEX0_TCC_SHIFT) | ((u64)1 << GS_TEX0_CLD_SHIFT);
             break;
         }
+        /* Set the sprite texture coordinates from the scroll; flip picks the other size. */
         if (flip == 0) {
             TestEnv_1_0036DDB0.uv1.u = scroll_x * 16 + 4096;
             TestEnv_1_0036DDB0.uv1.v = scroll_y * 16 + 4096;
@@ -757,6 +791,7 @@ static void TexTest(void)
         TestEnv_1_0036DDB0.xyz1.x = 0x8600;
         TestEnv_1_0036DDB0.xyz0.y = 0x7800;
         TestEnv_1_0036DDB0.xyz1.y = 0x8800;
+        /* Draw the sprite, then show the state in hex. */
         FlushCache(0);
         xglDmaDirectNormal(DMA_CHANNEL_GIF, (u32)&TestEnv_1_0036DDB0, TEXTEST_SPRITE_QWORDS);
         xglFontDebugHex(0, 16, width, 3);
@@ -770,6 +805,10 @@ static void TexTest(void)
     WorkEnd = saved_work_end;
 }
 
+/*
+ * Uploads a texture through GIF DMA: first a setup packet with its size and block
+ * width, then the pixel payload.
+ */
 void TexTrans(TextureTransferHeader *texture)
 {
     int width_in_blocks;

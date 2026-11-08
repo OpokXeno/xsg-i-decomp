@@ -26,9 +26,9 @@ typedef struct UnitOrgRecord {
 static const char unitOrgDataUnitOrgGetErrText[32];
 extern UnitOrgRecord orgData[];
 
-/* This string precedes dataEtherTecSet's jump table in the original rodata. */
 static const char unitOrgDataUnitOrgGetErrText[32] = "** dataUnitOrgGet: err %d\n";
 
+/* Returns the org record for a one-based unit org id, or 0 after printing an error when the id is out of range. */
 void *dataUnitOrgGet(int unitOrgId)
 {
     if (unitOrgId >= UNIT_ORG_COUNT) {
@@ -41,6 +41,7 @@ void *dataUnitOrgGet(int unitOrgId)
 extern const char unitOrgDataPlChaGetErrText[];
 extern PlCharacter plChaData[];
 
+/* Returns the character record for a one-based character id, or 0 after printing an error when the id is out of range. */
 PlCharacter *dataPlChaGet(int cid)
 {
     if (cid >= PL_CHARACTER_ID_END) {
@@ -152,14 +153,16 @@ SpecialTableRecord *dataSpecTblGet(int entry)
 }
 
 extern void dataEtherLearnSet(int etherType, int techniqueId, int selector);
-/* The C-owned unitOrgDataPlChaGetErrText string lies between this and the first
- * definition above; the following switch table is emitted after this string. */
 static const char unitOrgDataEtherTecSetErrText[40] = "dataEtherTecSet: err %d\n";
 extern void *dataUnitFileGet(BattleUnit *unit, int charaId);
 extern int dataUnitFileLoadMot(BattleUnit *unit, int motionId, int slot, UnitFileInfo *file);
 
 extern void dataSpecLearnSet(int cid, int specialId);
 
+/*
+ * Teaches the ether technique and special technique mapped to selector 1 to 8.
+ * Prints an error and returns for any other selector.
+ */
 void dataEtherTecSet(int selector)
 {
     int etherType = 0;
@@ -217,6 +220,7 @@ void dataEtherTecSet(int selector)
 
 extern const char unitOrgDataEtherLearnSetErrText[];
 
+/* Sets the learned-ether bit for techniqueId of character cid, when techniqueId is not 0. */
 /* The third argument is supplied by dataEtherTecSet but is not read here. */
 void dataEtherLearnSet(int cid, int techniqueId, int selector)
 {
@@ -333,13 +337,12 @@ void dataSpecLearnSet(int cid, int specialId)
     }
 }
 
-/*
- * thinkMapTbl's tail is a per-character-id table of special-technique base
- * ids; dataSpecLearnGet subtracts the character's base from specialId
- * before indexing PlCharacter.special, the same subtraction
- * dataSpecLearnSet performs through dataSpecBaseGet.
- */
 static const char unitOrgDataSpecLearnGetErrText[32];
+/*
+ * Returns the special id stored in the character's slot for specialId, or 0 when
+ * specialId is 0 or cid is out of range. The slot index is specialId minus the
+ * character's base id from thinkMapTbl.
+ */
 short dataSpecLearnGet(int cid, int specialId)
 {
     short learned;
@@ -355,6 +358,7 @@ short dataSpecLearnGet(int cid, int specialId)
     return learned;
 }
 
+/* Returns the special slot of character cid whose id is specialId, or 0 when none matches. */
 PlSpecialSlot *dataSpecDataGet(int cid, int specialId)
 {
     PlCharacter *pl;
@@ -375,6 +379,7 @@ PlSpecialSlot *dataSpecDataGet(int cid, int specialId)
     return 0;
 }
 
+/* Returns the index of normalId in the unit's normal technique list, or -1 when it is absent. */
 int dataNormIdxGet(BattleUnit *unit, int normalId)
 {
     int i;
@@ -452,6 +457,7 @@ extern PlNormSlot orgNormalInit[];
 extern PlInitCopy12 orgSpecialInit;
 extern PlInitCopy24 orgEtherInit;
 
+/* Fills the unit org records of ids 1 to 32 from the battle data tables. */
 void dataPlUnitInit(void)
 {
   PlInitCopy12 *nb;
@@ -479,6 +485,7 @@ void dataPlUnitInit(void)
   int expEntry;
   new_var = &orgEtherInit;
   cha = (unsigned char *) plChaData;
+  /* Unit org records for ids 1 to 32. */
   for (i = 0; i < 0x20; i++)
   {
     rec = &((PlUnitRec *) orgData)[i];
@@ -516,6 +523,7 @@ void dataPlUnitInit(void)
     p2->f4 = *((unsigned short *) (((unsigned char *) eq) + 0x18));
     p2->f8 = *((unsigned short *) (((unsigned char *) eq) + 0x1A));
     p2->f6 = *((unsigned short *) (((unsigned char *) eq) + 0x1C));
+    /* Ids 1 to 16 also fill their character records. */
     if (i < 0x10)
     {
       memset((void *) ((i * 0xA8) + ((int) cha)), 0, 0xA8);
@@ -571,8 +579,7 @@ typedef struct BattleUnitStat {
 
 /*
  * playerData (7 entries) and enemyData (5 entries) are 0x180-byte battle
- * unit records; dataBattleInit is this TU's only writer and only clears the
- * calc-record index at +0x38.
+ * unit records. dataBattleInit clears the character id at +0x38 of each entry.
  */
 typedef struct BattleUnitInfo {
     UnitInitData init; /* +0x00: copy of dataUnitInitGet's record */
@@ -597,6 +604,7 @@ static int leaderCid;
 static int padMode;
 static short padData;
 
+/* Clears the character id of every player and enemy battle slot, after initializing the file info. */
 void dataBattleInit(void)
 {
     int i;
@@ -611,15 +619,9 @@ void dataBattleInit(void)
 }
 
 /*
- * dataUnitInitSet binds a battle unit record to unit->work (Actor +0x84).
- * Ids 1 to 32 reuse the player slot already holding the id, else take a free
- * player slot and fill it from the origin record (dataUnitOrgGet). Ids 33 to
- * 186 take a free enemy slot and build it from the init, normal and ether
- * tables. Ids 187 to 194 take a free player slot and copy the player slot that
- * holds the mapped id (7, 6, 3 or 2), then clear its three weapon ids. A slot
- * is free when its id at +0x38 is zero. The messages: no free player slot (PL),
- * no free enemy slot (EN), and no free slot or an unknown id in the
- * special-model range (SKJ).
+ * Binds the battle unit record for charaId to unit->work: ids 1 to 32 use or fill a
+ * player slot, ids 33 to 186 fill a free enemy slot, and ids 187 to 194 copy a player
+ * slot and clear its weapon ids. Prints an error and returns when no slot is free.
  */
 extern const char unitOrgDataUnitInitSetErrText[32];
 extern const char unitOrgDataUnitInitSetErrPLText[32];
@@ -687,6 +689,7 @@ void dataUnitInitSet(BattleUnit *unit, int charaId)
         slot->normalInit = *dataNormInitGet(charaId);
         slot->etherInit = *dataEtherInitGet(charaId);
     } else {
+        /* Find a free player slot for ids 187 to 194. */
         for (i = 0; i < 7; i++) {
             if (playerData[i].charaId == 0) {
                 slot = &playerData[i];
@@ -719,6 +722,7 @@ void dataUnitInitSet(BattleUnit *unit, int charaId)
             return;
         }
         work->up = (CalcUnitParam *)slot;
+        /* Copy the player slot whose charaId is the source id. */
         for (i = 0; i < 7; i++) {
             srcSlotOffset = i * sizeof(BattleUnitInfo);
             srcStatBlockOffset = srcSlotOffset + BATTLE_UNIT_STAT_OFFSET;
@@ -788,11 +792,8 @@ short dataWidGet(unsigned int wid)
 }
 
 /*
- * dataMotNameGetMenu reads motionId as a short at +0x14. calcBp2Tid
- * (src/ov01/calc.c, this TU's TecKindView) reads the same +0x11 byte this
- * file's dataFileLoadWepSp/dataFileLoadWepSp2 compare against 6 and names
- * it kind (a BP timeline/special-weapon selector); kept as the same name
- * and signed-byte width here since this file owns the rest of the layout.
+ * dataMotNameGetMenu reads motionId as a short at +0x14. The byte at +0x11 is kind,
+ * a BP timeline/special-weapon selector that calcBp2Tid also reads.
  */
 typedef struct TecRecord {
     unsigned char unmodeled_00[0x11];
@@ -824,7 +825,7 @@ TecRecord *dataTecGet(int entry)
 
 /* dataMotNameGetMenu reads the weapon's technique id as a short at +0x14.
  * dataUnitFileLoad loads a weapon slot's own technique motion only when the
- * short at +0xA is 1 (`lh $3,0xA($2)` / `bne $3,$21`, $21 = 1). */
+ * short at +0xA is 1. */
 typedef struct WpnRecord {
     unsigned char unmodeled_00[0xA];
     short motionType; /* +0xA */
@@ -1011,9 +1012,7 @@ typedef struct GainRecord { unsigned char opaque[0x14]; } GainRecord;
 
 /*
  * batDatBuf.header.gainOffset is the gain table's byte offset from the loaded block;
- * dataGainGet's table starts 0x294 bytes before this field's own byte
- * offset, the same idiom dataExpTblGet uses for its own table. Splat has
- * not named the table's own base, only this field.
+ * dataGainGet's table starts 0x294 bytes before that offset.
  */
 extern const char unitOrgDataGainGetErrText[];
 
@@ -1066,6 +1065,10 @@ void dataCdSyncClear(void)
 static const char unitOrgNBreadErrText[24];
 static const char unitOrgNBreadEndText[24];
 
+/*
+ * CD read callback for dataFileLoadNB: prints read errors and, on result 4,
+ * counts down cdReqNum and prints the end text when it reaches zero.
+ */
 void dataNBreadCB(int result) {
     if (result < 0) {
         printf(unitOrgNBreadErrText, result);
@@ -1081,14 +1084,14 @@ void dataNBreadCB(int result) {
 extern const char unitOrgNBreadErrText2[];
 extern const char unitOrgNBreadText[];
 
+/*
+ * Starts an asynchronous CD read of filename into destination and counts it in
+ * cdReqNum. Returns 1 when the request is accepted and 0 when it fails.
+ */
 int dataFileLoadNB(const char *filename, void *destination)
 {
-    /* xglCdReadFile's published declaration (include/umbrella/public.h:161,
-     * also include/main/xgl_cd.h:6) types the fourth argument `int flags`;
-     * this call (like src/main/window_tex_load.c:348 and src/main/srs.c:582,
-     * the lane's other published callers passing a callback here) passes
-     * dataNBreadCB's completion callback through that int, so the cast
-     * stays rather than retyping a shared, out-of-lane header. */
+    /* xglCdReadFile declares its fourth argument as int, so the completion callback
+     * is passed through an int cast. */
     int result = xglCdReadFile(filename, destination, 1, (int)dataNBreadCB);
 
     if (result < 0) {
@@ -1103,6 +1106,7 @@ int dataFileLoadNB(const char *filename, void *destination)
 extern void *motAdrTbl[];
 extern int mdlAdrTbl[];
 
+/* Resets the unit file table and fills its motion and model addresses from motAdrTbl and mdlAdrTbl. */
 void dataFileInfoInit(void)
 {
     int i;
@@ -1214,12 +1218,6 @@ extern int GameResourceSearch(int type, int id);
 extern void xglMemCopy16(unsigned int dst, unsigned int src, int n);
 extern void xglMemCopy16b(unsigned int dst, unsigned int src, int n);
 
-/*
- * For each entry of tbl (at most three, ended by id 0), finds the enemy's
- * GameResource block. The first block whose parts are ordered is copied to
- * the enemy unit slot 3 + i, and the copy is rebased to the slot's model
- * address; the animation and texture parts follow it.
- */
 typedef struct EnemyMdlFile {
     int charaId;
     int cid;
@@ -1231,6 +1229,11 @@ typedef struct EnemyMdlFile {
     unsigned char pad24[0x130 - 0x24];
 } EnemyMdlFile;
 
+/*
+ * Finds the GameResource block of the first entry of tbl (at most three, ended by
+ * id 0) whose parts are in order and copies it to unit file slot 3 + i, rebasing its
+ * part pointers to the slot's model address.
+ */
 void dataEnemyMdlChk(EnemyMdlEnt *tbl)
 {
     EnemyMdlFile *dst;
@@ -1287,21 +1290,19 @@ typedef struct LeaderChkWork {
 } LeaderChkWork;
 
 extern int calcAccEquChk(BattleUnit *unit, int accId);
-/* The leader's character id (`lw $3,0x0($16)`, $16 = &leaderId), compared
- * with charaId; a static of the original TU at 0x00a597b8, still asm-owned. */
+/* Id of the party leader, set by dataLeaderChk and compared in dataUnitFileLoad. */
 static int leaderId;
 
-/*
- * Scans the first three party candidates (ids[0], ids[4], ids[8]). The first
- * one whose battle id matches the party leader and who has no accessory
- * equipped becomes the leader: its character id is recorded, and its file
- * slot's model address is exchanged with slot 0.
- */
 typedef struct LeaderUnitFile {
     int charaId;
     unsigned char unmodeled_4[0x12c];
 } LeaderUnitFile;
 
+/*
+ * Scans the party candidates ids[0], ids[4] and ids[8]. The first one whose cid matches
+ * the party leader's battle id and who has no accessory equipped becomes the leader: the
+ * battle id is stored in leaderCid, its id in leaderId, and a pointer field of its file slot is rewritten.
+ */
 void dataLeaderChk(short *ids)
 {
     union {
@@ -1365,10 +1366,9 @@ static const char *motNameBase;
 static const char *motNameExt;
 
 /*
- * Menu-side motion name lookup. The unit-origin record is the unit's own
- * CalcUnitParam (0x180 bytes, include/ov01/calc.h), so the weapon slot
- * selects weaponId[]; the weapon record names its technique and the
- * technique record names the motion.
+ * Menu-side motion name lookup for one weapon slot of a unit origin record. The weapon
+ * id comes from weaponId[], the weapon record names its technique and the technique
+ * record names the motion.
  */
 int dataMotNameGetMenu(char *name, int orgId, int weaponSlot)
 {
@@ -1398,6 +1398,7 @@ int dataMotNameGetMenu(char *name, int orgId, int weaponSlot)
     return found;
 }
 
+/* Builds the motion name of motionId for weaponId into name, and clears name when no suffix matches. */
 int dataMotNameGet(char *name, BattleUnit *unit, int motionId, int weaponId)
 {
     int found;
@@ -1506,6 +1507,11 @@ int dataUnitFileLoad(BattleUnit *unit, int charaId)
 
 static const char unitOrgDataUnitFileLoadErrText[32];
 
+/*
+ * Returns the file slot holding charaId, or else claims a free slot for it: ids 0x21
+ * to 0xBA use slots 3 to 5 and other ids use slots 0 to 2. Returns 0 and prints an
+ * error when no slot is free.
+ */
 void *dataUnitFileGet(BattleUnit *unit, int charaId)
 {
     UnitFileInfo *slot;
@@ -1559,10 +1565,9 @@ extern const char unitOrgMomobText[];
 extern int MenuScenarioNoGet(void);
 
 /*
- * Picks the packed model name for a party member. Units outside the special
- * character range, or carrying the AGWS flag in their work or parameter
- * record, use the pcPack_0 table; the special range takes the fixed names
- * chosen by the accessory and status checks.
+ * Picks the packed model name for a party member: pcPack_0 maps the character id to a name,
+ * and outside the special character range accessory and status checks may replace it.
+ * AGWS-flagged units outside that range get no name.
  */
 const char *dataPackPcMdlNameGet(BattleUnit *unit)
 {
@@ -1645,12 +1650,9 @@ extern void ACT_initMotion(Actor *actor);
  * texture buffers selected by the leader path, not file identifiers. */
 #define LEADER_ANIMATION_ADDRESS ((void *)0x01070800)
 #define LEADER_TEXTURE_ADDRESS ((void *)0x010B1000)
-/* dataUnitFileLoadFaceMdl's cache-miss buffers: lui $3,(0x10B4000>>16) /
- * ori $3,$3,(0x10B4000&0xFFFF) builds the model address below. */
+/* Face model buffer that dataUnitFileLoadFaceMdl sets for the leader. */
 #define FACE_MODEL_ADDRESS ((void *)0x010B4000)
-/* dataUnitFileLoadFaceMdl's cache-miss buffers: lui $4,(0x10E6000>>16) /
- * ori $4,$4,(0x10E6000&0xFFFF) builds the texture address below (stored to
- * the MOVE slot, not the MATRIX slot). */
+/* Face texture buffer that dataUnitFileLoadFaceMdl sets for the leader; it goes to the MOVE resource slot. */
 #define FACE_TEXTURE_ADDRESS ((void *)0x010E6000)
 
 static char mdlFileName[256];
@@ -1669,11 +1671,10 @@ extern int xglCdGetFileSize(const char *name);
 extern int dataUnitFileLoadFaceMdl(BattleUnit *unit, int charaId, UnitFileInfo *file);
 
 /*
- * Reuse cached model data when the character id agrees. Otherwise use
- * the leader's resident data, a packed player model, or separate model,
- * animation and texture files, rounding each loaded file to a CD sector.
- * Repeated calcUPGet calls and signed division preserve the original
- * call sequence and sector-rounding behavior.
+ * Loads the model, animation and texture data of a unit, or reuses it when the character
+ * id matches. The leader's resident data, a packed player model or separate files are used,
+ * each rounded to a CD sector. Repeated calcUPGet calls and signed division keep the original
+ * call sequence and sector rounding.
  */
 int dataUnitFileLoadMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
 {
@@ -1705,6 +1706,7 @@ int dataUnitFileLoadMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
                 file->textureAdr = 0;
             }
         } else {
+            /* Separate model, animation and texture files. */
             RES_GetMdlFileName(mdlFileName, charaId);
             strcpy(mdlFileName2, mdlFileName);
             strcat(mdlFileName2, unitOrgLexText);
@@ -1746,6 +1748,7 @@ int dataUnitFileLoadMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
 extern const char unitOrgDataUnitFileLoadFaceMdlHitText[];
 extern void *dataChildActorCreate(int callerId);
 
+/* Creates the face child actor of a unit. The leader's fixed face buffers are set when its id changes. */
 int dataUnitFileLoadFaceMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
 {
     Actor *actor;
@@ -1768,9 +1771,9 @@ int dataUnitFileLoadFaceMdl(BattleUnit *unit, int charaId, UnitFileInfo *file)
     return 1;
 }
 
-/* Word view of a Actor's pack slots. Its int lvalues keep the
+/* Word view of an Actor's pack slots. Its int lvalues keep the
  * original alias set: stores through the void * fields of Actor
- * move the size load in dataUnitFileLoadMot (measured by tucheck). */
+ * move the size load in dataUnitFileLoadMot. */
 typedef struct ActorWords {
     unsigned char unmodeled_0[0x100];
     int packEntry[4]; /* +0x100 */
@@ -1783,6 +1786,7 @@ extern const char unitOrgFPKDataNothingText[];
 extern const char unitOrgDataUnitFileLoadMotHitText[];
 extern const char unitOrgMOTReadSizeText[];
 
+/* Loads the motion pack for motionId into slot of the unit file and points the actor's pack table entry at it. */
 int dataUnitFileLoadMot(BattleUnit *unit, int motionId, int slot, UnitFileInfo *file)
 {
     Actor *actor;
@@ -1835,6 +1839,7 @@ extern const char unitOrgWpnActotText[];
 #define WPN_FILE_SECTORS(name) \
     (((xglCdGetFileSize(name) + (CD_SECTOR_SIZE - 1)) / CD_SECTOR_SIZE) * CD_SECTOR_SIZE)
 
+/* Loads a weapon model into the unit's weapon slot and creates its child actor. Returns 0 when the weapon has no model. */
 int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *file)
 {
     UnitWeaponActors *equip = (UnitWeaponActors *)unit;
@@ -1870,6 +1875,7 @@ int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *
             strcat(mdlFileName2, unitOrgJntText);
             file->wpn[slot].part[2].size = WPN_FILE_SECTORS(mdlFileName2);
         }
+        /* Slot 2 of a unit without the AGWS flag uses the mdlAdrTbl[6] address. */
         if (!(calcUPGet(unit)->flags & CALC_UNIT_FLAG_IS_AGWS) && slot == 2) {
             address = (unsigned char *)mdlAdrTbl[6];
             file->wpn[2].part[0].id = 0x3000;
@@ -1890,6 +1896,7 @@ int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *
                        + file->wpn[slot].part[2].size;
             file->wpn[slot].part[0].id = weaponId;
         }
+        /* Packed weapon models load as one file; other models load their parts in sequence. */
         if (packed == 1) {
             if (dataWpnLRChk(unit, weaponId, slot, file)) {
                 file->wpn[slot].part[0].adr = file->wpn[0].part[0].adr;
@@ -1934,6 +1941,7 @@ int dataUnitFileLoadWep(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *
     return 1;
 }
 
+/* Returns 1 when slot 1 holds the same weapon as slot 0, so slot 1 can reuse slot 0's parts. */
 int dataWpnLRChk(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *fileInfo)
 {
     (void)unit;
@@ -1946,6 +1954,7 @@ int dataWpnLRChk(BattleUnit *unit, int weaponId, int slot, UnitFileInfo *fileInf
 extern Actor *ACT_create(int parent, int callerId);
 static const char unitOrgDataChildActorCreateErrText[32];
 
+/* Creates a child actor for callerId and initializes its motion. Returns 0 when creation fails. */
 void *dataChildActorCreate(int callerId)
 {
     Actor *actor;
@@ -1967,6 +1976,10 @@ int dataUnitFileLoadMotSp(BattleUnit *unit, int motionId, int slot) {
     return 1;
 }
 
+/*
+ * Sets the slot's motion address and copies its pack entry into the weapon actors' motion
+ * slots: both weapons when p4 is 5, else weapon p3 when p3 is not negative.
+ */
 int dataUnitFileLoadMotSp2(BattleUnit *unit, int motionId, int slot, int p3, int p4)
 {
     Actor *actor;
@@ -1996,14 +2009,8 @@ int dataUnitFileLoadMotSp2(BattleUnit *unit, int motionId, int slot, int p3, int
 extern const char unitOrgDataUnitFileLoad2Text[];
 extern void dataUnitFileLoad2Sub(BattleUnit *unit);
 
-/* unitCmdSet's queued-command record: src/ov01/unit_cmd.h:157-162 (CmdEntry)
- * and src/ov01/calc.c:28-34 (CalcCmdEntry) both restate this same layout
- * for their own calls into unitCmdSet (still asm, src/ov01/unit_cmd.c), so
- * this TU forward-declares the identical selector/argument/extra fields
- * rather than inventing its own. This call only writes selector and
- * argument; extra and the trailing 8 bytes are unwritten here, matching
- * calc.c's own "unwritten by the one evidenced call" note for the same
- * tail. */
+/* Queued-command record for unitCmdSet. dataUnitFileLoad2 writes only selector and argument;
+ * extra and the trailing 8 bytes are left unwritten. */
 typedef struct CmdEntry {
     int selector; /* +0x00 */
     int argument; /* +0x04 */
@@ -2012,6 +2019,7 @@ typedef struct CmdEntry {
 } CmdEntry;
 extern int rnd(int max);
 
+/* Runs dataUnitFileLoad2Sub and queues command 0x25 for the unit; enemies get a random argument, others 0. */
 void dataUnitFileLoad2(BattleUnit *unit)
 {
     CmdEntry cmd;
@@ -2052,6 +2060,11 @@ extern void ACT_updateDefault(Actor *self);
 extern const char unitOrgDataUnitFileLoad2SubMdlPackText[];
 extern const char unitOrgDataUnitFileLoad2SubWpnPackText[];
 
+/*
+ * Finishes the actors of a unit once its files are loaded: unpacks the model pack pointers
+ * on first use, sets the hand, face and weapon actors and their motions, and creates the
+ * unit effect when the stat checks allow it.
+ */
 void dataUnitFileLoad2Sub(BattleUnit *unit)
 {
     unsigned char effectParam[0x24];
@@ -2090,6 +2103,7 @@ void dataUnitFileLoad2Sub(BattleUnit *unit)
         }
         printf(unitOrgDataUnitFileLoad2SubMdlPackText);
     }
+    /* Pack the models of weapons that have one (id other than 0x3000). */
     i = 0;
     off = 0x50;
     do {
@@ -2129,6 +2143,7 @@ void dataUnitFileLoad2Sub(BattleUnit *unit)
         face->flags = face->flags & (~8);
         unitFaceMotSet(unit, 0x35);
     }
+    /* Attach each weapon to its arm slot and set its motion. */
     for (i = 0; i < 3; i++) {
         wpnId = calcUPGet(unit)->weaponId[i];
         actor = ((EquipActor **) unit->weapon)[i & 3];
@@ -2204,12 +2219,10 @@ void dataPackWpnMdl2(Actor *actor)
 }
 
 /*
- * Resolve a loaded motion pack in place: the anim pack table slot gets the
- * address of the pack's first entry and the matching motionPackEntry slot that of
- * its second, both as offsets from the pack header (the PackedFile idiom
- * above). Computing the slot in a local keeps the scaled-index copy the
- * motionPackEntry store uses (`daddu $5,$3,$0`); both header offsets are read
- * before the stores.
+ * Resolves a loaded motion pack in place: the anim pack table slot gets the address of the
+ * pack's first entry and the motionPackEntry slot that of its second, both as offsets from
+ * the pack header (the PackedFile idiom above). The slot is computed in a local, and both
+ * header offsets are read before the stores, to keep the original index copy.
  */
 void dataMotAdrSet(Actor *actor, int motionId)
 {
@@ -2366,10 +2379,10 @@ int dataDefWpnGet(BattleUnit *unit)
 extern const char unitOrgMTDIdFrameText[];
 
 /*
- * Looks up the motion record for the actor's current motion slot and
- * trigger. The record's key list is searched for the trigger; when that
- * entry lists the current frame, the motion's frame table is scanned.
- * Returns 1 on a frame hit, 2 on a trigger without that frame, else 0.
+ * Finds the motion record for the actor's current motion id, then walks its
+ * trigger records for one keyed by trigger. Returns 1 (after printing the key)
+ * when that record lists the current frame, 2 when the trigger is present
+ * without that frame, else 0.
  */
 int dataMtdRead(BattleUnit *unit, short trigger)
 {
@@ -2418,6 +2431,7 @@ int dataMtdRead(BattleUnit *unit, short trigger)
     ft = *(float *) (act + 0x6F4) / 0.033333335f + 0.5f;
     frame = (int) ft;
     k = key;
+    /* Walk the trigger records: key, frame count, then the frame ids. */
     while (k != 0) {
         if ((short) k == trigger) {
             for (i = 0; i < *(short *) (r + 2); i++) {
@@ -2495,6 +2509,7 @@ void *dataThinkAdrGet(void)
     return thinkBuf;
 }
 
+/* Returns the index of mapNo in thinkMapTbl, or -1 when it is not mapped. */
 int thinkMapGet(int mapNo)
 {
     int i;
@@ -2516,6 +2531,7 @@ static const char *thinkNameBase;
 static const char *thinkNameExt;
 static const char unitOrgJpText[8];
 
+/* Builds the behavior file name for thinkNo into name and returns 1, or clears name and returns 0 when thinkNo is not mapped. */
 int dataThinkNameGet(char *name, int thinkNo)
 {
     char num[16];
@@ -2567,6 +2583,7 @@ int dataThinkFileLoad(int thinkNo)
     return 0;
 }
 
+/* Loads the behavior file of the remapped number thinkNo into thinkBuf. */
 void dataThinkLoad(int thinkNo)
 {
     char path[256];
@@ -2603,6 +2620,7 @@ static const char *mapName;
 static const char *mapNameExt;
 static const char unitOrgDataMapLoadErrText[32];
 
+/* Starts a non-blocking load of map mapNo into its fixed buffer; numbers of 100 or more print an error. */
 void dataMapLoad(int mapNo)
 {
     char path[256];
@@ -2877,14 +2895,15 @@ void dataVPadModeSet(int mode)
 #define VIRTUAL_PAD_BIT_COUNT 14
 
 static unsigned short padConvTbl[14];
+/* Maps the low 14 bits of virtualPad to pad bits through padConvTbl and stores the result in padData. */
 void dataVPadSet(int virtualPad)
 {
     unsigned short result = 0;
     int shift = 0;
     const unsigned short *entry = padConvTbl;
     virtualPad &= 0xFFFF;
-    /* Original entry at 0x00A1D2A0 enters the body before testing the
-     * loop count; keep the table pointer advance and 16-bit mask. */
+    /* The loop enters its body before testing the count, as in the original; keep the
+     * table pointer advance and 16-bit mask. */
     do {
         if ((virtualPad >> shift) & 1) {
             result |= *entry;
@@ -2895,13 +2914,13 @@ void dataVPadSet(int virtualPad)
     padData = result;
 }
 
-/* MAIN's two pad records (0x00490d90, 2 * 0x68 bytes). */
+/* MAIN's two pad records (2 * 0x68 bytes). */
 extern XglPadRecord PadData[2];
 
 /*
- * Pad 0's direction word: 0 the held directions, 1 the newly pressed ones,
- * 2 the auto-repeated ones. In virtual-pad mode (dataVPadModeSet) the word
- * dataVPadSet built is returned instead.
+ * Returns a direction word of pad 0 selected by padNo: 0 the held directions, 1 the newly
+ * pressed ones, 2 the auto-repeated ones. In virtual-pad mode (dataVPadModeSet) the word
+ * built by dataVPadSet is returned for any padNo.
  */
 int dataPadRead(int padNo)
 {

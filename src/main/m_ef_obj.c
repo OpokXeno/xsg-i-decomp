@@ -30,12 +30,14 @@ static u32 mefObjSysFlags = 0;
 
 static MEfObj mefObjBuff[MEFOBJ_COUNT];
 
+/* Clears the object pool and marks the system ready. */
 void MEfObjInit(void)
 {
     memset(mefObjBuff, 0, MEFOBJ_COUNT * MEFOBJ_SIZE);
     mefObjSysFlags = 1;
 }
 
+/* Enables object updates when `enabled` is nonzero, and disables them otherwise. */
 void MEfObjEnabled(short enabled)
 {
     if (enabled != 0) {
@@ -45,6 +47,10 @@ void MEfObjEnabled(short enabled)
     mefObjSysFlags &= ~MEFOBJ_SYS_ENABLED;
 }
 
+/*
+ * Updates the effect camera parameters from the current studio camera, then runs the
+ * first update callbacks of every active object.  Does nothing unless ready and enabled.
+ */
 void MEfObjExec1st(void)
 {
     if ((mefObjSysFlags & (MEFOBJ_SYS_READY | MEFOBJ_SYS_ENABLED)) ==
@@ -78,6 +84,7 @@ void MEfObjExec1st(void)
     }
 }
 
+/* Runs the second update callbacks of every active object, when the system is ready and enabled. */
 void MEfObjExec2nd(void)
 {
     if ((mefObjSysFlags & (MEFOBJ_SYS_READY | MEFOBJ_SYS_ENABLED)) ==
@@ -99,6 +106,7 @@ void MEfObjExec2nd(void)
     }
 }
 
+/* Returns a free pool object, marked active with no callbacks; returns 0 when not ready or the pool is full. */
 void *MEfObjCreate(void)
 {
     MEfObj *object;
@@ -126,6 +134,7 @@ void *MEfObjCreate(void)
     return 0;
 }
 
+/* Deactivates `object` and clears its callbacks; returns 1 on success, 0 when not ready or not active. */
 int MEfObjDestroy(void *object)
 {
     MEfObj *effect = object;

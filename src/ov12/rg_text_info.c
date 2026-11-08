@@ -20,6 +20,7 @@ const char textInfoEndMarkerString[8] = ".";
 const char textInfoUnknownParameterTypeFormat[40] = "unknown parameter type %d";
 
 
+/* Returns the entry named pszName, or 0 when no entry before the end marker matches. */
 struct RgTextInfoEntry *_FindEntry(struct RgTextInfoEntry *pParaList,
                                    const char *pszName)
 {
@@ -39,6 +40,7 @@ struct RgTextInfoEntry *_FindEntry(struct RgTextInfoEntry *pParaList,
     return 0;
 }
 
+/* Reads keyword and value pairs until the end of the text, storing each value through its entry. */
 void RgTextInfoRead(struct RgReadText *pReadText,
                     struct RgTextInfoEntry *pParaList, char *pData)
 {
@@ -71,6 +73,7 @@ void RgTextInfoRead(struct RgReadText *pReadText,
             RgError(textInfoUnknownKeyWordFormat, textInfoSourcePath, 53, pszName);
         }
         type = pEntry->type;
+        /* The entry type selects how the value is read and where it is stored. */
         switch (type) {
         case RG_TEXT_INFO_INT_OFFSET:
             integer = RgReadTextGetInt(pReadText);
@@ -128,6 +131,7 @@ void RgTextInfoRead(struct RgReadText *pReadText,
                 } while (value_index < address_count);
             }
             break;
+        /* Callbacks receive each string token up to the end marker "." */
         case RG_TEXT_INFO_CALLBACK_OFFSET:
             value_index = 0;
             RgReadTextGetString(pReadText, pszString);

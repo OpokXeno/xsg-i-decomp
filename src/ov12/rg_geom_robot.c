@@ -25,6 +25,7 @@ const char geomRobotAssertGeomNotNil[] = "pGeom != NIL";
 const char geomRobotSourcePath[] = "../rg_geom_robot.euc.c";
 const char geomRobotAssertRobotNotNil[] = "pRobot != NIL";
 
+/* Sets up a robot geometry: its ball, type, status and rotation fields. */
 static void _InitRgGeomRobot(RgGeom *geom)
 {
     RgGeomRobot *robot = (RgGeomRobot *)geom;
@@ -43,6 +44,7 @@ static void _InitRgGeomRobot(RgGeom *geom)
     RgGeomSetPassTimeMeshod(geom, (RgGeomPassTimeMethod)RgGeomRobotPassTime);
 }
 
+/* Allocates a robot geometry and initializes it. */
 RgGeom *CreateRgGeomRobot(void)
 {
     RgGeom *geom;
@@ -55,6 +57,7 @@ RgGeom *CreateRgGeomRobot(void)
     return geom;
 }
 
+/* Initializes an existing robot geometry. */
 void InitRgGeomRobot(RgGeom *geom)
 {
     if (geom == 0) {
@@ -72,6 +75,7 @@ void RgGeomRobotSetRotate(RgGeom *geom, float rotate)
     robot->rotate = rotate;
 }
 
+/* Sets the rotation from the X and Z components of direction. */
 void RgGeomRobotSetDir(RgGeom *geom, RgVector direction)
 {
     RgGeomRobotSetRotate(geom, atan2(direction[0], direction[2]));
@@ -140,6 +144,7 @@ float RgGeomRobotGetRotForce(const RgGeom *geom)
     return robot->rotForce;
 }
 
+/* Builds the local matrix from the rotation, with the position in its translation row. */
 void RgGeomRobotCalcLocal(RgGeom *geom, RgMatrix matrix)
 {
     RgGeomRobot *robot = (RgGeomRobot *)geom;
@@ -162,6 +167,11 @@ void RgGeomRobotCalcLocal(RgGeom *geom, RgMatrix matrix)
 #define RG_GEOM_ROBOT_PI 3.1415927f
 #define RG_GEOM_ROBOT_TWO_PI 6.2831855f
 
+/*
+ * Advances the robot by deltaTime: applies the rotation force divided by the
+ * point weight, clamps the angular velocity, wraps the angle into [-PI, PI],
+ * and damps the velocity when the damping status is set.
+ */
 void RgGeomRobotPassTime(RgGeom *geom, float deltaTime)
 {
     RgGeomRobot *robot = (RgGeomRobot *)geom;

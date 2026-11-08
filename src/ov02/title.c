@@ -55,6 +55,7 @@
 
 extern u8 gameEntrySelection[];
 
+/* Queues a VIF1 packet that copies the frame through the GS transfer registers. */
 static int copyframe(void)
 {
     XglPacket *packet;
@@ -90,6 +91,7 @@ static int copyframe(void)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/* Queues a VIF1 packet that draws the title's textured quad and sets its mipmap state from the render buffer bases. */
 static void build_mipmap(XglPacket *packet)
 {
     TitleMipmapPacket *gif;
@@ -200,6 +202,7 @@ static void build_mipmap(XglPacket *packet)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/* Gives particle index a new start position, depth and speed. */
 static void particle_reset(TitleParticleView *particles, int index)
 {
     int random_value;
@@ -234,6 +237,11 @@ static void particle_reset(TitleParticleView *particles, int index)
         (s16)((xglSRand() & 0x3f) + 16);
 }
 
+/*
+ * Runs the title screen: reads the memory cards and the HDD, loads and decodes the
+ * title data, then loops over the menu until an entry is chosen or the timeout ends.
+ * Returns the selection value for the caller, or 0 when nothing starts.
+ */
 int Title(void)
 {
     XglPacket *packet;
@@ -312,6 +320,7 @@ int Title(void)
     fade = TITLE_FADE_MAX;
     preroll = TITLE_PREROLL_FRAMES;
 
+    /* Per-frame loop: handles input, then builds the frame packet. */
     for (;;) {
         TitleRecordHeader *header;
         TitleRecord *record;
@@ -378,6 +387,7 @@ int Title(void)
         sceVif1PkRef(packet, FlushEnv_5, 3, 0, 0, 0);
         sceVif1PkCnt(packet, 0);
 
+        /* Snow particles: move each one and reset it once it leaves the visible area. */
         for (particleIndex = 0; TITLE_PARTICLE_COUNT > particleIndex; particleIndex++) {
             TitleParticleView *particle = (TitleParticleView *)(TITLE_PARTICLE_BASE + particleIndex * TITLE_PARTICLE_STRIDE);
 
@@ -407,6 +417,7 @@ int Title(void)
             sceVif1PkRef(packet, (u8 *)header + record->w16, record->w12, 0, 0, 0);
         }
 
+        /* Menu entries: the selected entry is drawn highlighted; HDD install is skipped when no disk is usable. */
         for (m = 0; 4 > m; m++) {
             int sel;
             int w9;
@@ -455,6 +466,7 @@ int Title(void)
         sceVif1PkRef(packet, TestEnv_12, 10, 0, 0, 0);
         xglSleep();
     }
+        /* Starts the chosen option. */
         switch (flag) {
         case TITLE_CHOICE_NEW_GAME:
             TitleGameInit();

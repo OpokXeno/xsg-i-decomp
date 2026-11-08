@@ -29,15 +29,10 @@ extern float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second);
 extern Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first,
                                           const Vector4 *second, float parameter);
 /*
- * main/m_math.h declares this void; MCamCalcBaseCoord (like
- * m_ef_create_amp_02.c's MMathCalcDir use) reads the srsAtan2 result MMathCalcDir
- * leaves in $f0 (it calls srsAtan2 last and returns), so this TU redeclares it
- * float-returning.
+ * Declared float-returning here: MCamCalcBaseCoord reads the srsAtan2 result that
+ * MMathCalcDir leaves in $f0. The definition in src/main/m_math.c returns void, so
+ * this is an ABI workaround, not a claim that the two signatures agree.
  */
-/* The definition in src/main/m_math.c returns void (m_math.h:22) while the
- * original code here reads $f0 after the call. This declaration is an inherited
- * ABI workaround, also present at src/ov01/m_ef_create_amp_02.c:72; it is not a
- * claim that the signatures agree. */
 extern float MMathCalcDir(const void *first, const void *second);
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
 extern float fmodf(float value, float modulus);
@@ -79,8 +74,7 @@ enum MCamPoint {
 /*
  * Linear interpolation state shared by the per-parameter MoveProc callbacks
  * (mode/duration/elapsed feed MCamMoveProc_CalcRatio; start/end/current hold
- * the eased scalar value). The counters compare unsigned (`sltu $2,$2,$3`,
- * 0x00a32bf8 in MCamMoveProc_Bank).
+ * the eased scalar value). The counters are compared unsigned.
  */
 typedef struct MCamMoveState {
     MCamIpType mode;
@@ -98,9 +92,8 @@ typedef struct MCamMoveState {
  * then a decay phase that shrinks the amplitude by decayStep per frame.
  */
 typedef struct MCamShakeState {
-    /* MCamShake's first argument, stored at +0x00 (`sw $4,0x0($9)`,
-     * 0x00a31ccc); MCamShakeProc reads +0x04..+0x1C and never this word,
-     * so what it selects is not established. */
+    /* MCamShake's first argument, stored at +0x00. MCamShakeProc reads
+     * +0x04..+0x1C and never this word, so what it selects is not established. */
     unsigned int mode;
     float amplitude;
     float decayStep;
@@ -112,13 +105,11 @@ typedef struct MCamShakeState {
 } MCamShakeState;
 
 /*
- * How MCamCalcCoord offsets the base coordinate. In MCamMove_Coord the
- * original stores zero to this mode (`sw $0,0x70($20)`, 0x00a32714) between the
- * request's fixOnArrival halfword load (`lh $3,0xBC($18)`, 0x00a3270c) and the
- * camFlags load (`lw $2,0($4)`, 0x00a32718). The enum typing is required by the
- * tested matching form: with an unsigned int field the compiler moved that
- * store above the halfword load, with the enum it kept the original order.
- * That is a property of the form that matched, not an established original type.
+ * How MCamCalcCoord offsets the base coordinate. MCamMove_Coord stores zero to
+ * this mode between the request's fixOnArrival halfword load and the camFlags
+ * load. The enum type keeps that store in its original order: with an unsigned
+ * int field the compiler moved it above the halfword load. The enum is a codegen
+ * choice, not a recovered original type.
  */
 typedef enum MCamOffsetMode {
     MCAM_OFFSET_NONE,
@@ -142,10 +133,8 @@ typedef struct MCamCoordOffset {
 
 /*
  * A point's fixed coordinate. MCamMove_Coord copies whole point records with
- * aligned ld/sd loops. What was tested: copying a plain Vector4 source
- * compiled to ldl/ldr/sdl/sdr, while a union with a u64 pair compiled to ld/sd.
- * The u64 pair (the GameVector8 spelling in src/main/game.c) therefore selects
- * the matching form and carries no meaning of its own.
+ * aligned ld/sd loops, which the u64 pair produces; a plain Vector4 copy compiles
+ * to ldl/ldr/sdl/sdr instead. The pair carries no meaning of its own.
  */
 typedef union MCamVector {
     Vector4 vector;
@@ -153,11 +142,10 @@ typedef union MCamVector {
 } MCamVector;
 
 /*
- * The selector MCamCalcBaseCoord switches on for a point's base coordinate
- * (a compare chain at 0x00a31ef4..0x00a31f10, not a jump table): what each
- * case computes names the value.
- * Constants only; the field stays an unsigned int (an enum-typed field
- * changes the compiler's scheduling, see MCamOffsetMode).
+ * The selector MCamCalcBaseCoord switches on for a point's base coordinate. It is
+ * a compare chain, not a jump table. The enum is used for its constants only; the
+ * field stays an unsigned int, since an enum-typed field changes the compiler's
+ * scheduling (see MCamOffsetMode).
  */
 enum MCamBaseMode {
     MCAM_BASE_FIXED = 0,  /* copies fixedCoord */
@@ -169,9 +157,8 @@ enum MCamBaseMode {
 
 /*
  * MCamCalcBaseCoord selects the base coordinate by mode (MCamBaseMode).
- * Size-preserving for the type: 0xB0 by member arithmetic (fixedCoord
- * +0x10, ratio +0x6C, coordOffset +0x70..0xA4, perspectiveAngle +0xA4, tail
- * to 0xB0).
+ * The struct is 0xB0 bytes (fixedCoord at +0x10, ratio at +0x6C, coordOffset at
+ * +0x70..0xA0, perspectiveAngle at +0xA4, tail to 0xB0).
  */
 typedef struct MCamPointParams {
     unsigned int mode;
@@ -189,9 +176,8 @@ typedef struct MCamPointParams {
     unsigned char unmodeled_44[0x28];
     float ratio;
     MCamCoordOffset coordOffset;
-    /* Bank angle: MCamMove_Bank reads a request's target bank here
-     * (`lwc1 $f1,0xA0($4)`, 0x00a3277c); MCamSet mode 2 copies the same word
-     * to camParams.bank (`lwc1 $f0,0xA0($5)`, 0x00a31a78). */
+    /* Bank angle: MCamMove_Bank reads a request's target bank here, and
+     * MCamSet mode 2 copies the same word to camParams.bank. */
     float bank;
     /* MCamMove_Pers reads a request's perspective angle (degrees) here. */
     float perspectiveAngle;
@@ -200,15 +186,11 @@ typedef struct MCamPointParams {
 
 /*
  * Coordinate move state of one point, filled by MCamMove_Coord: the point
- * record at the start and at the target, the other point's coordinate as
+ * records at the start and at the target, the other point's coordinate as
  * pivot, the start, end and current coordinates, then the request's path,
- * mode and duration and the elapsed frames (cleared). MCamMoveProc_Coord
- * consumes them: it branches three ways on path (0, 1, other:
- * `beqz`/`beq $2,$3` at 0x00a32a7c..0x00a32a84 on `lw $2,0x1A0($18)`),
- * and first hands mode (`lw $4,0x1A4($18)`, 0x00a32a18), the incremented
- * elapsed (`lw $5,0x1AC($18)`/`addiu $5,$5,0x1`, stored back by
- * `sw $5,0x1AC($18)` at 0x00a32a28) and duration (`lw $6,0x1A8($18)`) to
- * MCamMoveProc_CalcRatio (0x00a32a24). The names path and mode are
+ * mode and duration, and the elapsed frames (cleared). MCamMoveProc_Coord
+ * branches on path (0, 1, other), increments elapsed, and passes mode, elapsed
+ * and duration to MCamMoveProc_CalcRatio. The names path and mode are
  * MCamMoveRequest's for the same two words; what the values select is not
  * established.
  */
@@ -218,8 +200,8 @@ typedef struct MCamCoordMove {
     Vector4 pivot;
     Vector4 startCoord;
     Vector4 endCoord;
-    /* MCamVector: MCamExec_Control copies it whole into a point's fixedCoord
-     * (`ld $3,0x390($2)` at 0x00a32240; as a Vector4 it compiled `ld $2,408($16)`). */
+    /* MCamVector: MCamExec_Control copies it whole into a point's fixedCoord.
+     * The union type keeps that copy as a 64-bit load/store pair. */
     MCamVector currentCoord;
     int path;
     int mode;
@@ -228,13 +210,10 @@ typedef struct MCamCoordMove {
 } MCamCoordMove;
 
 /*
- * MCamInit clears this complete 0x5B0-byte camera-parameter store (unchanged
- * size, confirmed by member arithmetic: points 0x160, angle/baseCoord/coord/eye/
- * rotation to 0x1F0, coordMove 2 x 0x1B0 from 0x200, tail to 0x5B0). The two
- * point records, the derived base coordinates, coordinates, angles, eye and
- * rotation are the views MCamExec_SetParams_Base and the getters address; the
- * other bytes remain part of the live store but their individual meanings are
- * not recovered yet.
+ * MCamInit clears this 0x5B0-byte camera-parameter store. The two point records,
+ * the base coordinates, coordinates, angles, eye and rotation are the views
+ * MCamExec_SetParams_Base and the getters address; the other bytes remain part of
+ * the live store, but their individual meanings are not recovered yet.
  */
 typedef struct MCamParameterStorage {
     MCamPointParams point[2];
@@ -249,9 +228,8 @@ typedef struct MCamParameterStorage {
     float perspectiveStart;
     unsigned char unmodeled_1F8[0x8];
     MCamCoordMove coordMove[2];
-    /* MCamExec_Control passes &camParams + 0x560 (camControlParams) to
-     * MCamMoveProc_Bank and copies its current (+0x14, `lwc1 $f0,0x574`)
-     * to bank. */
+    /* MCamExec_Control passes &camParams + 0x560 to MCamMoveProc_Bank and
+     * copies its current value (+0x14) to bank. */
     MCamMoveState bankMove;
     MCamMoveState perspectiveMove;
     MCamShakeState shake;
@@ -261,16 +239,11 @@ static StudioCamera *sysCam;
 /* MCamTakeControl saves the StudioCamera returned by xglStudioGetCamera2. */
 static StudioCamera sysCamBuff;
 
-/* Bits of camFlags. MCamMove_Coord picks CAM_FLAG_FIX_COORD (point 0) or
- * CAM_FLAG_FIX_TARGET (point 1) at its head (`addiu $21,$0,0x2000` at
- * 0x00a325e0, `addiu $21,$0,0x4000` at 0x00a325fc) and ORs it in
- * (`or $2,$2,$21`, 0x00a32728) when the request's fixOnArrival halfword
- * (`lh $3,0xBC($18)`, 0x00a3270c) is nonzero, after the move bit
- * (`or $2,$2,$22`, 0x00a3271c); the bits the older functions test keep
- * their names. Enum constants, not macros, as the project publishes them
- * (CALC_NORMAL_TECHNIQUE_COUNT). camFlags has this type because an int camFlags
- * shares the alias class of MCamMoveState's counters, and `sw $3,0($5)` then
- * schedules ahead of `swc1 $f0,0x14($2)` (0x00a32784, MCamMove_Bank). */
+/* Bits of camFlags. MCamMove_Coord ORs in CAM_FLAG_FIX_COORD (point 0) or
+ * CAM_FLAG_FIX_TARGET (point 1) when the request's fixOnArrival halfword is
+ * nonzero, after the move bit. Enum constants, not macros. camFlags has this
+ * type because an int camFlags shares the alias class of MCamMoveState's
+ * counters, which changes how MCamMove_Bank schedules its stores. */
 enum CamFlag {
     CAM_FLAG_ACTIVE = 0x1,
     CAM_FLAG_DUMP_DISABLED = 0x10,
@@ -319,6 +292,8 @@ static __inline__ void MCamCopyVector(Vector4 *destination, const Vector4 *sourc
                          : "$8", "memory");
 }
 
+/* Copies the base coordinate of point 0 or 1 into baseCoord and returns it. Other
+ * values give zero. */
 Vector4 *MCamGetCurrentBaseCoord(Vector4 *baseCoord, int point)
 {
     __asm__ __volatile__("sq $0,0(%0)" : : "r"(baseCoord) : "memory");
@@ -333,7 +308,10 @@ Vector4 *MCamGetCurrentBaseCoord(Vector4 *baseCoord, int point)
     return baseCoord;
 }
 
-/* The clear is VU0's constant $vf0 (0, 0, 0, 1); w is then reset to 1.0f. */
+/*
+ * Copies the current coordinate of point 0 or 1 into coord and returns it, with w
+ * set to 1.0f. For other values the result stays VU0's $vf0 constant (0, 0, 0, 1).
+ */
 Vector4 *MCamGetCurrentCoord(Vector4 *coord, int point)
 {
     __asm__ __volatile__("sqc2 $vf0,0(%0)" : : "r"(coord) : "memory");
@@ -349,6 +327,7 @@ Vector4 *MCamGetCurrentCoord(Vector4 *coord, int point)
     return coord;
 }
 
+/* Copies the angle of point 0 or 1 into angle and returns it. Other values give zero. */
 Vector4 *MCamGetCurrentAngle(Vector4 *angle, int point)
 {
     __asm__ __volatile__("sq $0,0(%0)" : : "r"(angle) : "memory");
@@ -372,6 +351,7 @@ Vector4 *MCamGetCurrentEye(Vector4 *eye)
     return eye;
 }
 
+/* Returns the length of actor 0 or 1, or 0 for other selectors. */
 float MCamGetLengthActor(int selector)
 {
     float length = 0.0f;
@@ -569,14 +549,14 @@ void MCamSet(unsigned int point, MCamPointParams *params)
 }
 
 /*
- * The caller's move request handed to MCamMove (MCamMove clamps a zero
- * duration to 1). Not size-preserving: the type ends at 0xBC (mode at
- * 0xB4, duration at 0xB8); this one is reshaped (target point record 0xB0, path
- * 0xB0, mode 0xB4, duration 0xB8) and extended by the halfword at 0xBC. MCamMove_Coord copies its leading 0xB0 bytes as the target
- * point record and sets the point's fix flag when fixOnArrival (lh +0xBC)
- * is non-zero. mode is the MCamIpType selector MCamMove_Bank and MCamMove_Pers
- * copy to MCamMoveState.mode. The original loads duration first (`lw $7,0xB8($4)`
- * at 0x00a32774, `lw $6,0xB4($4)` at 0x00a32780); as an int, mode loads first.
+ * The caller's move request handed to MCamMove, which clamps a zero duration
+ * to 1. The target point record fills the first 0xB0 bytes, followed by path
+ * (0xB0), mode (0xB4), duration (0xB8) and the fixOnArrival halfword (0xBC).
+ * MCamMove_Coord copies the leading 0xB0 bytes as the target point record and
+ * sets the point's fix flag when fixOnArrival is nonzero. mode is the MCamIpType
+ * selector that MCamMove_Bank and MCamMove_Pers copy to MCamMoveState.mode.
+ * The original loads duration before mode; the enum type keeps that order,
+ * where an int mode would load first.
  */
 typedef struct MCamMoveRequest {
     MCamPointParams target;
@@ -663,6 +643,7 @@ int MCamIsMoving(unsigned int point)
     return (camFlags & moveFlag) != 0;
 }
 
+/* Starts a camera shake with the given mode and amplitude. A zero amplitude turns it off. */
 void MCamShake(unsigned int mode, unsigned int amplitude, unsigned int phaseStep,
                unsigned int holdFrames, unsigned int decayFrames)
 {
@@ -700,11 +681,15 @@ void MCamShake(unsigned int mode, unsigned int amplitude, unsigned int phaseStep
 
 int MCamIsShaking(void)
 {
-    /* Arithmetic shift (`sra $2,$2,12`, 0x00a31e10); enum CamFlag is unsigned. */
+    /* The arithmetic shift needs the int cast: enum CamFlag is unsigned. */
     return ((int)camFlags >> CAM_SHAKE_BIT) & 1;
 }
 
-/* Local in the original: splat emits `glabel MCamGetActorCoord, local`; no use outside m_cam.c. */
+/*
+ * Writes the position of an actor part into coord and returns it. Part 0 is the
+ * actor's own position, other parts come from sefGetNullPosition. w is the actor's
+ * rotation.y plus pi, modulo 2 pi. A NULL actor leaves coord zeroed.
+ */
 static Vector4 *MCamGetActorCoord(Vector4 *coord, Actor *actor, int part)
 {
     __asm__ __volatile__("sq $0,0(%0)" : : "r"(coord) : "memory");
@@ -726,6 +711,10 @@ static Vector4 *MCamGetActorCoord(Vector4 *coord, Actor *actor, int part)
 static float MCamGetAtkRange(int id);
 static float MCamGetDefRange(int id);
 
+/*
+ * Computes a point's base coordinate into coord, selected by point->mode. Returns
+ * the XZ distance between the two actors for the ratio and range modes, else 0.
+ */
 static float MCamCalcBaseCoord(Vector4 *coord, MCamPointParams *point)
 {
     Vector4 coordA, coordB;
@@ -768,6 +757,7 @@ static float MCamCalcBaseCoord(Vector4 *coord, MCamPointParams *point)
     return length;
 }
 
+/* Computes a point's base coordinate, then applies its coordinate offset. Returns the base length. */
 static float MCamCalcCoord(Vector4 *coord, MCamPointParams *point)
 {
     MCamCoordOffset *coordOffset = &point->coordOffset;
@@ -874,7 +864,7 @@ static void MCamExec_Control(void)
 }
 
 /*
- * Publishes the frame to the studio camera: eye direction from the two points,
+ * Writes the frame to the studio camera: eye direction from the two points,
  * then coordinate, rotation (with the shake offset on the axes shake.mode
  * selects: bits 0, 4 and 8) and field of view.
  */
@@ -903,6 +893,10 @@ static void MCamExec_SetParams(void)
     sysCam->fov = camParams.perspectiveStart;
 }
 
+/*
+ * Recomputes the base coordinates, coordinates and angles of both points, then the
+ * rotation from the first angle with the bank applied to z.
+ */
 static void MCamExec_SetParams_Base(void)
 {
     camParams.actorLength[0] = MCamCalcBaseCoord(&camParams.baseCoord[0], &camParams.point[0]);
@@ -921,6 +915,10 @@ static void MCamExec_DispParams(void)
 {
 }
 
+/*
+ * Starts a coordinate move of point 0 or 1 from its current coordinate to the
+ * request's target. fixOnArrival sets the matching fix flag.
+ */
 static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
 {
     MCamCoordMove *move;
@@ -970,11 +968,7 @@ static void MCamMove_Coord(unsigned int pointSelector, MCamMoveRequest *request)
     }
 }
 
-/*
- * Starts the bank (roll) move from the current bank to the request's target
- * bank. The start store precedes the request's bank load (`swc1 $f0,0xC($2)`
- * 0x00a32770, `lwc1 $f1,0xA0($4)` 0x00a3277c: both float class).
- */
+/* Starts the bank move from the current bank to the request's target bank. */
 static void MCamMove_Bank(MCamMoveRequest *request)
 {
     MCamMoveState *state = &camParams.bankMove;
@@ -996,6 +990,10 @@ static void MCamMove_Bank(MCamMoveRequest *request)
     camFlags |= CAM_FLAG_MOVE_BANK;
 }
 
+/*
+ * Starts the perspective move from the current angle to the request's target
+ * angle. A zero target angle means the default 40 degrees.
+ */
 static void MCamMove_Pers(MCamMoveRequest *request)
 {
     MCamMoveState *state = &camPerspectiveMove;
@@ -1025,6 +1023,10 @@ static void MCamMove_Pers(MCamMoveRequest *request)
 }
 
 
+/*
+ * Maps elapsed/duration to the ratio of the move's interpolation mode (MCamIpType).
+ * A zero duration warns and returns 0.
+ */
 static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, unsigned int duration)
 {
     float ratio;
@@ -1036,6 +1038,7 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
 
     ratio = (float)elapsed / (float)duration;
 
+    /* The sine cases evaluate their curve with a VU0 micro-subroutine call. */
     switch (mode) {
     case MCAM_IP_SINE_IN_OUT: {
         float sine1;
@@ -1095,8 +1098,9 @@ static float MCamMoveProc_CalcRatio(unsigned int mode, unsigned int elapsed, uns
     return ratio;
 }
 
-/* One helper: the original shares one add tail between both paths, which gcc's
- * cross-jumping only produces from a single source line (as MCamCopyVector). */
+/* A single helper: the original shares one add tail between both paths, which gcc's
+ * cross-jumping only produces when the add comes from a single source line (as
+ * MCamCopyVector does). */
 static __inline__ void MCamAddDrift(MCamCoordMove *move, Vector4 *coord, Vector4 *drift)
 {
     Vu0SefAddVectorXYZ(&move->currentCoord, coord, drift);
@@ -1144,6 +1148,7 @@ static int MCamMoveProc_Coord(MCamCoordMove *move)
     return (unsigned int)move->elapsed < (unsigned int)move->duration;
 }
 
+/* Advances the bank move one frame. Returns nonzero while frames remain. */
 static int MCamMoveProc_Bank(MCamMoveState *state)
 {
     float start;
@@ -1155,6 +1160,7 @@ static int MCamMoveProc_Bank(MCamMoveState *state)
     return state->elapsed < state->duration;
 }
 
+/* Advances the perspective move one frame. Returns nonzero while frames remain. */
 static int MCamMoveProc_Pers(MCamMoveState *state)
 {
     float start;
@@ -1166,6 +1172,11 @@ static int MCamMoveProc_Pers(MCamMoveState *state)
     return state->elapsed < state->duration;
 }
 
+/*
+ * Advances the shake one frame: the hold phase oscillates the offset, the decay
+ * phase shrinks the amplitude, and after both the offset is zeroed and the shake
+ * bit is cleared.
+ */
 static void MCamShakeProc(void)
 {
     MCamShakeState *shake = &camParams.shake;

@@ -1,5 +1,6 @@
 /*
  * OV01 original TU 8: 0x00a24a98..0x00a26018 (30 functions)
+ * GIF packet, framebuffer and transform helpers.
  */
 #include "common.h"
 #include "shared.h"
@@ -37,10 +38,9 @@ typedef struct GrGifOpenTag {
 } GrGifOpenTag;
 
 /*
- * grRotTransPers's output vertex: the screen-space X/Y grPutXxx (siblings,
- * not decoded here) feed to the GS in 12.4 fixed point (the *16.0f below),
- * the projected depth as a plain integer, and the out-of-frustum bit
- * (0x8000) grRotTransPers itself copies from *clipFlags.
+ * grRotTransPers's output vertex: screen X and Y in 12.4 fixed point for the
+ * GS (the *16.0f in the writers), the projected depth as a plain integer, and
+ * the out-of-frustum bit (0x8000) that grRotTransPers copies from *clipFlags.
  */
 typedef struct GrScreenVertex {
     int x;      /* +0x00 */
@@ -140,8 +140,7 @@ extern void sceVif1PkTerminate(XglPacket *packet);
 /* The record grCalcMatrix transforms. Only the four vectors of its transform
  * block are recovered; everything before +0x90 stays unnamed.
  *
- * Evidence for the block and its 0x10-byte stride: curPutSub (ov01 0x00a10904
- * and 0x00a10a30) copies record+0x90..record+0x110 out to its own frame as one
+ * curPutSub copies record+0x90..record+0x110 out to its own frame as one
  * 0x80-byte unit, overrides single lanes inside it, calls grCalcMatrix and then
  * copies the unit back. The lanes it overrides say what the vectors are:
  * +0x94 = 0 and +0xa4 = 0.01 (the cursor sits on the ground and is lifted by
@@ -201,8 +200,8 @@ typedef struct TransformState {
     FloatVector3 scale;                /* +0xc0 */
 } TransformState;
 
-/* Only the transform record the command points at is recovered (lw v0,0x10(a0)
- * at 0x00a25b3c); grBBCalc and curPutSub pass the record through untouched. */
+/* Only the transform record the command points at is named; grBBCalc and
+ * curPutSub pass the record through untouched. */
 typedef struct MatrixCommand {
     unsigned int : 32;                 /* +0x00 */
     unsigned int : 32;                 /* +0x04 */
@@ -212,9 +211,8 @@ typedef struct MatrixCommand {
 } MatrixCommand;
 
 /*
- * grOpenF2/grOpenF4/grOpenFT4/grOpenFT4STQ/grOpenSpr (siblings, not decoded
- * here) each save the caller's packet into their own GpSave static and zero
- * their Num static; grPutXxx then advances GpSave.count as it appends
+ * grOpenF2, grOpenF4, grOpenFT4, grOpenFT4STQ and grOpenSpr each save the
+ * caller's packet into their own GpSave static and zero their Num static; grPutXxx then advances GpSave.count as it appends
  * primitives. The quadword at GpSave.data[GpSave.count] is left for the
  * trailing GIF tag: grCloseXxx patches its low 8 bytes with the final Num
  * (the accumulated NLOOP) so the tag matches how many primitives were put.
@@ -313,6 +311,10 @@ int grFBAdrGet(int index)
     return fb[index];
 }
 
+/*
+ * Returns the index of the first framebuffer base that is neither the drawing
+ * nor the current buffer, or -1.
+ */
 int grBBIdxGet(void)
 {
     int index = 0;
@@ -330,6 +332,10 @@ int grBBIdxGet(void)
     return -1;
 }
 
+/*
+ * Stores the table indices of the drawing and current buffers through the
+ * pointers when found. Returns 1.
+ */
 int grDBIdxGet(int *drawing_index, int *current_index)
 {
     int index = 0;
@@ -348,6 +354,10 @@ int grDBIdxGet(int *drawing_index, int *current_index)
     return 1;
 }
 
+/*
+ * Copies the framebuffer at table index source to table index destination.
+ * Invalid or equal indices print an error and do nothing.
+ */
 void grVramCopyFBtoFB(int source, int destination)
 {
     GrFrameBaseTable bases = grFrameBaseTable;
@@ -543,7 +553,7 @@ void grPutF2(GrPacket *packet, GrF2Vertices *line, const Matrix4 matrix)
     f2Num += 2;
 }
 
-/* grPutF2's writer for four corners instead of two. */
+/* Writes a four-corner quad as RGBAQ + XYZ2 per corner, like grPutF2. */
 void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix)
 {
     int clipFlags = 0;
@@ -606,6 +616,10 @@ void grPutFT4(GrPacket *packet, GrFT4STQVertices *quad, const Matrix4 matrix)
     ft4Num += 4;
 }
 
+/*
+ * Writes a textured quad with an STQ quadword per corner. The Q of each corner
+ * is the reciprocal W that grRotTransPers returns for it.
+ */
 void grPutFT4STQ(GrPacket *packet, GrFT4STQVertices *quad,
                  const Matrix4 matrix)
 {
@@ -633,6 +647,11 @@ void grPutFT4STQ(GrPacket *packet, GrFT4STQVertices *quad,
     ft4STQNum += 4;
 }
 
+/*
+ * Writes a sprite as two corners, each an RGBAQ and an XYZ2 quadword. flag 0
+ * converts the vertices to 12.4 screen coordinates; otherwise they are written
+ * as integers.
+ */
 void grPutSpr(GrPacket *packet, GrSpr *prim, int flag)
 {
     Vector4 *v;
@@ -687,6 +706,7 @@ void grPutSpr(GrPacket *packet, GrSpr *prim, int flag)
 }
 
 
+/* Sends the packet to VIF1 as a FLUSH followed by one direct-data transfer. */
 void grPacketSend(GrPacket *packet)
 {
     XglPacket *vif1Packet;
@@ -709,6 +729,11 @@ Matrix4 *grWorldMatGet(void)
     return &camera->viewMatrix;
 }
 
+/*
+ * Builds the matrix for a transform record: position plus offset is applied
+ * as a translation, then rotation and scale, and the result is multiplied by
+ * the current world matrix into destination.
+ */
 void grCalcMatrix(MatrixCommand *command, Matrix4 *destination)
 {
     Matrix4 *world;
@@ -796,6 +821,10 @@ float grRotTransPers(GrScreenVertex *vertex, const Matrix4 matrix,
     return invW;
 }
 
+/*
+ * Computes the screen position of a transform command's origin. Returns 0 when
+ * the origin is outside the frustum, otherwise 1.
+ */
 int grBBCalc(MatrixCommand *command, int *screen_x, int *screen_y)
 {
     Vector4 origin;
@@ -825,6 +854,10 @@ void grGsRegSet(GrPacket *packet, unsigned long long register_id,
     grGifAppendRegister(packet, register_id, value);
 }
 
+/*
+ * Writes an A+D header and one GS register write per entry, up to the entry
+ * with register_id -1, then stores the entry count in the header's NLOOP.
+ */
 void grGsRegListSet(GrPacket *packet, GrGsRegListEntry *entries)
 {
     GrGifOpenTag *head;

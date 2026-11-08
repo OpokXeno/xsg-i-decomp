@@ -5,18 +5,20 @@
 #include "shared.h"
 #include "ov12/xrg_rand_int.h"
 
-/* newlib rand() and libm, out of recovery scope: this TU only calls them. */
+/* rand() and libm come from the newlib runtime; this file only calls them. */
 
 int XrgRandInt(void)
 {
     return rand();
 }
 
+/* Returns a random float scaled to the range from lower to upper. */
 float XrgRand(float lower, float upper)
 {
     return (float) rand() * XRG_RAND_UNIT * (upper - lower) + lower;
 }
 
+/* Returns a random int from lower to upper - 1. */
 int XrgRandIntRange(int lower, int upper)
 {
     return (rand() % (upper - lower)) + lower;
@@ -159,6 +161,7 @@ float XrgLengthVector(RgVector source)
     return __builtin_sqrtf(x_squared + y_squared + z_squared);
 }
 
+/* Normalizes source into destination and returns its length; a zero-length source gives a zero destination. */
 float XrgNormalizeVector(RgVector destination, RgVector source)
 {
     float length = __builtin_sqrtf(source[0] * source[0]
@@ -177,6 +180,7 @@ float XrgNormalizeVector(RgVector destination, RgVector source)
     return length;
 }
 
+/* Writes the cross product of the xyz parts of first and second to destination; destination[3] is left unchanged. */
 void XrgOuterVector(RgVector destination, RgVector first, RgVector second)
 {
     destination[0] = first[1] * second[2] - first[2] * second[1];
@@ -228,6 +232,7 @@ void XrgUnitMatrix(RgMatrix destination)
     } while (row >= 0);
 }
 
+/* Multiplies left and right on VU0 into destination, one row of right per pass. */
 void XrgMulMatrix(RgMatrix destination, RgMatrix left, RgMatrix right)
 {
     __asm__ __volatile__(
@@ -285,6 +290,7 @@ void XrgNegateVector(RgVector destination, RgVector source)
     destination[3] = source[3];
 }
 
+/* Writes a random direction, +Z rotated by a random yaw and pitch, into destination. */
 void XrgRandVector(RgVector destination)
 {
     float pitch;
@@ -301,6 +307,10 @@ void XrgRandVector(RgVector destination)
     XrgApplyVector(destination, rotation, XrgVectorZ());
 }
 
+/*
+ * Writes a direction from +Z tilted by a random pitch within pitchRange and
+ * a random yaw within yawRange, both centred on zero.
+ */
 void XrgRandVectorRange(RgVector destination, float pitchRange, float yawRange)
 {
     float pitch;
@@ -361,15 +371,9 @@ void XrgRotVector(RgVector destination, RgMatrix matrix, RgVector vector)
 }
 
 /*
- * Each XrgCalcMatrix<From>to<To> builds an orthonormal frame (matrix rows 0/1/2
- * as its X/Y/Z axes, ov12:0x00a4d498..0x00a4d698): one axis is normalized
- * directly from an input vector, the second is its cross product with the
- * other input, and the third closes the frame as their cross product. The
- * two input vectors are named for the axis each represents, in the order the
- * original passes them (annotations/overlays/ov12_annotations.csv gives the
- * desired/reference role per function; which role lands in which parameter
- * position is this allocation's own evidence, from XrgNormalizeVector's and
- * XrgOuterVector's argument order at each call site).
+ * Each XrgCalcMatrix<From>to<To> builds an orthonormal frame in matrix rows 0/1/2
+ * (X/Y/Z axes). One axis is normalized from its input vector, the next is the cross
+ * product of that axis with the other input, and the last closes the frame.
  */
 void XrgCalcMatrixYtoZ(RgMatrix matrix, RgVector zAxis, RgVector yAxis)
 {
@@ -423,7 +427,7 @@ void XrgCalcMatrixXtoZ(RgMatrix matrix, RgVector xAxis, RgVector zAxis)
  * Each XrgRotMatrix<Axis> multiplies source by a rotation of angle radians
  * about that axis: a unit matrix with the cosine/sine block written in,
  * then XrgMulMatrix(destination, source, rotation). The store order is the
- * original's (ov12:0x00a4d6e8..0x00a4d6f8 for X).
+ * original's.
  */
 void XrgRotMatrixX(RgMatrix destination, RgMatrix source, float angle)
 {
@@ -496,6 +500,7 @@ void XrgInvMatrix(RgMatrix destination, const RgMatrix source)
     XrgMulMatrix(destination, rotation, translation);
 }
 
+/* Returns the angle of the vector's xz direction from +Z, as atan2(x, z). */
 float XrgCalcRotY(RgVector vector)
 {
     return (float) atan2((double) vector[0], (double) vector[2]);
@@ -506,12 +511,14 @@ float XrgCalcRotY(RgVector vector)
 static float s_aStack[XRG_MAT_STACK_DEPTH * XRG_MATRIX_FLOATS];
 static float *s_paTop;
 
+/* Resets the matrix stack to a single identity matrix. */
 void XrgClearMatStack(void)
 {
     s_paTop = (float *) s_aStack;
     XrgUnitMatrix((float *) s_aStack);
 }
 
+/* Pushes a copy of the top matrix. */
 void XrgPushMatStack(void)
 {
     float *previous_top = s_paTop;
@@ -535,6 +542,7 @@ void XrgMulMatStack(RgMatrix matrix)
     XrgMulMatrix(s_paTop, s_paTop, matrix);
 }
 
+/* Sets the top matrix's translation to its transform of (x, y, z). */
 void XrgTransMatStack(float x, float y, float z)
 {
     RgVector translation;
@@ -544,6 +552,7 @@ void XrgTransMatStack(float x, float y, float z)
     XrgCopyVector(s_paTop + 12, translation);
 }
 
+/* Rotates the top matrix about Y, then X, then Z. */
 void XrgRotMatStack(float angle_x, float angle_y, float angle_z)
 {
     XrgRotMatrixY(s_paTop, s_paTop, angle_y);
@@ -584,6 +593,10 @@ void XrgCalcPlane(RgVector plane, RgVector p0, RgVector p1, RgVector p2)
     plane[3] = -XrgInnerVector(plane, p0);
 }
 
+/*
+ * Returns 1 when the ray from origin along direction hits the triangle, with *distance
+ * set to the hit parameter t. Hits need 0 <= t < 1.
+ */
 int XrgIsTriIntersectedByRay(RgVector origin, RgVector direction, RgVector triangle[3], float *distance)
 {
     RgVector edge0;
@@ -628,6 +641,7 @@ int XrgIsTriIntersectedByRay(RgVector origin, RgVector direction, RgVector trian
     return 0;
 }
 
+/* Wraps angle into [-pi, pi] and returns its eighth-turn sector, 0 to 7; sector 0 is centred on angle 0 and sector 4 on pi. */
 int XrgQuantAngle(float angle)
 {
     if (XRG_PI < angle) {
@@ -665,7 +679,7 @@ int XrgQuantAngle(float angle)
 }
 
 /*
- * Wraps angle into (-pi, pi] and returns its quadrant around the forward
+ * Wraps angle into [-pi, pi] and returns its quadrant around the forward
  * direction: 0 for [-pi/4, pi/4), 1 for [pi/4, 3pi/4), 2 behind (|angle| >= 3pi/4),
  * 3 for [-3pi/4, -pi/4); -1 is unreachable after the wrap.
  */

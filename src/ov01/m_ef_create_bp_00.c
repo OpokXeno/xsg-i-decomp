@@ -90,6 +90,11 @@ static void fnBP00_PR010(void *self, BP00Work *work);
 static void fnBP00_DP000(void *self, BP00Work *work);
 static void fnBP00_PO000(void *self, BP00Work *work);
 
+/*
+ * Initializes a BP00 effect: places it at the creation offset from the actor's matrix,
+ * clears the trail and visibility flags, and sets the first strand's step back along
+ * the actor's facing. Returns 1.
+ */
 int MEfCreate_BP00(MEfObjRecord *self)
 {
     /* This constructor interprets its own variant of the pooled work. */
@@ -134,6 +139,11 @@ int MEfCreate_BP00(MEfObjRecord *self)
     return 1;
 }
 
+/*
+ * Per-frame update of the first strand: shifts its history, and extends it while the
+ * counter is below 18. At counter 24 it restarts all five strands and switches the
+ * object to fnBP00_PR010.
+ */
 static void fnBP00_PR000(void *self, BP00Work *work)
 {
     BP00Object *object = self;
@@ -177,6 +187,10 @@ static void fnBP00_PR000(void *self, BP00Work *work)
     }
 }
 
+/*
+ * Per-frame update of the strands after the restart: each started strand shifts its
+ * history, and the strands are extended while the counter is below 16.
+ */
 static void fnBP00_PR010(void *self, BP00Work *work)
 {
     int strand;
@@ -251,6 +265,10 @@ static __inline__ int bp00Floor(int value)
     return value < 0 ? 0 : value;
 }
 
+/*
+ * Draws the strands into the effect's packet: one strip per strand, skipping invisible
+ * points and fading the colour along the trail.
+ */
 static void fnBP00_DP000(void *self, BP00Work *work)
 {
     MEfGsPacket *packet = &work->packet;
@@ -271,6 +289,7 @@ static void fnBP00_DP000(void *self, BP00Work *work)
     screen = mefCamParams.screen;
     view = mefCamParams.matrix;
     MGsGPInit(packet, 0, 0);
+    /* GS state: alpha test, z buffer without depth write, additive alpha. */
     setting = packet->current;
     setting[0].gif.tag = MEF_GS_SETUP_TAG;
     setting[0].gif.registers = MEF_GS_SETUP_REGS;
@@ -280,6 +299,7 @@ static void fnBP00_DP000(void *self, BP00Work *work)
     bp00SetRegister(&setting[2], SCE_GS_ZBUF_1, MEF_GS_ZBUF_1_PSMZ24_NO_DEPTH_WRITE);
     bp00SetRegister(&setting[3], SCE_GS_ALPHA_1, MEF_GS_ALPHA_1_ADDITIVE);
     bp00CloseTag(packet, 3);
+    /* One strip per strand, holding its visible points. */
     for (strand = 0; strand < BP00_STRANDS; strand++) {
         drawn = 0;
         clip = 0;
@@ -328,13 +348,13 @@ static void fnBP00_DP000(void *self, BP00Work *work)
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* The post callback advances frame (+0x70) and counter (+0x74) once per call,
- * fires sefHitEffect at BP00_HIT_FRAME and expires through MEfObjDestroy at
- * BP00_LIFETIME. Nothing else in this TU reads counter, so its role is not
- * evidenced here and it keeps its neutral name. */
 #define BP00_HIT_FRAME 0x21
 #define BP00_LIFETIME  0x2D
 
+/*
+ * The post callback advances frame (+0x70) and counter (+0x74) once per call, fires
+ * sefHitEffect at BP00_HIT_FRAME and expires through MEfObjDestroy at BP00_LIFETIME.
+ */
 static void fnBP00_PO000(void *self, BP00Work *work)
 {
     work->frame++;

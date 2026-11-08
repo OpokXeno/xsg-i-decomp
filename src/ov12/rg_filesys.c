@@ -55,6 +55,7 @@ static int _FindInPrepare(RgFileSys *pSys, const char *pszFile,
                           RgFileSysLinkFound *pFound);
 static void _WrapperDestruct(void *object);
 
+/* Allocates a file record from the heap and marks it as allocated. */
 static RgFileSysData *_AllocFile(void)
 {
     RgFileSysData *pFile;
@@ -66,6 +67,7 @@ static RgFileSysData *_AllocFile(void)
 }
 
 
+/* Returns the file record named pszName in the system's file vector, or 0. */
 static RgFileSysData *_FindFile(RgFileSys *pSys, const char *pszName)
 {
     RgFileSysData *found;
@@ -136,6 +138,7 @@ const char fileSysDumpDuplicateFormat[16] = "  dup org=%p\n";
 
 const char fileSysDumpPrepareFormat[16] = "  prepare\n";
 
+/* Returns pFile when it is in the system's file vector, or 0. */
 static RgFileSysData *_FindFileObj(RgFileSys *pSys, RgFileSysData *pFile)
 {
     RgFileSysData *found;
@@ -157,6 +160,10 @@ static RgFileSysData *_FindFileObj(RgFileSys *pSys, RgFileSysData *pFile)
 
 
 
+/*
+ * Looks up the base name of pszFile in the first prepared link archive. On a hit,
+ * fills *pFound when it is not null and returns 1.
+ */
 static int _FindInPrepare(RgFileSys *pSys, const char *pszFile,
                           RgFileSysLinkFound *pFound)
 {
@@ -222,6 +229,7 @@ static void _InitFileSys(RgFileSys *pSys)
 }
 
 
+/* Destroys a file system: clears its files, then frees its vector and record. */
 static void _WrapperDestruct(void *object)
 {
     RgFileSys *pSys = object;
@@ -231,6 +239,7 @@ static void _WrapperDestruct(void *object)
     RgHeapFree(InstanceOfRgHeap(), pSys, rg_filesys_source_file, 196);
 }
 
+/* Returns the file system singleton, creating and registering it on first use. */
 RgFileSys *InstanceOfRgFileSys(void)
 {
     RgFileSys *pSys;
@@ -240,18 +249,13 @@ RgFileSys *InstanceOfRgFileSys(void)
         pSys = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgFileSys),
                             rg_filesys_source_file, 205);
         _InitFileSys(pSys);
-        /*
-         * The registry keeps any singleton with its destructor; its shared
-         * prototype is spelled for the RgSimpleDB singletons, so this one
-         * converts at the call, as rg_motion_info_db.c's
-         * InstanceOfRgMotionInfoDB does for the same registry.
-         */
         RgSingletonIDEntry(RG_SINGLETON_FILESYS, pSys, _WrapperDestruct);
     }
     return pSys;
 }
 
 
+/* Frees every file record in the system and empties its file vector. */
 void RgFileSysClear(RgFileSys *pSys)
 {
     void *files;
@@ -275,6 +279,12 @@ void RgFileSysClear(RgFileSys *pSys)
 }
 
 
+/*
+ * Returns a file record for pszName. A name held by a prepared link archive gives
+ * a duplicate of that entry. Otherwise an unloaded file is read from disk under
+ * pszRoot, and a loaded one is returned with its reference count raised. Returns 0
+ * when the file cannot be read.
+ */
 RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
                              const char *pszRoot)
 {
@@ -338,6 +348,7 @@ RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
         RgVectorPush(pSys->files, pFile);
         return pFile;
     }
+    /* Reuse the loaded record. A prepared file must not be read normally. */
     switch (pFile->mode) {
     case FILE_MODE_NORMAL:
     case FILE_MODE_DUP:
@@ -351,6 +362,7 @@ RgFileSysData *RgFileSysRead(RgFileSys *pSys, const char *pszName,
 }
 
 
+/* Returns a new record with its own copy of the data of file pszName. */
 RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
                             const char *pszRoot)
 {
@@ -385,6 +397,7 @@ RgFileSysData *RgFileSysDup(RgFileSys *pSys, const char *pszName,
     return pDup;
 }
 
+/* Reads file pszName and keeps it as a prepared file, up to PREPARE_MAX of them. */
 void RgFileSysPrepareFile(RgFileSys *pSys, const char *pszName,
                           const char *pszRoot)
 {
@@ -407,6 +420,7 @@ void RgFileSysPrepareFile(RgFileSys *pSys, const char *pszName,
 }
 
 
+/* Releases every prepared file and empties the prepared list. Warns about files that are still referenced. */
 void RgFileSysDisposePrepares(RgFileSys *pSys)
 {
     unsigned int index;
@@ -433,6 +447,7 @@ void RgFileSysDisposePrepares(RgFileSys *pSys)
 }
 
 
+/* Registers pszName as a file whose data is already in pBuf, and logs it. Errors if the name is loaded. */
 RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
                                  void *pBuf, unsigned int nSize)
 {
@@ -465,6 +480,7 @@ RgFileSysData *RgFileSysOnMemory(RgFileSys *pSys, const char *pszName,
 }
 
 
+/* Drops one reference to pFile. The record, and its data when it was allocated, are freed when none remain. */
 void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
                               int line)
 {
@@ -488,6 +504,7 @@ void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
         }
         return;
     }
+    /* A prepared file leaves its owner's list once it has no references left. */
     if (pFile->mode == FILE_MODE_PREPARED) {
         if (_FindFileObj(pFile->owner, pFile) == 0) {
             RgError(fileSysUnknownErrorFormat, rg_filesys_source_file, 522, pFile->name);
@@ -518,6 +535,7 @@ void DisposeRgFileSysData_sub(RgFileSysData *pFile, const char *source_file,
     }
 }
 
+/* Returns the name of a file record. */
 char *RgFileSysDataGetName(RgFileSysData *pFile)
 {
     if (pFile == 0) {
@@ -528,6 +546,7 @@ char *RgFileSysDataGetName(RgFileSysData *pFile)
 }
 
 
+/* Logs every file record in the system with its name, address, allocation flag and kind. */
 void RgFileSysDump(RgFileSys *pSys)
 {
     unsigned int index;

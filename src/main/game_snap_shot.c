@@ -90,11 +90,12 @@ extern void SyncDCache(void *start, void *end);
 extern int sceGsSyncPath(int mode, int timeout);
 static char snapname[40];
 
-/* Points at the slot digit inside the snapshot file name (snapname + 0x1F). */
+/* Points at the four-digit number in the snapshot file name (snapname + 0x1F). */
 static char *snapnameno = snapname + 31;
 
 static char snapname[40] = "host0:/home/xeno/work/snap/game0000.jpg";
 
+/* Luma, Cb and Cr quality presets, selected by ~quality when the quality argument is negative. */
 static GameSnapShotQuality quality_table[5] = {
     { { { 100, { 0 } }, { 100, { 0 } }, { 0, { 0 } } }, { 0 } },
     { { { 90, { 0 } }, { 90, { 0 } }, { 0, { 0 } } }, { 0 } },
@@ -103,6 +104,7 @@ static GameSnapShotQuality quality_table[5] = {
     { { { 30, { 0 } }, { 30, { 0 } }, { 0, { 0 } } }, { 0 } }
 };
 
+/* Points at the file name extension (snapname + 36). */
 static char *snapnamext = snapname + 36;
 
 char GameMovieTransparent = 0;
@@ -113,6 +115,7 @@ short GameMovieFrame = 0;
 
 static SnapshotDmaPacket TestPrim_0_00366EA0;
 
+/* DMA packet that GameSnapShotSaveThumbnail sends with xglDmaDirectNormal. */
 static SnapshotDmaPacket TestPrim_0_00366EA0 = { .words = { 0x0000000000000000ULL, 0x5100000b00000000ULL, 0xa08b400000008001ULL, 0x000000e53531eeeeULL, 0x0000000000071001ULL, 0x0000000000000047ULL, 0x0000000000000060ULL, 0x0000000000000014ULL, 0x0000000000000000ULL, 0x000000000000004cULL, 0x0000000000000000ULL, 0x0000000000000006ULL, 0x0000008000000080ULL, 0x0000000000000080ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x000071f700006ff8ULL, 0x00000000ffffffffULL, 0x00001c0000002000ULL, 0x0000000000000000ULL, 0x000078f7000077f8ULL, 0x00000000ffffffffULL, 0x0000000000000000ULL, 0x000000000000003fULL } };
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
@@ -120,6 +123,7 @@ const char snapShotLogFormat[] = "*** SnapShot:%s,%08x ***\n";
 
 const char snapShotQualityFormat[24] = "%d,%d,%d\n";
 
+/* Sets the first digit of the file name number when number is not negative, and returns that digit. */
 int GameSnapShotNumber(int number) {
     if (number >= 0) {
         *snapnameno = number + '0';
@@ -130,6 +134,11 @@ int GameSnapShotNumber(int number) {
 void GameSnapShotCheck(void) {
 }
 
+/*
+ * Encodes the displayed frame as a JPEG and writes it to snapname. A negative quality selects a
+ * preset through ~quality, otherwise it is the luma quality. Flags bit 0 also writes a .bin
+ * metadata file. Then the file number advances.
+ */
 void GameSnapShotExecute(int quality, int flags) {
     GameSnapShotJpegParams params;
     unsigned int buffer_address;
@@ -171,6 +180,7 @@ void GameSnapShotExecute(int quality, int flags) {
         sceClose(image_descriptor);
     }
 
+    /* Optionally write the metadata to the .bin file that shares the image's name. */
     if (flags & 1) {
         GameSnapShotMetadata metadata;
         int metadata_descriptor;
@@ -192,6 +202,7 @@ void GameSnapShotExecute(int quality, int flags) {
         snapnamext[2] = 'g';
     }
 
+    /* Advance the file number, carrying into the higher digits. */
     if (snapnameno[3] == '9') {
         if (snapnameno[2] == snapnameno[3]) {
             snapnameno[1]++;
@@ -205,10 +216,12 @@ void GameSnapShotExecute(int quality, int flags) {
     }
 }
 
+/* Encodes the draw buffer as a 128 by 112 JPEG thumbnail into output_buffer and returns its size. */
 unsigned int GameSnapShotSaveThumbnail(int quality, unsigned int output_buffer) {
     GameSnapShotJpegParams params;
     unsigned long long bitbltbuf;
 
+    /* Point the transfer packet at the draw buffer, send it, and wait for the GS path to drain. */
     bitbltbuf = 0x24020000 | (sRender.draw_buffer_base << 5);
     TestPrim_0_00366EA0.words[10] = bitbltbuf | (0xC800ULL << 19);
     TestPrim_0_00366EA0.words[8] = 0x801C0;
@@ -238,6 +251,10 @@ unsigned int GameSnapShotSaveThumbnail(int quality, unsigned int output_buffer) 
     return params.output_size;
 }
 
+/*
+ * Writes a snapshot into image: the SOI marker and APP14 segment header, the metadata block, the thumbnail,
+ * then the full frame encoded after them. Returns the total size.
+ */
 int GameSnapShotSave(int quality, unsigned char *image) {
     GameSnapShotJpegParams params;
     GameSnapShotMetadata metadata;
@@ -267,6 +284,7 @@ int GameSnapShotSave(int quality, unsigned char *image) {
     image += thumbnail_size;
     thumbnail_size += SNAPSHOT_METADATA_SIZE + 6;
 
+    /* The full frame starts right after the thumbnail, with the same quality rules as GameSnapShotExecute. */
     memset(&params, 0, sizeof(params));
     params.output_buffer = (unsigned int) image;
     display_origin = DrawEnv.display_origin;
@@ -292,6 +310,10 @@ int GameSnapShotSave(int quality, unsigned char *image) {
     return thumbnail_size + params.output_size;
 }
 
+/*
+ * Writes size bytes of data to the snapshot file. A non-negative number first sets the
+ * four-digit name. Returns the number used, then advances the file number.
+ */
 int GameSnapShotSaveFile(int number, const void *data, int size) {
     int image_descriptor;
 

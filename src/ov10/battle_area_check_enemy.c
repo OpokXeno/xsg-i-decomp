@@ -46,10 +46,10 @@ typedef struct CardStackSpan {
 #define ATTACK_SPLASH 0x00100000       /* one more point of damage to every target */
 
 /*
- * TodomeHyouka scores. It adds TODOME_DECK_OUT_BONUS when the other side's draw pile would be down to
- * fewer than two cards, so any score from TODOME_DECK_OUT_SCORE up (and none below it)
- * includes the bonus; the checks read it as a winning move. The margins are how far a candidate has to
- * beat the current score before the AI plays it.
+ * TodomeHyouka scores. It adds TODOME_DECK_OUT_BONUS when the other side's draw
+ * pile, less the total counted in the score, is below two cards. Callers read a
+ * score of TODOME_DECK_OUT_SCORE or more as that deck-out win. The margins are
+ * how far a candidate has to beat the current score before the AI plays it.
  */
 #define TODOME_DECK_OUT_BONUS 1000
 #define TODOME_DECK_OUT_SCORE 1001
@@ -238,7 +238,7 @@ s32 CheckFriendType4(s32 side, CardGameWork *work)
 }
 
 /* Counts the battle-slot cards of `side` whose attack type (CardChkAttackType)
- * is one. */
+ * is CARD_ATTACK_HAND. */
 s32 CheckFriendKakutouCnt(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -270,9 +270,10 @@ s32 CheckFriendKakutouCnt(s32 side, CardGameWork *work)
     return count;
 }
 
-/* -1 unless `side` has exactly one occupied battle slot. Otherwise the first
- * battle slot index (tagged 0xF0000 as in CheckShukumeiCommand) holding Albedo
- * whose CheckNowPower value differs from that card's attackPower. */
+/* -1 unless `side` has exactly one occupied battle slot. Otherwise the index of
+ * the first battle slot holding Albedo whose CheckNowPower value (tagged with
+ * 0xF0000 as CheckShukumeiCommand tags its result) differs from that card's
+ * attackPower. The returned index is untagged. */
 s32 AlbedoCheck(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -298,9 +299,9 @@ s32 AlbedoCheck(s32 side, CardGameWork *work)
 }
 
 /*
- * Special-card AI move policy: picks the caller's disposal or battle slot
- * `slot` (0xF0000 tags a battle slot), shuffles battle cards, then scores the
- * board with GetFriendAttack/TodomeHyouka.
+ * Special-card check for the caller's unfrozen Albedo card: shuffles the battle
+ * and disposal cards, then returns 1 when a move was made or the TodomeHyouka
+ * score clears a junk-count threshold, 0 otherwise.
  */
 s32 GainanCheck(s32 side, CardGameWork *work)
 {
@@ -413,6 +414,7 @@ s32 GainanCheck(s32 side, CardGameWork *work)
                 emptyDisposal++;
             }
         }
+        /* Pick the destination by the number of playable Retreat/Woglinde commands. */
         switch (playable) {
         case 0:
             if (otherSide->battle[0].battle.layers[0].cardId < 0 &&
@@ -479,6 +481,7 @@ s32 GainanCheck(s32 side, CardGameWork *work)
             }
         }
     }
+    /* Re-find the Albedo battle slot and run a todome move for it, three times. */
     for (index = 0; index < 3; index++) {
         s32 search;
 
@@ -492,6 +495,7 @@ s32 GainanCheck(s32 side, CardGameWork *work)
         }
         CC_Kara_TodomeMove(side, work, slot);
     }
+    /* Score the rearranged board. */
     GetFriendAttack(side, work, friendA, friendB);
     if (CheckEnemy12Attack(side == 0, work) >= junkCount + 2) {
         return 0;
@@ -508,7 +512,7 @@ s32 GainanCheck(s32 side, CardGameWork *work)
 }
 
 /* 1 when a disposal or battle slot of `side` holds a card whose definition
- * has flag 4 set (CardDefinition.flags), else 0. */
+ * has the CARD_ATTR_GNOSIS flag set, else 0. */
 s32 CheckGuno(s32 side, CardGameWork *work)
 {
     s32 slotIndex;
@@ -546,6 +550,8 @@ s32 CheckGuno(s32 side, CardGameWork *work)
     return 0;
 }
 
+/* 1 when a disposal or battle slot of `side` holds a card whose definition
+ * has the CARD_ATTR_REALIAN flag set, else 0. */
 s32 CheckREAL(s32 side, CardGameWork *work)
 {
     s32 slotIndex;
@@ -943,7 +949,7 @@ s32 CheckCommandPlay(s32 side, CardGameWork *work, s32 cardId)
     return 0;
 }
 
-/* Cure-All and Start Up: the two command cards that revive a downed card. */
+/* 1 when the hand holds Cure-All or Start Up that CheckCommandPlay accepts, else 0. */
 s32 CheckDownKaifukuCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = &work->player;
@@ -971,6 +977,8 @@ s32 CheckDownKaifukuCommand(s32 side, CardGameWork *work)
     return 0;
 }
 
+/* 1 when a disposal or battle slot of the other side holds a card with the
+ * CARD_ATTR_GNOSIS flag set, else 0. */
 s32 CheckEnemyGuno(s32 side, CardGameWork *work)
 {
     s32 slotIndex;
@@ -1011,9 +1019,8 @@ s32 CheckEnemyGuno(s32 side, CardGameWork *work)
 }
 
 /*
- * Operation-card choice for one side: plays the first hand card the rules
- * allow (index into the hand is passed to CardPlayDisployment), otherwise
- * returns 0.
+ * Chooses an operation card from the side's hand and plays it through
+ * CardPlayDisployment. Returns 1 when a card was played, 0 otherwise.
  */
 s32 CC_Kara_SetOpe(s32 side, CardGameWork *work)
 {
@@ -1031,6 +1038,7 @@ s32 CC_Kara_SetOpe(s32 side, CardGameWork *work)
         return 0;
     }
     handCount = CardPlayHandCnt(&ownSide->hand);
+    /* With the 413 command played, Armistice goes first when its checks pass. */
     if (play413 == 1) {
         for (index = 0; index < handCount; index++) {
             cardId = ownSide->hand.cards[index];
@@ -1045,6 +1053,7 @@ s32 CC_Kara_SetOpe(s32 side, CardGameWork *work)
             }
         }
     }
+    /* Stim and Good Luck are skipped unless a battle card has CARD_ATTR_HUMAN. */
     battleFlagged = 0;
     for (index = 0; index < CARD_BOARD_SLOTS; index++) {
         if (ownSide->battle[index].battle.layers[0].cardId >= 0 &&
@@ -1083,6 +1092,8 @@ flag_done:
                 continue;
             }
         }
+        /* Armistice: played when a Virgil and Realian board allows it, or when the
+         * TodomeHyouka scores allow. */
         if (cardId == CARD_ID_ARMISTICE) {
             s32 attack[CARD_BOARD_SLOTS];
             s32 status[CARD_BOARD_SLOTS];
@@ -1160,9 +1171,8 @@ flag_done:
 }
 
 /*
- * Whether the side's hand holds Stim (a kind-4
- * card) that CardPlayChkCondition accepts (returns 0); only the phase-1 and
- * phase-8 turns are checked.
+ * 1 when the side's hand holds Stim (a CARD_KIND_SITUATION card) that
+ * CardPlayChkCondition accepts, checked only in the move phases (1 and 8).
  */
 s32 CheckTamasii(s32 side, CardGameWork *work)
 {
@@ -1194,7 +1204,10 @@ s32 CheckTamasii(s32 side, CardGameWork *work)
     return 0;
 }
 
-/* Weapon-card placement for the CPU hand. */
+/*
+ * Plays the weapon card at hand `index` onto a battle or disposal slot of `side`
+ * that it can equip. Returns 1 when a card was played, 0 otherwise.
+ */
 s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
 {
     CardPlaySide *otherSide;
@@ -1231,6 +1244,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
 
+    /* Shield goes on an AG-02-M or a Saber, battle board first, then disposal board. */
     if (held.cardId == CARD_ID_SHIELD) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_AG_02_M) {
@@ -1272,6 +1286,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
 
+    /* Collect the unequipped battle slots this weapon can be attached to. */
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         slotCard[i] = -1;
     }
@@ -1292,6 +1307,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
 
+    /* Choose the best battle slot among the candidates. */
     bestSlot = -1;
     for (i = 3; i >= 0; i--) {
         if (slotCard[i] == -1) {
@@ -1337,6 +1353,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
 
+    /* Score the battle-board placement with TodomeHyouka before committing to it. */
     if (bestSlot != -1) {
         s32 attack[CARD_BOARD_SLOTS];
         s32 status[CARD_BOARD_SLOTS];
@@ -1376,6 +1393,7 @@ s32 CC_Kara_SetWeapon(s32 side, CardGameWork *work, s32 index)
         }
     }
 
+    /* Otherwise collect the disposal slots this weapon can be attached to. */
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         slotCard[i] = -1;
     }
@@ -1463,6 +1481,11 @@ s32 CC_Kara_SetLv10(s32 side, CardGameWork *work, s32 handIndex)
     return 0;
 }
 
+/*
+ * Moves hand card `index` onto an empty battle slot (for hand and ballistic
+ * cards the one TodomeHyouka scores best), or onto the first empty disposal
+ * slot when no battle slot is free. Then pays the play and reserve costs.
+ */
 s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
 {
     CardPlaySide *ownSide;
@@ -1484,6 +1507,7 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
     bestSlot = bestValue = -1;
     power =work->definitions[cardId].attackPower;
 
+    /* Try each empty battle slot and keep the best TodomeHyouka value. */
     if (work->definitions[cardId].attackType == CARD_ATTACK_HAND) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId < 0) {
@@ -1568,10 +1592,10 @@ s32 SetGunoFinish(s32 side, CardGameWork *work, s32 index)
 }
 
 /*
- * Guno placement for hand card `handIndex`: counts the card's discard
- * requirements, collects the disposal and battle slots whose price or reward
- * is below the card's CardDat value, and when there are enough of them plays
- * the chosen slots away through CardPlayDesertBattle before SetGunoFinish.
+ * Guno placement for hand card `handIndex`. Counts the card's discard
+ * requirements and the human-flagged board cards priced below the card's
+ * CardDat value; when there are enough, deserts them through
+ * CardPlayDesertBattle up to the requirement, then calls SetGunoFinish.
  * Returns 1 when SetGunoFinish ran.
  */
 s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
@@ -1674,6 +1698,11 @@ s32 CC_Kara_SetGuno(s32 side, CardGameWork *work, s32 handIndex)
     return 0;
 }
 
+/*
+ * Set-phase choice for one side: tries an operation card first, then ranks the
+ * hand's battle cards by CGPDispoSub0 and plays one, directly or through Guno
+ * or weapon placement. Returns 1 when a card was played.
+ */
 s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
 {
     CardDefinition *definitions;
@@ -1717,6 +1746,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
     }
 
+    /* Lv 10 cards are tried first when the draw pile has at least five cards. */
     yama = CardPlayYamaCnt(ownSide);
     if (yama >= 5) {
         for (i = 0; i < handCount; i++) {
@@ -1730,6 +1760,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
     }
 
+    /* With a small draw pile, drop picks whose play cost would leave too few cards. */
     if (yama < 10) {
         for (i = 0; i < handCount; i++) {
             if (handPick[i] == -1) {
@@ -1746,6 +1777,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
     }
 
+    /* Without an empty disposal slot, only picks 13 to 15 stay. */
     emptyDisposal = 0;
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         if (ownSide->disposal[i].battle.layers[0].cardId < 0) {
@@ -1760,6 +1792,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
     }
 
+    /* pickA: the most expensive pick 0 card. pickB: the most expensive pick 15 card. */
     pickA = -1;
     pickB = -1;
     for (i = 0; i < handCount; i++) {
@@ -1827,6 +1860,7 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
         }
     }
 
+    /* The pricier of pickA and pickB is tried first. */
     if (price2 < price1) {
         if (pickA != -1) {
             ownSide->hand.playPoints[0] -= work->definitions[ownSide->hand.cards[pickA]].playCost;
@@ -1877,6 +1911,11 @@ s32 CC_Kara_SetFase_1(s32 side, CardGameWork *work)
     return 0;
 }
 
+/*
+ * Command-phase choice for one side: step 0 picks a Supply Ship/Fleet, Mary and
+ * Shelley or Umn Invasion card from the hand, step 1 plays the picked card.
+ * Returns 0 when a card was picked or played, 1 otherwise.
+ */
 s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
 {
     /* The command card chosen from the hand and its hand index. */
@@ -1900,6 +1939,7 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
         i += delta;
         delta += i;
     }
+    /* Step 0 picks a command card from the hand; step 1 plays the picked card. */
     switch (work->aiStep) {
     case 0: {
         i = 0;
@@ -1959,6 +1999,11 @@ s32 CC_Kara_CommFase(s32 side, CardGameWork *work)
     return 1;
 }
 
+/*
+ * Target for the Damage command: a battle slot of the other side (tagged with
+ * CARD_SLOT_BATTLE), or -1. The threshold is first raised to the bonus from
+ * playable Surprise Attack cards and SO_WEAK operations.
+ */
 s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
 {
     s32 attack[CARD_BOARD_SLOTS];
@@ -2014,6 +2059,8 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
     if (bonus > threshold) {
         threshold = bonus;
     }
+    /* Event phase: each other-side battle slot is scored by its GetShoukin value and the
+     * TodomeHyouka score after its attack is reduced by the threshold. */
     phase = work->command.phase;
     if (phase == CARD_PHASE_EVENT || phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         GetFriendAttack(side, work, attack, status);
@@ -2068,6 +2115,12 @@ s32 CheckDamageCommand(s32 side, CardGameWork *work, s32 threshold)
     }
 }
 
+/*
+ * Target for the Retreat command: a battle slot of the other side, or -1. With
+ * Albedo on the board and two or more playable Retreat/Woglinde cards, the slot
+ * is chosen from Albedo's position. Otherwise it is the slot whose TodomeHyouka
+ * change is largest, if that change reaches TODOME_MARGIN.
+ */
 s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
 {
     s32 bonus;
@@ -2169,8 +2222,11 @@ s32 CheckTaikyakuCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-/* Battle slot of the other side whose TodomeHyouka score is lowest and more
- * than 30 below the score of the initial board (-1 if none qualifies). */
+/*
+ * Returns the first occupied battle slot of the other side when the score of the
+ * board is below its starting score by no more than TODOME_MARGIN, otherwise -1.
+ * Returns -1 in the event phase.
+ */
 s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
 {
     s32 slotIndex;
@@ -2209,6 +2265,12 @@ s32 CheckTotugekiCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
+/*
+ * Confusion check: swaps the other side's battle slots 0 with 2 and 1 with 3,
+ * rescores the board and restores the slots. Returns 1 when the swap raises the
+ * score by TODOME_MARGIN in the event phase, or lowers it by TODOME_MARGIN in
+ * other phases, else 0.
+ */
 s32 CheckKonranCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *target;
@@ -2228,6 +2290,7 @@ s32 CheckKonranCommand(s32 side, CardGameWork *work)
     if (phase == CARD_PHASE_EVENT || phase == CARD_PHASE_EVENT + CARD_PHASES_PER_SIDE) {
         GetFriendAttack(side, work, attackVec, statusVec);
         score = TodomeHyouka(side, work, 0, 0, attackVec, statusVec);
+        /* Save the battle stacks, swap the slot pairs and rescore. */
         battleBase = target->battle;
         for (i = 0; i < CARD_BOARD_SLOTS; battleBase++, i++) {
             savedBattle[i] = *(CardStackSpan *)&battleBase->battle;
@@ -2278,8 +2341,10 @@ s32 CheckKonranCommand(s32 side, CardGameWork *work)
 }
 
 /*
- * Chooses a curry target: the battle slot of the side whose operation
- * duration is lowest, or -1 when the command is not played now.
+ * Target for the Curry command: a battle slot of the caller's own side (tagged
+ * with CARD_SLOT_BATTLE), or -1. Slots where operationDuration - life is below 2
+ * and cards whose only flag is CARD_ATTR_GNOSIS are skipped. The chosen slot must
+ * lower the TodomeHyouka score by TODOME_MARGIN_SMALL.
  */
 s32 CheckCurryCommand(s32 side, CardGameWork *work)
 {
@@ -2338,6 +2403,11 @@ s32 CheckCurryCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
+/*
+ * Check for the Tent command (Bio Sphere). Returns 1 when raising each occupied
+ * battle slot's attack value by 3, capped at its card's operationDuration, lowers
+ * the TodomeHyouka score by at least TODOME_MARGIN_SMALL. Returns 0 in the event phase.
+ */
 s32 CheckTentCommand(s32 side, CardGameWork *work)
 {
     s16 *cardIdPtr;
@@ -2386,8 +2456,9 @@ s32 CheckTentCommand(s32 side, CardGameWork *work)
     return result;
 }
 
-/* Compares the reward totals of the two battle boards: returns 1 when the
- * caller's side collects less than the other side (flags 4 and 8 cards). */
+/* Compares the battle-board reward totals of the two sides, counting only cards
+ * whose flags are exactly CARD_ATTR_GNOSIS or CARD_ATTR_MECH. Returns 1 when the
+ * caller's total is lower. */
 s32 CheckSouteniHouCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *ownSide;
@@ -2417,6 +2488,8 @@ s32 CheckSouteniHouCommand(s32 side, CardGameWork *work)
     return ownTotal < opponentTotal;
 }
 
+/* 1 when the caller's battle and disposal slots total less reward (GetShoukin on
+ * battle slots, GetPrice on disposal slots) than the other side's. */
 s32 CheckHatudouCommand(s32 side, CardGameWork *work)
 {
     s32 slotIndex;
@@ -2449,6 +2522,11 @@ s32 CheckHatudouCommand(s32 side, CardGameWork *work)
     return ownTotal < opponentTotal;
 }
 
+/*
+ * X-Buster check: totals both sides' reward. A card whose life would be used up by
+ * damage counts in full, otherwise its reward is scaled by damage / 10. Returns 1
+ * when the other side's total is higher.
+ */
 s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
 {
     s32 slotIndex;
@@ -2501,8 +2579,8 @@ s32 CheckXDamageCommand(s32 side, CardGameWork *work, s32 damage)
     return otherTotal > ownTotal;
 }
 
-/* Reward total of the caller's battle slots 2 and 3: a slot counts 90% of
- * its reward when its base card is set. Returns whether the total exceeds 80. */
+/* Reward total of the other side's battle slots 2 and 3: a slot counts 90% of
+ * its reward when its base card is set. Returns 1 when the total is above 80. */
 s32 CheckMilCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideData = (side == 0) ? &work->enemy : &work->player;
@@ -2553,9 +2631,9 @@ s32 CheckNazoCommand(s32 side, CardGameWork *work)
 }
 
 /*
- * Target for the Seimitsu command: the flagged battle or disposal slot whose
- * adjusted reward plus TodomeHyouka score beats the baseline score by at
- * least 15, encoded as a slot index (battle slots carry the 0xF0000 tag);
+ * Target for the Seimitsu command: an occupied slot of the other side (battle
+ * slots tagged with 0xF0000, disposal slots plain) whose adjusted reward plus
+ * TodomeHyouka score beats the baseline score by at least TODOME_MARGIN_SMALL.
  * -1 when none does.
  */
 s32 CheckSeimitsuCommand(s32 side, CardGameWork *work)
@@ -2646,9 +2724,9 @@ s32 CheckGunoYokanCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-/* Highest-reward flagged card on the caller's own side: the battle board
- * first (GetShoukin, battle slot index tagged 0xF0000), then the disposal
- * board (GetPrice, plain disposal slot index); -1 if none qualifies. */
+/* Highest-reward frozen card (CARD_STACK_FLAG_FROZEN) on the caller's own side:
+ * the battle board first (GetShoukin, battle slot index tagged 0xF0000), then the
+ * disposal board (GetPrice, plain disposal slot index); -1 if none qualifies. */
 s32 CheckExtCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *ownSide = (side == 0) ? &work->player : &work->enemy;
@@ -2680,9 +2758,9 @@ s32 CheckExtCommand(s32 side, CardGameWork *work)
 }
 
 /*
- * Highest-reward flagged category-four entity on the other side's battle
- * board (GetShoukin) then disposal board (GetPrice), encoded as a slot index
- * (battle slots carry the 0xF0000 tag; -1 if none qualifies).
+ * Highest-reward frozen card whose flags are exactly CARD_ATTR_GNOSIS on the
+ * other side's battle board (GetShoukin) then disposal board (GetPrice), encoded
+ * as a slot index (battle slots carry the 0xF0000 tag; -1 if none qualifies).
  */
 s32 CheckDownGunoCommand(s32 side, CardGameWork *work)
 {
@@ -2718,8 +2796,9 @@ s32 CheckDownGunoCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-/* Highest-price category-one card among the flagged slots of the other side's
- * disposal board, encoded as a disposal slot index (-1 if none qualifies). */
+/* Highest-price card with exactly CARD_ATTR_HUMAN flags on the other side's
+ * disposal board, whose stack has CARD_STACK_FLAG_END set, encoded as a disposal
+ * slot index (-1 if none qualifies). */
 s32 CheckChudanCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *otherSide = (side == 0) ? &work->enemy : &work->player;
@@ -2742,8 +2821,9 @@ s32 CheckChudanCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-/* Command 413 is allowed when the caller's battle board holds two type-two
- * cards, or one and the opposing draw pile has fewer than thirteen cards. */
+/* Command 413 is allowed when the caller's battle board holds two or more cards
+ * with flags equal to CARD_ATTR_REALIAN, or exactly one and the opposing draw pile
+ * has fewer than thirteen cards. Returns 0 once play413 is set. */
 s32 Check413Command(s32 side, CardGameWork *work)
 {
     CardPlaySide *ownSide;
@@ -2784,8 +2864,8 @@ s32 Check413Command(s32 side, CardGameWork *work)
     return 0;
 }
 
-/* Highest-price flagged card on the other side's disposal board, encoded as
- * a disposal slot index (-1 if none qualifies). */
+/* Highest-price frozen card (CARD_STACK_FLAG_FROZEN) on the other side's disposal
+ * board, encoded as a disposal slot index (-1 if none qualifies). */
 s32 CheckKyoukouCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *otherSide = (side == 0) ? &work->enemy : &work->player;
@@ -2806,9 +2886,9 @@ s32 CheckKyoukouCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
-/* Lowest-reward active category-one card on the caller's own battle board,
- * encoded as a battle slot index (0xF0000 tags it as a battle, not disposal,
- * slot for the caller). */
+/* Battle slot of the caller's board holding a card whose flags are exactly
+ * CARD_ATTR_HUMAN and whose opposing-slot GetShoukin value is the lowest and below
+ * 50. Returned tagged with 0xF0000; -1 if none qualifies. */
 s32 CheckShukumeiCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *ownSide;
@@ -2840,12 +2920,12 @@ s32 CheckShukumeiCommand(s32 side, CardGameWork *work)
 }
 
 /*
- * Target for the Bujin command, on the caller's own battle board: a slot
- * whose doubled attack (the low halfword of its friendStatus word) lifts the
- * TodomeHyouka score above the baseline by at least 30. The first slot with
- * a stacked Eyeglasses card that clears the threshold is returned at once; otherwise
- * the best of the remaining battle slots is returned if it clears it. Battle
- * slots are encoded with the 0xF0000 tag, -1 means none.
+ * Target for the Bujin command, on the caller's own battle board. A slot whose
+ * doubled attack (the low halfword of its friendStatus word) lifts the
+ * TodomeHyouka score more than 30 above the baseline qualifies. An Eyeglasses
+ * slot that qualifies is returned at once; otherwise the best remaining slot is
+ * returned if it is at least 30 above the baseline. Battle slots carry the
+ * 0xF0000 tag; -1 means none.
  */
 s32 CheckBujinCommand(s32 side, CardGameWork *work)
 {
@@ -2993,6 +3073,12 @@ s32 CheckKetugiCommand(s32 side, CardGameWork *work)
     return ownTotal < otherTotal;
 }
 
+/*
+ * Teppeki (Impregnable Guard) check; returns 0 once playteppeki is set. Returns 1
+ * when no VX-10000 is on the board and the other side has a CARD_ATTACK_HOMING
+ * battle card with power below two, when the TodomeHyouka score reaches
+ * TODOME_DECK_OUT_SCORE, or when the draw pile is below CheckEnemyAttack's total.
+ */
 s32 CheckTeppekiCommand(s32 side, CardGameWork *work)
 {
     CardPlaySide *otherSide;
@@ -3101,6 +3187,12 @@ s32 CheckSensiCommand(s32 side, CardGameWork *work)
     return bestSlot;
 }
 
+/*
+ * War Casualty (Sensi) event: up to four rounds, each picking the cheapest flagged
+ * disposal card and the lowest-reward flagged battle card (flagged when the slot's
+ * life is below 5) while the draw pile stays under WAR_CASUALTY_DECK_LIMIT. Runs
+ * CGPEnemyExecCommand on the picks.
+ */
 s32 SensiEvent(s32 side, CardGameWork *work)
 {
     s32 i;
@@ -3155,6 +3247,7 @@ s32 SensiEvent(s32 side, CardGameWork *work)
         }
         i++;
     } while (i < 4);
+    /* Up to four rounds: each round picks one disposal and one battle card. */
     count = 0;
     round = 0;
     do {
@@ -3207,6 +3300,12 @@ s32 SensiEvent(s32 side, CardGameWork *work)
     return CGPEnemyExecCommand(side, work, targets, count);
 }
 
+/*
+ * Disposal event for Juli Mizrahi, Pellegri and Zohar Emulator on the caller's
+ * battle board. Each one present is disposed (life set to 0, then its CCU06x exec
+ * runs) when the TodomeHyouka score, recomputed with the status of the other cards
+ * raised and this slot cleared, exceeds the current score by TODOME_DISPOSE_MARGIN.
+ */
 int CC_Kara_DisposeEvent(s32 side, CardGameWork *work)
 {
     CardPlaySide *own;
@@ -3278,10 +3377,9 @@ int CC_Kara_DisposeEvent(s32 side, CardGameWork *work)
 }
 
 /*
- * Plays the next command card the acting side can use: the hand is scanned
- * in order, each playable command card asks its evaluator, and the first
- * one that accepts stores its target in commplay and returns the hand index.
- * -1 when no card qualifies; a `commplay` of zero is the no-target answer.
+ * Picks the command card to play from the hand, in hand order (after
+ * CC_Kara_DisposeEvent in the event phase). Returns its hand index and sets
+ * commplay to its target (0 when none), or -1 when no card qualifies.
  */
 s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
 {
@@ -3532,9 +3630,9 @@ s32 CC_Kara_CommRequest(s32 side, CardGameWork *work)
 }
 
 /*
- * Decodes the stored AI action target (commplay: its low halfword is the
- * index, the masks pick the zone) and either dispatches the command through
- * CGPEnemyExecCommand or plays the Sensi event for the played card.
+ * Decodes commplay into a board cursor (low halfword is the index; CARD_SLOT_OTHER_SIDE
+ * and CARD_SLOT_BATTLE pick the zone). Records Teppeki and 413 as played, then runs
+ * the War Casualty event (SensiEvent) or CGPEnemyExecCommand.
  */
 s32 CC_Kara_CommPlay(s32 side, CardGameWork *work)
 {
@@ -3667,6 +3765,11 @@ s32 GetPrice(CardLayerStack *stack)
     return price;
 }
 
+/*
+ * Scores the board for `side` after the attacks in `results` (GetFriendAttack
+ * layout), with the per-slot lives in `kinds`. When slotA and slotB differ, their
+ * attack flags are swapped first. Returns the score.
+ */
 s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds, s32 *results) {
     s32 life[CARD_BOARD_SLOTS];
     s32 flags[CARD_BOARD_SLOTS];
@@ -3736,6 +3839,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             }
         }
     }
+    /* Swap the attack flags of slotA and slotB for this what-if board. */
     if (slotA != slotB) {
         remain = flags[slotA];
         flags[slotA] = flags[slotB];
@@ -3823,6 +3927,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
             }
         }
     }
+    /* Splash adds to counted; spread and homing attacks go to their own totals. */
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         value = flags[i];
         if (value & ATTACK_SPLASH) {
@@ -3860,6 +3965,7 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
         }
         flags[i] &= ATTACK_POWER_MASK;
     }
+    /* Resolve the attacks against each other-side battle slot's life. */
     if (life[0] != 0) {
         remain = life[0] - flags[1];
         if (pinnedB != 0) {
@@ -4064,6 +4170,11 @@ s32 TodomeHyouka(s32 side, CardGameWork *work, u32 slotA, u32 slotB, s32 *kinds,
     return score;
 }
 
+/*
+ * Fills kinds with each other-side battle slot's life and results with the attack
+ * flags and power of the caller's battle slots (power from CheckNowPower or
+ * LvUpCheck, ATTACK_* bits added). Frozen slots lose their power. Returns 1.
+ */
 s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
 {
     CardPlaySide *ownSide;
@@ -4162,6 +4273,11 @@ s32 GetFriendAttack(s32 side, CardGameWork *work, s32 *kinds, s32 *results)
     return 1;
 }
 
+/*
+ * Moves the battle card in `slot` to the other battle slot whose swap TodomeHyouka
+ * scores best, when that score beats the current one and the target is empty, has
+ * a deck value below 4, or reaches TODOME_DECK_OUT_SCORE. Returns 1.
+ */
 s32 CC_Kara_TodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
     s32 friendA[CARD_BOARD_SLOTS];
@@ -4215,9 +4331,8 @@ s32 CC_Kara_TodomeMove(s32 side, CardGameWork *work, s32 slot)
 }
 
 /*
- * Routes the attack card in battle slot `index` of `side` through the
- * finisher movement: attack type 2 and type 1 and every other type all
- * tail-call CC_Kara_TodomeMove with flag 1.
+ * Attack move for the battle card in `slot`. Every attack type calls
+ * CC_Kara_TodomeMove on that slot, so the branches are identical.
  */
 s32 CC_Kara_AttackMove(s32 side, CardGameWork *work, s32 slot)
 {
@@ -4233,6 +4348,11 @@ s32 CC_Kara_AttackMove(s32 side, CardGameWork *work, s32 slot)
     return CC_Kara_TodomeMove(side, work, index);
 }
 
+/*
+ * Back-row todome move for battle slot `slot` (0 to 3). The case picks the other
+ * slots to try. A swap is made when its TodomeHyouka score is higher and the
+ * target slot is empty, has a deck value below 4, or scores as deck-out. Returns 1.
+ */
 s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
     s32 attack[CARD_BOARD_SLOTS];
@@ -4351,6 +4471,11 @@ s32 CC_Kara_BackTodomeMove(s32 side, CardGameWork *work, s32 slot)
     }
 }
 
+/*
+ * Front-row todome move for battle slot `slot`: slots 0 and 1 score a swap with
+ * the other front slot through TodomeHyouka; slots 2 and 3 call CC_Kara_KabeMove.
+ * Returns 1.
+ */
 s32 CC_Kara_FrontTodomeMove(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *mySide;
@@ -4446,6 +4571,12 @@ s32 CC_Kara_FrontTodomeMove(s32 side, CardGameWork *work, s32 slot)
     return 1;
 }
 
+/*
+ * Attack move for battle slot `battleSlot`. A hand card, or a ballistic card while
+ * the other side's battle board has cards, goes to CC_Kara_BackTodomeMove.
+ * Otherwise, when that board is empty, a card in slot 0 or 1 moves to the first
+ * empty back slot (2, then 3). Returns 1 when it moved, else 0.
+ */
 s32 CC_Kara_BackAttackMove(s32 side, CardGameWork *work, s32 battleSlot)
 {
     u16 slot = battleSlot;
@@ -4493,8 +4624,7 @@ s32 CC_Kara_BackAttackMove(s32 side, CardGameWork *work, s32 battleSlot)
     return 0;
 }
 
-/* The VX-10000 card on either side's battle board, checking both sides'
- * slot i together for i in 0..3. */
+/* Returns 1 when a VX-10000 card is on either side's battle board, else 0. */
 s32 VX10000Check(s32 side, CardGameWork *work)
 {
     CardPlaySide *sideA;
@@ -4575,9 +4705,13 @@ s32 MoMoCheck(s32 side, CardGameWork *work)
     return -1;
 }
 
-/* Joachim Mizrahi (Yoakimu) moves to the battle slot MoMoCheck names, or checks
- * the hand and the power of the disposal slot it was played from. A slot
- * with bits 0xF0000 set names a battle slot instead. */
+/*
+ * Joachim Mizrahi (Yoakimu) move. A disposal slot (no 0xF0000 tag) moves into battle
+ * slot 2 or 3 when MoMoCheck finds a MoMo card on the battle board; otherwise it
+ * returns 0 while the hand holds CARD_ID_RIFLE or the card after it, else whether
+ * CheckNowPower is 0. A battle slot (tagged) moves the same way, else returns whether
+ * CheckNowPower is nonzero.
+ */
 s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *sideData = &work->player;
@@ -4653,6 +4787,10 @@ s32 YoakimuMove(s32 side, CardGameWork *work, s32 slot)
     return 0;
 }
 
+/*
+ * MoMo move for `slot`. Returns 0 unless Joachim Mizrahi is on the caller's battle
+ * board. Otherwise it rearranges the battle slots around him and returns 1.
+ */
 s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
 {
     s32 attack[CARD_BOARD_SLOTS];
@@ -4736,6 +4874,7 @@ s32 MoMoMove(s32 side, CardGameWork *work, s32 slot)
     case 1:
         CGPMoveDSBATTLEwork(&ownSide->battle[3].battle, &ownSide->battle[1].battle);
         return 1;
+    /* Cases 2 and 3 score their swap with TodomeHyouka before moving. */
     case 2:
         if (slot != 0) {
             CGPMoveDSBATTLEwork(&ownSide->battle[0].battle, &ownSide->battle[slot].battle);
@@ -4857,6 +4996,12 @@ s32 CheckFriendSensi(s32 side, CardGameWork *work)
     return 0;
 }
 
+/*
+ * Sensi (War Casualty) move for `slot`. A disposal slot (no 0xF0000 tag) moves into
+ * a battle slot picked by attack type, power and deck data. A battle slot (tagged)
+ * goes to disposal slot 0 under the front hand-attack conditions, else to
+ * CC_Kara_AttackMove.
+ */
 s32 CC_Kara_SensiMove(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *otherSide;
@@ -4877,6 +5022,8 @@ s32 CC_Kara_SensiMove(s32 side, CardGameWork *work, s32 slot)
         otherSide = &work->player;
     }
 
+    /* A frozen disposal card with 11 or more cards in the draw pile ends the move
+     * (returns 1) unless Cure-All or Start Up can be played. */
     if ((slot & CARD_SLOT_BATTLE) == 0) {
         if ((ownSide->disposal[slot].battle.flags & CARD_STACK_FLAG_FROZEN) != 0) {
             if (11 <= CardPlayYamaCnt(ownSide)) {
@@ -5268,9 +5415,10 @@ s32 CC_Kara_KabeMove(s32 side, CardGameWork *work, s32 slot)
     return 0;
 }
 
-/* Escape command: the friend and enemy counts on the board must allow it,
- * then a card that is not out-attacked moves to an empty disposal slot or
- * runs MoveFase_Type4. A slot with bits 0xF0000 set names a battle slot. */
+/* Escape command: the friend and enemy counts on the board must allow it. Then a
+ * card whose life the enemy's attack (CheckEnemy12Attack) reaches moves to an
+ * empty disposal slot (battle slot, single friend) or runs CC_Kara_MoveFase_Type4
+ * (disposal slot). A slot with bits 0xF0000 set names a battle slot. */
 s32 EscapeMove(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *sideData = &work->player;
@@ -5446,6 +5594,11 @@ s32 LvUpCheck(s32 side, CardGameWork *work, s32 slot)
     return -1;
 }
 
+/*
+ * Type-zero AI move for `slot`. A level-up card, a short draw pile or a
+ * generation check that rejects the card passes the slot to
+ * CC_Kara_MoveFase_Type2. Returns 1 when a battle slot moved to disposal.
+ */
 s32 CC_Kara_MoveFase_Type0(s32 side, CardGameWork *work, s32 slot)
 {
     CardPlaySide *sideData = &work->player;
@@ -5494,9 +5647,9 @@ s32 CC_Kara_MoveFase_Type0(s32 side, CardGameWork *work, s32 slot)
 }
 
 /*
- * Type-one AI move: a level-up check, then the hand and deck counts and the
- * attack type of the chosen card, falling back to the generation and the
- * disposal-to-battle move when neither applies.
+ * Type-one AI move for `slot`. A level-up card goes to CC_Kara_MoveFase_Type3, and
+ * so does a generation check or a non-hand attack on a short draw pile (Type2 for
+ * a hand attack). A battle slot with no generation moves to an empty disposal slot.
  */
 s32 CC_Kara_MoveFase_Type1(s32 side, CardGameWork *work, s32 slot)
 {
@@ -5600,6 +5753,7 @@ s32 CC_Kara_MoveFase_Type2(s32 side, CardGameWork *work, s32 slot)
         goto tagged;
     }
 
+    /* Disposal slot: fill an empty battle slot, or replace a battle card with less life than this card. */
     if (own->battle[3].battle.layers[0].cardId >= 0) {
         if (own->battle[1].battle.layers[0].cardId < 0) {
             CGPMoveDSBATTLEwork(&own->battle[1].battle, &own->disposal[slot].battle);
@@ -5644,6 +5798,7 @@ s32 CC_Kara_MoveFase_Type2(s32 side, CardGameWork *work, s32 slot)
         return 1;
     }
 
+    /* A card that is not a hand attack takes the highest-numbered empty battle slot. */
     do {
     cardChk:
         if (CardChkAttackType(work->definitions, &own->disposal[slot].battle) != CARD_ATTACK_HAND) {
@@ -5676,6 +5831,7 @@ s32 CC_Kara_MoveFase_Type2(s32 side, CardGameWork *work, s32 slot)
 
 tagged:
     slot &= CARD_SLOT_INDEX_MASK;
+    /* Attack move when the battle friend check returns 1 and the disposal friend check returns 0. */
     result = BattleAreaCheckFriend(side, work);
     dispFriend = DisposeAreaCheckFriend(side, work);
     if (result == 1 && dispFriend == 0) {
@@ -5704,9 +5860,9 @@ tagged:
 }
 
 /*
- * Type-three AI move: a move of the Momo cards (Lv 1, Swim Suit and Lv 10) first,
- * then the attack-type and escape checks, ending in the Sensi, Haibi-kabe or
- * kabe move for the chosen slot.
+ * Type-three AI move for `slot`: Momo cards (Lv 1, Swim Suit, Lv 10) move first.
+ * A short draw pile checks the attack type for a Haibi-kabe or kabe move, else
+ * EscapeMove runs. The Sensi move ends it.
  */
 s32 CC_Kara_MoveFase_Type3(s32 side, CardGameWork *work, s32 slot)
 {
@@ -5759,9 +5915,10 @@ s32 CC_Kara_MoveFase_Type3(s32 side, CardGameWork *work, s32 slot)
 }
 
 /*
- * Type-four AI move: a special-card check, the attack and friend-count
- * gates, then the disposal-to-battle move into the first open battle slot
- * that qualifies, or the rear-attack move for a battle slot.
+ * Type-four AI move for `slot`: YoakimuMove first, then the draw-pile and
+ * friend-count gates (Type3 or SensiMove). A disposal slot fills battle slot 2
+ * or 3. A battle slot moves to an empty disposal slot, and BackAttackMove runs
+ * when battle slots 0 and 1 are occupied.
  */
 s32 CC_Kara_MoveFase_Type4(s32 side, CardGameWork *work, s32 slot)
 {
@@ -5836,10 +5993,10 @@ s32 CC_Kara_MoveFase_Type4(s32 side, CardGameWork *work, s32 slot)
 }
 
 /*
- * Movement policy for the `side` side's board: the disposal slots first, then
- * the battle slots. A slot whose second stacked card is one of the three
- * command cards is skipped while the other side has fewer than two occupied
- * battle slots and the draw pile holds at least eleven cards.
+ * Movement policy for the `side` side's board: disposal slots, then battle slots.
+ * A disposal slot is skipped when the other side has under two battle cards, the
+ * draw pile has eleven or more, and its layer power is below 2 with Eyeglasses,
+ * Missile Pod or Beam as the second card.
  */
 s32 CC_Kara_MoveFase_2(s32 side, CardGameWork *work)
 {
@@ -5903,6 +6060,7 @@ s32 CC_Kara_MoveFase_2(s32 side, CardGameWork *work)
         }
     }
 
+    /* Battle slots under the same conditions move into each empty disposal slot. */
     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
         s32 slotOffset = i * (s32) sizeof(CardBoardSlot) + 400;
         CardBoardSlot *slot = (CardBoardSlot *) ((u8 *) ownSide + slotOffset);
@@ -5951,9 +6109,9 @@ s32 CC_Kara_MoveFase_2(s32 side, CardGameWork *work)
 }
 
 /*
- * Moves disposal stacks into open battle slots. First every open,
- * unflagged battle stack takes the empty disposal stacks; then each
- * occupied disposal stack moves into the battle slot its attack type picks.
+ * Each frozen battle stack moves into the empty disposal stacks. Then each
+ * occupied, unfrozen disposal stack moves into a free battle slot: slot 0 or 1
+ * for a hand attack, otherwise the first free one of slots 2, 3, 0 and 1.
  */
 s32 CC_Kara_MoveFase_1(s32 side, CardGameWork *work)
 {
@@ -6017,6 +6175,11 @@ s32 CC_Kara_MoveFase_1(s32 side, CardGameWork *work)
     return 0;
 }
 
+/*
+ * Combo move check for `side`: Phase Cannon, Article 4-13 with Armistice, and
+ * Virgil. Resets the play413 and playteppeki flags, moves cards to set up the
+ * combo, and returns 1 when a combo is set up, 0 otherwise.
+ */
 s32 CheckComboMove(s32 side, CardGameWork *work)
 {
     CardPlaySide *own;
@@ -6062,6 +6225,8 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
         return 0;
     }
 
+    /* Phase Cannon: each Gnosis or Mech battle stack moves to a disposal slot
+     * that is empty or holds neither Gnosis nor Mech. */
     for (i = 0; i < handCount; i++) {
         if (own->hand.cards[i] == CARD_ID_PHASE_CANNON && CheckCommandPlay(side, work, CARD_ID_PHASE_CANNON) == 1 &&
             BattleAreaCheckEnemy(side, work) > 0) {
@@ -6090,6 +6255,7 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
         }
     }
 
+    /* Article 4-13 and Armistice in hand, with at least two cards in the draw pile. */
     ownYamaCount = CardPlayYamaCnt(own);
     pick = 0;
     pick2 = 0;
@@ -6105,6 +6271,7 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
             }
         }
 
+    /* Article 4-13 with Armistice: Realian disposal stacks move into battle slots. */
     if (pick == 1 && pick2 == 1) {
         n = 0;
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
@@ -6147,6 +6314,7 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
             break;
         }
     }
+    /* Armistice with Virgil on the board: Realian stacks, then Virgil, move into battle slots. */
     if (pick2 == 1 && virgilOnBoard == 1) {
         virgilInBattle = 0;
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
@@ -6212,6 +6380,11 @@ s32 CheckComboMove(s32 side, CardGameWork *work)
     return 0;
 }
 
+/*
+ * Board move for `side`. A combo move, Compulsory Sortie, A Rat in a Trap, or a
+ * successful Guno, REAL or Gainan check ends the move with 0. Otherwise
+ * CC_Kara_MoveFase_2 runs ten times.
+ */
 s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
 {
     CardPlaySide *player;
@@ -6299,6 +6472,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
     if (CardPlayCntOpe(player, CARD_ID_A_RAT_IN_A_TRAP) != 0 || CardPlayCntOpe(enemy, CARD_ID_A_RAT_IN_A_TRAP) != 0) {
         return 0;
     }
+    /* A Lv 10 Momo in either battle row moves the own disposal stacks into empty battle slots. */
     if (CheckGuno(side, work) != 0) {
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
             if (ownSide->battle[i].battle.layers[0].cardId == CARD_ID_LV_10_MOMO ||
@@ -6325,6 +6499,7 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
     if (GainanCheck(side, work) == 1) {
         return 0;
     }
+    /* The board move runs ten times. */
     for (i = 9; i >= 0; i--) {
         CC_Kara_MoveFase_2(side, work);
     }
@@ -6332,8 +6507,8 @@ s32 CC_Kara_MoveFase(s32 side, CardGameWork *work)
 }
 
 /*
- * Whether the side's hand holds Miyuki's Email or Song, whose play condition
- * CardPlayChkCondition accepts (it returns 0 for an allowed card).
+ * Returns 1 when the side's hand holds Miyuki's Email or Song that
+ * CardPlayChkCondition allows (it returns 0 for an allowed card).
  */
 s32 CC_Kara_1stAnswer(s32 side, CardGameWork *work)
 {

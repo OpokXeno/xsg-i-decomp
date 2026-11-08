@@ -55,11 +55,11 @@ extern MovieTransparency GameMovieTransparent;
 extern MovieAlpha GameMovieAlpha;
 extern short GameMovieFrame;
 
-/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
+/* Defined in src/main/xgl_1.c. */
 extern int xglMovieClose(void *movie);
 
 extern void xglMovieInfoInit(MovieInfo *movie);
-/* Defined in src/main/xgl_1.c, still INCLUDE_ASM there. */
+/* Defined in src/main/xgl_1.c. */
 extern int xglMovieOpen(void *movie, char *name);
 
 extern int SCRIPT_getEventActiveFlag(void);
@@ -113,6 +113,7 @@ static inline char caption_peek(char *cursor)
     return *cursor;
 }
 
+/* Per-frame update while a movie is active: plays the next frame unless flags bit 0 is set, then sends the overlay packet. */
 void GameMovieMain(void)
 {
     if (mi.state != 0) {
@@ -136,6 +137,7 @@ void GameMovieStop(void)
     mi.state = 0;
 }
 
+/* Closes the movie that is playing, if any, then opens name. Returns the xglMovieOpen result. */
 int GameMoviePlay(char *name)
 {
     if (mi.state != 0) {
@@ -145,6 +147,7 @@ int GameMoviePlay(char *name)
     return xglMovieOpen(&mi, name);
 }
 
+/* While a script event is active, marks the movie as skipped (mode 2 unless it is already 1), signals the script and cancels the fade-in. */
 static void movie_skip(int *mode)
 {
     if (SCRIPT_getEventActiveFlag() != 0) {
@@ -157,6 +160,7 @@ static void movie_skip(int *mode)
     }
 }
 
+/* Skips line breaks and ';' markers after a caption entry and returns the start of the next line. */
 static char *caption_nextline(char *cursor)
 {
     char character;
@@ -181,12 +185,10 @@ static char *caption_nextline(char *cursor)
 }
 
 /*
- * Reads one caption entry: a time stamp (minutes:seconds:frames, or minutes
- * and seconds only) followed by blanks and the text up to a CR, LF or
- * backslash. The text is written to out with a two byte header (a tag byte
- * of 1 and the complement of half the text width); a backslash starts a
- * further line in the same entry. *time receives the time stamp in frames,
- * or -1 when the line has none. Returns the start of the next entry.
+ * Reads one caption entry: an optional time stamp (minutes:seconds:frames, or minutes and
+ * seconds), then the text up to CR, LF or a backslash, which starts a further line.
+ * The text goes to out after a two-byte header; *time gets the stamp in frames, or -1.
+ * Returns the start of the next entry.
  */
 static char *caption_getparam(char *cursor, int *time, char *out)
 {
@@ -250,6 +252,7 @@ static char *caption_getparam(char *cursor, int *time, char *out)
     return caption_nextline(cursor);
 }
 
+/* Converts a caption file in place: each entry gets its time stamp before its text, and the list ends at the first entry without one. */
 static void caption_convert(char *text)
 {
     char *src;
@@ -271,6 +274,7 @@ static void caption_convert(char *text)
     } while (time >= 0);
 }
 
+/* Plays the movie name with its caption track. Handles pause (START), skip and replay, and the skip-all combo. */
 void GameMpeg2Play(char *name, int mode)
 {
     MovieMpegContext mpeg;
@@ -291,6 +295,7 @@ void GameMpeg2Play(char *name, int mode)
         xglRenderClearDepth();
         xglSoundStreamStop(0);
         nmlModelSendSignalMovieStart();
+        /* Each pass plays the file once; a REPLAY press on the seek-error screen repeats it. */
         do {
             replay = 0;
             text = GameResourceGetFreeAddr();
@@ -320,6 +325,7 @@ void GameMpeg2Play(char *name, int mode)
                     }
                 }
             }
+            /* Read the caption file into text and convert it in place; a failed read leaves size 0. */
             size = xglCdReadFile(text, text, 0, 0);
             if (size < 0) {
                 size = 0;
@@ -332,6 +338,7 @@ void GameMpeg2Play(char *name, int mode)
             }
             if (xglMpeg2Open(&mpeg, name) >= 0) {
                 GameLoopState.input_delay = MOVIE_INPUT_DELAY;
+                /* Play frames and print the caption due at the current frame. A negative status is a seek error; a positive one ends the movie. */
                 for (;;) {
                     status = xglMpeg2Play(&mpeg);
                     if (text != 0) {
@@ -372,6 +379,7 @@ void GameMpeg2Play(char *name, int mode)
                     if (status > 0) {
                         break;
                     }
+                    /* Pad input is ignored while input_delay counts down; START opens the pause screen. */
                     if (GameLoopState.input_delay != 0) {
                         GameLoopState.input_delay--;
                     } else if (PadData.half_2a & PAD_BUTTON_START) {
@@ -380,6 +388,7 @@ void GameMpeg2Play(char *name, int mode)
                             GameLoopState.flags |= MOVIE_FLAG_SKIP_ALL;
                             break;
                         }
+                        /* Pause screen: SKIP skips the movie, START resumes it. */
                         xglSoundEffectNormalDirect(MOVIE_SE_PAUSE);
                         sRender.scene_disabled = 1;
                         xglRenderCopyDisp2Draw();
@@ -407,6 +416,7 @@ finish_movie_pause:
                         xglSoundEffectNormalDirect(MOVIE_SE_PAUSE);
                         sRender.scene_disabled = 0;
                         GameLoopState.input_delay = MOVIE_INPUT_DELAY;
+                        /* Leaving the pause with SKIP ends the movie, with a longer input delay. */
                         if (PadData.half_2a & PAD_BUTTON_SKIP) {
                             GameLoopState.input_delay = MOVIE_INPUT_DELAY_AFTER_SKIP;
                             break;
@@ -424,6 +434,7 @@ finish_movie_pause:
     }
 }
 
+/* Allocates the movie buffers for size bytes of source data and resets the movie state. */
 void GameMovieInit(int size)
 {
     unsigned int span;

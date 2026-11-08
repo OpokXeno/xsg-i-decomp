@@ -99,6 +99,12 @@ typedef struct FpkAnimationAttributeSlot {
 
 void FCV2_readAttribute(FcvAttributeState *attributes, void *data);
 
+/*
+ * Returns the entry at clock->current_data_id's index in an FPK pack and stores
+ * that entry's attribute index in clock->attribute_index. An FCV pack is
+ * returned as the entry itself. The pack's offsets are relocated to pointers on
+ * first access.
+ */
 FpkAnimationEntry *ANM_getEntry(AnmClock *clock, FpkFcvPack *pack)
 {
     u32 signature;
@@ -160,6 +166,11 @@ FpkAnimationEntry *ANM_getEntry(AnmClock *clock, FpkFcvPack *pack)
     return 0;
 }
 
+/*
+ * Returns entry 'index' of an FPK pack, relocating the pack's offsets on first
+ * access. An FCV pack is returned as is; a null pack, an unknown magic or an
+ * out-of-range index gives 0.
+ */
 void *PACK_getEntry(FpkFcvPack *pack, int index)
 {
     int signature;
@@ -213,6 +224,10 @@ void *PACK_getEntry(FpkFcvPack *pack, int index)
     return 0;
 }
 
+/*
+ * Returns attribute 'index' of an FPK pack, from the table that follows its
+ * entries; relocates the pack's offsets on first access. An FCV pack gives 0.
+ */
 void *PACK_getAttr(FpkFcvPack *pack, int index)
 {
     int signature;
@@ -269,6 +284,11 @@ void *PACK_getAttr(FpkFcvPack *pack, int index)
     return 0;
 }
 
+/*
+ * Undoes the pointer relocation of a relocated FPK pack: entries become offsets
+ * from base_address again (format 2 entries are left as they are) and the
+ * relocated flag is cleared. Returns the pack for an FCV pack, otherwise 0.
+ */
 void *PACK_unlink(FpkFcvPack *pack, int base_address)
 {
     u32 signature;
@@ -302,6 +322,11 @@ void *PACK_unlink(FpkFcvPack *pack, int base_address)
     return 0;
 }
 
+/*
+ * Returns the entry count of an FPK pack, relocating its offsets on first
+ * access (format 2 and later use the data_offset form). An FCV pack counts as
+ * 1; a null pack or an unknown magic gives 0.
+ */
 u32 PACK_getSize(FpkFcvPack *pack)
 {
     u32 signature;
@@ -354,6 +379,12 @@ u32 PACK_getSize(FpkFcvPack *pack)
     return 0;
 }
 
+/*
+ * Starts default playback on the entry at state->entry_index of the pack and
+ * clears ANM_FINISHED. Sets the speed to the default frame duration, the limits
+ * to the entry's first and last frames and the frame to its first frame.
+ * Returns the entry, or 0 when the pack has none at that index.
+ */
 FpkAnimationEntry *ANM_resetDefault(AnmDefaultState *state, FpkFcvPack *pack)
 {
     float frame;
@@ -375,6 +406,12 @@ FpkAnimationEntry *ANM_resetDefault(AnmDefaultState *state, FpkFcvPack *pack)
     return entry;
 }
 
+/*
+ * Restarts a time-driven clock on its current entry and clears ANM_RESTART. The
+ * limits come from the entry, or from its FCV2 playback range when there is one,
+ * and the reset bounds come from the reset range or the limits. The frame goes
+ * to the start of the playback direction. Returns the entry, or 0.
+ */
 FpkAnimationEntry *ANM_resetTime(AnmClock *clock)
 {
     FcvAttributeState attributes;
@@ -421,6 +458,12 @@ FpkAnimationEntry *ANM_resetTime(AnmClock *clock)
     return entry;
 }
 
+/*
+ * Fetches the pack entry at clock->current_data_id into clock->entry and starts
+ * playback on it with the pack frame duration. When flags bit 0 is set, the
+ * clock also waits (ANM_WAITING) until its frame passes loop_limit, which is
+ * wait_duration past the start frame. Returns the entry, or 0.
+ */
 FpkAnimationEntry *ANM_resetPack(AnmClock *clock)
 {
     FcvAttributeState attributes;
@@ -476,6 +519,12 @@ FpkAnimationEntry *ANM_resetPack(AnmClock *clock)
     return entry;
 }
 
+/*
+ * Restarts the clock's current entry for interpolated time playback. It sets up
+ * the limits, reset bounds, speed and frame as ANM_resetPack does, with the
+ * interpolated time frame duration, and clears ANM_RESTART. Returns the entry,
+ * or 0.
+ */
 FpkAnimationEntry *ANM_resetTimeInterp(AnmClock *clock)
 {
     FcvAttributeState attributes;
@@ -530,6 +579,12 @@ FpkAnimationEntry *ANM_resetTimeInterp(AnmClock *clock)
     return entry;
 }
 
+/*
+ * Sets clock->pack to pack and starts playback on the entry at
+ * clock->current_data_id, set up as ANM_resetPack does but with the reset frame
+ * duration. ANM_update calls it to move on to the next entry. Returns the entry,
+ * or 0.
+ */
 FpkAnimationEntry *ANM_reset(AnmClock *clock, FpkFcvPack *pack)
 {
     FcvAttributeState attributes;
@@ -586,6 +641,12 @@ FpkAnimationEntry *ANM_reset(AnmClock *clock, FpkFcvPack *pack)
     return entry;
 }
 
+/*
+ * Advances a clock by its speed unless it is paused, then applies its limits.
+ * A waiting clock only checks whether the wait is over. At the end of the range
+ * the clock loops (ANM_LOOP) or finishes, and with ANM_ADVANCE_ENTRY it moves to
+ * the next entry of the pack.
+ */
 void ANM_update(AnmClock *clock)
 {
     u32 flags = clock->flags;
@@ -594,6 +655,7 @@ void ANM_update(AnmClock *clock)
     if (!(flags & ANM_PAUSED)) {
         clock->frame += speed;
     }
+    /* While waiting, the clock only checks whether the frame has passed loop_limit. */
     if (flags & ANM_WAITING) {
         if (speed >= 0.0f) {
             float frame = clock->frame;
@@ -608,6 +670,7 @@ void ANM_update(AnmClock *clock)
         }
         return;
     }
+    /* Forward playback ends when the frame passes forward_limit. */
     if (speed >= 0.0f) {
         if (clock->forward_limit < clock->frame) {
             if (flags & ANM_LOOP) {
@@ -622,6 +685,7 @@ void ANM_update(AnmClock *clock)
                 clock->frame = clock->forward_limit;
                 clock->flags = flags | ANM_FINISHED;
             }
+            /* Move to the next entry of the pack, keeping the bank bits, and restart on it. */
             if (clock->flags & ANM_ADVANCE_ENTRY) {
                 int entry_count = PACK_getSize(clock->pack);
                 u16 current_data_id = clock->current_data_id;
@@ -663,6 +727,11 @@ void ANM_update(AnmClock *clock)
     }
 }
 
+/*
+ * Moves a clock's frame forward by elapsed time, in place of its speed, and
+ * applies the same wait, loop and finish limits as ANM_update. It does not move
+ * to the next pack entry.
+ */
 void ANM_updateTime(AnmClock *clock, float elapsed)
 {
     float frame = clock->frame + elapsed;

@@ -22,12 +22,7 @@
 #define MATRIX_COMBINE_WEIGHT_RISE 0.4f
 #define MATRIX_COMBINE_WEIGHT_FALL 0.15f
 
-/*
- * A double effector's per-unit record: the two manipulators
- * RgMatricesEffectorAddDoubleMani (0x00a37ea8) pairs into one heap block,
- * _EffectorAddDoubleUnit (0x00a373f0) allocates and fills, and
- * _DestructDoubleEffector (0x00a36f90) frees back apart.
- */
+/* Per-unit record of a double effector: its two manipulators, in one heap block. */
 typedef struct ManipulatorPair ManipulatorPair;
 struct ManipulatorPair {
     SkeMani *first;
@@ -35,11 +30,9 @@ struct ManipulatorPair {
 };
 
 /*
- * The per-unit RgVector container (ov12/tu050, src/ov12/rg_vector.c) that
- * MatrixEffector.units points at.  Its layout belongs to that TU, so these
- * entry points keep the generic pointer this TU already uses for the field.
+ * MatrixEffector.units points at an RgVector of per-unit records. That container
+ * belongs to rg_vector.c, so this file keeps the field as a generic pointer.
  */
-
 static void _InitCombine(MatrixCombine *combine);
 static void _EffectorSetActivity(MatrixEffector *effector, int activity);
 static void _DestructEffector(MatrixEffector *effector);
@@ -74,6 +67,7 @@ static void _ManiSet(SkeMani *manipulator, RgMatrix matrix)
 }
 
 
+/* Reads a manipulator's matrix. The identity matrix is used when it has no getter. */
 static void _ManiGet(SkeMani *manipulator, RgMatrix matrix)
 {
     if (manipulator != 0) {
@@ -102,6 +96,7 @@ static void _InitEffector(MatrixEffector *effector)
     effector->activity = 1;
 }
 
+/* Frees each unit and then the unit vector. */
 static void _DestructSingleEffector(MatrixEffector *effector)
 {
     unsigned int count;
@@ -122,6 +117,7 @@ static void _DestructSingleEffector(MatrixEffector *effector)
     DisposeRgVector(effector->units, matricesEffectorSourcePath, 104);
 }
 
+/* Frees both manipulators and the pair record of every unit, then the unit vector. */
 static void _DestructDoubleEffector(MatrixEffector *effector)
 {
     unsigned int count;
@@ -147,6 +143,7 @@ static void _DestructDoubleEffector(MatrixEffector *effector)
 }
 
 
+/* Frees the units for the effector kind, then runs its destruct hook. */
 static void _DestructEffector(MatrixEffector *effector)
 {
     void *identifier;
@@ -164,6 +161,7 @@ static void _DestructEffector(MatrixEffector *effector)
     }
 }
 
+/* Runs one pass: start hook, then apply to each unit matrix and store it back. */
 static void _SingleEffectorJob(MatrixEffector *effector)
 {
     unsigned int unit_count;
@@ -195,6 +193,7 @@ static void _SingleEffectorJob(MatrixEffector *effector)
     }
 }
 
+/* Runs one pass: start hook, then apply to each pair of unit matrices and store both back. */
 static void _DoubleEffectorJob(MatrixEffector *effector)
 {
     unsigned int unit_count;
@@ -225,6 +224,7 @@ static void _DoubleEffectorJob(MatrixEffector *effector)
     }
 }
 
+/* Stores the activity flag and calls the effector's set_activity hook. */
 static void _EffectorSetActivity(MatrixEffector *effector, int activity)
 {
     void (*set_activity)(MatrixEffector *effector, int activity);
@@ -246,6 +246,7 @@ static void _EffectorAddUnit(MatrixEffector *effector, SkeMani *unit)
     }
 }
 
+/* Allocates a pair record for two manipulators and appends it to the units. */
 static void _EffectorAddDoubleUnit(MatrixEffector *effector, SkeMani *first,
                                    SkeMani *second)
 {
@@ -286,6 +287,11 @@ static void _InitDoubleEffector(MatrixEffector *effector)
     effector->job = _DoubleEffectorJob;
 }
 
+/*
+ * Moves the constraint weight up while the effector is active and down otherwise,
+ * clamped to [0, 1]. Builds the root and constrained frames from the three manipulators.
+ * Identity frames are used while any manipulator is missing.
+ */
 static void _ConstraintStartFunc(MatrixConstraint *constraint)
 {
     RgMatrix root_frame;
@@ -324,12 +330,14 @@ static void _ConstraintStartFunc(MatrixConstraint *constraint)
     _ManiGet(constraint->joint_manipulator, joint_matrix);
     _ManiGet(constraint->top_manipulator, top_matrix);
 
+    /* Root frame, aimed from the root toward the top manipulator. */
     XrgSubVector(direction, &top_matrix[12], &root_matrix[12]);
     XrgCalcMatrixXtoZ(root_frame, direction, &root_matrix[8]);
     XrgCopyVector(&root_frame[12], &joint_matrix[12]);
     root_frame[15] = 1.0f;
     XrgInvMatrix(constraint->root_inverse, root_frame);
 
+    /* Blends the target-direction frame with the root frame by the weight. */
     XrgSubVector(direction, constraint->point_to,
                  &root_matrix[12]);
     XrgCalcMatrixXtoZ(top_frame, direction, &root_matrix[8]);
@@ -346,6 +354,7 @@ static void _ConstraintFunc(MatrixConstraint *constraint, RgMatrix matrix)
     XrgMulMatrix(matrix, constraint->constrained_frame, matrix);
 }
 
+/* Frees the top, root and joint manipulators that the constraint holds. */
 static void _ConstraintDestructFunc(MatrixConstraint *constraint)
 {
     if (constraint->top_manipulator != 0) {
@@ -423,6 +432,10 @@ static void _ConstraintSetPointTo(MatrixConstraint *constraint, RgVector input)
     XrgCopyVector(constraint->point_to, input);
 }
 
+/*
+ * Refreshes the root and top matrices and their inverses. The combine weight rises
+ * while the effector is active and falls otherwise, clamped to [0, 1].
+ */
 static void _CombineStartFunc(MatrixCombine *combine)
 {
     if (combine->root == 0)
@@ -457,6 +470,10 @@ static void _CombineStartFunc(MatrixCombine *combine)
     }
 }
 
+/*
+ * Blends the first matrix toward root * top^-1 * second by the combine weight, when
+ * the weight is positive.
+ */
 static void _CombineFunc(MatrixCombine *combine, RgMatrix first, RgMatrix second)
 {
     RgMatrix transform;
@@ -475,6 +492,7 @@ static void _CombineFunc(MatrixCombine *combine, RgMatrix first, RgMatrix second
     }
 }
 
+/* Frees the root and top manipulators that the combine holds. */
 static void _CombineDestructFunc(MatrixCombine *combine)
 {
     if (combine->root != 0) {

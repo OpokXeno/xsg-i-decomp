@@ -16,6 +16,10 @@ void unitInit(void)
     unitEnNum = 0;
 }
 
+/*
+ * Returns the number of slots for side (0 players, 1 enemies, anything else
+ * all 8) and points *table at the side's first slot.
+ */
 int unitTblGet(int side, BattleUnit ***table)
 {
     if (side == 0) {
@@ -31,9 +35,12 @@ int unitTblGet(int side, BattleUnit ***table)
 }
 
 /*
+ * Stores unit in the first free slot of its side (0 players, 1 enemies) and
+ * returns 1, or returns 0 when no slot is free or the side is invalid.
+ *
  * The side's first slot is its own local, copied into the loop index where
- * the two side paths meet (daddu $6,$2,$0 at 0x00a00e18); starting the loop
- * index itself in each branch allocates it to $6 directly.
+ * the two side paths meet; starting the loop index itself in each branch
+ * keeps the copy out of the loop.
  */
 int unitTblSet(int side, BattleUnit *unit)
 {
@@ -64,6 +71,7 @@ int unitTblSet(int side, BattleUnit *unit)
     return 0;
 }
 
+/* Clears the slot holding unit and updates the side count. Returns 1 when found. */
 int unitTblRemove(BattleUnit *unit)
 {
     BattleUnit **units = unitTbl;
@@ -83,6 +91,7 @@ int unitTblRemove(BattleUnit *unit)
     return 0;
 }
 
+/* Puts newUnit in the slot of oldUnit. Returns 1 when oldUnit is found. */
 int unitTblChg(BattleUnit *oldUnit, BattleUnit *newUnit)
 {
     BattleUnit **units = unitTbl;
@@ -97,6 +106,7 @@ int unitTblChg(BattleUnit *oldUnit, BattleUnit *newUnit)
     return 0;
 }
 
+/* Returns the number of units on side (0 players, 1 enemies, anything else both). */
 int unitNumGet(int side)
 {
     int count;
@@ -111,6 +121,7 @@ int unitNumGet(int side)
     return count;
 }
 
+/* Counts the units on side that are not dead. */
 int unitLiveNumGet(int side)
 {
     BattleUnit **table;
@@ -141,7 +152,7 @@ int unitLiveNumGet(int side)
 
 /*
  * unitLiveNumGet that also skips units carrying status 0x2000 in category
- * 0 or 4 (calcStatGet at 0x00a01064 and 0x00a01080).
+ * 0 or 4.
  */
 int unitLiveNumGet2(int side)
 {
@@ -165,6 +176,10 @@ int unitLiveNumGet2(int side)
     return live;
 }
 
+/*
+ * Returns the character id for the unit's CID: 0x14 when calcStatGet category
+ * 7 flag 2 is set, 0x15 when flag 1 is set, otherwise the id from dataCidGet.
+ */
 int unitCidGet(BattleUnit *unit)
 {
     int cid;
@@ -186,16 +201,11 @@ void unitPlFunc(ObjectTask *task);
 static const char UnitPlCreateAgwsFormat[32] =
     "unitPlCreate: AGWS (pilot %d)\n";
 
-/*
- * unitCreate/unitTblSet/unitLoad are unitPlCreate's own siblings; unitCreate
- * is still asm in this TU (also forward-declared below for unitEnCreate's
- * own use), unitTblSet is defined above and unitLoad later in this file.
- * unitTblSet returns int, not void: it leaves 1 or 0 in $2 (addiu $2,$0,0x1
- * at 0x00a00e80, daddu $2,$0,$0 at 0x00a00e98).
- */
+/* unitCreate and unitLoad are defined later in this file. */
 extern BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func);
 void unitLoad(BattleUnit *unit, int mode);
 
+/* Creates a player unit from the placement record pl; AGWS characters also get a linked pilot unit. */
 BattleUnit *unitPlCreate(s16 *pl)
 {
     BattleUnit *unit;
@@ -223,12 +233,6 @@ BattleUnit *unitPlCreate(s16 *pl)
     return unit;
 }
 
-/*
- * unitCreate is unitEnCreate's own sibling, still asm in this TU;
- * forward-declared above for the call it makes before its definition
- * appears later in the file.
- */
-
 void unitEnFunc(ObjectTask *task);
 
 BattleUnit *unitEnCreate(s16 *pl)
@@ -245,8 +249,8 @@ BattleUnit *unitEnCreate(s16 *pl)
 
 /*
  * The player-character origin record dataUnitOrgGet (src/ov01/data_unit_org_get.c)
- * returns, as far as unitAgwsPilotGet reads it: the equipped AGWS at +0x54
- * (`lh $3,0x54($2)`, 0x00a012a8), CalcCharParaData.agwsId in src/ov01/calc.h.
+ * returns, as far as unitAgwsPilotGet reads it: the equipped AGWS at +0x54,
+ * CalcCharParaData.agwsId in src/ov01/calc.h.
  */
 typedef struct UnitOrgAgws {
     unsigned char unmodeled_00[0x54];
@@ -256,8 +260,8 @@ typedef struct UnitOrgAgws {
 extern UnitOrgAgws *dataUnitOrgGet(int charaId);
 
 /*
- * The AGWS character ids (`addiu $2,$17,-0x11`/`sltiu $2,$2,0x10`) and the
- * player characters that can pilot one (`slti $2,$16,0x11`).
+ * The AGWS character ids (0x11 to 0x20) and the player character ids that
+ * can pilot one (1 to 0x10).
  */
 #define UNIT_AGWS_FIRST  0x11
 #define UNIT_AGWS_COUNT  0x10
@@ -308,6 +312,11 @@ void unitActupdate(Actor *actor);
 void unitActdraw(Actor *actor);
 void unitParaInit(BattleUnit *unit, int charaId, int flag);
 
+/*
+ * Creates a unit on side 0 (player) or 1 (enemy) from the placement record pl
+ * (pl[0] character id, pl[1] position id). Returns the unit, or 0 when no
+ * object or actor could be created.
+ */
 BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func)
 {
     BattleUnit *unit;
@@ -351,6 +360,7 @@ BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func)
     }
     ACT_initMotion(act);
     unit->actor = act;
+    /* Position from the placement table; the x sign follows the placement id. */
     act->position.x = dataPosTblGet(pl[1])->x;
     act->position.y = dataPosTblGet(pl[1])->y;
     act->position.z = dataPosTblGet(pl[1])->z;
@@ -377,6 +387,7 @@ BattleUnit *unitCreate(s16 *pl, int side, ObjectTaskCallback func)
     ((UnitFW *)&act->posSnapX)->f = 0.1f;
     act->motionFrame = 0;
     act->motion = 0;
+    /* Clears the five words at +0x100 of the motion actor. */
     i = 0;
 loop:
     ((int *)((char *)act + 0x100))[i] = 0;
@@ -495,6 +506,10 @@ void unitRemove(BattleUnit *unit, int mode)
     }
 }
 
+/*
+ * Sets up the player or enemy sound and effect slots for a unit whose character
+ * id is outside the special model range, then loads its unit files.
+ */
 void unitLoad(BattleUnit *unit, int mode)
 {
     CalcUnitParam *up;
@@ -539,8 +554,9 @@ void unitActdraw(Actor *actor)
 /*
  * Resets the unit's parameter record: the character id, the wait counters
  * from calcWct, and the three weapon-slot values taken from each equipped
- * weapon whose attachment is set. The branch-count limit is 3, and the
- * branch counter starts at 1 for a stat-gated unit, else at the stored byte.
+ * weapon whose attachment is set. bcLimit is 3. For flag 0 (the player side)
+ * bcValue is 1 when stat 0x1000 of category 7 is set and 0 otherwise; for
+ * other flags it is the stored byte unmodeled_1e[3].
  */
 void unitParaInit(BattleUnit *unit, int charaId, int flag)
 {
@@ -583,9 +599,8 @@ void unitParaInit(BattleUnit *unit, int charaId, int flag)
 }
 
 /*
- * plTbl's stride (8 bytes per entry, three entries) and its leading short are
- * the only bytes unitPlInit demonstrates; unitPlCreate is called with the
- * entry pointer itself whenever that leading short is nonzero.
+ * Creates a player unit for each entry of plTbl (three entries, 8 bytes apart)
+ * whose leading short is nonzero.
  */
 void unitPlInit(short *plTbl)
 {
@@ -603,6 +618,10 @@ void unitPlInit(short *plTbl)
 
 extern const char unitCmdUnitEnInitENOverText[];
 
+/*
+ * Creates an enemy unit for each entry of pl (4 shorts apart) until an entry
+ * with a zero leading short, and at most five.
+ */
 void unitEnInit(s16 *pl)
 {
     int count;
@@ -658,16 +677,12 @@ void unitEnFunc(ObjectTask *task)
     unitClipSet(unit);
 }
 
-/*
- * Defined in a different translation unit (src/ov01/obj.c, ov01/tu001), its
- * published exact_c; unitCmdClear forwards its own unit argument straight
- * through to it.
- */
+/* Defined in src/ov01/obj.c; unitCmdClear passes its unit argument straight through to it. */
 extern void objCmdClear(ObjectTask *task);
 
 /*
- * unitCmdClear also nulls out its unit's Actor.update callback (declared
- * above), alongside clearing the shared object command queue.
+ * unitCmdClear clears the shared object command queue, then nulls out the
+ * unit's Actor.update callback.
  */
 void unitCmdClear(BattleUnit *unit)
 {
@@ -693,6 +708,10 @@ int unitCmdNext(BattleUnit *unit)
     return objCmdNext((ObjectTask *)unit);
 }
 
+/*
+ * Pushes cmd onto the unit's command queue and resets its run counter and move
+ * state. A nonzero selector marks the command pending.
+ */
 void unitCmdSet(BattleUnit *unit, CmdEntry *cmd)
 {
     Actor *actor;
@@ -708,6 +727,10 @@ void unitCmdSet(BattleUnit *unit, CmdEntry *cmd)
     }
 }
 
+/*
+ * Runs the handler for the unit's current command; the run frame counter
+ * advances while the handler returns 0.
+ */
 void unitCmdExec(BattleUnit *unit)
 {
     Actor *actor;
@@ -733,7 +756,7 @@ int unitCmdFree(BattleUnit *unit)
 }
 
 /*
- * Queues the attack once, while the action's move state is still 0: the
+ * Runs the attack once, while the action's move state is still 0: the
  * request takes the technique and the target from the queued entry and the
  * work actor, runs the attack, then pays the technique's ep and bp cost, and
  * the special-ability counter of the attacker's spec record advances.
@@ -781,6 +804,10 @@ extern const char unitCmdJobTypeErrTidText[];
  */
 #define UNIT_ERROR_PRINT(args) do { printf args; } while (0)
 
+/*
+ * Starts the attack for technique request->id: a valid job type goes to
+ * unitJobTypeAtk, and an unknown job type prints an error.
+ */
 void unitCmdAtkSub(BattleUnit *unit, UnitActRequest *request)
 {
     TecJobView *tec;
@@ -811,7 +838,7 @@ typedef struct UnitJtaHit {
     int clearMask;     /* +0x18 */
 } UnitJtaHit;
 
-/* The scenario step scenarioSrcSet stores; stride is ScenarioStep.stride. */
+/* The source step that scenarioSrcSet receives. */
 typedef struct UnitJtaStep {
     BattleUnit *unit; /* +0x00 */
     int mode;         /* +0x04: request->mode */
@@ -840,6 +867,12 @@ extern BattleUnit *tgtFindNext(void);
 extern int scenarioSrcSet(UnitJtaStep *source);
 extern int scenarioDstSet(UnitJtaDst *entry);
 
+/*
+ * Runs an attack over the chain of targets from tgtFindNext. Each target gets
+ * a destination record from calcHitDmg (job type 7 uses a fixed record) passed
+ * to scenarioDstSet; when no target is left the source step is stored and the
+ * unit's turn bias grows by calcPlusAglGet.
+ */
 int unitJobTypeAtk(BattleUnit *unit, UnitActRequest *request, TecJobView *tec)
 {
     UnitJtaStep step;
@@ -862,6 +895,7 @@ int unitJobTypeAtk(BattleUnit *unit, UnitActRequest *request, TecJobView *tec)
             hitKind = out.result;
             hitMode = hitKind & 0xFF;
             hitSide = (hitKind >> 8) & 0xFF;
+            /* Effect kind for each hit mode. */
             switch (hitMode) {
             case 0:
                 kind = 0xA;
@@ -923,12 +957,10 @@ int unitJobTypeAtk(BattleUnit *unit, UnitActRequest *request, TecJobView *tec)
 }
 
 /*
- * unitCmdAtkEnd's own siblings, both defined later in this TU; forward-
- * declared for its calls (an implicit declaration would mismatch the
- * definitions' void return), as the existing unitMotSet declaration before
- * unitCmdEva does for that function.
+ * Ends an attack: clears the command queue, then either queues command 0xD
+ * with weapon motions (when the current motion is 0x20) or plays motion 1.
+ * Face motion 0x35 is set last.
  */
-
 void unitCmdAtkEnd(BattleUnit *unit)
 {
     CmdEntry cmd;
@@ -949,6 +981,7 @@ void unitCmdAtkEnd(BattleUnit *unit)
     unitFaceMotSet(unit, 0x35);
 }
 
+/* Queues the dead command (selector 0xC) when the unit's current HP is zero. Returns 1 if it was queued. */
 int unitCmdDeadSet(BattleUnit *unit)
 {
     CmdEntry cmd;
@@ -965,8 +998,8 @@ int unitCmdDeadSet(BattleUnit *unit)
 }
 
 /*
- * The ether record's halfword at +2 carries the 0x2000 bit that marks a
- * learnable ether; the technique id sits at +6 (dataEthGet, data_unit_org_get).
+ * The ether record's halfword at +2 carries the 0x2000 bit that unitCmdEther
+ * tests; the technique id sits at +6 (dataEthGet, data_unit_org_get).
  */
 typedef struct EtherRecord {
     unsigned char unmodeled_00[2];
@@ -984,9 +1017,10 @@ extern EtherRecord *dataEthGet(int etherId);
 extern void calcEtherDisableSet(BattleUnit *unit, int bit);
 
 /*
- * Queues the ether command once, while the action's move state is still 0:
- * the attack request runs in mode 2, the technique's ep cost is paid, and
- * the ether slot equipped with the requested ether is disabled.
+ * Runs the ether command once, while the action's move state is still 0: the
+ * attack request runs in mode 2, the technique's ep cost is paid, and the
+ * equipped slot holding the requested ether is disabled. Skips to the next
+ * command when stat 0x1000 of category 1 is set.
  */
 int unitCmdEther(BattleUnit *unit)
 {
@@ -1027,7 +1061,7 @@ int unitCmdEther(BattleUnit *unit)
 }
 
 /*
- * Queues the item command once, while the action's move state is still 0:
+ * Runs the item command once, while the action's move state is still 0:
  * the queued entry supplies the argument and item id, the work actor
  * supplies the target unit, and the item sub-routine runs with mode 3.
  */
@@ -1056,6 +1090,11 @@ int unitCmdItem(BattleUnit *unit)
 extern int calcHitItem(BattleUnit *unit, ItemCmd *cmd, UnitJtaHit *hit);
 extern int calcDmgItem(BattleUnit *unit, ItemCmd *cmd);
 
+/*
+ * Applies an item command to each target in turn: calcHitItem picks the hit
+ * kind, scenarioDstSet records the target, and scenarioSrcSet stores the
+ * source step once no targets remain.
+ */
 void unitCmdItemSub(BattleUnit *unit, ItemCmd *buf)
 {
     UnitJtaStep src;
@@ -1077,6 +1116,7 @@ void unitCmdItemSub(BattleUnit *unit, ItemCmd *buf)
         hit = calcHitItem(unit, buf, &out);
         t = hit & 0xFF;
         b2 = (hit >> 8) & 0xFF;
+        /* Hit types 1 and 3 store the damage as its absolute value; 2 and 4 keep it signed; 5 and 6 deal none. */
         switch (t) {
         case 1:
         case 3:
@@ -1133,6 +1173,11 @@ void unitCmdItemSub(BattleUnit *unit, ItemCmd *buf)
     scenarioSrcSet(&src);
 }
 
+/*
+ * Moves the unit to its target: state 0 sets the destination and, unless the
+ * move warps, the facing; state 1 jumps or warps, then calls unitCmdMoveNext.
+ * Warping applies to AGWS player units and to enemies with moveKindId 4.
+ */
 int unitCmdMove(BattleUnit *unit)
 {
     Actor *actor;
@@ -1184,8 +1229,8 @@ int unitCmdGuard(BattleUnit *unit)
     unitCmdPtrGet(unit);
     if (actor->moveState == 0) {
         unitMotSet(unit, 0x1B);
-        /* The work slot is loaded again after the call (lw $2,0x10($16) at
-         * 0x00a0275c), not read through the cached `actor`. */
+        /* The work slot is loaded again after the call, not read through the
+         * cached `actor`. */
         unit->work->flags |= ACTOR_FLAG_GUARD;
         actor->moveState++;
     } else if (unit->actor->moveFlags & MOVE_FLAG_REACHED) {
@@ -1197,9 +1242,8 @@ int unitCmdGuard(BattleUnit *unit)
 
 /*
  * Queues the AGWS boarding pair: command 0x2B (with the queued argument and
- * the unit's character id: the linked unit's when CalcUnitParam flag 0x40 is
- * set, lw $2,0x50/lh $17,0x38($2) at 0x00a0280c, else baseCharaId,
- * lh $17,0x54($3) at 0x00a02818) and then command 0x2D from the same entry.
+ * the unit's character id: the linked unit's when CALC_UNIT_FLAG_IS_AGWS is
+ * set, else baseCharaId) and then command 0x2D from the same entry.
  */
 int unitCmdAgws(BattleUnit *unit)
 {
@@ -1228,8 +1272,7 @@ int unitCmdAgws(BattleUnit *unit)
         effectId = 0x67;
         soundId = 0x20;
     } else {
-        /* Both set before the call: addiu $17,0x66 and the delay-slot
-         * addiu $18,0x1F around jal sndSeTransPlay (0x00a02888). */
+        /* Both values are assigned around the sndSeTransPlay call, as in the original. */
         effectId = 0x66;
         soundId = 0x1F;
         sndSeTransPlay(unit, 0x17, 3);
@@ -1239,9 +1282,15 @@ int unitCmdAgws(BattleUnit *unit)
     return unitCmdNext(unit);
 }
 
-/* Defined in src/ov01/data_unit_org_get.c (still asm there). */
+/* Defined in src/ov01/data_unit_org_get.c. */
 extern void dataFileInfoInitChg(BattleUnit *unit, s16 charaId);
 
+/*
+ * Replaces the unit with a new unit of another character, built from the
+ * record in the command. The old unit's remaining commands are copied to the
+ * new unit, which is linked to the old one and takes over its gauge values,
+ * then queues a change-in command (0x2A) and the saved commands.
+ */
 int unitCmdUnitChange(BattleUnit *unit)
 {
     Actor *actor;
@@ -1294,6 +1343,7 @@ int unitCmdUnitChange(BattleUnit *unit)
         hdr[1] = h1;
         hdr[2] = 0;
         hdr[3] = 0;
+        /* Copies the old unit's queued commands into list. */
         while (unitCmdNext(unit) != 0) {
             lp++;
             *lp = *(CmdEntry *)unitCmdPtrGet(unit);
@@ -1335,6 +1385,7 @@ int unitCmdUnitChange(BattleUnit *unit)
             calcUPGet(nu)->bcValue = savedBcValue;
             calcUPGet(nu)->bpGauge = savedBpGauge;
         }
+        /* Carries the hidden state over, then queues the change-in command and the saved commands. */
         nu->work->flags |= hiddenFlag;
         np = calcUPGet(nu);
         sp.selector = 0x2A;
@@ -1370,10 +1421,10 @@ int unitCmdEnd(BattleUnit *unit)
 }
 
 /*
- * Damage reaction: the queued argument picks the hit motion and face (1 and
- * 2 the heavy ones, face 0x3B), and a kind-2 hit on a front position
- * (CalcUnitParam.posId < 4, lh $3,0x44($2) at 0x00a02df8) knocks the unit
- * three positions back and snaps its motion actor onto the new position.
+ * Damage reaction: the queued argument picks the hit motion and face (1 uses
+ * motion 5 and 2 uses motion 0x26, both with face 0x3B; anything else uses
+ * motion 4 and face 0x3A). A kind-2 hit on a front position (posId < 4) adds 3
+ * to CalcUnitParam.posId and snaps the motion actor onto that position.
  */
 int unitCmdDmg(BattleUnit *unit)
 {
@@ -1399,7 +1450,7 @@ int unitCmdDmg(BattleUnit *unit)
             motion = 0x26;
             face = 0x3B;
             break;
-        case 0: /* its own case: slti $2,$17,2 at 0x00a02d7c */
+        case 0: /* Kept as its own case, separate from the default. */
         default:
             motion = 4;
             face = 0x3A;
@@ -1430,12 +1481,7 @@ int unitCmdDmg(BattleUnit *unit)
     return 0;
 }
 
-/*
- * unitMotSet's own sibling, still asm in this TU; forward-declared for the
- * call unitCmdEva makes before its own definition appears later in the
- * file.
- */
-
+/* Evasion: plays motion 0x1A, then stands the unit once that motion reaches its end. */
 int unitCmdEva(BattleUnit *unit)
 {
     Actor *actor;
@@ -1457,8 +1503,8 @@ int unitCmdEva(BattleUnit *unit)
 
 /*
  * Defence: plays motion 0x1E, then, once it ends, motion 0x1C unless the
- * unit is guarding (Actor.flags 0x800, andi at 0x00a02fac), and stands the
- * unit when the last motion ends.
+ * unit is guarding (ACTOR_FLAG_GUARD), and stands the unit when the last
+ * motion ends.
  */
 int unitCmdDef(BattleUnit *unit)
 {
@@ -1491,6 +1537,11 @@ int unitCmdDef(BattleUnit *unit)
 extern void calcTurnEnd(BattleUnit *unit);
 extern int unitDeadSpecChk(BattleUnit *unit);
 
+/*
+ * Death sequence over several move states: the death motion and sound, a
+ * reset of the stat masks that keeps three bits, and for enemies the removal
+ * from the unit table once the death spec check passes.
+ */
 int unitCmdDead(BattleUnit *unit)
 {
     Actor *actor;
@@ -1543,6 +1594,7 @@ int unitCmdDead(BattleUnit *unit)
         statKeep2 = calcUPGet(unit)->statActiveMask[2] & 0x4000;
         statKeep3 = calcUPGet(unit)->statActiveMask[3] & 0x800;
         statKeep7 = calcUPGet(unit)->statActiveMask[7] & 7;
+        /* Clears every stat mask, then restores the three kept bits. */
         for (i = 0; i < 8; i++) {
             calcUPGet(unit)->statActiveMask[i] = 0;
         }
@@ -1576,6 +1628,7 @@ int unitCmdDead(BattleUnit *unit)
     return 0;
 }
 
+/* Returns 0 for the character ids listed in the switch and 1 for every other unit. */
 int unitDeadSpecChk(BattleUnit *unit)
 {
     short charaId;
@@ -1598,8 +1651,8 @@ int unitDeadSpecChk(BattleUnit *unit)
 
 /*
  * Plays the queued motion (argument), then waits either for it to end
- * (extra == 0: the motion actor's moveFlags bit 0x1000) or for extra frames
- * of Actor.runFrameCounter (bne $3,$2 at 0x00a033b0).
+ * (extra == 0: the motion actor's MOVE_FLAG_REACHED) or for extra frames
+ * of Actor.runFrameCounter.
  */
 int unitCmdMot(BattleUnit *unit)
 {
@@ -1622,6 +1675,10 @@ int unitCmdMot(BattleUnit *unit)
 
 extern const char unitCmdTgtSetErrText[];
 
+/*
+ * Sets the target from the queued command's technique, target, item and mode.
+ * When no target is found, prints an error and cancels the queued commands.
+ */
 int unitCmdTgtSet(BattleUnit *unit)
 {
     Actor *actor;
@@ -1641,8 +1698,7 @@ int unitCmdTgtSet(BattleUnit *unit)
     target = tgtFindFirst(unit, &tgtCmd);
     if (target != 0) {
         /* The work slot is loaded again here, not read through the cached
-         * `actor`: reusing the local trades two callee-saved registers and
-         * the OV01.OVL gate no longer matches (tried, unitCmdTgtSet). */
+         * `actor`, as in the original. */
         unit->work->targetUnit = target;
         return unitCmdNext(unit);
     }
@@ -1652,6 +1708,12 @@ int unitCmdTgtSet(BattleUnit *unit)
     return unitCmdNext(unit);
 }
 
+/*
+ * Turns the unit toward its target. Move state 0 picks the target point: the
+ * target unit for cmd[0] 15, a position-table entry for 16, otherwise the
+ * average of the living units on the other side. unitCmdTurnSub then rotates
+ * the unit, and the command ends when that turn is done.
+ */
 void unitCmdTurn(BattleUnit *unit)
 {
     Actor *actor;
@@ -1718,6 +1780,11 @@ void unitCmdTurn(BattleUnit *unit)
 extern void unitSetInterp(BattleUnit *unit);
 extern void unitSetInterpTime(BattleUnit *unit, float time);
 
+/*
+ * Rotates the unit's yaw toward its turn target, at a rate set by the size
+ * class; mode 0 also sets the interpolation time and the turn motion. Returns
+ * 1 when the turn is complete.
+ */
 int unitCmdTurnSub(BattleUnit *unit, int mode)
 {
     Actor *actor;
@@ -1765,6 +1832,7 @@ int unitCmdTurnSub(BattleUnit *unit, int mode)
                 rate = 5.0f;
             }
         }
+        /* Takes the shorter way round the circle. */
         if (tgt->y < 0.0f) {
             nd = -tgt->y;
             if (nd > 3.1415927f) {
@@ -1864,9 +1932,14 @@ void unitCmdTurnSubInit(BattleUnit *unit, int mode)
 
 extern float unitCmdLenGet(BattleUnit *unit);
 
-/* Prints the unit's move kind when it has no handler (format string in .rodata). */
+/* Format for the error printed when unitCmdMoveCha gets an unknown move kind. */
 extern const char unitCmdMoveChaErrText[];
 
+/*
+ * Starts the move for the unit's moveKindId. Kind 0 jumps over short distances
+ * and walks over long ones; the other kinds each select their own movement
+ * command. An unknown kind prints an error.
+ */
 int unitCmdMoveCha(BattleUnit *unit)
 {
     Actor *actor;
@@ -1934,18 +2007,20 @@ int unitCmdMoveCha(BattleUnit *unit)
 }
 
 /*
- * calcUPGet(unit)+0x44 (ov01/tu004 calc.c's own unmodeled span) is the same
- * position-table-index half unitCmdDstSet and unitCmdDirAdj read later in
- * this file (CALC_UNIT_PARAM_UNK44_OFF below); unitCmdMoveNext is its only
- * claimed writer, copying it from the queued command entry's own index at
- * cmdEntry+0x4 (CMD_ENTRY_X_OR_IDX_OFF below, also read there). Offset
- * 0x4C is a float this TU does not otherwise claim, restored into the
- * motion actor's yaw on every call.
+ * calcUPGet(unit)+0x44 holds the position-table index that unitCmdDstSet
+ * reads; unitCmdMoveNext's mode 1 copies it from the queued command entry's
+ * halfword at +0x4. The float at +0x4C is the unit's default yaw, restored
+ * into the motion actor on every call.
  */
 #define CALC_UNIT_PARAM_UNK44_OFF 0x44
 #define CMD_ENTRY_X_OR_IDX_OFF 0x4
 #define CALC_UNIT_PARAM_DEFAULT_YAW_OFF 0x4C
 
+/*
+ * Restores the default yaw and moves on to the next command. Mode 1 saves the
+ * queued position index and stands the unit; any other mode sets the
+ * destination and direction first.
+ */
 int unitCmdMoveNext(BattleUnit *unit, int mode)
 {
     Actor *actor;
@@ -1968,20 +2043,16 @@ int unitCmdMoveNext(BattleUnit *unit, int mode)
 }
 
 /*
- * unitCmdMoveChaNorm's, unitCmdMoveChaJump2's and unitCmdMovePosNorm's own
- * siblings, defined later in this TU and forward-declared for their
- * calls. unitCmdLenGet returns its distance in $f0, which all three hand on as
- * unitCmdDivSet's distance (mov.s $f12,$f0 at 0x00a03eb0,
- * 0x00a044f4 and 0x00a0416c).
+ * unitCmdLenGet returns the distance that unitCmdMoveChaNorm, unitCmdMoveChaJump2
+ * and unitCmdMovePosNorm pass on to unitCmdDivSet.
  */
 extern void unitCmdDivSet(BattleUnit *unit, float distance, float step);
 
 /*
- * A run up to the target unit followed by a jump onto it: step 0 hands
- * unitCmdDivSet the distance unitCmdLenGet returned and that distance less
- * 255.0f as the step (0x437F0000 through lui/mtc1, sub.s $f13,$f12,$f13 at
- * 0x00a03ebc), step 1 waits for the run, step 2 starts the jump and the last
- * step waits for it to land.
+ * A run up to the target unit, then a jump onto it: step 0 passes
+ * unitCmdDivSet the distance and that distance less 255.0f as the step; step 1
+ * waits for the run, step 2 starts the jump, and the last step waits for it to
+ * land.
  */
 int unitCmdMoveChaNorm(BattleUnit *unit)
 {
@@ -2053,17 +2124,12 @@ int unitCmdMoveChaWarp(BattleUnit *unit)
 /*
  * A three-hop jump to the command's target: step 0 stores distance / 3 in
  * hopLength and passes unitCmdDivSet the whole distance and hopLength as the
- * step; steps 1..3 each wait for unitCmdJump to land, aim the next hop and
- * pass unitCmdDivSet the remaining distance with hopLength as the step, or
- * that remaining distance itself as the step for the last hop (beq $2,$18
- * at 0x00a04168 skips the lwc1 $f0,0($19) at 0x00a04170); the step after
- * the last hop finishes the move. Nothing is divided by hopLength: the only
- * division is the one by 3 cited below. The work slot points at the Actor record;
- * it is read again after unitCmdPtrGet (lw $2,0x10($16) at 0x00a040d0) for
- * the hopLength address. hops is an int local, not a 3.0f literal: the
- * original keeps 3 in $18 and converts it for the division (mtc1 $18,$f13;
- * cvt.s.w $f13,$f13; div.s $f13,$f0,$f13 at 0x00a040f0..0x00a0410c), while a
- * float literal is loaded ready-made with lui/mtc1.
+ * step; steps 1..3 each wait for unitCmdJump to land, then aim the next hop,
+ * passing the remaining distance with hopLength as the step, or the remaining
+ * distance itself on the last hop. The step after the last hop finishes the
+ * move. The work slot is read again after unitCmdPtrGet, as in the original.
+ * hops stays an int rather than a 3.0f literal, which the original converts
+ * at the division.
  */
 int unitCmdMoveChaJump2(BattleUnit *unit)
 {
@@ -2130,6 +2196,11 @@ extern int unitCmdMovePosHover2(BattleUnit *unit);
 extern int unitCmdMovePosFloat(BattleUnit *unit);
 extern int unitCmdMovePosHover3(BattleUnit *unit);
 
+/*
+ * Starts a move toward a position, chosen by the unit's moveKindId. Kind 0
+ * jumps for short distances and uses the normal move for long ones. An
+ * unknown kind prints an error.
+ */
 int unitCmdMovePos(BattleUnit *unit)
 {
     Actor *actor;
@@ -2196,12 +2267,9 @@ int unitCmdMovePos(BattleUnit *unit)
 }
 
 /*
- * Step 0 passes unitCmdDivSet the distance unitCmdLenGet returned (mov.s
- * $f12,$f0 at 0x00a044f4) and the step 255.0f (0x437F0000 through lui/mtc1
- * into $f13 at 0x00a044e8/0x00a044ec); nothing here divides by 255.0f.
- * The queued command's argument word is parked in Actor.targetUnit for the jump
- * (lw $2,0x4($4); sw $2,0x80($17) at 0x00a044b4/0x00a044e0) and written back
- * before the run's unitCmdDstSet reads it (sw $2,0x4($4) at 0x00a04568).
+ * Step 0 parks the queued command's argument word in Actor.targetUnit for the
+ * jump and passes unitCmdDivSet the distance with 255.0f as the step. Step 2
+ * writes the word back into the command before the run's unitCmdDstSet reads it.
  */
 int unitCmdMovePosNorm(BattleUnit *unit)
 {
@@ -2298,9 +2366,9 @@ int unitCmdMovePosHover3(BattleUnit *unit)
 }
 
 /*
- * ov01/tu004 calc.c owns CalcUnitParam and does not model this signed half;
- * unitCmdDirAdj is the only claimed reader, using its sign to flip which side
- * of the move target the retreat offset below is placed on.
+ * unitCmdDirAdj reads the position-table index at calcUPGet(unit)+0x44 as a
+ * signed half: a negative index flips the side of the target that the offset
+ * is placed on.
  */
 
 void unitCmdDirAdj(BattleUnit *unit, int cmdId, int flip)
@@ -2321,14 +2389,12 @@ void unitCmdDirAdj(BattleUnit *unit, int cmdId, int flip)
 }
 
 /*
- * Moves the unit along the authored root-motion curve of its current step
- * motion: the per-frame offset is the curve's value at the motion actor's
- * motionFrame less the previous frame's (lwc1 $f0,-0x4($2), sub.s at
- * 0x00a04a9c/0x00a04aa0), clamped to the distance left to the command target.
+ * Moves the unit along the root-motion curve of its current step motion: the
+ * per-frame offset is the curve's value at the motion actor's motionFrame less
+ * the previous frame's, clamped to the distance left to the command target.
  * The target is blended by unitCmdDivSet, copied into the motion actor's
- * position and then restored (two ld/sd pairs, 0x00a04aa4..0x00a04af8).
- * The calcUPGet call before the curve read has no use of its result
- * (jal calcUPGet at 0x00a04a84, $2 overwritten at 0x00a04a90).
+ * position and then restored. The calcUPGet call before the curve read has an
+ * unused result, as in the original.
  */
 void unitCmdPosAdj(BattleUnit *unit, int cmdId)
 {
@@ -2405,6 +2471,12 @@ extern void unitCmdTurnSubInit(BattleUnit *unit, int mode);
 extern void unitCmdDirAdj(BattleUnit *unit, int cmdId, int flip);
 extern int unitCmdMoveCalc(BattleUnit *unit, int freeX, int freeY, int freeZ);
 
+/*
+ * Runs the unit toward cmdTarget in three move phases: turn (cmdId 1 uses
+ * motion 0xD, other ids use the backward motion 0x12), run the last stretch
+ * with a step limited by size class, then stand facing the target. Returns 1
+ * when the run is finished.
+ */
 int unitCmdRun(BattleUnit *unit, int cmdId, int flip)
 {
     Actor *actor;
@@ -2434,6 +2506,7 @@ int unitCmdRun(BattleUnit *unit, int cmdId, int flip)
             turnMode = 1;
         }
         unitMotSet(unit, motionId);
+        /* The target is saved here and restored after the run step. */
         saved[0] = cmdTgt->x;
         saved[1] = cmdTgt->y;
         saved[2] = cmdTgt->z;
@@ -2484,6 +2557,11 @@ int unitCmdRun(BattleUnit *unit, int cmdId, int flip)
     return 0;
 }
 
+/*
+ * Moves the unit toward cmdTarget through move phases 0 to 5, choosing motions
+ * and sounds from cmdId; faceFlag 0 enables the direction updates.
+ * Returns 1 when the jump is finished.
+ */
 int unitCmdJump(BattleUnit *unit, int cmdId, int flip, int faceFlag)
 {
     Actor *work = unit->work;
@@ -2500,6 +2578,7 @@ int unitCmdJump(BattleUnit *unit, int cmdId, int flip, int faceFlag)
     switch (work->movePhase) {
     case 0:
     case 1:
+        /* While motion 2 plays, switch to motion 1 and wait nine frames. */
         if (work->movePhase == 0) {
             if (unitMotGet(unit) == 2) {
                 unitMotSet(unit, 1);
@@ -2562,6 +2641,7 @@ int unitCmdJump(BattleUnit *unit, int cmdId, int flip, int faceFlag)
         motionActor->position.z = cmdTgt->z;
         goto _sw_end;
     case 4:
+        /* Restores the saved target, then sets the approach step. */
         cmdTgt->x = saved[0];
         cmdTgt->y = saved[1];
         cmdTgt->z = saved[2];
@@ -2654,6 +2734,10 @@ _sw_end:
 static unsigned char sSp[24];
 extern int calcSpline(void *spline, float *out, int mode);
 
+/*
+ * Hovers the unit toward cmdTarget: turns to face it, moves along the sSp
+ * spline, then settles on the target. Returns 1 when the hover is finished.
+ */
 int unitCmdHover(BattleUnit *unit, int cmdId, int flip)
 {
     Actor *work = unit->work;
@@ -2716,6 +2800,11 @@ int unitCmdHover(BattleUnit *unit, int cmdId, int flip)
     }
 }
 
+/*
+ * Floats the unit toward cmdTarget: turns to face it, lowers the motion actor
+ * by a fixed offset, follows the sSp spline and then settles on the target.
+ * Returns 1 when finished.
+ */
 int unitCmdFloat(BattleUnit *unit, int cmdId, int flip)
 {
     Actor *work = unit->work;
@@ -2796,6 +2885,10 @@ int unitCmdFloat(BattleUnit *unit, int cmdId, int flip)
     return 0;
 }
 
+/*
+ * Warps the unit to cmdTarget: stands it, fades it out, moves the motion actor
+ * to the target and fades it back in. Returns 1 when finished.
+ */
 int unitCmdWarp(BattleUnit *unit, int cmdId, int flag)
 {
     Actor *actor = unit->work;
@@ -2830,11 +2923,9 @@ int unitCmdWarp(BattleUnit *unit, int cmdId, int flag)
 }
 
 /*
- * curCmdSet's queued command (src/ov01/battle_init.c, this TU's own
- * ObjectCommandEntry-shaped record via unitCmdPtrGet) stores either a raw
- * coordinate pair at +4/+0xC or a position-table index at +4, selected by
- * mode; ov01/tu001 obj.c owns the record and types both as int, so the float
- * reads below reinterpret the same bytes it does not model as float.
+ * The queued command (unitCmdPtrGet) holds either a raw coordinate pair at
+ * +0x4 and +0xC or a position-table index at +0x4, chosen by mode. obj.c types
+ * these fields as int, so the float reads below reinterpret the same bytes.
  */
 #define CMD_ENTRY_Z_OFF 0xC
 
@@ -2894,8 +2985,7 @@ float unitCmdDirSet(BattleUnit *unit)
 
 /*
  * Ground-plane distance from the motion actor to the pending move command's
- * target (cmdTarget x/z, lwc1 0x0/0x8 off the hoisted +0x90 base at
- * 0x00a05b2c).
+ * target (cmdTarget x and z).
  */
 float unitCmdLenGet(BattleUnit *unit)
 {
@@ -2931,6 +3021,12 @@ void unitCmdDivSet(BattleUnit *unit, float distance, float step)
 static float cPoint[32];
 extern void calcSplineInit(void *spline, float *points, int count, int duration);
 
+/*
+ * Prepares a move toward cmdTarget: sets the interpolation time and the path
+ * length in the floats at +0xD0 and +0xD8. Ids 5, 6, 11 and 12 build a
+ * five-point spline in sSp; other ids take a straight-line velocity, and ids
+ * 3 and 4 also set a vertical acceleration and velocity.
+ */
 void unitCmdVASet(BattleUnit *unit, int cmdId, int arg2)
 {
     float q = 0.25f;
@@ -2965,6 +3061,7 @@ void unitCmdVASet(BattleUnit *unit, int cmdId, int arg2)
         calcSplineInit(sSp, arr, 5, n);
         goto after_switch;
     }
+    /* Ids 11 and 12 build the same points; 11 first sets the target height to the actor's. */
     if (cmdId == 11) {
         tgt[1] = act->position.y;
         cPoint[0] = act->position.x;
@@ -3031,11 +3128,10 @@ after_switch:
  *
  * Forms that moved the bytes: velocity/position locals keep both in FPRs
  * across the stores (no reload of +0x30/+0x10); the block-scoped zero is
- * materialized once per axis after the velocity/acceleration loads
- * (mtc1 $0,$f3 at 0x00a060e8) and shared by the three sign tests; the ||
- * form of the overshoot test allocates arrived to $9 and the target base to
- * $8; the magnitude negates distance inside the comparison, which keeps
- * neg.s (0x00a06160) and the duplicated 1e-6 test, where a separate
+ * materialized once per axis after the velocity/acceleration loads and shared
+ * by the three sign tests; the || form of the overshoot test allocates arrived
+ * to $9 and the target base to $8; the magnitude negates distance inside the
+ * comparison, which keeps neg.s and the duplicated 1e-6 test, where a separate
  * `if (distance < zero) distance = -distance;` gives a branch-likely neg and
  * a ternary without the assignment folds into a compare against -1e-6.
  */
@@ -3230,10 +3326,10 @@ int unitCmdBtst(BattleUnit *unit)
 
 /*
  * Battle end: step 0 plays the victory motions (unitMotSet 0x24, weapon
- * motion 0x30, face motion 0x39) for a player unit that is neither flagged
- * 0x40 in CalcUnitParam.flags nor one of the charaId 0xBB..0xC2 units
- * unitLoad also skips, then turns the status effects off; the next steps
- * wait for the motion to end and put the weapon away.
+ * motion 0x30, face motion 0x39) for a player unit that is neither an enemy,
+ * nor an AGWS (CALC_UNIT_FLAG_IS_AGWS), nor a special-model character, then
+ * turns the status effects off; the next step waits for the motion to end and
+ * puts the weapon away.
  */
 int unitCmdBted(BattleUnit *unit)
 {
@@ -3269,6 +3365,7 @@ int unitCmdBted(BattleUnit *unit)
     return 0;
 }
 
+/* Applies the weapon changes that the unit's motion data requests. */
 void unitMtdProc(BattleUnit *unit)
 {
     int defaultWeapon;
@@ -3293,10 +3390,8 @@ void unitMtdProc(BattleUnit *unit)
 }
 
 /*
- * unitCmdRec/unitCmdStat both read a flag word of the queued command entry
- * (unitCmdPtrGet; unitCmdDstSet's own cmdEntry above reads its own command's
- * first argument at this same offset): nonzero skips playing the stand
- * motion below.
+ * unitCmdRec and unitCmdStat read the flag word at +0x4 of the queued command
+ * entry; when it is nonzero the stand motion is skipped.
  */
 typedef struct {
     unsigned char unmodeled_00[0x4];
@@ -3319,6 +3414,7 @@ void unitCmdRec(BattleUnit *unit)
     unitCmdNext(unit);
 }
 
+/* Wakes the unit: plays motion 0x25 and its sound, then clears the dead flag and stands it once the motion ends. */
 int unitCmdWake(BattleUnit *unit)
 {
     Actor *actor;
@@ -3353,6 +3449,7 @@ void unitCmdStat(BattleUnit *unit)
     unitCmdNext(unit);
 }
 
+/* Waits until the CD sync counter reaches the command's argument, then loads the unit's file data. */
 int unitCmdReadWait(BattleUnit *unit)
 {
     Actor *actor;
@@ -3372,9 +3469,9 @@ int unitCmdReadWait(BattleUnit *unit)
 }
 
 /*
- * Step 0 calls the AGWS effect (0x67 with CalcUnitParam flag 0x40, else 0x66,
- * movz at 0x00a06c14), step 1 stands the unit and clears the teleport timer,
- * then it waits for unitTelIn.
+ * Step 0 calls effect 0x67 for an AGWS unit (CALC_UNIT_FLAG_IS_AGWS), else
+ * effect 0x66. Step 1 stands the unit and clears the teleport timer, then
+ * step 2 waits for unitTelIn.
  */
 int unitCmdAgws2(BattleUnit *unit)
 {
@@ -3395,6 +3492,7 @@ int unitCmdAgws2(BattleUnit *unit)
     return 0;
 }
 
+/* Teleports the unit out; an enemy is then taken out of the unit table and removed. */
 int unitCmdEscape(BattleUnit *unit)
 {
     Actor *actor;
@@ -3482,10 +3580,7 @@ int unitCmdFadeOut(BattleUnit *unit)
     return 0;
 }
 
-/*
- * unitMotSetEx is defined later in this TU, still asm; forward-declared for
- * the tail call unitMotSet makes to it, always with a zero third argument.
- */
+/* unitMotSet forwards to unitMotSetEx with a zero third argument. */
 extern void unitMotSetEx(BattleUnit *unit, int motion, int);
 
 void unitMotSet(BattleUnit *unit, int motion)
@@ -3496,6 +3591,13 @@ void unitMotSet(BattleUnit *unit, int motion)
 extern const char unitCmdMotSetMotPackFlagText[];
 extern const char unitCmdIntrText[];
 
+/*
+ * Starts a motion on the unit's actor when animation data exists for
+ * (arg2 << 8) + motion - 1. When arg2 is 0 the flags passed to ACT_setMotion2
+ * (interpolation, 0x8, 0x20000000) are chosen from the motion id, and the effect
+ * unit's UNIT_WORK_STATUS_BLOCKED bit is cleared for motions 1 and 2 and set for
+ * all others.
+ */
 void unitMotSetEx(BattleUnit *unit, int motion, int arg2)
 {
     Actor *actor;
@@ -3565,6 +3667,7 @@ void unitSetInterpTime(BattleUnit *unit, float time)
     unit->actor->interpTime = time;
 }
 
+/* Plays a motion on the weapon actor at weaponIndex when its animation exists, or always for motion 0xFF. */
 void unitWpnMotSet(BattleUnit *unit, int weaponIndex, int animGroup, int motion)
 {
     Actor *actor;
@@ -3583,13 +3686,11 @@ void unitWpnMotSet(BattleUnit *unit, int weaponIndex, int animGroup, int motion)
 
 /*
  * Plays a motion on the unit's sub-actor (BattleUnit.subActor), when it has
- * the animation: ACT_setMotion2's flags are 0 for motions 0x3A and 0x3B
- * (the compiler folds the two tests into the sltiu at 0x00a0722c) and 8
- * otherwise.
- * Receipts: flags starts at 0 and the if sets 8 (daddu $17,$0,$0 then
- * movz at 0x00a0723c; a ternary gives movn with 8 preloaded), and
- * `motion - 1` is written in both calls, which keeps it in $18 and the
- * flags in $17 (a named dataId local swaps the two).
+ * the animation. The ACT_setMotion2 flags are 0 for motions 0x3A and 0x3B and
+ * 8 otherwise. The flags start at 0 and the if sets 8, as in the original (a
+ * ternary generates a different sequence); `motion - 1` is written out in both
+ * calls, which keeps the original's register assignment (a named dataId local
+ * swaps the two).
  */
 void unitFaceMotSet(BattleUnit *unit, int motion)
 {
@@ -3612,21 +3713,21 @@ int unitMotGet(BattleUnit *unit)
 }
 
 /*
- * Bits of Actor.flags (unit->work, lw 0x10 then lw 0x0) that unitMotStandSet
- * tests, named by what this function does with them: 0x800 (andi at
- * 0x00a072b8) selects motion 0x1D outright; 0x8 (andi at 0x00a072dc) is
- * tested only after calcIdol2Chk returned nonzero, and when set gates motion
- * 2 on unitMotGet returning 0x1C or 0x23. This TU is not the only reader of
- * 0x800: calcHitRate (src/ov01/calc.c on the calc branch) tests the same bit
- * of the target's actor flags (literal 0x800) and calcTurnStart
- * tests and clears it; what the bit means for them is not evidenced here.
+ * Bits of Actor.flags (unit->work) that unitMotStandSet tests: 0x800 selects
+ * motion 0x1D outright; 0x8 is tested only after calcIdol2Chk returned nonzero,
+ * and when set gates motion 2 on unitMotGet returning 0x1C or 0x23. This TU is
+ * not the only reader of 0x800: calcHitRate (src/ov01/calc.c) tests the same
+ * bit of the target's actor flags and calcTurnStart tests and clears it; what
+ * the bit means for them is not evidenced here.
  */
 #define ACTOR_FLAG_STAND_MOTION_1D 0x800u
 #define ACTOR_FLAG_STAND_MOTION_2_GATED 0x8u
 
 /*
- * One condition for motion 2, as the original branches: separate if/else
- * arms for the last test turn its bnel (0x00a07308) into a bne.
+ * Picks the stand motion: 0x1D when the 0x800 flag is set, motion 2 when
+ * calcIdol2Chk passes and the 0x8 gate allows it, otherwise motion 1. The
+ * motion 2 test is written with separate if/else arms, as the original
+ * branches on it.
  */
 void unitMotStandSet(BattleUnit *unit)
 {
@@ -3646,6 +3747,7 @@ void unitMotStandSet(BattleUnit *unit)
 
 static const char UnitNoGetFailureFormat[32] = "** unitNoGet: err -> %X\n";
 
+/* Returns the table index of unit, or -1 after printing an error when it is not in the table. */
 int unitNoGet(BattleUnit *unit)
 {
     BattleUnit **units = unitTbl;
@@ -3672,13 +3774,10 @@ int unitPtrGet(int index)
     return 0;
 }
 
-/*
- * unitDispOn's own sibling, still asm in this TU; this TU's own BattleUnit
- * view of unitTblGet's table (already published identically as BattleUnit
- * by src/ov01/battle_init.c and src/ov01/debug_entry.c, both ov01/tu003).
- */
+/* unitTblGet is defined at the top of this file. */
 extern int unitTblGet(int side, BattleUnit ***table);
 
+/* Clears the hidden flag on the motion actors of the units on side. */
 void unitDispOn(int side)
 {
     BattleUnit **table;
@@ -3695,8 +3794,7 @@ void unitDispOn(int side)
             unit = *cur;
             cur++;
             if (unit != 0) {
-                /* Clears the motion actor's hidden-draw flag (bit 0x8 of
-                 * Actor.flags); no other claimed function here touches it. */
+                /* Clears the hidden-draw flag (bit 0x8 of Actor.flags) on the motion actor. */
                 unit->actor->flags &= ~ACTOR_FLAG_HIDDEN;
             }
             remaining--;
@@ -3704,6 +3802,7 @@ void unitDispOn(int side)
     }
 }
 
+/* Sets the hidden flag on the motion actors of the units on side. */
 void unitDispOff(int side)
 {
     BattleUnit **table;
@@ -3728,8 +3827,8 @@ void unitDispOff(int side)
 }
 
 /*
- * Combined collision distance of a unit approaching targetUnit, in the
- * position table's units (/ 100). The first term is converted and kept in a
+ * Collision distance between a unit and its target: the unit's coliMove plus
+ * the target's coliTarget, divided by 100. The first term is held in a
  * callee-saved FP register across the second calcUPGet call, as the original
  * does.
  */
@@ -3743,9 +3842,9 @@ float unitColiGet(BattleUnit *unit, BattleUnit *targetUnit)
 }
 
 /*
- * Whether any unit on the side carries CalcUnitParam.flags bit 0x40 (lhu
- * 0x1C, andi 0x40 at 0x00a07558), the bit unitCmdMove tests to pick a warp
- * move for a player unit.
+ * Whether any unit on the side carries the CALC_UNIT_FLAG_IS_AGWS bit (0x40) in
+ * CalcUnitParam.flags, the bit unitCmdMove tests to pick a warp move for a
+ * player unit.
  */
 int unitAgwsChk(int side)
 {
@@ -3765,9 +3864,8 @@ int unitAgwsChk(int side)
 }
 
 /*
- * Counts the units on one side whose CalcUnitParam.charaId equals charaId.
- * unitTblGet is defined at the top of this TU with `BattleUnit ***table`, so
- * the table is a BattleUnit ** here and each entry goes to calcUPGet as it is.
+ * Returns 1 when a unit on the side has CalcUnitParam.charaId equal to
+ * charaId, otherwise 0.
  */
 int unitIdChk(int side, int charaId)
 {
@@ -3788,7 +3886,7 @@ int unitIdChk(int side, int charaId)
     return matchCount != 0;
 }
 
-/* Defined later in this TU (a local sibling still in asm). */
+/* unitDispOnOff is defined below. */
 extern void unitDispOnOff(int flag);
 
 void unitDispOnAll(void)
@@ -3801,6 +3899,11 @@ void unitDispOffAll(void)
     unitDispOnOff(1);
 }
 
+/*
+ * Shows every unit with its status effects (flag 0), or hides them (any other
+ * flag). The hidden flag and the effect unit's blocked bit change with it, and
+ * statEffOn or statEffOff is called for each unit.
+ */
 void unitDispOnOff(int flag)
 {
     BattleUnit **table;

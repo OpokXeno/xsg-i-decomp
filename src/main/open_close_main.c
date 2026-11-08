@@ -62,12 +62,11 @@ typedef struct EWidgetColor {
 } EWidgetColor;
 
 /*
- * Partial view of the object eWindowSet initialises. eWindowMain (still
- * INCLUDE_ASM in this TU) reads x/y/width/height back as the low 16 bits of
- * these words and work as a full word, copying all five into a render packet
- * at +0x1c..+0x27; it also dispatches on mode through a dozen-plus state
- * constants and gates that same packet's use on visible. flag is cleared here
- * but not read by any function in this TU.
+ * Partial view of the object eWindowSet initialises. eWindowMain reads
+ * x/y/width/height back as the low 16 bits of these words and work as a full
+ * word, copying all five into a render packet at +0x1c..+0x27; it also
+ * dispatches on mode and gates that same packet's use on visible. flag is
+ * cleared here but not read by any function in this TU.
  */
 typedef struct EWindow {
     int x;               /* +0x00 */
@@ -122,6 +121,11 @@ const char OpenCloseMenu01Path[24] = "data\\endou\\menu01.xtx";
 
 const char OpenCloseCfwinPath[32] = "data\\endou\\cfwin.xtx";
 
+/*
+ * Draws one frame of the open transition (subtype 00): OPEN_CLOSE_SEGMENTS
+ * rectangles around the controller's rectangle, with the outer edges scaled
+ * by cos. Advances the frame, or sets the phase to done on the last frame.
+ */
 static void OpenSubType00(OpenCloseController *controller)
 {
     int frames_remaining = OPEN_CLOSE_FRAMES - controller->frame;
@@ -142,6 +146,7 @@ static void OpenSubType00(OpenCloseController *controller)
         int bottom_y;
         OpenCloseDrawPrimitive *primitive = &controller->primitive[segment];
 
+        /* Horizontal edges: the outer position moves with cos. */
         cosine = xglCos(angle);
         origin_x = controller->x;
         half_width = (short)controller->width / 2;
@@ -153,6 +158,7 @@ static void OpenSubType00(OpenCloseController *controller)
         right_x = (int)((float)(controller->x + half_width) +
                         (float)half_width * cosine);
 
+        /* The edges are then offset by a sine wave that depends on the segment. */
         angle = (float)frames_remaining * 0.2617994f;
         sine = xglSin(angle);
         wave = (float)segment * 0.4f;
@@ -184,6 +190,7 @@ static void OpenSubType00(OpenCloseController *controller)
         bottom_y = (int)((float)bottom_y + (float)half_height * wave * sine);
 
         angle = (float)frames_remaining * 0.1308997f;
+        /* Store the segment rectangle and its grey colour, then draw it. */
         primitive->width = right_x - left_x;
         primitive->work = controller->work;
         primitive->x = left_x;
@@ -206,6 +213,11 @@ static void OpenSubType00(OpenCloseController *controller)
         controller->frame++;
 }
 
+/*
+ * Draws one frame of the close transition (subtype 00). It uses the same
+ * layout as OpenSubType00 with sin and cos swapped. Advances the frame, or
+ * sets the phase to done on the last frame.
+ */
 static void CloseSubType00(OpenCloseController *controller)
 {
     int frames_remaining = OPEN_CLOSE_FRAMES - controller->frame;
@@ -294,6 +306,11 @@ static void CloseSubType00(OpenCloseController *controller)
         controller->frame++;
 }
 
+/*
+ * Draws one frame of the cross transition (subtype 01): a rectangle that
+ * grows vertically from the centre of the controller's rectangle. Sets the
+ * phase to done once the frame reaches OPEN_CLOSE_FADE_FRAMES.
+ */
 static void OpenSubType01(OpenCloseController *controller)
 {
     int draw_count;
@@ -339,6 +356,7 @@ static void OpenSubType01(OpenCloseController *controller)
         controller->frame++;
 }
 
+/* Starts the transition on its first call, then runs the handler for the subtype. */
 void OpenCloseMain(OpenCloseController *controller)
 {
     OpenCloseCallbacks callbacks;
@@ -358,6 +376,7 @@ void OpenCloseMain(OpenCloseController *controller)
                     (controller->subtype & 15)](controller);
 }
 
+/* Runs one step of the window state machine and draws the window while it is visible. */
 void eWindowMain(EWindowMainData *window)
 {
     unsigned char mode = window->mode;
@@ -385,6 +404,7 @@ void eWindowMain(EWindowMainData *window)
     case E_MODE_SHOW_STEP:
         window->mode = E_MODE_RUN_START;
         break;
+    /* Open: run the open transition, then switch to showing. */
     case E_MODE_OPEN_START:
         window->controller.x = (unsigned short)window->x;
         window->controller.y = (unsigned short)window->y;
@@ -400,6 +420,7 @@ void eWindowMain(EWindowMainData *window)
         if (window->controller.phase < 0)
             window->mode = E_MODE_SHOW_START;
         break;
+    /* Running: copy the current window geometry into the render packet each frame. */
     case E_MODE_RUN_START:
         window->mode = E_MODE_RUN_STEP;
         window->visible = 1;
@@ -425,6 +446,7 @@ void eWindowMain(EWindowMainData *window)
         endPrintExtFunc(window->primitive.work, END_PRINT_CMD_WINDOW,&window->primitive);
 }
 
+/* Resets the window to hidden, at the origin, 16x16, with the default grey colour. */
 void eWindowSet(EWindow *window)
 {
     window->color.alpha = -128;
@@ -439,6 +461,7 @@ void eWindowSet(EWindow *window)
     window->visible = 0;
 }
 
+/* Advances the cursor state machine one frame and draws its sprite while active. */
 void eCursolMain(ECursolMainData *cursol)
 {
     switch (cursol->state) {
@@ -495,6 +518,7 @@ void eCursolMain(ECursolMainData *cursol)
     case E_MODE_HIDE_STEP:
         break;
     }
+    /* While active, advance the frame counter and draw the sprite with a cycling frame. */
     if (cursol->active) {
         int frame = cursol->timer + 1;
         unsigned char style = cursol->width;
@@ -519,6 +543,10 @@ void eCursolMain(ECursolMainData *cursol)
     }
 }
 
+/*
+ * Sets the cursor state to mode. A show or run mode is refused while the
+ * cursor is already showing or running; modes below 32 are always accepted.
+ */
 void eCursolModeChange(ECursolMainData *cursol, unsigned int mode)
 {
     switch (mode) {
@@ -541,6 +569,7 @@ void eCursolModeChange(ECursolMainData *cursol, unsigned int mode)
     cursol->state = mode;
 }
 
+/* Resets the cursor to the origin, the default grey colour and state 0, inactive. */
 void eCursolSet(ECursolMainData *cursol, int width)
 {
     cursol->x = 0;

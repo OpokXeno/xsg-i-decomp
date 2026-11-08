@@ -7,7 +7,7 @@
 #include "main/outer_product.h"
 #include "main/xgl_font.h"
 
-/* UnduDataGetHeader selects by identifier unless this bit is set: then the low bits index the map's header table (here always entry 0). */
+/* UnduDataGetHeader selects by identifier unless this bit is set: then the low bits index the map's header table. */
 #define GET_UNDU_HEADER_BY_INDEX 0x8000
 
 /* Directions Check_Octpus samples at most. */
@@ -70,14 +70,10 @@ extern float UnduCheck(const Vector4 *position, void *exclude, UnduParam *param)
 extern float cosf(float angle);
 extern float atan2f(float y, float x);
 /* Declared here, not at the top: moving it up changes the original code. */
-/* MARK: provisional extern block. All eight words are _gp-relative .sdata
-   witnesses at 0x004d81cc..0x004d81e8. They are not proven original
-   declarations; names below record roles observed in this function only. */
-/* Role name for TwoPiD:
-   subtracted to wrap the cursor down at/above the high clamp. */
 #include "main/get.h"
 #include "get.h"
 
+/* Wraps an angle in radians into the range [-pi, pi). */
 float Get_Decimal_Surplus_for_Radius(float angle)
 {
     if (angle <= 0.0f) {
@@ -95,6 +91,11 @@ float Get_Decimal_Surplus_for_Radius(float angle)
     return angle;
 }
 
+/*
+ * Checks the two L-shaped routes between first and second, through the other
+ * two corners of their rectangle, for walls. Returns 1 and writes a crossing
+ * point to destination when Check_CrossingOver reports a crossing.
+ */
 int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
                      Vector4 *destination, int map_index, float radius)
 {
@@ -126,6 +127,7 @@ int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
     second_corner.x = second_x;
     second_corner.y = second_y;
     second_corner.z = first_z;
+    /* Nudge the first corner's x and the second corner's z by 0.1. */
     {
         float adjusted_x = (first_x - second_x) < 0.0f
             ? first_x + -0.1f : first_x + 0.1f;
@@ -148,6 +150,7 @@ int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
     first_intersection = first_crossing;
     second_intersection = second_crossing;
 
+    /* Second pair of routes: y comes from first, one of x or z from second. */
     first_corner.x = second->x;
     first_corner.y = first->y;
     first_corner.z = first->z;
@@ -169,6 +172,7 @@ int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
     third_intersection = third_crossing;
     fourth_intersection = fourth_crossing;
 
+    /* Draw the placeholder text, then store each crossing that is found. */
     xglFontDebugPrintf(8, 0x64, moveSquarePlaceholderText);
     if (Check_CrossingOver(second,
                            &first_intersection,
@@ -191,6 +195,7 @@ int Check_MoveSquare(const Vector4 *first, const Vector4 *second,
     return crossed;
 }
 
+/* Writes the point length units away from source at angle, in the xz plane. */
 void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
                               float angle, float length)
 {
@@ -200,6 +205,7 @@ void Get_Point_By_AngleLength(const Vector4 *source, Vector4 *destination,
     destination->w = source->w;
 }
 
+/* Writes the point at point_index / point_count of the way from start to following; w is 1. */
 void Get_MiddlePoint(const float *start, const float *following,
                      short point_index, short point_count, float *result)
 {
@@ -219,6 +225,10 @@ void Get_MiddlePoint(const float *start, const float *following,
     }
 }
 
+/*
+ * Interpolates between first and second at current / total and raises y by an
+ * arc that is zero at both ends and full at the midpoint of the sequence.
+ */
 void Get_MiddlePoint_Parabora(const ParabolaVec *first, const ParabolaVec *second,
                               int current, int total, float height,
                               ParabolaVec *destination)
@@ -249,6 +259,11 @@ void Get_MiddlePoint_Parabora(const ParabolaVec *first, const ParabolaVec *secon
     }
 }
 
+/*
+ * Marks in blocked each of count directions around position at distance_scale:
+ * 1 when Get_HeightAttr returns 0, a map unit is hit, or the territory differs.
+ * A count <= 0 checks one random direction; the other entries are cleared.
+ */
 void Check_Wall(float distance_scale, float wall_parameter,
                 const float *position, signed char *blocked, int count_argument,
                 int map_index, u8 actor_number, int territory)
@@ -294,6 +309,11 @@ void Check_Wall(float distance_scale, float wall_parameter,
     }
 }
 
+/*
+ * Samples count directions around origin at the given length, ranks them by
+ * the distance their straight check reaches, applies four random swaps to the
+ * ranking and writes the first entry to destination.
+ */
 void Check_Octpus(float length, float radius, const Vector4 *origin,
                   Vector4 *destination, int count_argument, int map_index,
                   int excluded_actors, int territory)
@@ -349,6 +369,11 @@ void Check_Octpus(float length, float radius, const Vector4 *origin,
     *destination = checked[ranked[0]];
 }
 
+/*
+ * Searches the count wall slots around the circle, alternating outward from
+ * angle, and returns the angle of the first free slot (wall_flags entry 0).
+ * Returns 0 when no slot is free.
+ */
 float Get_WallSpace(int unused, const signed char *wall_flags,
                     short count, float angle)
 {
@@ -381,6 +406,7 @@ float Get_WallSpace(int unused, const signed char *wall_flags,
     return (float)selected * (wallAngleStep / count_as_float);
 }
 
+/* Writes a point length units from source toward destination in the xz plane. */
 void Get_One_Step(float length, const Vector4 *source,
                   const Vector4 *destination, Vector4 *output)
 {
@@ -394,6 +420,11 @@ void Get_One_Step(float length, const Vector4 *source,
     output->w = 1.0f;
 }
 
+/*
+ * Walks from start toward end in steps and stops before the first sample blocked
+ * by a map unit, the territory or an actor. Writes the last clear point to
+ * destination and returns its step index.
+ */
 int Check_Straight(const Vector4 *start, const Vector4 *end, short steps,
                    unsigned long *destination, float radius, int map_index,
                    int excluded_actors, int territory)
@@ -432,6 +463,11 @@ int Check_Straight(const Vector4 *start, const Vector4 *end, short steps,
     return steps;
 }
 
+/*
+ * Walks count segments from start toward end on map_index. Stops before a sample
+ * with no ground or a map unit in the way; writes the last clear point to
+ * destination (end when none is blocked) and returns its index.
+ */
 int Check_Straight_ID(const Vector4 *start, const Vector4 *end,
                       short count, Vector4 *destination, int map_index)
 {
@@ -495,6 +531,10 @@ float Get_Angle(const Vector4 *first, const Vector4 *second)
     return atan2f(second->x - first->x, second->z - first->z);
 }
 
+/*
+ * Returns 1 when angle lies between rangeStart and rangeEnd. Both ends are
+ * wrapped into [-pi, pi), and a range that starts above its end wraps through pi.
+ */
 int Check_Angle(float angle, float rangeStart, float rangeEnd)
 {
     rangeStart = Get_Decimal_Surplus_for_Radius(rangeStart);
@@ -513,6 +553,7 @@ int Check_Angle(float angle, float rangeStart, float rangeEnd)
     return 0;
 }
 
+/* Returns the angle from first to second minus reference, wrapped into [-pi, pi]. */
 float Get_Angle_Relative(const Vector4 *first, const Vector4 *second,
                          float reference)
 {
@@ -525,6 +566,7 @@ float Get_Angle_Relative(const Vector4 *first, const Vector4 *second,
     return relative;
 }
 
+/* Returns 1 when segment first_start-first_end crosses segment second_start-second_end. */
 int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
                        const Vector4 *second_start, const Vector4 *second_end)
 {
@@ -541,6 +583,11 @@ int Check_CrossingOver(const Vector4 *first_start, const Vector4 *first_end,
     return 0;
 }
 
+/*
+ * Returns 1 when target is within radius of origin and inside the fan of
+ * fan_width_degrees centered on facing. Unless map_index is -1, a clear map path
+ * from origin to target is also required.
+ */
 int Check_InsideFan(float facing, float radius, float fan_width_degrees,
                     float crossing_radius, const Vector4 *origin,
                     const Vector4 *target, int map_index)
@@ -575,6 +622,7 @@ int Check_InsideFan(float facing, float radius, float fan_width_degrees,
     return CrossPointUwamono(origin, target, crossing_radius, &intersection) != 1;
 }
 
+/* Returns 1 when target is within radius of origin and inside the fan of fanWidthDegrees around facing. */
 int Check_InsideFan_Wooo(const Vector4 *origin, const Vector4 *target,
                          float facing, float radius, float fanWidthDegrees)
 {
@@ -589,6 +637,10 @@ int Check_InsideFan_Wooo(const Vector4 *origin, const Vector4 *target,
     return inside;
 }
 
+/*
+ * Steps the angle current toward target along the shorter arc by 1/speed of the
+ * remaining difference, and returns the result wrapped into [-pi, pi].
+ */
 float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
                                             float speed)
 {
@@ -596,11 +648,9 @@ float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
 
     if (current == target)
         return current;
-    /* Difference first, then the same variable carries the adjusted
-       cursor position for the remainder of the loop. */
+    /* The difference is computed first; the same variable then holds the adjusted position. */
     cursor = target - current;
-    /* MARK: builtin form emits abs.s under -fno-builtin; a plain fabsf
-       call would tail-call instead and break the match. */
+    /* __builtin_fabsf keeps the absolute value inline instead of calling fabsf. */
     if (__builtin_fabsf(cursor) < 3.1415927f)
         cursor = current + cursor / speed;
     else if (cursor < -3.1415927f)
@@ -614,6 +664,11 @@ float Get_Cursol_by_Reduce_Speed_Angle_Loop(float current, float target,
     return cursor;
 }
 
+/*
+ * Writes a point near origin to destination: origin itself when UnduCheck finds
+ * ground there, otherwise the nearest of eight points 2 units around it, probed
+ * on map 772.
+ */
 void Get_EnemyIDPos(const Vector4 *origin, Vector4 *destination)
 {
     Vector4 sample;
@@ -672,6 +727,11 @@ float Get_Multi_Max_Under(float value, float step, float maximum)
     return value;
 }
 
+/*
+ * Runs a height query at position into param with attrMask (bit 0x800 always
+ * set) and returns its result. Map 0 uses the player's data header; other maps
+ * look up their header by index.
+ */
 float Get_HeightAttr(const Vector4 *position, int mapIndex, int attrMask,
                     UnduParam *param)
 {
@@ -686,6 +746,7 @@ float Get_HeightAttr(const Vector4 *position, int mapIndex, int attrMask,
     return UnduCheck(position, 0, param);
 }
 
+/* Runs the height query at position into UnduTest, with the header choice of Get_HeightAttr. */
 void Get_Height(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
@@ -699,6 +760,7 @@ void Get_Height(const Vector4 *position, int mapIndex, int attrMask)
     UnduCheck(position, 0, &UnduTest);
 }
 
+/* Returns the attribute at position on mapIndex; attrMask always gets bit 0x800 set. */
 int Get_Attr(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
@@ -713,6 +775,7 @@ int Get_Attr(const Vector4 *position, int mapIndex, int attrMask)
     return (int)UnduTest.attribute;
 }
 
+/* Like Get_Attr, but attrMask is used without the 0x800 bit. */
 int Get_Attr_NU(const Vector4 *position, int mapIndex, int attrMask)
 {
     UnduParamInit(&UnduTest);
@@ -727,6 +790,10 @@ int Get_Attr_NU(const Vector4 *position, int mapIndex, int attrMask)
     return (int)UnduTest.attribute;
 }
 
+/*
+ * Traces from start toward end on map_index. Writes the point reached to
+ * destination and returns 1 when it lands within tolerance of end.
+ */
 int Check_Undu(const Vector4 *start, const Vector4 *end, int map_index,
                 Vector4 *destination, int query_mode, int excluded_units,
                 int flags)
@@ -769,6 +836,7 @@ void BSpline_Init(Vector4 *destination, const Vector3 *source)
     }
 }
 
+/* Stores source as control point (frame / period + offset) modulo count, with w set to 1. */
 void BSpline_Add(short frame, short count, short period,
                  Vector4 *destination, const Vector3 *source, short offset)
 {
@@ -781,6 +849,10 @@ void BSpline_Add(short frame, short count, short period,
     destination[index].w = 1.0f;
 }
 
+/*
+ * Evaluates the spline through four consecutive points at frame with the
+ * DataSpline weights and writes the xyz result to destination.
+ */
 void GetBSplineLoop(short frame, short count, int period_value,
                     Vector4 *points, Vector4 *destination)
 {
@@ -806,6 +878,7 @@ void GetBSplineLoop(short frame, short count, int period_value,
                      / GET_BSPLINE_WEIGHT_SCALE;
 }
 
+/* Advances the actor's enepc state by one frame and writes the interpolated position to destination. */
 void GetBSplineLoopDummy(short frame, short count, short period,
                          const Vector4 *points, Vector4 *destination,
                          const SplineMotionActor *actor)

@@ -48,7 +48,7 @@ struct HddInstallParams {
     u8 *transfer_buffer;
 };
 
-/* Gauge block read by tyaDrawGauge: the same layout as its TU-local TyaGaugeArgs. */
+/* Gauge block read by tyaDrawGauge: the same layout as TyaGaugeArgs (src/main/tya_draw_gauge.h). */
 struct HddInstallGauge {
     short x;
     short y;
@@ -142,6 +142,10 @@ UmnInterface2State *UmnInterface2 = 0;
 /* Font control bytes passed to the existing font-script renderer. */
 static const char installScreenFontText[8] = "\x0f\x44\x00\x80\x0d\x03";
 
+/*
+ * Sends the VIF packet with the render state and both transfer-buffer halves, then
+ * draws the screen font.
+ */
 static void HddInstallSync(void)
 {
     XglPacket *packet;
@@ -161,6 +165,11 @@ static void HddInstallSync(void)
     xglFontPrintDirectOT(-1, installScreenFontText);
 }
 
+/*
+ * Progress callback for xglHddInstall. Draws the stage text and the copy gauge,
+ * decodes the next progress image and handles the abort prompt. Returns nonzero to
+ * stop the install.
+ */
 static int HddInstallCB(int command, int offset, int *status)
 {
     struct HddInstallGauge gauge;
@@ -234,6 +243,7 @@ static int HddInstallCB(int command, int offset, int *status)
             jpeg_request.destination = HddInstallParam->transfer_buffer;
             xglJpegDecode(&jpeg_request);
         }
+        /* Cross asks for an abort: Circle aborts, Cross resumes the copy. */
         pad = &PadData;
         if ((pad->half_2a & PAD_CROSS) != 0) {
             xglSoundEffectNormalDirect(SE_CANCEL);
@@ -303,6 +313,10 @@ static int HddInstallCB(int command, int offset, int *status)
     return 0;
 }
 
+/*
+ * Runs the install screen: the start prompt, the install, then the completion or
+ * failure prompt. Returns when the player leaves the screen.
+ */
 static void TitleHddInstallSubInstall(void)
 {
     int installStatus;
@@ -329,6 +343,7 @@ static void TitleHddInstallSubInstall(void)
                 return;
             }
         }
+        /* Check the disk, then run the install when the check passed. */
         xglSoundEffectNormalDirect(SE_DECIDE);
         result = xglHddCheck();
         if (result == 0) {
@@ -361,6 +376,7 @@ static void TitleHddInstallSubInstall(void)
                 }
             }
         }
+        /* Failure prompt: Circle leaves the screen, Cross returns to the start prompt. */
         for (;;) {
             xglFontPrint(HDD_MESSAGE_X, HDD_MESSAGE_Y, -1, installFailedText);
             HddInstallSync();
@@ -382,6 +398,7 @@ static void TitleHddInstallSubInstall(void)
     }
 }
 
+/* Runs the uninstall screen with the same prompt flow as the install screen. */
 static void TitleHddInstallSubUninstall(void)
 {
     int result;
@@ -450,6 +467,10 @@ static void TitleHddInstallSubUninstall(void)
     }
 }
 
+/*
+ * Entry point of the HDD install screen. Reads the install archive, decodes its first
+ * image, then shows the install, uninstall or message screen selected by command.
+ */
 void TitleHddInstall(int command)
 {
     struct HddInstallParams params;
@@ -471,6 +492,7 @@ void TitleHddInstall(int command)
             command = HDD_SCREEN_REACTIVATE;
         }
     }
+    /* Read the archive into the free work area and place the transfer buffer after it. */
     buffer = WorkEnd;
     size = xglCdReadFile(installArchivePath, buffer, 0, 1);
     transfer_buffer = (u8 *)(((u32)buffer + size + 63) & ~63);

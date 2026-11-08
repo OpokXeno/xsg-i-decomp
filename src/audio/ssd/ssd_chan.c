@@ -23,6 +23,10 @@ void SsdForceKeyoffChannel(SsdChannel *channel, const SsdMidiEvent *event);
 void SsdForceKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice);
 void SsdSetChannelAdsr(SsdChannel *channel, int adsr1, int adsr2);
 
+/*
+ * Allocates a MIDI device with channel_count channels and links it into the device list.
+ * An out-of-range voice_range bound is reset to the first or last voice.
+ */
 SsdMidiDevice *SsdNewMidiDevice(int channel_count, int allocation_mode,
                               const SsdVoiceRange *voice_range)
 {
@@ -70,6 +74,7 @@ void SsdDisposeMidiDevice(SsdMidiDevice *device)
     SsdDisposePtr(device);
 }
 
+/* Returns the lowest device id from 1 that no linked device uses, or -1 when ids 1 to 254 are all taken. */
 int SsdGetNewDeivceID(void)
 {
     int id = 1;
@@ -136,6 +141,7 @@ void SsdResumeDeviceChannel(SsdMidiDevice *device)
     }
 }
 
+/* Marks every voice on the channel for a volume, pitch and ADSR update. */
 void SsdResumeChannel(SsdChannel *channel)
 {
     SsdVoice *voice = channel->voices;
@@ -166,6 +172,7 @@ void SsdSuspendDeviceChannel(SsdMidiDevice *device)
     }
 }
 
+/* Mutes every voice on the channel and rewrites its ADSR registers. */
 void SsdSuspendChannel(SsdChannel *channel)
 {
     SsdVoice *voice = channel->voices;
@@ -198,6 +205,7 @@ void SsdResetMidiDeviceParam(SsdMidiDevice *device, int flags)
     device->master_panpot = 0;
 }
 
+/* Cuts off and resets every channel of the device; a negative flags value selects the stored reset flags. */
 void SsdResetChannelAll(SsdMidiDevice *device, int flags)
 {
     int remaining = device->channel_count;
@@ -352,6 +360,7 @@ void SsdLinkChannelVoice(SsdChannel *channel, SsdVoice *voice)
     voice->channel = channel;
 }
 
+/* Unlinks the voice from its channel and clears its key state and next link. */
 void SsdUnlinkChannelVoice(SsdVoice *voice)
 {
     SsdChannel *channel = voice->channel;
@@ -373,6 +382,7 @@ void SsdUnlinkChannelVoice(SsdVoice *voice)
     SsdCutoffUnlinkVoice(voice);
 }
 
+/* Sets the event bits on every voice of every channel of the device. */
 void SsdSetChannelAllVoiceEvent(SsdMidiDevice *device, unsigned short events)
 {
     int channels_remaining = device->channel_count;
@@ -409,6 +419,7 @@ process_voice:
         goto process_voice;
 }
 
+/* Adds the effect bits to the channel and to its voices, and the flags to its voices. */
 void SsdSetChannelHWEffectOn(SsdChannel *channel, unsigned char effects,
                            unsigned short flags)
 {
@@ -422,6 +433,7 @@ void SsdSetChannelHWEffectOn(SsdChannel *channel, unsigned char effects,
     }
 }
 
+/* Clears the effect bits on the channel and on its voices, and sets the flags on its voices. */
 void SsdSetChannelHWEffectOff(SsdChannel *channel, unsigned char effects,
                             unsigned short flags)
 {
@@ -450,6 +462,7 @@ void SsdKeyonChannel(SsdChannel *channel, SsdMidiEvent *event)
     }
 }
 
+/* Starts a voice for a wave channel from the current wave sample and the channel settings. */
 void SsdKeyonChannelWave(SsdChannel *channel, SsdMidiEvent *event)
 {
     SsdWaveSample *wave = channel->wave_data;
@@ -481,6 +494,7 @@ void SsdKeyonChannelWave(SsdChannel *channel, SsdMidiEvent *event)
     }
 }
 
+/* Starts a voice for each program split whose key range contains the key. */
 void SsdKeyonChannelProgram(SsdChannel *channel, SsdMidiEvent *event)
 {
     if ((channel->flags & SSD_CHANNEL_SLUR) == 0) {
@@ -561,6 +575,7 @@ void SsdKeyonChannelProgram(SsdChannel *channel, SsdMidiEvent *event)
     }
 }
 
+/* Returns the first split of the program whose upper key is not below key. */
 SsdProgramSplit *SsdGetProgramSplitPtr(SsdProgram *program, int key)
 {
     SsdProgramSplit *split = program->splits;
@@ -570,6 +585,7 @@ SsdProgramSplit *SsdGetProgramSplitPtr(SsdProgram *program, int key)
     return split;
 }
 
+/* Marks the voice for key-on, unless the channel slurs, and links it to the channel if it is not linked yet. */
 void SsdKeyonChannelVoice(SsdChannel *channel, SsdVoice *voice)
 {
     unsigned short events = voice->events;
@@ -598,6 +614,7 @@ void SsdSendChannelKeyoffEvent(SsdChannel *channel)
     }
 }
 
+/* Releases every voice on the channel whose key matches the event key. */
 void SsdKeyoffChannel(SsdChannel *channel, const SsdMidiEvent *event)
 {
     SsdVoice *voice = channel->voices;
@@ -609,6 +626,7 @@ void SsdKeyoffChannel(SsdChannel *channel, const SsdMidiEvent *event)
     }
 }
 
+/* Marks the voice key as released and, unless the channel slurs or sustains, starts its release. */
 void SsdKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice)
 {
     voice->key_state |= SSD_VOICE_KEY_RELEASED;
@@ -623,6 +641,7 @@ void SsdKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice)
     }
 }
 
+/* Force-releases every voice on the channel whose key matches the event key. */
 void SsdForceKeyoffChannel(SsdChannel *channel, const SsdMidiEvent *event)
 {
     SsdVoice *voice = channel->voices;
@@ -634,6 +653,7 @@ void SsdForceKeyoffChannel(SsdChannel *channel, const SsdMidiEvent *event)
     }
 }
 
+/* Marks the voice key as released and starts its release at the forced release rate. */
 void SsdForceKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice)
 {
     voice->key_state |= SSD_VOICE_KEY_RELEASED;
@@ -646,6 +666,7 @@ void SsdForceKeyoffChannelVoice(SsdChannel *channel, SsdVoice *voice)
     voice->flags |= SSD_VOICE_FLAG_ADSR2;
 }
 
+/* Selects a wave sample of the channel bank and clears the program selection. */
 void SsdSetChannelWave(SsdChannel *channel, unsigned char wave_index)
 {
     SsdWaveBank *bank = SsdGetWSPtrBank(channel->bank);
@@ -673,6 +694,7 @@ void SsdSetChannelWave(SsdChannel *channel, unsigned char wave_index)
     channel->program_data = 0;
 }
 
+/* Selects a program of the channel bank and returns it, or 0 when the index has no program. */
 SsdProgram *SsdSetChannelProgram(SsdChannel *channel, unsigned char program_index)
 {
     SsdProgram *program = 0;

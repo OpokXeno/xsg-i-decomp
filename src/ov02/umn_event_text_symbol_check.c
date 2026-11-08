@@ -24,11 +24,11 @@
 #define UMN_EVENT_NUMBER_OCTAL 0
 #define UMN_EVENT_NUMBER_DECIMAL 1
 
-/* Mail ids listed in event_tbl and compulsion_down_load_tbl. */
 /* uet_text_buf layout: a 4-byte count header, then 8-byte speech records. */
 #define UMN_EVENT_TEXT_HEADER_SIZE 4
 #define UMN_EVENT_TEXT_RECORD_SIZE 8
 
+/* Mail ids listed in event_tbl and compulsion_down_load_tbl. */
 #define UMN_EVENT_MAIL_COUNT 18
 #define UMN_COMPULSION_MAIL_COUNT 13
 
@@ -49,7 +49,7 @@
 #define UMN_MAIL_HEADER_TABLE_SIZE 0x4800
 
 /*
- * event_end_mail (ov02 .data, 2 bytes: 0x1D, 0x1E) is the one configured
+ * event_end_mail (the two bytes 0x1D, 0x1E) is the one configured
  * follow-up mail: UmnEventEndMailCheck unlocks follow_mail_id's data byte 0
  * and registers it into the mailbox once trigger_mail_id has been read.
  */
@@ -95,27 +95,27 @@ typedef struct UmnEventTextSymbolTable {
     UmnEventTextSymbol entry[UMN_EVENT_TAG_COUNT];
 } UmnEventTextSymbolTable;
 
-/* Scaffold-owned symbol table at 0x00A13588 (no recovered C definition). */
+/* Event text tag names and codes, defined in the overlay data rather than in C. */
 extern const UmnEventTextSymbolTable eventTextTagTable;
 
 typedef struct UmnEventTextCharTable {
     UmnEventTextSymbol entry[UMN_EVENT_SPEAKER_COUNT];
 } UmnEventTextCharTable;
 
-/* Scaffold-owned speaker-name table at 0x00A135D0 (no recovered C definition). */
+/* Speaker names, defined in the overlay data rather than in C. */
 extern const UmnEventTextCharTable eventTextSpeakerTable;
 
 extern char *eMessageNextWaitKeySearch(char *text);
 
 /*
- * Declared int, unlike main/data.h's void dataWpnBoxInc (measured: the void
- * prototype moves the loop-bound compare in UmnMailAttachSet from $v1 to $v0).
+ * Declared int, unlike main/data.h's void dataWpnBoxInc: the int declaration
+ * is what UmnMailAttachSet's loop-bound compare needs.
  */
 extern int dataItmBoxInc(int id);
 extern int dataWpnBoxInc(int id);
 extern int dataMoneyBoxInc(int amount);
 
-/* "data\\endou\\umn\\histree.bin" and "data\\umn\\header.lst", ov02 .data; no witnessed rename. */
+/* File names of the history tree and the mail header list. */
 const char historyTreePath[] = "data\\endou\\umn\\histree.bin";
 const char mailHeaderListPath[] = "data\\umn\\header.lst";
 static unsigned char umn_attach_tbl[UMN_ATTACH_COUNT * UMN_ATTACH_RECORD_SIZE] = {
@@ -182,6 +182,7 @@ int UmnEventTextSymbolCheck(unsigned char **cursor)
     return 0;
 }
 
+/* Matches a speaker name at *cursor; on a match advances *cursor past it and returns its value, otherwise 0. */
 int UmnEventTextCharCheck(unsigned char **cursor)
 {
     UmnEventTextCharTable table;
@@ -209,6 +210,7 @@ int UmnEventTextCharCheck(unsigned char **cursor)
     return 0;
 }
 
+/* Reads digits at *cursor in base 8 or 10 (UMN_EVENT_NUMBER_OCTAL or _DECIMAL), advances *cursor and returns the value. */
 int UmnEventTextNumberGet(unsigned char **cursor, int base)
 {
     unsigned char c;
@@ -316,6 +318,7 @@ int UmnEventTextMake(int event_no)
     UmnEventTextRecord *record;
     unsigned int tag;
 
+    /* Picks the file for event_no and loads it into the aligned work area. */
     name[14] = '0' + event_no / 10;
     name[15] = '0' + event_no % 10;
     aligned = (unsigned char *) ((UmnEventTextMakeWork + 0xF) & ~0xF);
@@ -329,6 +332,7 @@ int UmnEventTextMake(int event_no)
     buf = uet_text_buf;
     uet_file_end = aligned + size;
 
+    /* First pass: counts the speech blocks, skipping memo sections. */
     count = 0;
     scan = aligned;
     if (scan < uet_file_end) {
@@ -353,6 +357,7 @@ int UmnEventTextMake(int event_no)
     records = (unsigned char *) head + UMN_EVENT_TEXT_HEADER_SIZE;
     write = records + count * UMN_EVENT_TEXT_RECORD_SIZE;
 
+    /* Second pass: fills one record per speech block as the tags are read. */
     index = 0;
     UmnEventTextGyouJump(&cursor);
     while (cursor < uet_file_end) {
@@ -429,8 +434,8 @@ UmnEventTextRecord *UmnEventTextNextGet(int delta)
 }
 
 /*
- * event_tbl lists the mail_id values UmnEventEndMailCheck's mailbox check
- * applies to; bit 2 of the mail's data byte marks it already handled.
+ * Returns the 1-based event_tbl index of mail_id, or 0 when mail_id is not listed
+ * or its data byte has bit 2 set (already handled).
  */
 int UmnMailEventCheck(int mail_id)
 {
@@ -484,6 +489,7 @@ int UmnHistoryTreeLoad(int work)
     return next;
 }
 
+/* Returns the history node for history_id, or NULL when it is out of range. */
 UmnHistoryNode *UmnHistoryTreeGet(unsigned int history_id)
 {
     UmnHistoryNode *tree = UmnHistoryTreeBuf;
@@ -530,6 +536,7 @@ unsigned char *UmnMailAttachGet(int box_id)
     return umn_attach_tbl + box_id * UMN_ATTACH_RECORD_SIZE;
 }
 
+/* Applies the attachment of mail box_id: unlocks a plugin, or adds items, weapons or money. */
 void UmnMailAttachSet(int box_id)
 {
     UmnMailSaveData *state = &umnMailSaveData;
@@ -590,6 +597,10 @@ UmnMailHeader *UmnMailHeaderGet(int mail_id)
     return &UmnMailHeaderBuf[mail_id];
 }
 
+/*
+ * Builds the mail header table in the work area from the mail list file and
+ * returns the address after it.
+ */
 int UmnMailHeaderCreate(int work)
 {
     int aligned = (work + 0xF) & ~0xF;
@@ -609,6 +620,7 @@ int UmnMailHeaderCreate(int work)
     UmnMailHeaderBuf = (UmnMailHeader *)aligned;
     memset(UmnMailHeaderBuf, 0, UMN_MAIL_HEADER_TABLE_SIZE);
     xglCdReadFile(mailHeaderListPath, list, 0, 0);
+    /* Each record starts with a size and mail_id word, then the body, subject and title text. */
     size = ((UmnMailList *)cursor)->size;
     while (size != 0) {
         cursor = cursor + 4;
@@ -649,6 +661,7 @@ int UmnMailHeaderCreate(int work)
                 cursor = cursor + 1;
             }
         }
+        /* Copies the subject and title text, skipping 9 and 8 leading bytes of them. */
         eMessageCpy(header->subject, subject + 9);
         eMessageCpy(header->title, title + 8);
         record = record + size + 4;
@@ -672,6 +685,10 @@ char *UmnPluginTextGet(unsigned int plugin_id)
     return text;
 }
 
+/*
+ * Loads the umntxt file into the work area at work: from the CD when mode is 0,
+ * otherwise through MenuLoadFile. Returns the address after it.
+ */
 int UmnTextLoad(int work, int mode)
 {
     static char f_name[] = "data\\endou\\umn\\umntxt.bin";
@@ -708,6 +725,7 @@ int UmnMailCompulsionDownLoadCheck(int mail_id)
     return 0;
 }
 
+/* Points the event text buffer at the work area at work and returns the address after it. */
 int UmnEventTextInit(int work)
 {
     int aligned = (work + 0xF) & ~0xF;

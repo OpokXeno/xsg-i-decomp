@@ -12,6 +12,7 @@ static MapMultiplier mapMul;
 #define MAP_DISP_SHOWN 0
 #define MAP_DISP_HIDDEN 1
 
+/* Resets both map parts to shown and the multiplier components to 1.0. */
 void mapInit(void) {
     mapDispWork[1] = MAP_DISP_SHOWN;
     mapMul.components[0] = 1.0f;
@@ -53,6 +54,10 @@ void mapDispOffAll(void)
     mapDispWork[0] = MAP_DISP_HIDDEN;
 }
 
+/*
+ * Draws the map model for mapNo. Each part's name visibility follows
+ * mapDispWork; nothing is drawn when both parts are hidden.
+ */
 void mapDisp(int mapNo)
 {
     MapDispData *mapData;

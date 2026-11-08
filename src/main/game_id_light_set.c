@@ -27,7 +27,7 @@
 /* Frames an actor's light blends towards a new light id. */
 #define ID_LIGHT_BLEND_STEPS 4
 
-/* The background parameter block ends in the light preset table's first slot. */
+/* The background parameter block; its light preset table starts at offset 0x7F0. */
 typedef struct GameBgDrawType2 {
     unsigned char unmodeled_00[0x7F0];
     IdLightSet lights[ID_LIGHT_COUNT];
@@ -44,6 +44,11 @@ extern float I2F(int value);
 extern void xglVectorInter(IdLightQuadword *destination, IdLightQuadword *start,
                            const IdLightQuadword *end, float fraction);
 
+/*
+ * Updates an actor's light from the light id in the terrain attribute: either copies the preset
+ * light or blends towards it over ID_LIGHT_BLEND_STEPS frames. With a null query, the query is
+ * built in the scratchpad and the actor's position is checked first.
+ */
 void GameIdLightSet(IdLightActor *actor, IdLightQuery *query) {
     int id;
     const IdLightSet *target;

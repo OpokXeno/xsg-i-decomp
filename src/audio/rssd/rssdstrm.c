@@ -52,6 +52,7 @@ void SsdEEPcmStreamCallback(void *argument);
 
 RssdIopStreamWork RssdStrWork;
 
+/* Creates the PCM ring buffer and starts the IOP-side PCM stream, once. */
 void SsdInitEEPcmStream(int chunk_size, int format)
 {
     RssdIopStreamWork *work = &RssdStrWork;
@@ -68,6 +69,7 @@ void SsdInitEEPcmStream(int chunk_size, int format)
     }
 }
 
+/* Stops the PCM stream and frees its ring buffer. */
 void SsdDisposeEEPcmStream(void)
 {
     RssdIopStreamWork *work = &RssdStrWork;
@@ -79,6 +81,7 @@ void SsdDisposeEEPcmStream(void)
     }
 }
 
+/* Queues as many whole chunks of the request data as the PCM ring accepts, and returns their count. */
 int SsdSetEEPcmStreamData(RssdRpcPacket *request)
 {
     unsigned char *data = request->data;
@@ -99,6 +102,7 @@ int SsdSetEEPcmStreamData(RssdRpcPacket *request)
     return count;
 }
 
+/* Returns the PCM stream status with the free ring slots from bit 8 up; -1 when not initialized. */
 int SsdGetEEPcmStreamStatus(void)
 {
     if (!RssdStrWork.initialized) {
@@ -109,6 +113,10 @@ int SsdGetEEPcmStreamStatus(void)
           RssdStrWork.pcm.ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT);
 }
 
+/*
+ * Feeds the next PCM block to the IOP stream. After the drain count of empty polls,
+ * it reports the stream as finished.
+ */
 void SsdEEPcmStreamCallback(void *argument)
 {
     StreamChannel *channel = argument;
@@ -129,6 +137,7 @@ void SsdEEPcmStreamCallback(void *argument)
     }
 }
 
+/* Creates the ring buffer of channel 0 and starts the stereo VAG stream, once. */
 void SsdInitEEVagStreamStereo(int chunk_size, int format)
 {
     RssdIopStreamWork *work = &RssdStrWork;
@@ -147,6 +156,7 @@ void SsdInitEEVagStreamStereo(int chunk_size, int format)
     }
 }
 
+/* Creates one ring buffer per channel and starts the mono VAG stream, once. */
 void SsdInitEEVagStreamMono(int chunk_size, int channels, int format)
 {
     int i;
@@ -168,6 +178,7 @@ void SsdInitEEVagStreamMono(int chunk_size, int channels, int format)
     }
 }
 
+/* Stops the VAG stream and frees the ring buffers of its channels. */
 void SsdDisposeEEVagStream(void)
 {
     int i;
@@ -183,6 +194,7 @@ void SsdDisposeEEVagStream(void)
     }
 }
 
+/* Starts a VAG stream from the request arguments and clears the state of each channel. */
 void SsdPlayEEVagStream(RssdRpcPacket *request)
 {
     int i;
@@ -196,6 +208,7 @@ void SsdPlayEEVagStream(RssdRpcPacket *request)
     }
 }
 
+/* Stops the VAG channel named by argument 0. Channel 0 also clears every ring buffer. */
 void SsdStopEEVagStream(RssdRpcPacket *request)
 {
     SsdStopVagStream(request->arguments[0]);
@@ -203,6 +216,10 @@ void SsdStopEEVagStream(RssdRpcPacket *request)
         SsdEEClearRingBuffer(-1);
 }
 
+/*
+ * Queues stereo VAG data. In stereo mode the data goes to channel 0. Otherwise the
+ * interleaved data is split into two mono channels starting at channel_index.
+ */
 int SsdSetEEVagStreamDataStereo(const RssdRpcPacket *request)
 {
     int channel_index = request->arguments[0];
@@ -241,6 +258,7 @@ int SsdSetEEVagStreamDataStereo(const RssdRpcPacket *request)
         offset = sizeof(RssdRpcPacket);
         channels = RssdStrWork.vag;
         channels += channel_index;
+        /* Each pass copies one channel's 1024-byte blocks out of the interleaved data. */
         do {
             StreamChannel *channel = &channels[pair_index];
             count = 0;
@@ -274,6 +292,7 @@ int SsdSetEEVagStreamDataStereo(const RssdRpcPacket *request)
     return 0;
 }
 
+/* Returns the status of the stereo stream (channel 0), stores it in argument 0; -1 when not initialized. */
 int SsdGetEEVagStreamStatusStereo(RssdRpcPacket *request)
 {
     StreamChannel *channel;
@@ -291,6 +310,10 @@ int SsdGetEEVagStreamStatusStereo(RssdRpcPacket *request)
     return status;
 }
 
+/*
+ * Feeds the next stereo block to the IOP stream. After the drain count of empty polls,
+ * it reports the stream as finished.
+ */
 void SsdEEVagStreamCallbackStereo(void *argument)
 {
     RssdIopStreamWork *work = argument;
@@ -310,6 +333,7 @@ void SsdEEVagStreamCallbackStereo(void *argument)
     }
 }
 
+/* Queues as many chunks of mono data as the ring of the channel named by argument 0 accepts. Returns 0. */
 int SsdSetEEVagStreamDataMono(RssdRpcPacket *request)
 {
     unsigned char *data = request->data;
@@ -333,6 +357,7 @@ int SsdSetEEVagStreamDataMono(RssdRpcPacket *request)
     return 0;
 }
 
+/* Returns the status of the channel named by argument 0, and stores its volume, pan and pitch in arguments 1 to 3. */
 int SsdGetEEVagStreamStatusMono(RssdRpcPacket *request)
 {
     int volume;
@@ -354,6 +379,7 @@ int SsdGetEEVagStreamStatusMono(RssdRpcPacket *request)
     return status | ((ring->capacity - ring->count) << RSSD_STREAM_STATUS_FREE_SHIFT);
 }
 
+/* Stores the status of every channel in the request arguments and returns 0; -1 when not initialized. */
 int SsdGetEEVagStreamStatusAll(RssdRpcPacket *request)
 {
     int i;
@@ -370,6 +396,7 @@ int SsdGetEEVagStreamStatusAll(RssdRpcPacket *request)
     return 0;
 }
 
+/* Clears the ring buffer and state of one channel, or of all channels when index is negative. */
 void SsdEEClearRingBuffer(int index)
 {
     int channels;
@@ -388,6 +415,7 @@ void SsdEEClearRingBuffer(int index)
     }
 }
 
+/* Feeds the next block to each mono channel and reports the channels that finished as a bit mask. */
 void SsdEEVagStreamCallbackMono(void *argument)
 {
     RssdRpcPacket request;

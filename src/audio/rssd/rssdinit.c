@@ -56,6 +56,7 @@ void RssdSifRpcCallback(void *argument);
 void RssdGetVoiceEnvX(void);
 void RssdGetSeqPlayInfo(RssdRpcPacket *packet);
 
+/* Creates the RPC buffers, the completion semaphore and the server and client threads, then starts them. */
 int start(void)
 {
     IopThreadParameter thread;
@@ -87,6 +88,7 @@ int start(void)
     return 0;
 }
 
+/* Initializes SIF RPC, registers the RSSD RPC server and runs its RPC loop. */
 int RssdSifServerThread(void *argument)
 {
     SifRpcQueueData queue;
@@ -101,6 +103,7 @@ int RssdSifServerThread(void *argument)
     return 0;
 }
 
+/* RPC handler: runs one RSSD packet, or each packet of a batch, and returns the buffer. */
 void *RssdSifRpcServer(int command, void *bufferData, int size)
 {
     RssdRpcPacket *buffer = bufferData;
@@ -121,6 +124,7 @@ void *RssdSifRpcServer(int command, void *bufferData, int size)
     return buffer;
 }
 
+/* Dispatches one RSSD RPC packet to the SSD function for its command and stores the error code in it. */
 void RssdExecFunc(RssdRpcPacket *packet)
 {
     SsdResetFuncErrorCode();
@@ -426,10 +430,15 @@ void RssdExecFunc(RssdRpcPacket *packet)
         packet->error = -1;
         break;
     }
+    /* Store the executed packet, then report the SSD function error code in it. */
     RssdWork.lastPacket = *packet;
     packet->error = SsdGetFuncErrorCode();
 }
 
+/*
+ * Sends the voice envelope values together with the timing measurement. The
+ * measurement is cached and reused for RSSD_ENVELOPE_CACHE_FRAMES polls.
+ */
 void RssdGetVoiceEnvX(void)
 {
     int envelopes[SSD_VOICE_COUNT];
@@ -453,6 +462,7 @@ void RssdGetVoiceEnvX(void)
     RssdCallFunc(RSSD_CMD_GET_VOICE_ENV, &request, envelopes, sizeof(envelopes));
 }
 
+/* Fills the play ticks, play time, tempo and time signature of sequence arguments[0] and sends them back. */
 void RssdGetSeqPlayInfo(RssdRpcPacket *packet)
 {
     SsdSequence *sequence = SsdGetSequencePtr(packet->arguments[0]);
@@ -463,6 +473,7 @@ void RssdGetSeqPlayInfo(RssdRpcPacket *packet)
     RssdCallFunc(RSSD_CMD_GET_SEQ_PLAY_INFO, packet, &sequence->unmodeled_58, RSSD_SEQ_PLAY_INFO_SIZE);
 }
 
+/* Client thread: sends the queued RPC requests one at a time and frees each one after it is sent. */
 int RssdSifClientThread(void *argument)
 {
     for (;;) {
@@ -499,6 +510,7 @@ int RssdSifClientThread(void *argument)
     }
 }
 
+/* RPC completion: clears the busy flag, releases the completion semaphore and runs the request callback. */
 void RssdSifRpcCallback(void *argument)
 {
     RssdWork.flags &= ~RSSD_FLAG_RPC_BUSY;
@@ -507,6 +519,7 @@ void RssdSifRpcCallback(void *argument)
         RssdWork.completionCallback(RssdWork.completionArgument);
 }
 
+/* Queues an RPC request with a copy of data, then wakes the client thread. */
 void RssdCallFunc(int command, const void *requestData, const void *data, int size)
 {
     const RssdRpcPacket *request = requestData;
@@ -545,6 +558,7 @@ void RssdCallFunc(int command, const void *requestData, const void *data, int si
     WakeupThread(RssdWork.clientThread);
 }
 
+/* Interrupt-context version of RssdCallFunc: queues the request without disabling interrupts. */
 void iRssdCallFunc(int command, const void *requestData, const void *data, int size)
 {
     const RssdRpcPacket *request = requestData;

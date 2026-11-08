@@ -10,6 +10,7 @@
 const char mainFontAssertStringNotNil[24] = "pszString != NIL";
 const char mainFontSourcePath[32] = "../xrg_main_font.euc.c";
 
+/* Prints pszString at (x, y) behind a fixed font command prefix; bright selects the prefix colour bytes. */
 void XrgDispMainFont(int x, int y, const char *pszString, int bright)
 {
     char font_text[128];
@@ -23,7 +24,7 @@ void XrgDispMainFont(int x, int y, const char *pszString, int bright)
     font_text[0] = 13;
     font_text[1] = 2;
     font_cursor = &font_text[2];
-    /* The mode selects one of the two byte pairs in this prefix. */
+    /* The bright flag selects the colour bytes at offsets 3 to 5 of this prefix. */
     if (bright != 0) {
         *font_cursor = 12;
         font_cursor = &font_text[6];

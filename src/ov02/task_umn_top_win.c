@@ -40,7 +40,7 @@
 #define UMN_TOP_OPTION_WRAP_BOTTOM 464
 #define UMN_TOP_OPTION_WRAP_TOP (-112)
 
-/* Colour of the translucent panels and the outline of the empty option slots. */
+/* Colour and alpha of the translucent panels. */
 #define UMN_TOP_PANEL_RED 56
 #define UMN_TOP_PANEL_GREEN (-84)
 #define UMN_TOP_PANEL_BLUE (-62)
@@ -157,6 +157,11 @@ void eWindowSet(void *window);
 void eSpriteSet(ESprite *sprite, int texture);
 void eSpriteMain(ESprite *sprite);
 
+/*
+ * Task of the top menu window. The init state sets up the window, the messages,
+ * the option ribbons and the sprites. Each run frame scrolls the options toward
+ * the cursor and draws the panels, option entries and messages.
+ */
 void taskUmnTopWin(UmnObjectTask *task, void *data)
 {
     UmnTopWinWork *work;
@@ -271,6 +276,7 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
                 break;
             }
         case UMN_TOP_WIN_SCROLL:
+            /* Scroll the options. When the cursor option reaches the selected position, the cursor steps on if its option id is 0; otherwise the scroll ends. */
             for (v = 0; v < UmnWork.menu_count; v++) {
                 work->option[v].y -= UmnWork.direction * UMN_TOP_OPTION_SCROLL_STEP;
                 if (work->option[v].y == UMN_TOP_OPTION_WRAP_BOTTOM) {
@@ -291,6 +297,7 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
                 }
             }
         }
+        /* Draws the panels, the option entries, the sprites and the messages while the window is visible. */
         if (work->visible != 0) {
             work->quad0.vertex[0].y = 0;
             work->quad0.vertex[1].x = 36;
@@ -326,6 +333,7 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
             endPrintExtFunc(0, END_PRINT_CMD_LINE, &work->quad1);
             work->texture_addr = UmnTexAddr;
             endPrintExtFunc(0, END_PRINT_CMD_FONT_TEX_CHANGE, &work->texture_addr);
+            /* Options with an icon get a sprite; empty slots get an outlined panel. */
             for (k = 0; (int)k < UmnWork.menu_count; k++) {
                 id = UmnWork.option_ids[k];
                 if (id != 0) {
@@ -393,6 +401,11 @@ void taskUmnTopWin(UmnObjectTask *task, void *data)
     }
 }
 
+/*
+ * Top menu step. The first step builds the option list from the unlock flags and
+ * starts the window task. Later steps move the cursor, open the chosen option or
+ * leave the menu.
+ */
 void UmnTopMenu(void)
 {
     unsigned char *slot;

@@ -86,10 +86,8 @@ const char cameraAssertEssenceNotNil[] = "pEssence != NIL";
 
 const char cameraAssertReaderNotNil[] = "pReader != NIL";
 
-/* ov12:0x00a52978 "---------- camera dump %p\n" */
 const char cameraDumpHeaderFormat[] = "---------- camera dump %p\n";
 
-/* ov12:0x00a52998 "  me=%p enemy=%p\n" */
 const char cameraDumpMeEnemyFormat[] = "  me=%p enemy=%p\n";
 
 static int _SetBit(int *flags, int bit, int value)
@@ -114,6 +112,7 @@ static void _NonJobMethod(void)
 {
 }
 
+/* Stores the studio and resets the fields every camera type shares. */
 static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
 {
     if (camera == 0) {
@@ -143,6 +142,10 @@ static void _InitAbstructCamera(RgCamera *camera, RgDrawStudio *studio)
     camera->loadText = 0;
 }
 
+/*
+ * Points the studio view at the camera eye, with pitch and yaw taken from
+ * the target direction and roll from the turn rate.
+ */
 static void _SetView(RgCamera *camera)
 {
     float direction[3];
@@ -174,6 +177,7 @@ static void _SetView(RgCamera *camera)
     RgDrawViewSetRotateZ(view, roll);
 }
 
+/* Returns the index of timerName in the version 3 timer name table, or -1. */
 static int _GetVer3TimerID(char *timerName)
 {
     unsigned int timerIndex;
@@ -280,6 +284,7 @@ static void _SettingVersion3(RgCamera *camera, RgGeomPoint **points)
 {
 }
 
+/* Sets the default version 3 follow parameters and initializes the timers. */
 static void _SetVersion3Extent(RgCamera *camera)
 {
     int timerIndex;
@@ -332,6 +337,7 @@ static void _SetVersion3Extent(RgCamera *camera)
     } while (0);
 }
 
+/* Reads the version 3 camera parameters, condition names and operators. */
 static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader)
 {
     char text[6][64];
@@ -375,10 +381,12 @@ static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader)
     }
     operatorText[64] = 0;
     operatorText[0] = 0;
+    /* Reads the numeric keys into the camera fields and the names into text. */
     RgTextInfoRead(reader, table, (char *)camera);
 
     camera->lockAngle = camera->lockAngle * XRG_PI / 180.0f;
 
+    /* A leading '!' inverts the condition; the rest is looked up as a timer name. */
     timerId = camera->conditionTimer;
     for (i = 0; i < 4; i++) {
         name = text[i];
@@ -393,6 +401,7 @@ static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader)
         }
     }
 
+    /* An empty operator leaves the decision unchanged. */
     operatorIsAnd = camera->decisionIsAnd;
     operator = operatorText;
     for (i = 0; i < 2; i++) {
@@ -408,6 +417,10 @@ static void _LoadVersion3(RgCamera *camera, struct RgReadText *reader)
     }
 }
 
+/*
+ * Advances a version 3 camera by one frame: evaluates its timers, picks the
+ * desired yaw and distance, and writes the eye, target and up vectors.
+ */
 static void _PassTimeVersion3(RgCamera *camera, float elapsed)
 {
     RgGeomPoint *me;
@@ -453,6 +466,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
     prevInt50 = camera->snapToTarget;
     camera->snapToTarget = 0;
 
+    /* Pad toggle between the near and far follow distances. */
     if (camera->selectableFar >= 0) {
         XrgPadSetID(camera->selectableFar);
         if (XrgPadIsSelect()) {
@@ -485,6 +499,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
     robotRot = RgGeomRobotGetRotate(&me->geom);
     enemyYaw = atan2f(delta[0], delta[2]);
 
+    /* Arm the timers whose predicate holds, then build the condition and decision flags. */
     timers = camera->timers;
     for (i = 0; i < RG_CAMERA_TIMER_COUNT; i++) {
         _PreJobVer3Timer(&timers[i], camera);
@@ -516,6 +531,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
         }
     }
 
+    /* Desired yaw: the enemy direction, the current yaw, the move direction or the robot rotation. */
     XrgCopyVector(mePos, pos);
     if (outFlag[0] != 0) {
         if (outFlag[1] != 0) {
@@ -564,6 +580,7 @@ static void _PassTimeVersion3(RgCamera *camera, float elapsed)
         }
     }
 
+    /* Snap to the desired yaw and distance after snapToTarget was set; otherwise ease toward them. */
     if (prevInt50 != 0) {
         camera->distance = targetDist;
         yaw = desiredYaw;
@@ -617,6 +634,7 @@ static void _InitVersion3(RgCamera *camera, RgDrawStudio *studio)
     _SetVersion3Extent(camera);
 }
 
+/* Creates a camera of RG_CAMERA_VERSION3; other versions report an error and return 0. */
 RgCamera *CreateRgCamera(int cameraVersion, RgDrawStudio *studio)
 {
     RgCamera *camera;
@@ -649,6 +667,7 @@ void DisposeRgCamera(RgCamera *pRgCam)
     RgHeapFree(InstanceOfRgHeap(), pRgCam, cameraSourcePath, 698);
 }
 
+/* Stores the robot and enemy points from essence and runs the version's setup hook. */
 void RgCameraSetting(RgCamera *camera, RgGeomPoint **essence)
 {
     void (*setCamera)(RgCamera *, RgGeomPoint **);
@@ -696,6 +715,7 @@ void RgCameraSetFarMode(RgCamera *pCam, int enable)
     }
 }
 
+/* Sets the pad slot for the far-distance toggle; a level of 2 or more turns it off. */
 void RgCameraSelectableFar(RgCamera *pCam, int level)
 {
     if (pCam == 0) {
@@ -707,6 +727,7 @@ void RgCameraSelectableFar(RgCamera *pCam, int level)
     pCam->selectableFar = level;
 }
 
+/* Builds the local matrix from the camera eye, target and up vectors. */
 void RgCameraLocal(RgCamera *pCam, RgMatrix matrix)
 {
     if (pCam == 0) {
@@ -795,6 +816,7 @@ void RgCameraControl(RgCamera *pCam, float elapsed)
     _PassTimeVersion3(pCam, elapsed);
 }
 
+/* Writes the camera pointer and its me and enemy points to the debug log. */
 void RgCameraDump(RgCamera *pRgCam)
 {
     if (pRgCam == 0) {

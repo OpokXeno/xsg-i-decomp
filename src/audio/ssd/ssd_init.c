@@ -31,6 +31,7 @@ typedef struct ModuleInfo {
 
 ModuleInfo Module = { "PS2_SuzukiSoundDriver", 0x0205 };
 
+/* IRX entry point: prints the driver version and registers the library entries. */
 int SsdStart(int argc, char **argv)
 {
     printf("SSD Ver 2.5.0.020108,%04x.%02x\n", 96, 1);
@@ -43,6 +44,11 @@ SsdGlobalWork *SsdGetGlobalWorkPtr(void)
     return &SsdWork;
 }
 
+/*
+ * Initializes the driver over memory (size bytes): resets the work area, sets up the
+ * managers, interrupts, timer and output, and the two reverb cores. Returns 0 with an
+ * error when the driver is already initialized.
+ */
 void *SsdInit(void *memory, unsigned int size, int mode) {
     int flags;
     SsdReverbState *reverb;
@@ -102,6 +108,7 @@ void *SsdInit(void *memory, unsigned int size, int mode) {
     return memory;
 }
 
+/* Shuts the driver down and returns the memory area it was initialized over, or 0 if it was not initialized. */
 void *SsdQuit(void) {
     void *memory;
     if (SsdWork.flags & SSD_FLAG_INITIALIZED) {
@@ -120,6 +127,7 @@ void *SsdQuit(void) {
     return memory;
 }
 
+/* Installs the SPU2 and DMA interrupt handlers and enables their interrupts. */
 int SsdInitInterrupt(void) {
     sceSdSetSpu2IntrHandler(SsdIrqInterruptProcess, &SsdWork);
     sceSdSetTransIntrHandler(0, SsdWaveTransferInterruptProcess, &SsdWork);
@@ -130,6 +138,7 @@ int SsdInitInterrupt(void) {
     return 0;
 }
 
+/* Starts the hardware timer that calls SsdMainInterruptProcess at a fixed interval. */
 int SsdInitTimer(void) {
     IopSysClock clock;
     int timer;
@@ -143,6 +152,7 @@ int SsdInitTimer(void) {
     return 0;
 }
 
+/* Disables the SPU2 and DMA interrupts. */
 void SsdQuitInterrupt(void) {
     int previous_state;
     DisableIntr(SSD_INTR_SPU2_DMA0, &previous_state);
@@ -150,11 +160,13 @@ void SsdQuitInterrupt(void) {
     DisableIntr(SSD_INTR_SPU2, &previous_state);
 }
 
+/* Stops the main timer. */
 void SsdQuitTimer(void) {
     StopHardTimer(SsdWork.timer_id);
     printf("SSD2 - Release timer interrupt.\n");
 }
 
+/* Resumes all devices and streams and restores the master volume. */
 void SsdResume(void) {
     CpuDisableIntr();
     SsdResumeDeviceAll();
@@ -169,6 +181,7 @@ void SsdResume(void) {
     printf("Ssd resume\n");
 }
 
+/* Suspends all devices and streams and mutes the master volume. */
 void SsdSuspend(void) {
     CpuDisableIntr();
     SsdSuspendDeviceAll();
@@ -183,6 +196,7 @@ void SsdSuspend(void) {
     printf("Ssd suspend\n");
 }
 
+/* Starts the main timer and sets the enabled flag, unless the timer is locked or the driver is already enabled. */
 void SsdEnable(void) {
     if (!(SsdWork.flags & SSD_FLAG_TIMER_LOCKED)) {
       if (!(SsdWork.flags & SSD_FLAG_ENABLED)) {
@@ -192,6 +206,7 @@ void SsdEnable(void) {
     }
 }
 
+/* Stops the main timer and clears the enabled flag, unless the timer is locked or the driver is not enabled. */
 void SsdDisable(void) {
     if (!(SsdWork.flags & SSD_FLAG_TIMER_LOCKED)) {
         if (SsdWork.flags & SSD_FLAG_ENABLED) {
@@ -201,6 +216,7 @@ void SsdDisable(void) {
     }
 }
 
+/* Advances the random state and returns its low 15 bits. */
 int SsdGetRSRandom(void) {
     int state = SsdWork.random_state;
     state ^= state << 17;
@@ -209,12 +225,14 @@ int SsdGetRSRandom(void) {
     return state & 0x7fff;
 }
 
+/* Timer handler: runs the sequencer's interrupt process and returns the timer interval. */
 unsigned int SsdMainInterruptProcess(void *argument) {
     SsdGlobalWork *work = argument;
     SsdSeqInterruptProcess(work);
     return work->timer_interval;
 }
 
+/* Appends process to the end of the process list and returns it. */
 SsdProc *SsdLinkProc(SsdProc *process, SsdProcCallback callback, void *argument) {
     SsdProc *tail;
     process->kind = SSD_PROC_LINKED;
@@ -232,6 +250,7 @@ SsdProc *SsdLinkProc(SsdProc *process, SsdProcCallback callback, void *argument)
     return process;
 }
 
+/* Removes process from the process list. */
 void SsdUnlinkProc(SsdProc *process) {
     SsdProc *previous = SsdWork.processes;
     if (previous == process) {

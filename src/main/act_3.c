@@ -371,10 +371,9 @@ typedef struct {
     CircleShadowPoint points[8];
 } CircleShadowPacket;
 
-/* Owner type from src/main/xgl_2.h:10-15; include-layer transport is pending. */
 /* Private partial layouts: DrawDropShadowSub accesses actor +0x14/+0x91/+0xa0/
    +0x4dc/+0x824, and aligned matrices at scratch +0x60/+0xa0/+0xe0/
-   +0x120/+0x160. Their defining-owner header transport remains pending. */
+   +0x120/+0x160. */
 typedef struct {
     u8 unmodeled_000[0x10];
     float position[4];
@@ -519,7 +518,6 @@ extern void xglMatrixTrans(Matrix4 destination, const Matrix4 source,
 
 extern float atan2f(float x, float z);
 
-/* Original aligned matrices at scratchpad +0x60 and +0xa0. */
 static const DrawDropCircleIndexTable dropShadowIndexTable = {
     {
     0x04, 0x00, 0x01, 0x06, 0x01, 0x06, 0x07, 0x02,
@@ -552,7 +550,7 @@ static u32 TestEnv_7[12];
 
 static ActShadowEndPacket Tail_8;
 
-/* Original DATA order; zero alignment is supplied by allocation metadata. */
+/* Per-character foot tables, referenced by foot_tbl. */
 static u8 foot_sion[] = { 2, 16, 1, 12 };
 
 static u8 foot_kosmos[] = { 2, 16, 1, 12 };
@@ -633,6 +631,10 @@ static ActShadowEndPacket Tail_10 = {
 
 u8 * actNullPointerTable[] = { 0 };
 
+/*
+ * Plays a footstep sound when a walking or running actor reaches one of the two
+ * contact frames of its gait.
+ */
 static void Footstep(ActShadowActor *actor)
 {
     ActFootstepCollision collision;
@@ -675,6 +677,7 @@ static void Footstep(ActShadowActor *actor)
             }
             actor->previous_frame = frame;
             if (sound != 0) {
+                /* Controlled actor: the sound is offset by the ground material. Others use their enemy bank. */
                 if (actor == GameLoopState.controlled_actor) {
                     UnduParamInit(&collision);
                     collision.header = UnduDataGetHeader(0x303, 0x8000);
@@ -706,6 +709,11 @@ static inline const ActShadowMatrixRow *ActShadowMatrixConstRows(const ActShadow
     return matrix->elements;
 }
 
+/*
+ * Draws the circular drop shadow under an actor. Builds the ground-plane matrix,
+ * projects the 16 circle vertices and sends one packet, unless a vertex falls
+ * outside the GS window or behind the camera.
+ */
 static void DrawCircleShadow(void *actor_pointer)
 {
     float zero_coordinate;
@@ -781,6 +789,7 @@ static void DrawCircleShadow(void *actor_pointer)
         scratchpad->vertices[15].w = 1.0f;
     xglRotTransPersN(scratchpad->projected, ActShadowMatrixConstRows(&scratchpad->transform),
                     scratchpad->vertices, 16, camera_index);
+    /* Skip the shadow when any projected vertex is outside the GS window or behind the camera. */
     {
         DropShadowPacketPoint *clip = scratchpad->projected;
         int clip_index;
@@ -819,6 +828,11 @@ static void DrawCircleShadow(void *actor_pointer)
     nmlModelDirectSend(1, Tail_2, 3);
 }
 
+/*
+ * Projects the five points of one Zelda shadow contact and sends them as one
+ * packet. The shadow is skipped when a point is outside the GS window or behind
+ * the camera.
+ */
 static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
                               ActShadowMatrix *matrix)
 {
@@ -875,6 +889,7 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
     scratchpad->packet.command_words[7] = 0x47;
     scratchpad->packet.command_words[8] = 0x44;
     scratchpad->packet.command_words[9] = 0x42;
+    /* Alpha falls off with the matrix height above the shadow height, clamped to 0..1. */
     alpha = (0.05f -
              ((matrix->elements[3][1] - scratchpad->height) -
               0.13f)) * 20.0f;
@@ -924,6 +939,7 @@ static void DrawZeldaShadowSub(ActShadowScratchpad *scratchpad,
     nmlModelDirectSend(1, &scratchpad->packet, 0x12);
 }
 
+/* Draws the round shadow of a Zelda-style actor from its ground direction. */
 static void DrawZeldaShadow(void *actor_pointer)
 {
     ActZeldaShadowActor *actor = actor_pointer;
@@ -945,7 +961,7 @@ static void DrawZeldaShadow(void *actor_pointer)
     {
         ActShadowMatrix *destination = &scratchpad->matrix;
         ActShadowMatrix *matrix = actor->shadow_matrices->matrices;
-        /* Four aligned copies use the original scratch data register. */
+        /* Copies the four quadwords of the matrix through a scratch register. */
         QuadwordCopyMatrix(destination, matrix);
     }
     direction = actor->direction;
@@ -958,6 +974,11 @@ static void DrawZeldaShadow(void *actor_pointer)
     DrawZeldaShadowSub(scratchpad, &actor->shadow_matrices->matrices[20]);
 }
 
+/*
+ * Records the four source points of each shadow quad and stores its winding
+ * status (1 or 2) in back_shadow_status. Returns the sum of the statuses, or 0
+ * when any source vertex is invalid.
+ */
 static int DrawDropShadowSubChk(ActDropShadowWorkspace *shadow, u8 *quad_indices,
                                int source_index, int quad_count)
 {
@@ -1014,6 +1035,7 @@ static int DrawDropShadowSubChk(ActDropShadowWorkspace *shadow, u8 *quad_indices
     return status_sum;
 }
 
+/* Sends each back-facing shadow quad (status 1) as one packet. */
 static void DrawDropShadowSubBack(ActDropShadowWorkspace *shadow, int vertex_count,
                                   int draw_mode)
 {
@@ -1045,7 +1067,7 @@ static void DrawDropShadowSubBack(ActDropShadowWorkspace *shadow, int vertex_cou
     active_status = 1;
     status = shadow->back_shadow_status;
 
-    /* The original advances the status bytes and vertex records in lockstep. */
+    /* Status bytes and back-shadow entries advance together, one per quad. */
     do {
         if (*status == active_status) {
             /* Pointer form: a store through the vertex union itself is alias
@@ -1070,6 +1092,7 @@ static void DrawDropShadowSubBack(ActDropShadowWorkspace *shadow, int vertex_cou
     } while (remaining != 0);
 }
 
+/* Sends each front-facing shadow quad (status 2) as one textured packet. */
 static void DrawDropShadowSubFront(ActDropShadowWorkspace *shadow, int count)
 {
     float coordinate_scale = DROP_SHADOW_TEXTURE_COORDINATE_SCALE;
@@ -1130,6 +1153,10 @@ static void DrawDropShadowSubFront(ActDropShadowWorkspace *shadow, int count)
     }
 }
 
+/*
+ * Builds the drop shadow outline for a run of contact records, projects its
+ * vertices, and draws the visible quads. Returns the contact record after the run.
+ */
 static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
                             ActDropShadowWorkspace *work, DropShadowContactRecord *contacts)
 {
@@ -1193,8 +1220,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             xglMatrixMul(*second_world, ActShadowMatrixRows(model), ActShadowMatrixRows(second));
 
             /* Each VU block loads both complete vectors, changes XYZ, and retains
-               the VF2 input's W. VF2/VF3 and arithmetic flags are scratch here;
-               no incoming ACC/Q state is used and this compiler has no VF allocator. */
+               the VF2 input's W. VF2/VF3 and arithmetic flags are scratch here. */
             Vu0SubVectorXYZ(work->temporary.values, second_position, first_position);
             xglVectorOuter(perpendicular, &work->temporary.vector,
                              light_direction);
@@ -1258,6 +1284,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
             segments++;
         } while (contacts[segments].matrix_index != SHADOW_CONTACT_END);
     }
+    /* Project all segment vertices, then mark the ones outside the GS window as invalid. */
     vertex_count = segments * SHADOW_VERTEX_COUNT;
     xglRotTransPersN(work->source_vertices, 0, work->vertices,
                       vertex_count, work->camera_index);
@@ -1286,6 +1313,7 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     work->packet.dma_tag.words.low = 0;
     work->packet.dma_tag.words.high = 0;
     work->packet.vif_nop = 0;
+    /* Each segment draws its back quads, a test-environment packet, its front quads, then its back quads again. */
     for (i = 0; i < segments; i++) {
         DrawDropCircleIndexTable indices = dropShadowIndexTable;
         if (DrawDropShadowSubChk(work, &indices.quad_indices[0][0], i * SHADOW_VERTEX_COUNT, SHADOW_CIRCLE_QUAD_COUNT)) {
@@ -1298,6 +1326,10 @@ static DropShadowContactRecord *DrawDropShadowSub(ActShadowActor *actor,
     return contacts + segments + 1;
 }
 
+/*
+ * Draws the drop shadow of an actor. Builds the flatten matrix from the light
+ * direction, then draws the contact runs of the first matching definition.
+ */
 static void DrawDropShadow(void *actor_pointer)
 {
     ActShadowActor *actor = actor_pointer;
@@ -1326,7 +1358,7 @@ static void DrawDropShadow(void *actor_pointer)
     {
         ActShadowMatrix *matrix = actor->shadow_matrices;
         ActShadowMatrix *destination = &work->model;
-        /* Match the original four aligned SDK copies through its scratch GPR. */
+        /* Copies the four quadwords of the matrix through a scratch register. */
         QuadwordCopyMatrix(destination, matrix);
     }
     {
@@ -1349,12 +1381,13 @@ static void DrawDropShadow(void *actor_pointer)
         work->flatten.elements[3][2] = light_z;
         work->flatten.elements[3][3] = 0.0f;
     }
+    /* Use the first definition whose kind mask matches the actor kind. */
     actor_kind = actor->kind;
     for (entry = DropShadowDefineTable; entry->contacts; entry++) {
         if ((entry->kind_mask & actor_kind) == entry->kind_value) {
             contacts = entry->contacts;
             while (contacts->matrix_index != SHADOW_CONTACT_END) {
-                /* Keep the separately authored partial workspace interface. */
+                /* Draws one run of contact records and returns the record after it. */
                 contacts = DrawDropShadowSub(actor, work, contacts);
             }
             break;
@@ -1367,6 +1400,10 @@ static void DrawDropShadow(void *actor_pointer)
     nmlModelDirectSend(1, &Tail_5, 3);
 }
 
+/*
+ * Draws a circular drop shadow on the ground under an actor, built from 16
+ * vertices in two rings (8 at the ground height, 8 below it).
+ */
 static void DrawDropCircle(ActShadowActor *actor)
 {
     ActDropShadowWorkspace *work = (ActDropShadowWorkspace *)SCRATCHPAD_BASE;
@@ -1406,6 +1443,7 @@ static void DrawDropCircle(ActShadowActor *actor)
     }
     radius = actor->shadow_radius;
     corner = radius * dropCircleCornerScale;
+    /* Vertices 0-7 form the ring at the ground height; 8-15 copy their x/z below it. */
     vertices[4].x = vertices[5].x = center[0];
     vertices[0].x = vertices[2].x = center[0] + corner;
     vertices[1].x = vertices[3].x = center[0] - corner;
@@ -1445,6 +1483,7 @@ static void DrawDropCircle(ActShadowActor *actor)
         vertices[11].w = vertices[12].w = vertices[13].w =
         vertices[14].w = vertices[15].w = 1.0f;
     xglRotTransPersN(work->source_vertices, 0, vertices, 16, work->camera_index);
+    /* Mark vertices outside the GS window or behind the camera as invalid. */
     projected = work->source_vertices;
     visible = 0;
     clip_mask = SCREEN_CLIP_MASK;
@@ -1494,6 +1533,10 @@ void ACT_DrawShadowEnd(void)
     nmlModelDirectSend(1, &Tail_10, 3);
 }
 
+/*
+ * Draws the shadow selected by shadow_type, then copies the light direction used
+ * for it into the actor and plays its footstep sound when applicable.
+ */
 void ACT_DrawShadow(ActDrawShadowActor *actor)
 {
     ActShadowLight *light;

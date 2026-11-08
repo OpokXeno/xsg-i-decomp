@@ -4,10 +4,6 @@
 #include "common.h"
 #include "shared.h"
 
-/*
- * .bss for this TU is C-owned: the flag word keeps its ledger
- * name (config/symbols/ov01.txt) and the MPEG context its splat name.
- */
 static int mvFlags_00A43724 = 0;
 static unsigned char mv2MpegContext[0xC0];
 
@@ -29,12 +25,11 @@ extern void xglRenderCopyDisp2Draw(void);
 extern int xglMpeg2Close(unsigned char *mpegContext);
 
 /*
- * mv2Params (0x88 bytes, C-owned, immediately precedes mv2MpegContext)
- * is the movie-parameter block MMv2Play fills in: MMv2Play strncpy()s its
- * filename argument into the first 0x80 bytes (n=128, byte 0x7f forced to
- * '\0') and MMv2Exec/MMv2Play both read, increment and clear a retry counter
- * at +0x80 (lhu/lh/sh 128(base)). The 6 bytes past the counter are untouched
- * by either function.
+ * Movie-parameter block that immediately precedes mv2MpegContext. MMv2Play
+ * copies its filename argument into the first 0x80 bytes (at most 0x80 bytes,
+ * the last byte forced to '\0'). MMv2Exec and MMv2Play both read, increment
+ * and clear the retry counter at +0x80. The 6 bytes past the counter are
+ * untouched by either function.
  */
 typedef struct Mv2Params {
     char filename[0x80];
@@ -60,6 +55,7 @@ int MMv2Init(void)
     return 1;
 }
 
+/* Advances the playing movie one step: retries a failed decode and stops the movie when skip is pressed. */
 void MMv2Exec(void)
 {
     unsigned char *mpegContext = mv2MpegContext;
@@ -113,6 +109,7 @@ void MMv2Exec(void)
     }
 }
 
+/* Opens filename for playback and resets the retry counter; fails while another movie is playing. */
 int MMv2Play(const char *filename)
 {
     unsigned char *mpegContext = mv2MpegContext;
@@ -139,6 +136,7 @@ int MMv2Play(const char *filename)
     return 1;
 }
 
+/* Stops the playing movie, copying the display to the draw buffer and closing its decoder. */
 void MMv2Stop(void)
 {
     unsigned char *mpegContext = mv2MpegContext;

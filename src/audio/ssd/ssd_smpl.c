@@ -40,6 +40,7 @@ void SsdSampleKeyoffInterProc(SsdGlobalWork *work, void *argument);
 void SsdAllocSamplingVoice(int count);
 void SsdInitSamplingVoice(void);
 
+/* Sets up sampling on up to four voices, with a system-memory buffer of buffer_size bytes. */
 void SsdInitSampling(int voice_count, unsigned int spu_address,
                      unsigned int buffer_size)
 {
@@ -65,6 +66,7 @@ void SsdInitSampling(int voice_count, unsigned int spu_address,
     }
 }
 
+/* Unlinks the sampling voices, frees their SPU sample areas and the buffer. */
 void SsdDisposeSampling(void)
 {
     int channel;
@@ -91,6 +93,7 @@ void SsdSetSampleKeyoffCallback(SsdSampleKeyoffCallback callback)
     SsdSampleWork.keyoff_callback = callback;
 }
 
+/* Copies data into the buffer and starts an SPU DMA write of size bytes to the channel's sample area. */
 void SsdTransferSampling(int channel, const void *data, unsigned int size)
 {
     unsigned int address;
@@ -103,6 +106,7 @@ void SsdTransferSampling(int channel, const void *data, unsigned int size)
     SsdSampleWork.next_address = address + size;
 }
 
+/* Writes size bytes of data to the SPU address that follows the previous transfer. */
 void SsdTransferSamplingNext(void *data, unsigned int size)
 {
     unsigned int address = SsdSampleWork.next_address;
@@ -111,6 +115,7 @@ void SsdTransferSamplingNext(void *data, unsigned int size)
     SsdSampleWork.next_address = address + size;
 }
 
+/* Links the keyoff process and starts the channel's voice at pitch, volume and pan. */
 void SsdPlaySampling(int channel, int pitch, int volume, int pan)
 {
     SsdSamplingChannel *sample;
@@ -134,6 +139,7 @@ void SsdPlaySampling(int channel, int pitch, int volume, int pan)
     CpuEnableIntr();
 }
 
+/* Unlinks the keyoff process when it is linked and stops the channel's voice. */
 void SsdStopSampling(int channel)
 {
     SsdSamplingChannel *sample;
@@ -147,6 +153,7 @@ void SsdStopSampling(int channel)
     SsdCutoffUnlinkVoice(sample->voice);
 }
 
+/* Updates the pitch, volume and pan of a sampling channel. */
 void SsdSetSamplingParam(int channel, int pitch, int volume, int pan)
 {
     SsdSamplingChannel *sample = &SsdSampleWork.channels[channel];
@@ -158,6 +165,7 @@ void SsdSetSamplingParam(int channel, int pitch, int volume, int pan)
     voice->flags |= SSD_VOICE_FLAG_PITCH | SSD_VOICE_FLAG_VOLUME;
 }
 
+/* Sets the dry and reverb routing of a sampling channel. */
 void SsdSetSamplingEffect(int channel, int dry, int reverb)
 {
     unsigned char effect = 0;
@@ -179,6 +187,7 @@ void SsdSetSamplingEffect(int channel, int dry, int reverb)
     voice->flags |= updates;
 }
 
+/* Takes count voices from the voice table for sampling and gives them the sampling priority. */
 void SsdAllocSamplingVoice(int count)
 {
     int channel;
@@ -194,6 +203,7 @@ void SsdAllocSamplingVoice(int count)
     }
 }
 
+/* Initializes each sampling channel and allocates its SPU sample area. */
 void SsdInitSamplingVoice(void)
 {
     if (SsdSampleWork.voice_count) {
@@ -231,6 +241,10 @@ void SsdInitSamplingVoice(void)
     }
 }
 
+/*
+ * Process callback: marks a channel once its envelope is active, then reports it
+ * through the keyoff callback when the envelope drops back to zero.
+ */
 void SsdSampleKeyoffInterProc(SsdGlobalWork *work, void *argument)
 {
     int channel;

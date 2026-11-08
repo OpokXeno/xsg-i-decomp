@@ -58,6 +58,7 @@ int XrgFileSysModeGet(void)
     return _CurMode();
 }
 
+/* Allocates uSize bytes from the heap selected by the current filesys mode. */
 void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile, int iLine)
 {
     void *pBuf = 0;
@@ -83,6 +84,7 @@ void *XrgFileSysAlloc(unsigned int uSize, const char *pszFile, int iLine)
     return pBuf;
 }
 
+/* Frees pBuf from the code heap if it lies in that heap, otherwise from the data heap. */
 void XrgFileSysFree(void *pBuf, const char *pszFile, int iLine)
 {
     if (pBuf == 0)

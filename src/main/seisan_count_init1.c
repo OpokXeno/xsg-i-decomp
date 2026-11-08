@@ -34,10 +34,8 @@ typedef union SeisanNumberCoordinates {
     unsigned int packed;
 } SeisanNumberCoordinates;
 
-/* Original tu171 digit literals: each is an eight-byte character item.
- * tu172's original readers copy the first aligned halfword into a label.
- * The casts in msg_number express that existing reader view; these declarations
- * do not recover or allocate storage belonging to tu171. */
+/* Digit and label strings. Each is an eight-byte character item that the
+ * msg_number table views as unsigned short data. These are declarations only. */
 extern const char SeisanDigit0Text[8];
 
 extern const char SeisanDigit1Text[8];
@@ -63,7 +61,6 @@ extern const char seisanStartPointsText[7];
 extern const char seisanEndPointsText[7];
 extern const char seisanTotalPointsText[7];
 
-/* The original eight-byte prompt-pointer table remains in data scaffolding. */
 extern const char *msg00_1_0036DAC8[];
 
 static void tskSeisanStatus(TskObject *task, void *data);
@@ -151,6 +148,7 @@ static inline void SeisanItemBoxClear(SeisanItemEntry *item)
     }
 }
 
+/* Clears the settlement counter block and caches each character's nextExp. */
 void SeisanCountInit1(void)
 {
     int chrNo;
@@ -174,6 +172,11 @@ static inline void SeisanRollbackStats(SeisanUnitRecord *unit,
     unit->level -= row->level;
 }
 
+/*
+ * Snapshots the current stats of up to three result characters into
+ * SeisanCN.targets, then subtracts this battle's gains from the live stats
+ * and restores each character's cached nextExp.
+ */
 void SeisanCountInit2(void)
 {
     int i;
@@ -208,6 +211,10 @@ void SeisanCountInit2(void)
     SeisanCN.countedMoney = 0;
 }
 
+/*
+ * Steps current toward target by step, clamping at target. Sets *moving to 1
+ * when a step was taken without overshooting. Returns the new value.
+ */
 int SeisanNumberCount(int current, int target, int step, int *moving)
 {
   int overshot;
@@ -237,6 +244,7 @@ int SeisanNumberCount(int current, int target, int step, int *moving)
   return next;
 }
 
+/* Advances the settlement count-up by one frame for the current SeisanCN.state. */
 void SeisanCountMain(int mode)
 {
     const BattleExperienceAndParameters *levelData = func_A19338(0);
@@ -253,6 +261,7 @@ void SeisanCountMain(int mode)
         xglSoundEffectStopID(SEISAN_SE_COUNT_UP, 0);
         return;
     case 1:
+        /* Count each result value toward its snapshot target. */
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
@@ -293,6 +302,7 @@ void SeisanCountMain(int mode)
             SeisanCN.state = 3;
         break;
     case 2:
+        /* Play the level-up sound once if any result character gained a level. */
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
@@ -301,6 +311,7 @@ void SeisanCountMain(int mode)
                 break;
             }
         }
+        /* Restore the snapshot values in one step. */
         for (i = 0; i < 3; i++) {
             entries = SeisanResult->entries;
             characterNo = entries[i].characterNo;
@@ -336,6 +347,10 @@ void TskObjectSet2(TskObject *task, TskObjectWorker worker, void *data)
     task->state = 0;
 }
 
+/*
+ * Runs the task worker and removes the task once the settlement state is
+ * finished.
+ */
 void tskTskMain2(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
@@ -356,6 +371,10 @@ void tskTskMain2(TskObject *task)
     worker(task, task->data);
 }
 
+/*
+ * Time-and-money panel task: state 0 builds its window, tags, numbers and
+ * sprites; state 2 slides the panel in or out and redraws it.
+ */
 static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
 {
     XglClock elapsed;
@@ -405,6 +424,7 @@ static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
         break;
     case 2: {
         SeisanControlState *control = SeisanWork;
+        /* Slide toward the open height, or the closed height while closing. */
         targetY = 32;
         if (control->state == SEISAN_STATE_CLOSING)
             targetY = -64;
@@ -438,6 +458,7 @@ static void SeisanTimeEx(TskObject *task, SeisanTimePanel *panel)
     }
 }
 
+/* Button task: state 0 sets up the sprite and message; state 2 slides them toward their target. */
 static void tskSeisanButton(TskObject *task, void *data)
 {
     SeisanButtonWork *button = data;
@@ -475,6 +496,10 @@ static void tskSeisanButton(TskObject *task, void *data)
     }
 }
 
+/*
+ * Item-list panel task: state 0 counts the held items and sets up the two
+ * windows and their rows; state 2 slides the panel and draws the list.
+ */
 static void tskSeisanItem(TskObject *task, void *data)
 {
     SeisanItemPanel *panel = data;
@@ -519,6 +544,7 @@ static void tskSeisanItem(TskObject *task, void *data)
         break;
     case 2: {
         const unsigned char *screenState = &SeisanWork->state;
+        /* Slide target depends on the settlement page. */
         targetX = 112;
         switch (*screenState) {
         case SEISAN_STATE_RESULTS:
@@ -557,7 +583,7 @@ static void tskSeisanItem(TskObject *task, void *data)
                     panel->items[i].x = panel->windows[1].x + 43;
                     panel->items[i].y = panel->windows[1].y + i * 24 + 3;
                     eMessageMain(&panel->items[i]);
-                    /* Two-byte glyph pairs followed by the original terminating byte. */
+                    /* Label template: two-byte glyphs followed by a terminator byte. */
                     ordinalSource = msg_number[i + 1];
                     printY = panel->windows[1].y + i * 24 + 2;
                     printX = panel->windows[1].x + 3;
@@ -580,6 +606,11 @@ static void tskSeisanItem(TskObject *task, void *data)
     }
 }
 
+/*
+ * Per-party-member status panel task: state 0 builds the window and its
+ * widgets; state 2 slides the panel, refreshes the stat readouts and draws
+ * the learned-skill or item list when one is shown.
+ */
 static void tskSeisanStatus(TskObject *task, void *data)
 {
     SeisanStatusPanel *panel = data;
@@ -713,6 +744,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
         MoveSlide(&window->x, &targetX, SEISAN_SLIDE_SPEED);
         WindowDXMain(window);
         if (panel->displayFlags & 1) {
+            /* HP and EP readouts in the left column. */
             {
                 columnX = panel->window.x + 228;
                 baselineY = panel->window.y + 31;
@@ -788,6 +820,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
             panel->numbers[4].format = 1;
             panel->numbers[4].digits = 4;
             eNumberMain(&panel->numbers[4]);
+            /* Tech, skill and special point rows in the right column. */
             {
                 columnX = panel->window.x + 409;
                 baselineY = panel->window.y + 31;
@@ -860,6 +893,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 panel->sprites[9].y = baselineY - 1;
                 endPrintExtFunc(panel->depth, END_PRINT_CMD_SPRITE, &panel->sprites[9]);
             }
+            /* Level and experience rows in the left column. */
             {
                 columnX = panel->window.x + 228;
                 baselineY = panel->window.y + 64;
@@ -907,6 +941,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
                 eTagFontMain(&panel->tags[3]);
             }
         }
+        /* Separator lines: the layout differs on the results page. */
         if (SeisanWork->state == SEISAN_STATE_RESULTS) {
             panel->separator[0].y = panel->window.y + 28;
             panel->separator[0].x = panel->separator[1].x = panel->window.x + 304;
@@ -922,6 +957,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
         panel->separator[1].red = panel->separator[1].green = panel->separator[1].blue = 192;
         panel->separator[2].depth = 0;
         endPrintExtFunc(panel->depth, END_PRINT_CMD_LINE, panel->separator);
+        /* Highlight ribbon around the learned-skill list. */
         if (panel->learnedVisible) {
             int topY;
             int rightX;
@@ -943,6 +979,7 @@ static void tskSeisanStatus(TskObject *task, void *data)
             panel->highlight[0].y = panel->highlight[2].y = topY;
             endPrintExtFunc(panel->depth, END_PRINT_CMD_RIBBON, panel->highlight);
         }
+        /* Learned-list title, then the numbered labels for each row. */
         if (panel->displayFlags & 16) {
             SeisanGlyphText firstLabels;
             SeisanGlyphText lastLabels;
@@ -994,6 +1031,7 @@ static inline void SeisanDrawFade(SeisanFadeData *fade)
     endPrintExtFunc(0x02ffffff, END_PRINT_CMD_RIBBON,fade->vertices);
 }
 
+/* Full-screen fade task: state 0 sets up the quad; state 2 draws it, darkening while closing. */
 void SeisanFadeMain(void)
 {
     SeisanFadeData *fade = SeisanFade;
@@ -1032,6 +1070,7 @@ void SeisanFadeMain(void)
     }
 }
 
+/* Returns SEISAN_STATE_SKILLS when a party member learned a skill, otherwise 0. */
 int subSeisanHissatuCheck00(SeisanControlState *seisanWork)
 {
     int i;
@@ -1046,6 +1085,7 @@ int subSeisanHissatuCheck00(SeisanControlState *seisanWork)
     return 0;
 }
 
+/* Returns SEISAN_STATE_ETHERS when a party member learned five or more skills, otherwise 0. */
 int subSeisanHissatuCheck01(void)
 {
     int i;
@@ -1070,6 +1110,10 @@ int subSeisanItemCheck(void)
     return SEISAN_STATE_HINT;
 }
 
+/*
+ * Picks the next settlement state. Each page falls through to the following
+ * check until one returns a page; otherwise the settlement closes.
+ */
 void subSeisanCheck(void)
 {
     switch (SeisanWork->state) {
@@ -1101,6 +1145,7 @@ void subSeisanCheck(void)
     }
 }
 
+/* Applies a requested state change, then runs the handler for the current state. */
 void subSeisanMain(void)
 {
     if (SeisanWork->state != SeisanWork->requestedState) {
@@ -1179,12 +1224,14 @@ void subSeisanMain(void)
     SeisanWork->flags &= 0xfd;
 }
 
+/* Runs one frame of the settlement. Returns 0 once it has finished. */
 int SeisanMain(void)
 {
     subSeisanMain();
     return SeisanWork->state != SEISAN_STATE_FINISHED;
 }
 
+/* Draws one frame. While menu data is loading, only the background task runs. */
 void SeisanDisp(void)
 {
     SeisanRibbonData ribbon;
@@ -1205,6 +1252,11 @@ void SeisanDisp(void)
     }
 }
 
+/*
+ * Builds the settlement work area and its tasks, applies the battle rewards
+ * (points, experience and money, capped to their limits) and merges the
+ * acquired items into the item box.
+ */
 void SeisanInit(void)
 {
     SeisanRewardSnapshot before[16];
@@ -1289,6 +1341,7 @@ void SeisanInit(void)
     oldMoney = dataMoneyBoxChk();
     func_A17C08(SeisanResult);
     SeisanMg = func_00A0F110();
+    /* Add each reward to the character's snapshot total, clamping at the caps. */
     for (i = 0; i < 3; i++) {
         int characterNo = SeisanRewardCharacter(i);
         withinCap = (unsigned int)(characterNo - 1) < SEISAN_CHARACTER_COUNT;
@@ -1330,11 +1383,13 @@ void SeisanInit(void)
     itemGroups = seisanItemCategoryTable[0];
     {
     int itemIndex;
+    /* Build each item code from its id and its category group. */
     for (itemIndex = 0; itemIndex < SeisanMg->itemCount; itemIndex++) {
         int type = SeisanMg->itemTypes[itemIndex];
         if (type != 10)
             itemCodes[itemIndex] = (unsigned short)SeisanMg->itemIds[itemIndex] + (itemGroups.entries[type] << 16);
     }
+    /* Count into a matching box entry, or take the first empty slot. */
     for (itemIndex = 0; itemIndex < SeisanMg->itemCount; itemIndex++) {
         entrySlot = 0;
         if (SeisanMg->itemCount > 0) {
@@ -1410,7 +1465,7 @@ XglTaskScheduler *SeisanTask = 0;
 
 SeisanResultData *SeisanResult = 0;
 
-/* Remaining original small data, in address order. */
+/* Remaining small data globals. */
 SeisanMoneyData *SeisanMg = 0;
 
 SeisanItemEntry *SeisanItemBox = 0;

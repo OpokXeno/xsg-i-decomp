@@ -7,11 +7,7 @@
 #include "main/xgl_render.h"
 #include "main/xgl_thread.h"
 
-/*
- * REGIST/REGIST2 (main:0x0021826c/0x0021827c): the sound-effect bank name
- * and SWD bank name ControlEntry loads before the boot logo. Still owned by
- * asm data.
- */
+/* Sound bank names ControlEntry loads before the boot logo: REGIST for effects, REGIST2 for the SWD. */
 /* Overlay index of the boot logo / title screen (ov02). */
 #define OVERLAY_TITLE 2
 
@@ -38,14 +34,9 @@ extern const char soundRegist2Path[16];
 extern const char iopRebootImagePath[32];
 
 extern void BootDisplay(void);
-/*
- * InitializeSystem is file-local (LOCAL in the original symbol table) and is
- * still asm, so it is declared static before its use in main below.
- */
+/* InitializeSystem is file-local. */
 static void InitializeSystem(void);
 
-/* ControlEntry subsystem prototypes follow the argument and return
- * types evidenced by these cross-TU call sites. */
 extern void xglCdLoadOverlay(int overlayId);
 
 extern void xglSoundLoadEffect(const char *bankName, void *buffer, int mode);
@@ -56,12 +47,7 @@ extern void xglRenderDispOn(void);
 extern void LogoFirst(void);
 extern int Title(void);
 
-/*
- * SCE SDK entry points InitializeSystem calls to bring the IOP and its
- * CD/file-system modules up. Their own translation units are SCE SDK
- * (out of recovery scope) and stay assembly, so the prototypes are declared
- * here from this call site's argument and return usage.
- */
+/* SCE SDK entry points that InitializeSystem calls to bring up the IOP and its CD and file-system modules. */
 extern void sceSifInitRpc(int mode);
 
 extern int sceCdInit(int mode);
@@ -73,8 +59,6 @@ extern int sceCdMmode(int media);
 extern int sceFsReset(void);
 extern void *sceCdPOffCallback(void (*func)(void), void *old_func);
 
-/* InitializeSystem subsystem prototypes follow the argument and return
- * types evidenced by these cross-TU call sites. */
 extern int xglCdSifLoadModule(const char *path, int flags);
 
 extern void xglSoundInitial(void);
@@ -145,6 +129,11 @@ void ControlEntry(void)
     }
 }
 
+/*
+ * Reboots and syncs the IOP, loads the CD, file-system and device modules, then
+ * initializes the sound, pad, memory-card, task, DMA, geometry, packet, render,
+ * font, movie and menu subsystems.
+ */
 static void InitializeSystem(void)
 {
     sceSifInitRpc(0);
@@ -183,9 +172,9 @@ static void InitializeSystem(void)
 }
 
 /*
- * The compiler emits the call to __main (running static/global constructors)
- * at entry to any function literally named main; that call precedes the
- * statements below and needs no explicit source-level call.
+ * Entry point: stores argc and argv, shows the boot display, initializes the
+ * system and starts the thread library. The compiler emits the call to __main
+ * (static and global constructors) at entry to main, so no source-level call is needed.
  */
 int main(int argc, char **argv)
 {

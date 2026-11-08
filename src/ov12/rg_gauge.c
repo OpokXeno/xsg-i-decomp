@@ -16,6 +16,7 @@ const char gaugeAssertGaugeNotNil[] = "pGauge != NIL";
 const char gaugeSourcePath[] = "../rg_gauge.euc.c";
 const char gaugeAssertPaintNotNil[] = "pPaint != NIL";
 
+/* Sets the default change speed and values of a gauge and creates its display. */
 static void _InitGauge(RgGauge *pGauge)
 {
     if (pGauge == 0) {
@@ -56,6 +57,7 @@ void DisposeRgGauge(RgGauge *pGauge)
     RgHeapFree(InstanceOfRgHeap(), pGauge, gaugeSourcePath, 59);
 }
 
+/* Sets the target value; the first call also sets the current and maximum values. */
 void RgGaugeSetValue(RgGauge *pGauge, float value)
 {
     if (pGauge == 0) {
@@ -100,6 +102,7 @@ RgGaugeDisp *RgGaugeGetDisp(RgGauge *pGauge)
     return pGauge->disp;
 }
 
+/* Moves the current value toward the target by changeSpeed times deltaTime, without passing the target. Does nothing while inactive. */
 void RgGaugePassTime(RgGauge *pGauge, float deltaTime)
 {
     float diff;
@@ -133,6 +136,7 @@ void RgGaugePassTime(RgGauge *pGauge, float deltaTime)
     }
 }
 
+/* Updates the gauge display with the current and maximum values and draws it, while active. */
 void RgGaugeDraw(RgGauge *pGauge, XrgPaint2D *pPaint)
 {
     if (pGauge == 0) {

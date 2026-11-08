@@ -12,10 +12,14 @@
 /* Character-buffer slots that must be free before an effect is created. */
 #define CREATE_RG_BUFFER_CHARS 0x14
 
-/* Lookup buffer RgEffectEnvGetParticleData fills (0x2C0 bytes; its first 0xB0 are the essence). */
+/* Lookup buffer for RgEffectEnvGetParticleData: 0x2C0 bytes, four essence records of 0xB0 bytes each. */
 #define RG_PARTICLE_ESSENCE_WORDS 0xB0
 
 
+/*
+ * Creates a hit particle effect at local, named by the first of name1 and name2 that is
+ * not empty, unless the character manager reports its buffer full for the required slots.
+ */
 void CreateRgHitEffect(RgMatrix local, const char *name1, const char *name2) {
     int essences[RG_PARTICLE_ESSENCE_WORDS];
     const char *name;
@@ -39,6 +43,7 @@ void CreateRgHitEffect(RgMatrix local, const char *name1, const char *name2) {
     }
 }
 
+/* Creates a hit effect at a position with an identity orientation. */
 void CreateRgHitEffectPos(RgVector position, const char *name1, const char *name2) {
     RgMatrix local;
 
@@ -48,6 +53,7 @@ void CreateRgHitEffectPos(RgVector position, const char *name1, const char *name
     CreateRgHitEffect(local, name1, name2);
 }
 
+/* Creates a hit effect at a position, oriented along direction. */
 void CreateRgHitEffectPosDir(RgVector position, RgVector direction, const char *name1, const char *name2) {
     RgMatrix local;
 

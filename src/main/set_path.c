@@ -104,13 +104,11 @@ typedef struct CfSelectState {
     unsigned char unmodeled_11d[0x268 - 0x11d];
 } CfSelectState;
 
-/* Two 0x68-byte controller records. xglPadRead's CPU stores evidence
- * the overlapping held/pressed/repeat/released words at +0x28..+0x2e. */
+/* 0x68-byte controller record; PadData[2] holds one per pad. */
 typedef struct PadDataMenuLayout {
     u8 unmodeled_00[0x28];
     /* debugEffectConfig and debugCfSelect test the +0x28 doubleword as
-     * one packed mask, then read its +0x2a and +0x2c halfwords separately.
-     * Both representations are evidenced by their original ld/lhu reads. */
+     * one packed mask, then read its +0x2a and +0x2c halfwords separately. */
     union {
         u64 packed;
         struct {
@@ -257,8 +255,6 @@ static Vector4 tgtpos_16;
 
 static Vector4 scale_17;
 
-/* Initialized objects recovered for this TU. */
-/* PadData's storage export belongs in the defining TU's generated header. */
 static int cur_2;
 
 static int menumax_4;
@@ -297,7 +293,10 @@ static SetPathEffectParams prm_13;
 
 static CfSelectState cfs;
 
-/* Initialized objects recovered for this TU. */
+/*
+ * Splits filename at its last '/': the directory part, including the slash,
+ * goes to path and the remaining file name goes to name.
+ */
 static void splitName(char *filename, char *path, char *name)
 {
     int len;
@@ -333,6 +332,7 @@ void setPath(char *filename)
     srsSetViewPath(path_0);
 }
 
+/* Sets up the file selector state and the EE RAM buffers of the viewer. Does nothing once the file list is set. */
 void initFileSelect(void)
 {
     char **directorySlot = &filelist;
@@ -367,6 +367,7 @@ void initFileSelect(void)
     }
 }
 
+/* Runs the file selector until a file is chosen. Stores the path with setPath and returns 1 or 2. */
 int execFileSelect(void)
 {
     int result;
@@ -388,6 +389,7 @@ int execFileSelect(void)
     }
 }
 
+/* Runs one effect frame. START toggles the debug pause; while paused, the effect runs only with SELECT held. */
 static void sdbExecEffect(void)
 {
     PadDataMenuLayout *pad = &PadData[0];
@@ -416,6 +418,7 @@ void sdbDebugCamera(void) {
 
 }
 
+/* Prints count labels from list at x + 8, one line every dy pixels from y. */
 static void sdebufPrintMenu(int x, int y, int dy, char **list, int count)
 {
     char **cursor;
@@ -443,6 +446,7 @@ static void sdebufPrintMenu(int x, int y, int dy, char **list, int count)
     }
 }
 
+/* Shows the debug mode menu. Returns the chosen index, or -1 when the exit chord is pressed. */
 static int debugEffectConfig(void)
 {
     PadDataMenuLayout *pad = &PadData[0];
@@ -486,6 +490,7 @@ static int debugEffectConfig(void)
     return cur_2;
 }
 
+/* Shows the db effect selector. Returns the chosen number (1..30), or -1 on exit. */
 static int debugEffectSelect(void)
 {
     char text[0x100];
@@ -517,6 +522,7 @@ static int debugEffectSelect(void)
     return cur_5;
 }
 
+/* Shows the combo and enemy effect selector. Returns the chosen number, or -1 on exit. */
 static int debugEnemySelect(void)
 {
     char text[0x100];
@@ -570,6 +576,7 @@ static int debugEnemySelect(void)
     return cur_6;
 }
 
+/* Shows the CF effect selector. Returns the chosen effect number, or -1 on exit. */
 static int debugCfSelect(void)
 {
     char text[0x100];
@@ -603,6 +610,7 @@ static int debugCfSelect(void)
     return cur_7;
 }
 
+/* Fills three camera take parameter blocks and runs each through func_A31920. */
 static void SCamTake(void)
 {
     float params[44];
@@ -628,6 +636,7 @@ static void SCamTake(void)
     func_A318B8();
 }
 
+/* Resets the studio camera position, target and up vector, and the default studio light. */
 void SinitCamera(void)
 {
     SetPathCamera *camera;
@@ -653,6 +662,7 @@ void SinitCamera(void)
     xglLightSetDefault(light);
 }
 
+/* Battle debug loop. Each frame tops up item box 0x15 to 99 and runs the battle debug helpers. Does not return. */
 static void sbattleDebug(void)
 {
     int i;
@@ -676,6 +686,7 @@ static void sbattleDebug(void)
     }
 }
 
+/* Runs the db effect viewer for the selected number until the exit chord. */
 static void seffectDebugDb(void)
 {
     int effect;
@@ -723,6 +734,7 @@ static void seffectDebugDb(void)
     sresFreeReloaderMemory(1);
 }
 
+/* Runs the CF effect viewer for the selected effect until the exit chord. */
 static void seffectDebugCf(void)
 {
     int effect;
@@ -736,6 +748,7 @@ static void seffectDebugCf(void)
     }
 
     handle_9 = 0;
+    /* Dummy actor at unit scale. */
     memset(&dmyActor_12, 0, sizeof(dmyActor_12));
     Vu0SetOrigin(&dmyActor_12.scale);
     dmyActor_12.scale.x = 1.0f;
@@ -750,6 +763,7 @@ static void seffectDebugCf(void)
     dummyMapLoad();
     sefLoadEffectCf((int)cfScript, effect);
 
+    /* Frame loop: CIRCLE starts the effect, SQUARE kills it, the other buttons toggle the displays. */
     while ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) != EFFECT_VIEWER_EXIT_CHORD) {
         xglRenderClearFrame();
         if (sefCheckLoad() == 0) {
@@ -788,6 +802,7 @@ static void seffectDebugCf(void)
     sefDestroyEffectCf();
 }
 
+/* Runs the battle effect viewer for the selected number until the exit chord. */
 static void seffectDebugBattle(void)
 {
     int effect;
@@ -812,6 +827,7 @@ static void seffectDebugBattle(void)
     sefInitEffectBattle();
     dummyMapLoad();
     srsAnalyzeEftNo(effect, &eftInfo.kind, &eftInfo.variant);
+    /* Set up the player or enemy model for the selected kind, then wait for loading. */
     if (eftInfo.kind > 0) {
         weapon = 0;
         if ((unsigned int) (effect - EFFECT_WEAPON_BASE) < EFFECT_WEAPON_COUNT) {
@@ -831,6 +847,7 @@ static void seffectDebugBattle(void)
         }
     }
 
+    /* Fill the effect request block for the selected effect. */
     memset(&prm_13, 0, sizeof(prm_13));
     prm_13.actor = 0;
     prm_13.charaId = (u16) eftInfo.kind;
@@ -846,6 +863,7 @@ static void seffectDebugBattle(void)
     }
     sefLoadEffect(effect, prm_13.charaId);
 
+    /* Frame loop: CIRCLE creates the effect and CROSS runs the hit effect. */
     while ((PadData[0].buttons.packed & EFFECT_VIEWER_EXIT_CHORD) != EFFECT_VIEWER_EXIT_CHORD) {
         if (PadData[0].buttons.halfwords.pressed & PAD_R1) {
             mapdisp = (mapdisp == 0);
@@ -884,6 +902,7 @@ static void seffectDebugBattle(void)
     sefDestroyEffectCf();
 }
 
+/* Loads the dummy map resources once. */
 static void dummyMapLoad(void)
 {
     if (loaded == 0) {
@@ -897,6 +916,7 @@ static void dummyMapLoad(void)
     }
 }
 
+/* Draws the dummy map models whose display flags are set. Does nothing until the map is loaded. */
 static void dummyMapDraw(void)
 {
     Matrix4 sp0;
@@ -951,6 +971,7 @@ static void dummyMapDraw(void)
     }
 }
 
+/* Effect viewer entry point. Runs the file selector, mode menu and chosen viewer until the title mode is picked. */
 void SimajiriTest(void)
 {
     _debugPause = 0;

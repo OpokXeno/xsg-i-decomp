@@ -1,5 +1,6 @@
 /*
  * OV12 original TU 91: 0x00a4e340..0x00a4e488 (7 functions)
+ * Host file stubs that report the unsupported-function error.
  */
 #include "common.h"
 #include "shared.h"

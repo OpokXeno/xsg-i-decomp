@@ -80,8 +80,8 @@ typedef struct {
 
 /* search_key walks this object in 12-byte records: it compares the first
  * string with the requested key and walks the string-pointer list at +4.
- * The third pointer is present in every record but is not read by the
- * recovered caller, so its role remains intentionally unnamed. */
+ * search_key does not read the third pointer (path_prefix), which
+ * RES_GetMdlFileNameSub uses. */
 typedef struct ResourceKeyEntry {
     const char *key;
     union {
@@ -92,11 +92,10 @@ typedef struct ResourceKeyEntry {
 } ResourceKeyEntry;
 
 /*
- * The game loop's own record, as far as this TU reads it. Two spans are
- * evidenced: the runtime flags word command_player_lock ORs a bit into
- * (lw/ori/sw +0x10, main:0x0024c188) and the scene id GameResourceWorkReload
- * reloads by (lw +0x18, main:0x0024a998). Nothing else is modelled; the
- * object is still owned by the generated .sdata scaffolding.
+ * The game loop's state record, as far as this TU reads it: the flags word
+ * that command_player_lock sets a bit in, and the scene id that
+ * GameResourceWorkReload reloads. The other bytes are not modelled. The
+ * object is defined outside this file.
  */
 typedef struct {
     u8 unmodeled_00[0x10];
@@ -237,7 +236,7 @@ static int next_arc_size(void *address);
 extern void Enemy_LoadPreset(void *address, const char *name);
 extern void ACT_init(void);
 extern void MapChangeFadeSet(void);
-/* RES_loadFile callback: (resource type, file name, resource address). */
+/* A nonzero `flags` is a loader called as (resource type, resource id or name, slot address). */
 void *RES_loadFile(int command, int callback, int resource_id, int flags);
 static char *search_key(char *cursor, ResourceKeyEntry *table, int *id);
 extern int sefLoadEffectCfName(int cf_id, char *effect_name);
@@ -481,7 +480,7 @@ static const char base_9[6] = "data\\";
 
 unsigned char ModelPath = 0;
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
+/* Face id tables, referenced by faceTbl. */
 static u16 facePC[54];
 
 static u16 faceNPC[89];
@@ -559,6 +558,10 @@ const char *RES_getPath(void)
     return tbl_0_00366420[ScenePath];
 }
 
+/*
+ * Appends the scene script name for resource_id (cf or ev prefix, scene number,
+ * .txt) to the current scene directory in path. Returns a pointer to the "txt" extension.
+ */
 static char *RES_getScenePath(char *path, int resource_id)
 {
     const char *scene_path = RES_getPath();
@@ -595,6 +598,7 @@ static char *RES_getScenePath(char *path, int resource_id)
     return path + 7;
 }
 
+/* Returns the effect bank address assigned to sound_id, or -1 when no bank has it. */
 int RES_GetEnemySeBank(int sound_id)
 {
     int index = 0;
@@ -637,6 +641,7 @@ const char *RES_GetEnemySeName(int index)
     return 0;
 }
 
+/* Returns the first id of the cfMtnList group that contains id, or 1 when none does. */
 static int RES_GetMotBaseID(int id)
 {
     MotionEntry *entry = cfMtnList;
@@ -657,6 +662,10 @@ static int RES_GetMotBaseID(int id)
     return 1;
 }
 
+/*
+ * Maps a face id through the faceTbl entry of its group. Returns the face id
+ * unchanged when that table has no entry for it.
+ */
 static int convert_face(int value)
 {
     FaceEntry *entry = faceTbl;
@@ -678,6 +687,11 @@ static int convert_face(int value)
     return face;
 }
 
+/*
+ * Converts a lookup type and key to the form the resource table stores: face
+ * and motion ids are mapped, named motions get a tag, and file keys become the
+ * slot index. Returns 1 when the key was converted.
+ */
 static int resource_typeid_translate(int index, int *type, int *key)
 {
     switch ((unsigned short)*type) {
@@ -705,6 +719,10 @@ static int resource_typeid_translate(int index, int *type, int *key)
     }
 }
 
+/*
+ * Returns the index of the first resource matching type and key, where -1 matches
+ * any value. Returns -1 for file-type searches and when nothing matches.
+ */
 int GameResourceSearch(int type, int key)
 {
     int index;
@@ -737,6 +755,7 @@ static int resource_get_free(void)
     return -1;
 }
 
+/* Returns the address of the first free resource slot, but not below RES_WORK_BASE. */
 void *GameResourceGetFreeAddr(void)
 {
     unsigned char *free_address = GameResource[resource_get_free()].address;
@@ -747,6 +766,10 @@ void *GameResourceGetFreeAddr(void)
     return free_address;
 }
 
+/*
+ * Returns the address of the first free slot larger than size. When no slot fits,
+ * it sets the reload flag and returns RES_WORK_BASE.
+ */
 unsigned char *GameResourceWorkAlloc(int size)
 {
     int index;
@@ -769,6 +792,10 @@ unsigned char *GameResourceWorkAlloc(int size)
     return (unsigned char *)RES_WORK_BASE;
 }
 
+/*
+ * Reloads the current scene after GameResourceWorkAlloc could not fit a block;
+ * otherwise sets the map change fade.
+ */
 void GameResourceWorkReload(void)
 {
     if (GameResourceWorkReloadTable[0] != 0) {
@@ -779,6 +806,10 @@ void GameResourceWorkReload(void)
     MapChangeFadeSet();
 }
 
+/*
+ * Carves size bytes (rounded up to 64) from the first free slot, splitting the slot
+ * in two. Returns the address, or 0 when no slot is free.
+ */
 void *GameResourceAlloc(int size)
 {
     int index;
@@ -796,6 +827,10 @@ void *GameResourceAlloc(int size)
     return GameResource[index].address;
 }
 
+/*
+ * Resizes the block at address to size (rounded up to 64) by taking or giving back
+ * space from the following free slot. Returns address, or 0 when the block cannot grow.
+ */
 void *GameResourceRealloc(void *address, int size)
 {
     int index;
@@ -817,6 +852,10 @@ void *GameResourceRealloc(void *address, int size)
     return 0;
 }
 
+/*
+ * Copies the next entry of the scene archive to address, extracting ARX-compressed
+ * data, and returns its size. The first call also reads the archive header.
+ */
 static int next_arc_size(void *address)
 {
     u8 *source;
@@ -853,6 +892,7 @@ static int next_arc_size(void *address)
     return size;
 }
 
+/* Returns the start of the next line, skipping blank characters and ";" comment lines. */
 static u8 *next_line(u8 *cursor)
 {
     for (;;) {
@@ -872,6 +912,11 @@ static u8 *skip_space(u8 *cursor)
     return cursor;
 }
 
+/*
+ * Matches the text at cursor against table, descending into alias tables, and
+ * stores the resulting resource id in *id. Returns the input position after the
+ * match; when nothing matches, *id is 0 and cursor is returned.
+ */
 static char *search_key(char *cursor, ResourceKeyEntry *table, int *id)
 {
     ResourceKeyEntry *record = table;
@@ -885,6 +930,7 @@ static char *search_key(char *cursor, ResourceKeyEntry *table, int *id)
             char expected = *root_key;
             char root_character = *root_input;
 
+            /* At the end of a root key, try its alias table. */
             if (expected == '\0') {
                 ResourceKeyEntry *child = record->aliases.children;
                 int child_id = root_id;
@@ -962,6 +1008,7 @@ static char *search_key(char *cursor, ResourceKeyEntry *table, int *id)
     return cursor;
 }
 
+/* Parses the decimal number after the command and resets that resource slot. */
 static char *command_reset(int command, char *cursor)
 {
     int resource_id = 0;
@@ -981,6 +1028,10 @@ static char *command_reset(int command, char *cursor)
     return cursor;
 }
 
+/*
+ * Parses the map name after the command and loads it. A leading "-" loads the map
+ * data without switching to the map.
+ */
 static char *command_loadmap(int command, char *cursor)
 {
     MapNameGroup *group;
@@ -1035,6 +1086,7 @@ map_name_found:
     return cursor;
 }
 
+/* Parses a model key and loads it as a model resource. */
 static char *command_loadact(int command, char *cursor, int mode)
 {
     int resource_id = 0;
@@ -1044,6 +1096,7 @@ static char *command_loadact(int command, char *cursor, int mode)
     return next_cursor;
 }
 
+/* Parses a model key and loads its face variant (the key plus RES_ID_FACE). */
 static char *command_loadface(int command, char *cursor, int mode)
 {
     int resource_id = 0;
@@ -1053,6 +1106,10 @@ static char *command_loadface(int command, char *cursor, int mode)
     return next_cursor;
 }
 
+/*
+ * Parses a motion name and its foot-step number, loads the named motion, and stores
+ * the foot-step number in its resource.
+ */
 static char *command_loadmot(int command, char *cursor)
 {
     char name[0x100];
@@ -1109,6 +1166,7 @@ static char *command_loadmot(int command, char *cursor)
     return cursor;
 }
 
+/* Returns the foot-step number of the actor's first animation pack, or 0 when it has none. */
 u8 RES_GetFootStepNo(Actor *actor)
 {
     ActorResource *resource = actor->animPackTables[0];
@@ -1120,6 +1178,7 @@ u8 RES_GetFootStepNo(Actor *actor)
     return foot_step_no;
 }
 
+/* Parses a decimal id and loads it as a texture resource. */
 static char *command_loadtex(int command, char *cursor, int mode)
 {
     int resource_id = 0;
@@ -1141,6 +1200,7 @@ static char *command_loadtex(int command, char *cursor, int mode)
     return cursor;
 }
 
+/* Parses a decimal id and loads it as a movie resource. */
 static char *command_loadmovie(int command, char *cursor, int mode)
 {
     int resource_id = 0;
@@ -1162,6 +1222,7 @@ static char *command_loadmovie(int command, char *cursor, int mode)
     return cursor;
 }
 
+/* Loads the effect named effect_name into address, from the archive when one is open. */
 static void command_loadeffect_sub(int type, char *effect_name, void *address)
 {
     if (arcfileaddr != 0) {
@@ -1171,6 +1232,7 @@ static void command_loadeffect_sub(int type, char *effect_name, void *address)
     sefLoadEffectCfName((int)address, effect_name);
 }
 
+/* Parses an effect name up to the next blank and loads it as an effect resource. */
 static char *command_loadeffect(int command, char *cursor, int mode)
 {
     char effect_name[256];
@@ -1192,6 +1254,7 @@ static char *command_loadeffect(int command, char *cursor, int mode)
     return cursor;
 }
 
+/* Loads the enemy preset into the preset address, from the archive when one is open. */
 static int command_loadene_sub(int type, const char *name, void *address)
 {
     if (arcfileaddr != 0)
@@ -1202,6 +1265,7 @@ static int command_loadene_sub(int type, const char *name, void *address)
     return 0;
 }
 
+/* Parses an enemy preset name and loads it as an enemy preset resource. */
 static char *command_loadene(int command, char *cursor, int mode)
 {
     char name[256];
@@ -1222,6 +1286,10 @@ static char *command_loadene(int command, char *cursor, int mode)
     return cursor;
 }
 
+/*
+ * Parses a script name, appends ".evt" to the current scene directory, and loads
+ * and runs it unless flag 0x40 is set.
+ */
 static char *command_script(int command, char *cursor, int mode)
 {
     char script_name[256];
@@ -1264,6 +1332,10 @@ static char *command_player(int command, char *cursor, int mode)
     return cursor;
 }
 
+/*
+ * Allocates the slot for resource_id when it is empty, otherwise reallocates it.
+ * Returns result.
+ */
 static int command_dummy(int resource_id, int result)
 {
     if (GameResource[resource_id + 1].address == 0)
@@ -1273,6 +1345,10 @@ static int command_dummy(int resource_id, int result)
     return result;
 }
 
+/*
+ * Writes the leader foot-step sound name to dst: the two-letter prefix of the
+ * leader bank entry, "_", then foot_name.
+ */
 void RES_GetLeaderSeName(char *dst)
 {
     struct SaveDataLeaderSeIndex *save = (struct SaveDataLeaderSeIndex *)SaveData;
@@ -1302,6 +1378,10 @@ void RES_GetMapEnvSeName(char *name)
     }
 }
 
+/*
+ * Parses the foot-step, environment and sequence fields of a loadse command, separated
+ * by blanks or commas. Loads the matching effect banks and sequence.
+ */
 static u8 *command_loadse(int command, u8 *cursor)
 {
     char sound_name[0x40];
@@ -1385,6 +1465,7 @@ environment_name_done:
     }
     *sequence_end = 0;
 
+    /* Leader foot-step sounds: an empty name loads the default effects. */
     if (sound_name[0] == 0) {
         xglSoundLoadEffect(0, 0, SOUND_BANK_FOOT);
     } else {
@@ -1400,6 +1481,7 @@ environment_name_done:
         }
     }
 
+    /* Map environment effects. A "-" name keeps the bank contents when they still play. */
     if (env_name[0] == 0) {
         xglSoundLoadEffect(0, 0, SOUND_BANK_ENV);
     } else {
@@ -1435,6 +1517,7 @@ environment_name_done:
             xglSoundSendEffect(address, second_address, SOUND_BANK_ENV);
     }
 
+    /* A "." sequence name sends no sequence; any other name loads and sends its SMD. */
     if (sequence_name[0] != 0) {
         if (sequence_name[0] == '.') {
             xglSoundSendSmd(0);
@@ -1456,6 +1539,11 @@ environment_name_done:
     return cursor;
 }
 
+/*
+ * Parses a list of sequence names, one per sequence slot, and sends each loaded
+ * sequence to its slot. A "+" prefix sets normal volume; a "-" prefix skips the send
+ * when that sequence is already playing in the slot.
+ */
 static u8 *command_loadsmd(int command, u8 *cursor)
 {
     char name[0x40];
@@ -1550,6 +1638,7 @@ static u8 *command_loadsmd(int command, u8 *cursor)
     return cursor;
 }
 
+/* Parses a movie name, appends ".pss", and plays it in the given mode. */
 static char *command_mpeg2_core(int command, char *cursor, int mode)
 {
     char movie_name[256];
@@ -1611,6 +1700,10 @@ static char *command_player_lock(int command, char *cursor, int mode)
     return cursor;
 }
 
+/*
+ * Parses an enemy or NPC sound command (model key, sound name, foot-step number),
+ * records it in EnemySeBank, and loads its effect bank. mode is the ENEMY_SE_* kind.
+ */
 static char *command_enenpcse(int command, char *cursor, int mode)
 {
     char name[0x40];
@@ -1662,6 +1755,7 @@ static char *command_enenpcse(int command, char *cursor, int mode)
         character = *next & 0xff;
     }
 
+    /* Use the first free enemy sound slot, or the last one when all are taken. */
     address = GameResourceGetFreeAddr();
     for (slot = 0; slot < ENEMY_SE_BANK_COUNT - 1; slot++) {
         if (EnemySeBank[slot].id == 0)
@@ -1720,6 +1814,10 @@ static char *command_save(int command, char *cursor, int mode)
     return cursor;
 }
 
+/*
+ * Reads the scene script of scene_number. When its archive (the same name with an
+ * "a" extension) exists, preloads it near the top of EE RAM for GameResourceLoad.
+ */
 void GameResourcePreLoad(int scene_number)
 {
     char path[256];
@@ -1746,6 +1844,10 @@ static void readreq(const char *name, void *buffer)
     xglCdReadFile(name, buffer, 0, 1);
 }
 
+/*
+ * Loads the resources of scene_id: reads its script and archive (or uses the
+ * preloaded archive), then runs each command line of the script up to #end.
+ */
 void GameResourceLoad(int scene_id)
 {
     char path[0x100];
@@ -1775,6 +1877,7 @@ void GameResourceLoad(int scene_id)
     if (scene_txt_buffer.header.signature == SCENE_TXT_SIGNATURE) {
         int resource_id;
 
+        /* Each command line starts with a resource number, then the command name. */
         cursor = next_line(cursor);
         for (;;) {
             GameResourceCommand *entry;
@@ -1834,6 +1937,10 @@ void GameResourceLoad(int scene_id)
     }
 }
 
+/*
+ * Reads the map file name with suffix from the map directory into buffer, using the
+ * dummy map file when it is missing. Returns the file size.
+ */
 static int RES_loadFileSubMapSub(char *name, const char *suffix, void *buffer)
 {
     char path[0x100];
@@ -1876,6 +1983,10 @@ static int RES_loadFileSubMapSub(char *name, const char *suffix, void *buffer)
     return size;
 }
 
+/*
+ * Loads the lex, texture, id and think files of the map scene_id into end_address,
+ * each aligned to 16 bytes. Returns the total size of the map block.
+ */
 static int RES_loadFileSubMap(u8 *end_address, int scene_id)
 {
     char *map_name;
@@ -1936,6 +2047,10 @@ static int RES_loadFileSubMap(u8 *end_address, int scene_id)
     return (u32)end_address - (u32)state;
 }
 
+/*
+ * Returns the name of the cfMtnList group that contains id, or the first group's
+ * name when none does.
+ */
 const char *RES_GetMotBaseName(int id)
 {
     MotionEntry *entry = cfMtnList;
@@ -1954,6 +2069,11 @@ const char *RES_GetMotBaseName(int id)
     return cfMtnList[0].name;
 }
 
+/*
+ * Writes the model name for selector into dst: the default name for an id of 0, or
+ * the alias name of its group. Returns the converted selector, or 0 when the alias
+ * group has no entry.
+ */
 static int RES_GetMdlFileNameSub(char *dst, int selector)
 {
     int face_mode = (((u32)selector & RES_ID_FACE_MASK) == RES_ID_FACE);
@@ -2004,6 +2124,7 @@ static int RES_GetMdlFileNameSub(char *dst, int selector)
         return selector;
     }
 
+    /* Select the alias name at index alias_index in this group. */
     alias_entry = model_entry->aliases.children + alias_group;
     names = alias_entry->aliases.names;
     alias_index = selector & 0xff;
@@ -2070,6 +2191,10 @@ static int RES_GetMdlFileNameSub(char *dst, int selector)
     return 0;
 }
 
+/*
+ * Writes the model file name for selector into dst. When ModelPath is set, a "test"
+ * directory is inserted after the first backslash.
+ */
 void RES_GetMdlFileName(char *dst, int selector)
 {
     char name[256];
@@ -2102,6 +2227,10 @@ void RES_GetMdlFileName(char *dst, int selector)
     }
 }
 
+/*
+ * Loads one resource of the type in the low 16 bits of callback into address.
+ * Returns the number of bytes it occupies, or 0 or less when its file is missing.
+ */
 static int RES_loadFileSub(int callback, int resource_id, void *address)
 {
     char single_path[256];
@@ -2136,6 +2265,7 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
             readreq(single_path, address);
         break;
     }
+    /* A model block is its lex file, then its texture file (not for face ids), then its joint file. */
     case RES_TYPE_MODEL:
     case RES_TYPE_MODEL_NO_JOINTS: {
         char *model_end;
@@ -2333,6 +2463,10 @@ static int RES_loadFileSub(int callback, int resource_id, void *address)
     return size;
 }
 
+/*
+ * Loads a resource into slot command (or into a free slot for RES_LOAD_ANY_BLOCK),
+ * using the loader flags or RES_loadFileSub. Returns the resource address, or 0 on failure.
+ */
 void *RES_loadFile(int command, int callback, int resource_id, int flags)
 {
     unsigned char *result = 0;
@@ -2388,6 +2522,7 @@ void *RES_loadFile(int command, int callback, int resource_id, int flags)
     return result;
 }
 
+/* Returns the index of the resource slot at address, or -1 when there is none. */
 int GameResourceGetIndex(void *address)
 {
     int index = 0;
@@ -2407,6 +2542,7 @@ int GameResourceGetIndex(void *address)
     return -1;
 }
 
+/* When dump is nonzero, prints a page of the resource table with the debug font. */
 void GameResourceDump(int dump)
 {
     GameResourceEntry *entry;
@@ -2435,6 +2571,10 @@ void GameResourceDump(int dump)
     }
 }
 
+/*
+ * Frees slot and every slot after it, merging their space into slot, and clears the
+ * enemy sound banks.
+ */
 void GameResourceReset(int slot)
 {
     int total;
@@ -2467,6 +2607,10 @@ void GameResourceReset(int slot)
     arcfilepreload = 0;
 }
 
+/*
+ * Sets up the resource table over address and size, then clears the first word of
+ * each fixed-address resource buffer in EE RAM.
+ */
 void GameResourceInit(unsigned char *address, int size)
 {
     u32 *resource_buffer;

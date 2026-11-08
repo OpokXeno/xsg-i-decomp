@@ -202,12 +202,7 @@ static void _InitEnv(RgBattleCommonDataEnv *pEnv)
     pEnv->announceFont = 0;
 }
 
-/*
- * RgBxx is defined by ov12/tu073 (src/ov12/rg_bxx.c); this allocation only
- * stores and forwards the pointer LoadRgBxx_sub returns and DisposeRgBxx_sub
- * takes, so an incomplete type is enough here.
- */
-
+/* Disposes the resources held by the environment and clears their pointers. */
 static void _DestructEnv(RgBattleCommonDataEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -248,12 +243,14 @@ static void _DestructEnv(RgBattleCommonDataEnv *pEnv)
     }
 }
 
+/* Singleton destructor: disposes the environment and frees its memory. */
 static void _WrapperDestruct(void *pEnv)
 {
     _DestructEnv(pEnv);
     RgHeapFree(InstanceOfRgHeap(), pEnv, battleCommonDataSourcePath, 0xE6);
 }
 
+/* Returns the battle common data singleton, creating it on first use. */
 RgBattleCommonDataEnv *InstanceOfRgBattleCommonData(void)
 {
     RgBattleCommonDataEnv *pEnv;
@@ -268,6 +265,10 @@ RgBattleCommonDataEnv *InstanceOfRgBattleCommonData(void)
     return pEnv;
 }
 
+/*
+ * Loads the weapon motion list, the display texture archive, the announce archives
+ * and the fonts built from them. Reports an error when a part is already loaded.
+ */
 void RgBattleCommonDataLoad(RgBattleCommonDataEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -300,6 +301,7 @@ void RgBattleCommonDataLoad(RgBattleCommonDataEnv *pEnv)
                                                 battleCommonDataTimePointFontFileName);
 }
 
+/* Releases the battle common data loaded by RgBattleCommonDataLoad. */
 void RgBattleCommonDataDispose(RgBattleCommonDataEnv *pEnv)
 {
     if (pEnv == 0) {

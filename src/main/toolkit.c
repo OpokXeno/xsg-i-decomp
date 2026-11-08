@@ -26,11 +26,9 @@
     (*(unsigned short *)((char *)(object) + (field)->offset))
 
 /*
- * A field of a Java object, reached through the handle `lookupClassField`
- * returned for its name.  The offset is not a member of a C layout: the VM
- * chose it when it laid the class out, and `JavaField.offset` (+0x10 of the
- * handle) is where it reports it, so the readable name of each access is the
- * field-name string the preceding lookup resolved, not a constant.
+ * A field of a Java object, reached through the handle that lookupClassField
+ * returned for its name. The offset (JavaField.offset) is chosen by the VM when
+ * it lays out the class, so it is not a member of a C layout.
  */
 #define JAVA_INT_FIELD(object, field) \
     (*(int *)((char *)(object) + (field)->offset))
@@ -41,7 +39,7 @@
 #define JAVA_OBJECT_FIELD(object, field) \
     (*(void **)((char *)(object) + (field)->offset))
 
-/* Both native peer constructors import the Java position and Euler rotation. */
+/* Copies the Java position and Euler rotation fields into the given transform fields. Used by getPeer_Chr. */
 #define TOOLKIT_IMPORT_TRANSFORM(class_object, java_object, px, py, pz, rx, ry, rz) { \
     JavaField *component_field; \
     component_field = lookupClassField((class_object), \
@@ -68,9 +66,8 @@ typedef struct ToolkitPeerCall { SceneObject object; } ToolkitPeerCall;
 
 typedef struct ToolkitUnitTransform { float m[4][4]; } ToolkitUnitTransform;
 
-/* Partial views of the map-unit records read by getPeer_Unit. Every named
- * member is accessed in the original function; the intervening storage is
- * explicitly unmodeled. Sequence indexing uses the original 0x260 stride. */
+/* Partial views of the map-unit records read by getPeer_Unit. The bytes
+ * between the named members are unmodeled. Sequence entries are 0x260 bytes apart. */
 typedef struct ToolkitMapUnitPeer {
     unsigned char unmodeled_00[0x10];
     float position_x, position_y, position_z;
@@ -125,7 +122,7 @@ extern void *getPeer_Enepc(SceneObject java_character);
 static void *getPeer_Effect(SceneObject java_effect);
 static void *getPeer_Stage(SceneObject java_stage);
 
-/* Referenced original data recovered from this translation unit. */
+/* Java field names looked up by the peer functions. */
 const char unit_field_algorithm[16] = "algorithm";
 
 const char unit_field_id[8] = "id";
@@ -146,6 +143,7 @@ const char unit_field_peer[8] = "peer";
 
 const char lightPeerClassName[8] = "light";
 
+/* Writes the peer's position back into the Java unit's px, py and pz fields. */
 static inline void writeUnitPosition(SceneObject java_unit, void *unit_class,
                                      ToolkitMapUnitPeer *peer)
 {
@@ -162,6 +160,7 @@ static inline void writeUnitPosition(SceneObject java_unit, void *unit_class,
     JAVA_FLOAT_FIELD(java_unit, field) = peer->position_z;
 }
 
+/* Native entry point: returns the peer for a Java object, chosen by its class (Chr, Unit, Effect or Stage). Returns 0 for other classes. */
 void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_(
     JThread *thread, ToolkitPeerCall *arguments, void **result)
 {
@@ -187,6 +186,10 @@ void Java_xeno_util_Toolkit_getPeer__Ljava_lang_Object_(
     }
 }
 
+/*
+ * Creates the map-unit peer for a Java xeno.Unit and links the two. Rotations
+ * are converted from degrees to radians.
+ */
 static void *getPeer_Unit(SceneObject java_unit)
 {
     void *unit_class;
@@ -212,6 +215,7 @@ static void *getPeer_Unit(SceneObject java_unit)
     thread->java_object = java_unit;
     peer->java_object = java_unit;
 
+    /* Part transform and part position read the map part table; other algorithms use the Java px, py and pz fields. */
     switch (algorithm & TOOLKIT_ALGORITHM_MASK) {
     case TOOLKIT_ALGORITHM_PART_TRANSFORM: {
         ToolkitMapDisplay *display;
@@ -290,6 +294,10 @@ static void *getPeer_Unit(SceneObject java_unit)
     return peer;
 }
 
+/*
+ * Creates the enemy actor peer for a Java xeno.Chr, copies its position and
+ * rotation (converted from degrees to radians), and attaches a Light peer.
+ */
 void *getPeer_Enepc(SceneObject java_character)
 {
     void *character_class;
@@ -350,11 +358,9 @@ void *getPeer_Enepc(SceneObject java_character)
 }
 
 /*
- * getPeer_Uwamono (main VA 0x002f93f8, 588 bytes, GLOBAL binding).
- * Native peer helper: reads the unit id Java field, creates the Uwamono
- * peer, attaches a JNI thread ward, copies position/rotation Java fields
- * into the peer, normalizes rotations from degrees to radians, and stores
- * the peer back into the Java peer field.
+ * Creates the Uwamono peer for a Java xeno.Unit: reads its id, creates a JNI
+ * thread for it, copies its position and rotation fields (rotations converted
+ * from degrees to radians) and stores the peer back into the Java peer field.
  */
 void *getPeer_Uwamono(SceneObject java_unit)
 {
@@ -369,11 +375,8 @@ void *getPeer_Uwamono(SceneObject java_unit)
                              loadConstString(unit_field_id, -1), 0);
     unit_id = JAVA_INT_FIELD(java_unit, field);
     /*
-     * The algorithm-field lookup is emitted by the original (second
-     * jal lookupClassField at 0x2f9458) but its result is never read:
-     * the next call reuses a0=-1/a1=unit_id for Unit_CreateUwamono.
-     * The call is preserved here for exact call-sequence equality; the
-     * value has no data effect.
+     * The algorithm-field lookup is kept although its result is never read.
+     * It is preserved so the call sequence matches the original; the value has no effect.
      */
     algorithm_field = lookupClassField(unit_class,
                                        loadConstString(unit_field_algorithm,
@@ -411,6 +414,11 @@ void *getPeer_Uwamono(SceneObject java_unit)
     return peer;
 }
 
+/*
+ * Creates the actor peer for a Java xeno.Chr and copies its transform fields
+ * (rotations converted from degrees to radians). A nonzero algorithm field makes
+ * the peer an NPC updated by ACT_updateNPC. Also attaches a Light peer.
+ */
 void *getPeer_Chr(SceneObject java_character)
 {
     void *character_class;
@@ -421,7 +429,7 @@ void *getPeer_Chr(SceneObject java_character)
     int character_id;
     int algorithm;
     ActSequenceEntry *sequence;
-    /* The original keeps the 180.0 divisor in $f4. */
+    /* The 180.0 divisor is kept in a register-allocated local, as in the original. */
     register float half_turn;
     float rotation_x;
 
@@ -470,6 +478,11 @@ void *getPeer_Chr(SceneObject java_character)
     return peer;
 }
 
+/*
+ * Creates the effect peer for a Java xeno.Effect at its position and Y
+ * orientation. Loads the effect data for its id first. Clears the Java peer
+ * field and returns 0 when creation fails.
+ */
 static void *getPeer_Effect(SceneObject java_effect)
 {
     JavaClass *effect_class;
@@ -516,6 +529,7 @@ static void *getPeer_Effect(SceneObject java_effect)
     return peer;
 }
 
+/* Creates the stage peer for a Java xeno.Stage, using its short id field. Returns 0 when the object is not a Stage. */
 static void *getPeer_Stage(SceneObject java_stage)
 {
     JavaClass *stage_class;
@@ -544,6 +558,11 @@ void Java_xeno_util_Toolkit_call__Ljava_lang_Object_Ljava_lang_String_(void)
 {
 }
 
+/*
+ * Loads resource id for a Java Chr or Unit. Returns the motion load result for a
+ * Chr, the map unit load result for a Unit with no algorithm bits, and the
+ * masked algorithm value for other units.
+ */
 int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_I(
     JThread *thread, ToolkitResourceCall *arguments)
 {
@@ -587,6 +606,7 @@ void Java_xeno_util_Toolkit_loadResource__Ljava_lang_String_(
     *result = XTK_findFile(arguments->name->storage->bytes);
 }
 
+/* Stores resource value `id` in the peer of a Java Chr or Unit, at the slot given by resource_id. */
 void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I(
     JavaThread *thread, ToolkitResourceIndexCall *arguments)
 {
@@ -625,6 +645,11 @@ void Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_Ljava_lang_Object_I(
     }
 }
 
+/*
+ * Loads resources for a Java Chr or Unit and returns the result. For a Unit with
+ * no algorithm bits, the map unit resource is loaded, then a file keyed by
+ * resource_id, which is kept in the peer's resource field.
+ */
 int Java_xeno_util_Toolkit_loadResource__Ljava_lang_Object_II(
     JThread *thread, ToolkitResourceIndexCall *arguments)
 {

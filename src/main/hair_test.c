@@ -30,12 +30,9 @@ typedef struct JointChannel {
 } JointChannel;
 
 /*
- * FpkFcvHeader is the FPK-pack header getNumFCV reads: a magic word whose
- * low 3 bytes read little-endian as "FPK" (main VA 0x002db678, lui
- * $3,0xff / ori $3,$3,0xffff / lui $4,0x4b / ori $4,$4,0x5046 / and
- * $2,$2,$3), and the FCV count at +8, read only when the magic matches.
- * The word in between is not evidenced here and stays an unmodeled span
- * (docs/naming.md).
+ * FPK-pack header read by getNumFCV: a magic word whose low 3 bytes spell
+ * "FPK" in little-endian, and the FCV count at +8, read only when the magic
+ * matches. The word at +4 is unmodeled.
  */
 typedef struct FpkFcvHeader {
     unsigned int magic;
@@ -173,6 +170,7 @@ static int pause;
 
 static PpParticle cpos_00585200;
 
+/* Sets up the test scene: resources, the camera at the test position, the list count and the first actor. */
 static void InitTest(void)
 {
     AlignedVector4 initialPosition;
@@ -242,6 +240,10 @@ static void PrintDisp(void)
     }
 }
 
+/*
+ * Hair test main loop. Pad input moves the camera, selects the actor and motion,
+ * and START toggles pause. SELECT held with START pressed exits.
+ */
 void HairTest(void)
 {
     float moveX;
@@ -264,6 +266,7 @@ void HairTest(void)
     }
     do {
         ppNextStart(&cpos_00585200);
+        /* R1 and R2 move the camera height; the right stick moves it across the ground, turned by the yaw. */
         if (PadData[0].held & PAD_R1) {
         cpos_00585200.position.y += 0.01f;
         }
@@ -289,6 +292,7 @@ void HairTest(void)
         cpos_00585200.position.z = position +
             (rotatedMove + horizontalMove * sin(-cry_004DC654));
         ppNextEnd(&cpos_00585200);
+        /* Yaw and pitch that point the camera from its position toward the look target. */
         lookX = -cpos_00585200.position.x;
         lookZ = -cpos_00585200.position.z;
         lookHeight = lookY - cpos_00585200.position.y;
@@ -299,10 +303,8 @@ void HairTest(void)
         pCamera_004DC634->rotation.vector.x = crx_004DC650;
         pCamera_004DC634->rotation.vector.y = cry_004DC654;
         pCamera_004DC634->rotation.vector.z = 0.0f;
-        /* Compiler-forced goto: the original enters the update block from the
-         * unpause branch. Structured forms differ: a flag compare is 16 bytes
-         * short, a re-test of pause after the toggle 16 bytes long, and a
-         * conditional-expression test 36 bytes long. */
+        /* The goto is kept because the original enters the update block from the
+         * unpause branch; the structured alternatives compile to different code. */
         if (pause != 0) {
             if (PadData[0].pressed & PAD_START) {
                 pause = 0;
@@ -312,6 +314,7 @@ void HairTest(void)
             pause = 1;
         } else {
 unpaused:
+            /* Unpaused: up and down pick the list entry, which reloads the actor unless SQUARE is held; left and right change the motion. */
             if (PadData[0].repeat & PAD_DOWN) {
                 listpos++;
                 if (list[listpos].resourceId == 0) {
@@ -360,6 +363,11 @@ static u16 JNT_hairID(ExMotionJointWork *joint)
     return joint->hair_id_source->primary_id;
 }
 
+/*
+ * Computes the matrix buffer of one hair joint: root and clip checks, channel
+ * evaluation and the owner's sway update. Returns the advanced channel cursor,
+ * or 0 when the joint is skipped or clipped away.
+ */
 JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first, int consumerArgument)
 {
     Matrix savedRoot;
@@ -405,6 +413,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
     }
     xglMatrixUnit4s(joint->matrix_buffer->elements);
 
+    /* Owner sway: sway.w follows how far the owner moved since the last frame, weighted by its facing. */
     if (joint->owner != 0 && joint->owner->moved_hair_mode != 0) {
         Actor *owner = joint->owner;
         float movementFacing;
@@ -424,6 +433,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
 
     joint->channel_start_index = -1;
     joint->attribute_difference = joint->requested_attribute_key - joint->attribute_key;
+    /* Matching attribute keys walk the channels directly; the else branch below uses the static chain. */
     if (joint->attribute_difference == 0) {
         limit = JNT_hairID(joint);
         while (joint->current_index < limit) {
@@ -506,6 +516,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
             QuadwordCopyMatrix(rootRestore, &savedRoot);
         }
         animationState = joint->animation_flags;
+        /* A negative animation state evaluates the second hair section with JNT_getVal2; otherwise EXM_PresetHair and EXM_CalcExMotion run. */
         if (animationState < 0) {
             limit = joint->hair_id_source->primary_id + joint->hair_id_source->secondary_id;
             while (joint->current_index < limit) {
@@ -574,6 +585,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
         joint->current_index = index;
         MATRIX_convert4(savedRoot.rows, savedRoot.rows);
         joint->current_index = index;
+        /* Compose each transformed joint matrix with the saved root and store it in the buffer. */
         if (transformTail) {
             Matrix *convertedSource = &convertedJoint;
             Matrix *composedSource = &composedMatrix;
@@ -725,6 +737,7 @@ JointChannel *__JNT_computeMatrix(ExMotionJointWork *joint, JointChannel *first,
     return cursor;
 }
 
+/* Returns the FCV count of an FPK header, or 1 when the header is null or its magic does not match. */
 static int getNumFCV(FpkFcvHeader *header)
 {
     int count = 1;

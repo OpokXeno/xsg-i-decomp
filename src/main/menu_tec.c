@@ -65,7 +65,7 @@ enum MenuTecState {
 #define MENU_TEC_DELAY_CLOSE 16
 #define MENU_TEC_DELAY_MENU_ENTER 24
 
-/* Technique 0x61 (the Jr. spirit-absorbing one) shows "Spirits Absorbed". */
+/* Technique 0x61 shows "Spirits Absorbed". */
 #define MENU_TEC_BIT_SPIRIT_ABSORB 0x61
 
 /* Window slide targets of the right-hand lists and menus. */
@@ -389,7 +389,7 @@ extern const char waitLevelA5Text[8];
 extern const char waitLevelA1Text[8];
 extern const char waitLevelA2Text[8];
 
-/* Original objects referenced by this TU's initialized DATA. */
+/* The limited and unlimited speed value strings used by msg02_9. */
 extern const char speedLimitedValue[];
 
 extern const char speedUnlimitedValue[];
@@ -401,32 +401,22 @@ void *MenuTecDataGet(int chrNo);
 TecInitEntry *MenuTecSaveDataGet(int chrNo);
 int MenuTecNextSpeedPointGet(int chrNo, int point);
 
-/* dataPlChaGet (ov01/data_unit_org_get.c VA 0x00a19210, still INCLUDE_ASM
- * there and not yet linkable by that name): returns the running character's
- * control record, whose word at +0xC this function decrements. Kept under
- * the scaffold's undefined_funcs_auto.txt placeholder name until that TU
- * recovers it. */
+/* Returns the running character's MenuTecCharacter record; its points field is at +0x0C. */
 MenuTecCharacter *func_A19210(int chrNo);
 
 int MenuTecTLevLimitCheck(int chrNo, int point);
 int MenuTecNextTLevPointGet(int chrNo, int point);
-/* dataUnitOrgGet (ov01/data_unit_org_get.c VA 0x00a191c0, still INCLUDE_ASM
- * there and not yet linkable by that name): returns the running character's
- * parameter record (the full record is src/main/menu_para_pt_rate_get.c's
- * CharParaData); MenuTecEquipCheck only reads the six equipped technique ids
- * at +0x82. Kept under the scaffold's undefined_funcs_auto.txt placeholder
- * name until that TU recovers it. */
+/*
+ * Returns the running character's parameter record. Callers read only the six
+ * equipped technique ids at +0x82 (MenuTecEquipRecord). The full record is
+ * CharParaData in menu_para_pt_rate_get.c.
+ */
 MenuTecEquipRecord *func_A191C0(int chrNo);
 
-/* dataTecGet (ov01/data_unit_org_get.c VA 0x00a1a378, still INCLUDE_ASM there
- * and not yet linkable by that name): returns a pointer to the technique's
- * metadata record, or a NULL pointer plus a diagnostic print for a
- * non-positive index. Kept under the scaffold's undefined_funcs_auto.txt
- * placeholder name until that TU recovers it. */
+/* Returns the metadata record of a technique, or NULL with a diagnostic print for a non-positive index. */
 unsigned char *func_A1A378(int tecBit);
 
-/* Returns whether either of the technique's two low target-metadata bits is
- * set (elf_names annotation). */
+/* Maps a technique bit (45 to 98) to its index within its group of bits, or -1 outside the groups. */
 int BitToTecNo(int bit);
 
 int MenuTecNextWaitPointGet(int chrNo, int point);
@@ -547,6 +537,7 @@ int MenuTecTLevLimitCheck(int chrNo, int point)
     return saveData->level[point] < saveData->levelLimit[point];
 }
 
+/* Raises a technique's level by one, sets its level adjustment and spends the points. */
 void MenuTecTLevUp(int chrNo, int point)
 {
     int maskedChrNo = chrNo & 0xffff;
@@ -674,6 +665,10 @@ int MenuTecCharWaitUpCheck(void)
     return 0;
 }
 
+/*
+ * Runs the technique side window: builds it on first call, then slides the
+ * window and its three entries in or out according to the menu state.
+ */
 void MenuTecPasMain(void)
 {
     MenuTecPasWork *pas = MenuTecPas;
@@ -718,6 +713,7 @@ void MenuTecPasMain(void)
     for (i = 0; i < MENU_TEC_MENU_ENTRIES; i++)
         tabTarget[i] = 288;
 
+    /* The window slides in for the character, menu and list states, and out otherwise. */
     switch (MenuWork.menu_state[3]) {
     case MENU_TEC_STATE_CHARACTER:
     case MENU_TEC_STATE_MENU:
@@ -755,6 +751,10 @@ void MenuTecPasMain(void)
     }
 }
 
+/*
+ * Runs the help window at the bottom of the screen: builds it on first call,
+ * then fills its message for the current menu state and slides it into place.
+ */
 void MenuTecInfoMain(void)
 {
     MenuTecInfoWork **workSlot = &MenuTecInfo;
@@ -866,6 +866,7 @@ void MenuTecInfoMain(void)
         } else if (PadData.mappedRepeat != 0) {
             work->showCharacterHelp = 0;
         }
+        /* Pick the help line for the current menu state. */
         switch (MenuWork.menu_state[3]) {
         case MENU_TEC_STATE_CHARACTER:
             eMessageCpy(work->message, characterHelp[0]);
@@ -981,6 +982,7 @@ void MenuTecInfoMain(void)
                 break;
             }
             break;
+        /* Confirm and done: show the level or wait value, one step ahead in the confirm state. */
         case MENU_TEC_STATE_UPGRADE_CONFIRM:
         case MENU_TEC_STATE_UPGRADE_DONE:
             if (MenuWork.resetFlags & MENU_TEC_FLAG_STATE_ENTERED) {
@@ -1021,6 +1023,7 @@ void MenuTecInfoMain(void)
     }
 }
 
+/* Builds the two selection windows on first call, then slides them in and out for the menu state. */
 void MenuTecMenuMain(void)
 {
     MenuTecMenuWork *work = MenuTecMenu;
@@ -1092,6 +1095,10 @@ void MenuTecMenuMain(void)
     }
 }
 
+/*
+ * Runs the points ribbon: builds it on first call, shows the running
+ * character's points, and slides it in for the menu states.
+ */
 void MenuTecExMain(void)
 {
     MenuTecExWork *work = MenuTecEx;
@@ -1162,6 +1169,10 @@ void MenuTecExMain(void)
     }
 }
 
+/*
+ * Runs the L1 and R1 sprites: builds them on first call, slides them in for the
+ * menu state, and offsets each one while its shoulder button is held.
+ */
 void MenuTecL1R1Main(void)
 {
     MenuTecL1R1Work *self = MenuTecL1R1;
@@ -1227,6 +1238,11 @@ void MenuTecL1R1Main(void)
     }
 }
 
+/*
+ * Runs the status windows, one per roster member: builds them on first call,
+ * lays them out for the current menu state and moves the cursor to the
+ * selected member.
+ */
 void MenuTecStatusMain(void)
 {
     MenuTecStatusWork *work = MenuTecStatus;
@@ -1277,6 +1293,7 @@ void MenuTecStatusMain(void)
         work->window[0].header.state = MENU_TEC_WIDGET_RUN;
         /* fallthrough */
     case MENU_TEC_WIDGET_RUN:
+        /* Start from the default grid, then adjust the targets for the menu state. */
         for (i = 0; i < MenuWork.rosterCount; i++) {
             targetX[i] = (i & 1) * 816 - 272;
             targetY[i] = i / 2 * 104 + 64;
@@ -1344,6 +1361,7 @@ void MenuTecStatusMain(void)
             work->window[0].header.verticalFirst = 0;
             break;
         }
+        /* Slide each window toward its target, horizontally or vertically first. */
         for (i = 0; i < MenuWork.rosterCount; i++) {
             if (!work->window[0].header.verticalFirst) {
                 MoveSlide(&work->window[i].window.width, &targetWidth[i], 3.0f);
@@ -1375,6 +1393,10 @@ void MenuTecStatusMain(void)
     }
 }
 
+/*
+ * Runs the side list window: slides it in for the slot and upgrade states, and
+ * rebuilds its items the first time each state opens.
+ */
 void MenuTecListMain(void)
 {
     short target[1];
@@ -1476,12 +1498,17 @@ void MenuTecListMain(void)
     }
 }
 
+/*
+ * Runs the two technique detail rows: builds them on first call and refreshes
+ * their names for the current character.
+ */
 void MenuTecListMain2(void)
 {
     int i;
     int j;
     MenuTecList2Work *work = MenuTecList2;
 
+    /* Fills each row's equipment and technique names for the running character. */
     void subMenuTecListChange(void)
     {
         MenuTecEquipRecord *equipment = func_A191C0(MenuWork.characterNo);
@@ -1640,6 +1667,7 @@ void MenuTecListMain2(void)
             work->cursor.state = 0;
             break;
         }
+        /* Slide the rows, then place their markers, names and icons inside them. */
         for (i = 0; i < 2; i++) {
             MoveSlide(&work->row[i].window.x, &targetX[i], 3.0f);
             MoveSlide(&work->row[i].window.y, &targetY[i], 3.0f);
@@ -1678,6 +1706,7 @@ void MenuTecListMain2(void)
                 }
             }
         }
+        /* Place the detail labels and numbers inside the detail window. */
         MoveSlide(&work->detailWindow.x, &targetDetail, 3.0f);
         WindowDXMain(&work->detailWindow);
         work->detailLabel[0].text = msg00_4_0036DC90[0];
@@ -1708,6 +1737,10 @@ void MenuTecListMain2(void)
     }
 }
 
+/*
+ * Runs the upgrade window for the selected technique: builds it on first call,
+ * fills its level, speed and wait rows, and slides it in for the list states.
+ */
 void MenuTecSetWinMain(void)
 {
     MenuTecSetWinWork *work = MenuTecSetWin;
@@ -1860,6 +1893,7 @@ void MenuTecSetWinMain(void)
     }
 }
 
+/* Fills the sort row with the running character's techniques, terminated by 0. */
 void MenuTecSortSet00(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -1894,6 +1928,7 @@ int MenuTecEquipCheck(int chrNo, int tecNo)
     return count;
 }
 
+/* Returns nonzero when either of the low two bits of the technique's metadata byte is set. */
 int MenuTecTrgCheck(int tecBit)
 {
     return (func_A1A378(tecBit & 0xFFFF)[0] & 3) != 0;
@@ -1908,6 +1943,7 @@ int MenuTecTypeCheck(int chrNo, int bit)
     return MenuTecSaveDataGet(chrNo)->speed[tecNo] == 1;
 }
 
+/* Rebuilds the technique list, storing the number of equipped slots for each entry. */
 void MenuTecListMake00(void)
 {
     short *techniqueIds;
@@ -1935,6 +1971,7 @@ void MenuTecListMake00(void)
     }
 }
 
+/* Sets each list row's flag from whether the technique is learned and matches the current mode's trigger. */
 void MenuTecListMake00_2(void)
 {
     MenuListEntry *rows = MenuListGet(0);
@@ -1960,6 +1997,10 @@ void MenuTecListMake00_2(void)
     }
 }
 
+/*
+ * Rebuilds the upgrade list. Each entry's flag comes from the upgrade checks for
+ * that technique; the saved technique bit and point are restored afterward.
+ */
 void MenuTecListMake01(void)
 {
     MenuListEntry *rows = MenuListGet(0);
@@ -1985,6 +2026,11 @@ void MenuTecListMake01(void)
     MenuWork.point = savedPoint;
 }
 
+/*
+ * Runs the technique menu for one frame. The first call loads the tech data
+ * and carves the sub-window work buffers from the heap. Each frame then handles
+ * the input of the current state, and the sub-windows are updated last.
+ */
 void MenuTec(void)
 {
     unsigned char *heap;
@@ -2000,6 +2046,7 @@ void MenuTec(void)
     signed char nextMenu[3];
     int canImprove[3];
 
+    /* First call: carve each sub-window's work buffer from the heap and fill the roster. */
     if (MenuWork.menu_state[3] == MENU_TEC_STATE_INIT) {
         MenuTecPasWork *pas;
         MenuTecInfoWork *info;
@@ -2072,6 +2119,7 @@ void MenuTec(void)
             }
         }
     }
+    /* A changed state sets resetFlags bit 0 for one frame, so the state can reset itself. */
     if (MenuWork.menu_state[3] != MenuWork.nextState) {
         MenuWork.menu_state[3] = MenuWork.nextState;
         MenuWork.resetFlags |= 1;
@@ -2080,6 +2128,7 @@ void MenuTec(void)
     }
     if (MenuWork.inputDelay != 0)
         MenuWork.inputDelay--;
+    /* Input for the current state. Each case sets nextState to change state. */
     switch (MenuWork.menu_state[3]) {
     case MENU_TEC_STATE_CHARACTER:
         if (MenuWork.resetFlags & 1) {
@@ -2354,6 +2403,7 @@ void MenuTec(void)
         ChangeTopLevel(0);
         break;
     }
+    /* Update the sub-windows for this frame. */
     MenuTecPasMain();
     MenuTecInfoMain();
     MenuTecStatusMain();
@@ -2372,8 +2422,7 @@ void MenuTec(void)
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-/* Defined after MenuTec: the original .sdata holds it at 0x004DB518, after
- * every string literal of the TU's functions (MenuTec's ends at 0x004DB517). */
+/* Defined after MenuTec: the original .sdata places it after every string literal of the TU's functions. */
 MenuTecData *MenuTecDataBuf = 0;
 
 const char techSetMenuText[24] = "Set\nUse T.Pts\nCancel";

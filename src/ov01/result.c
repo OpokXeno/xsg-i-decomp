@@ -5,8 +5,8 @@
 
 extern void SeisanInit(void);
 /*
- * Returns nonzero while the settlement (seisan) screen is still running:
- * main:0x002a18c0 yields (SeisanWork byte +0x01 != 0xff).
+ * Returns nonzero while the settlement (seisan) screen is still running
+ * (SeisanWork byte +0x01 is not 0xff).
  */
 extern int SeisanMain(void);
 
@@ -15,7 +15,7 @@ void resultProcInit(void)
     SeisanInit();
 }
 
-/* entryPhase90 advances to entryPhase100 once this returns 0. */
+/* Runs the settlement screen and returns nonzero while it runs; entryPhase90 advances to entryPhase100 once this returns 0. */
 int resultProc(void)
 {
     return SeisanMain();

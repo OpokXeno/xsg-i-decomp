@@ -44,11 +44,12 @@ extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data,
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 /*
  * Pads the packet to a quadword boundary, closes the open DMA tag and
- * returns the new write address (main 0x0020acd4); sceVif1PkCnt (main
- * 0x0020ad20) keeps that return as the address of its next DMA tag.
+ * returns the new write address. sceVif1PkCnt keeps that return as the
+ * address of its next DMA tag.
  */
 extern void *sceVif1PkTerminate(XglPacket *packet);
 
+/* Sets up the packet on the caller's buffer, or on the scratchpad when address is 0. */
 void MGsGPInit(MGsPacket *packet, void *address, int size)
 {
     void *base = (address != 0) ? address : (void *)SCRATCHPAD_BASE;
@@ -60,6 +61,7 @@ void MGsGPInit(MGsPacket *packet, void *address, int size)
     packet->auxCount = 0;
 }
 
+/* Sends the queued direct data to VIF1 as a flush and resets the packet if anything is queued. */
 void MGsGPTerm(MGsPacket *packet)
 {
     if (packet->count != 0) {

@@ -19,9 +19,8 @@ typedef struct MenuEtherStatusEntry {
     short etherStatus;
 } MenuEtherStatusEntry;
 
-/* dataEthGet's record (src/ov01/data_unit_org_get.c, still asm), as far as
- * menuOpenEth reads it: the technique id at +6 (lh, then dataTecGet). Same
- * layout as src/ov01/calc.h's CalcEtherStatus, which this TU does not include. */
+/* dataEthGet's record as menuOpenEth reads it: the technique id at +6, passed
+ * to dataTecGet. Same layout as CalcEtherStatus in src/ov01/calc.h. */
 typedef struct MenuEtherRecord {
     unsigned char unmodeled_00[6];
     short tecId; /* +6 */
@@ -34,13 +33,12 @@ extern int rnd(int max);
 
 /*
  * statTbl: an array of pointers, indexed by charaId, each pointing at a
- * 0-terminated run of 0xC-byte entries (data still asm-owned). menuStatIconChk
- * (0x00A2A4C8..0x00A2A4E0) loads each entry's first word only, as a bitmask
- * tested against the statFlags mask argument.
+ * 0-terminated run of 0xC-byte entries. menuStatIconChk reads each entry's
+ * flags word as a bitmask tested against the statFlags mask argument.
  */
 typedef struct StatIconEntry {
     int flags; /* +0x00 */
-    int srcX;  /* +0x04: menuStatIconPut (0x00A2A56C..0x00A2A574) */
+    int srcX;  /* +0x04 */
     int srcY;  /* +0x08 */
 } StatIconEntry;
 static StatIconEntry *statTbl[8];
@@ -53,8 +51,8 @@ typedef struct MenuRGBA {
 } MenuRGBA;
 
 /* The sprite colour: menuStatSpriteRGB copies a caller's MenuRGBA into it
- * byte-wise (lwl/lwr, swl/swr), while menuStatSprite/menuStatSprite2 copy the
- * whole word from an aligned local (lw/sw), so the field is word-aligned. */
+ * byte-wise, while menuStatSprite/menuStatSprite2 copy the whole word from an
+ * aligned local, so the field is word-aligned. */
 typedef union MenuColor {
     unsigned int word;
     MenuRGBA rgba;
@@ -78,18 +76,15 @@ extern void grPutSpr(GrPacket *packet, GrSprite *sprite, int flags);
 extern void grOpenSpr(GrPacket *packet);
 extern void grCloseSpr(void);
 void menuStatSpriteRGB(GrPacket *packet, int x, int y, int width, int height, int srcX, int srcY, const MenuRGBA *rgba);
-/* The shared sprite colour, the word 0x80808080 (build/ov01/asm/data/ov01/menu.rodata.s:587;
- * rodata still asm-owned). */
+/* The shared sprite colour, the word 0x80808080. */
 extern const MenuRGBA menuNeutralGray;
 
 void menuATBEnvMake(void *packet);
 void menuEventTimerDispSub(ObjectTask *task, GrPacket *packet);
 
 /*
- * One entry of a battle window's command list (src/main/e_battle_win_open.h
- * BattleWinCommand, 0xC bytes, TU-local there): menuResultEth/menuResultItm
- * read the chosen entry's id as a halfword (lh $2,0xA($2) after
- * selection * 0xC).
+ * One entry of a battle window's command list (0xC bytes). The ether and item
+ * result functions read the chosen entry's id.
  */
 typedef struct MenuWinCommand {
     const char *name;                 /* +0x00: string-table entry (ether and item windows) */
@@ -100,11 +95,10 @@ typedef struct MenuWinCommand {
 } MenuWinCommand;
 
 /*
- * The ether/item window's parameter record, eBattleWinOpen's argument and
- * eBattleWinMain's (src/main/endou_test.c EndouBattleWindowParams, the same
- * layout; e_battle_win_open.h BattleWinTask names +0x1C/+0x20). The result
- * functions load commands (lw 0x14), store the pad word (sw 0x1C) and read
- * the selection (lw 0x20, -1 for none).
+ * The ether/item window's parameter record: eBattleWinOpen's argument and
+ * eBattleWinMain's (same layout as EndouBattleWindowParams). The result
+ * functions load the command list, store the pad word and read the selection
+ * (-1 for none).
  */
 typedef struct MenuBattleWin {
     int x;                            /* +0x00 */
@@ -143,11 +137,10 @@ void menuInitBat(void) {
 }
 
 /*
- * The battle menu's command tables, one 0x10-byte row per menu line
- * (sll $2,$2,4 on menuSel); menuBatObjFree reads only the command id at +0x04
- * (lw $5,0x4($2)), which menuCmdExecChk checks and menuResultBat returns.
- * chaTbl serves units without CALC_UNIT_FLAG_IS_AGWS, agwsTbl units with it
- * (lhu 0x1C; andi 0x40 selects %lo(agwsTbl_00A3F088)). Data still asm-owned.
+ * The battle menu's command tables, one 0x10-byte row per menu line, indexed
+ * by menuSel. menuBatObjFree reads the command id at +0x04, which
+ * menuCmdExecChk checks. chaTbl serves units without CALC_UNIT_FLAG_IS_AGWS,
+ * agwsTbl units with it.
  */
 typedef struct MenuBatCmdEntry {
     int iconRow;                      /* +0x00: menuBatObjDraw's icon row, times 0x14 */
@@ -158,18 +151,17 @@ typedef struct MenuBatCmdEntry {
 static MenuBatCmdEntry chaTbl_00A3F038[5];
 static MenuBatCmdEntry agwsTbl_00A3F088[5];
 
-/* The battle menu task's work: the unit the menu commands (lw $16,0x80($2)). */
+/* Work block of the battle menu task. */
 typedef struct MenuBatWork {
     unsigned char unmodeled_00[0x80];
-    BattleUnit *unit;                 /* +0x80 */
+    BattleUnit *unit;                 /* +0x80: the unit the menu commands */
     unsigned char unmodeled_84[0x90 - 0x84];
-    Vector4 pos;                      /* +0x90: the window's screen origin (x, z; menuOpenBat stores 8, 0, 292) */
+    Vector4 pos;                      /* +0x90: the window's screen origin (menuOpenBat stores x = 8, z = 292, y = 0) */
     unsigned char unmodeled_A0[0xF0 - 0xA0];
     Vector4 splinePoints[2];          /* +0xF0: calcSpline's control points (menuBatObjDraw) */
 } MenuBatWork;
 
-/* The highlighted menu line (0..4, wrapping) and its blink counter (bss still
- * C-owned between mapHDist and menuResBat; original ELF symbol names). */
+/* The highlighted menu line (0..4, wrapping) and its animation counter. */
 static int menuSel;
 static int menuSelCnt;
 void menuBatObj(ObjectTask *task);
@@ -181,7 +173,7 @@ void calcSplineInit(void *spline, Vector4 *points, int count, int duration);
 extern ObjectTask *objEntry2(void *argument, void (*callback)(ObjectTask *task));
 extern void objStdInit(ObjectTask *task);
 
-/* Opens the battle command menu for unit and returns nothing. */
+/* Opens the battle command menu for unit. */
 void menuOpenBat(BattleUnit *unit)
 {
     ObjectTask *task;
@@ -240,20 +232,20 @@ int menuOpenChkBat(void) {
     return pMenuBat != 0;
 }
 
-/* obj.c (ov01/tu001), still INCLUDE_ASM: returns the address of the
- * 20-byte command entry the task's work block currently selects. */
+/* obj.c (ov01/tu001): returns the address of the command entry the task's
+ * work block currently selects. */
 void *objCmdPtrGet(ObjectTask *task);
 void menuBatObjFree(ObjectTask *task);
 
+/* Battle menu task callback: runs the pad handling in menuBatObjFree. */
 void menuBatObj(ObjectTask *task) {
     void *work;
 
     objCmdPtrGet(task);
     menuBatObjFree(task);
-    /* The original keeps jal + epilogue for this last call rather than a
-     * tail jump (CP-0132, config/compiler-patterns.json): a post-call read
-     * blocks the compiler's sibcall lowering and is then removed as dead
-     * code. */
+    /* The original keeps the call and epilogue for this last call rather than a
+     * tail jump: a post-call read blocks the compiler's sibcall lowering and
+     * is then removed as dead code. */
     work = task->work;
 }
 
@@ -261,6 +253,10 @@ void menuBatObj(ObjectTask *task) {
 extern int dataPadRead(int padNo);
 int menuCmdExecChk(BattleUnit *unit, int command);
 
+/*
+ * Reads the pad for the battle menu: moves the highlighted line, plays the
+ * cursor sound, and on a confirmed command sets menuResBat to its id.
+ */
 void menuBatObjFree(ObjectTask *task)
 {
     BattleUnit *unit;
@@ -273,9 +269,7 @@ void menuBatObjFree(ObjectTask *task)
         table = chaTbl_00A3F038;
     }
     if (dataPadRead(1) & PAD_DOWN) {
-        /* A local, not a literal: the original compares with the 4 held in
-         * a register (addiu $3,$0,4; slt $3,$3,$2), where `menuSel > 4`
-         * folds to slti $2,$3,5. */
+        /* A local, not a literal: the original keeps the 4 in a register for the comparison. */
         int lastLine = 4;
 
         menuSel++;
@@ -313,6 +307,10 @@ int calcSpline(void *spline, Vector4 *out, int mode);
 void menuTexTrans(void);
 void menuEnvMake(void *packet);
 
+/*
+ * Draws the battle command window: five lines, with the highlighted one
+ * stepping through its animation frames and then showing its command icon.
+ */
 void menuBatObjDraw(ObjectTask *task)
 {
     GrPacket packet;
@@ -348,6 +346,7 @@ void menuBatObjDraw(ObjectTask *task)
     menuTexTrans();
     menuEnvMake(&packet);
     grOpenSpr(&packet);
+    /* Lines from the bottom (4) up to the top (0). */
     i = 4;
     anchor = &table[4].offsetY;
     do {
@@ -460,6 +459,7 @@ int menuCmdExecChk(BattleUnit *unit, int command)
     return ret;
 }
 
+/* Counts the unit's ether entries whose status is set. */
 int menuEtherNumChk(BattleUnit *unit)
 {
     int count;
@@ -491,6 +491,7 @@ int calcTakeEpGet(BattleUnit *unit, int tecId);
 int calcEthEnableChk(BattleUnit *unit, int id);
 void eBattleWinOpen(void *window);
 
+/* Fills the ether window's command list from the unit's ethers and opens the window. */
 void menuOpenEth(BattleUnit *unit) {
     MenuWinCommand *e;
     short *p;
@@ -542,16 +543,14 @@ void menuCloseEth(void) {
     sndSysSePlay(8);
 }
 
-/*
- * The ether window's result: pad 2's direction bits (0xF000) replace pad
- * 1's before eBattleWinMain reads them; the chosen ether's id (0 for an
- * unusable line, -1 for no selection) goes to *ethId, with the confirm
- * (0x20) and cancel (0x40) sounds. buttons is or-ed in its own statement
- * (and $17 then or $17,$17,$16: held keeps $16) and the function has one
- * return (each path ends at the shared daddu $2,$17,$0).
- */
 void eBattleWinMain(void *window);
 
+/*
+ * The ether window's result: pad 2's direction bits (0xF000) replace pad 1's
+ * before eBattleWinMain reads them. Stores the chosen ether's id (0 for an
+ * unusable line, -1 for no selection) to *ethId and plays the decide, buzzer
+ * or cancel sound. Returns the button word.
+ */
 int menuResultEth(int *ethId)
 {
     int held;
@@ -588,6 +587,7 @@ extern const char menuItemsListText[];
 const char **dataItmNameGet(int index);
 int calcItmEnableChk(BattleUnit *unit, int id);
 
+/* Fills the item window's command list from the owned items and opens the window. */
 void menuOpenItm(BattleUnit *unit) {
     MenuWinCommand *e;
     int i;
@@ -638,7 +638,7 @@ void menuCloseItm(void) {
     sndSysSePlay(8);
 }
 
-/* menuResultEth for the item window. */
+/* Item-window counterpart of menuResultEth: stores the chosen item id to *itmId. */
 int menuResultItm(int *itmId)
 {
     int held;
@@ -666,77 +666,57 @@ int menuResultItm(int *itmId)
     return buttons;
 }
 
-/* The +0x90 movement block of an object's work record (src/ov01/obj.h's
- * ObjectWorkTransform restates the same span; TU-local there): the current
- * position and the target objStdMove moves it toward. Shared by the stock
- * faces (MenuStockWork) and the critical indicator (MenuCritWork). */
+/*
+ * The +0x90 movement block of an object's work record: the current position
+ * and the target objStdMove moves it toward. Shared by the stock faces
+ * (MenuStockWork) and the critical indicator (MenuCritWork).
+ */
 typedef struct MenuObjTransform {
-    Vector4 position;                  /* +0x00: addiu $16,$16,0x90, then
-                                        * swc1 0x0/0x8 and sw $0,0x4 */
+    Vector4 position;                  /* +0x00 */
     float ap;                          /* +0x10: the status window's displayed values */
     float hp;                          /* +0x14 */
     float ep;                          /* +0x18 */
     unsigned char unmodeled_1c[0x14];
     float bp;                          /* +0x30 */
     unsigned char unmodeled_34[0x2C];
-    Vector4 target;                    /* +0x60: where the object moves to
-                                        * (menuStockDead/menuStockNext
-                                        * sw $0,0x64; menuCritDispOn
-                                        * swc1 0x60/0x68 from work+0x90) */
-    unsigned char unmodeled_70[0x10];  /* +0x70: ObjectWorkTransform's tail,
-                                        * not accessed here */
+    Vector4 target;                    /* +0x60: where the object moves to */
+    unsigned char unmodeled_70[0x10];  /* +0x70: tail of the record, not accessed here */
 } MenuObjTransform;
 
 /*
- * The critical-indicator object's work, one record for menuCritObj and
- * menuCritObjDraw: menuStatDispCreate registers both on the same task
- * (the addresses of menuCritObj and menuCritObjDraw are formed at
- * 0x00A26E94..0x00A26EB8 and passed to objEntry2; the result is stored to
- * pCritObj) and menuCritDispOn writes pCritObj's work.
- * +0x80 is an int count: menuCritDispOn compares it with its int argument
- * (0x00A28128 lw $2,0x80($3); beql $2,$16) and stores it (0x00A28174
- * sw $16,0x80($2)); menuCritObjDraw tests it and draws digit count - 1
- * (0x00A282E8 lw $2,0x80($3); 0x00A282FC addiu $3,$2,-1); menuCritObj only
- * tests it against zero (0x00A28200 lw $6,0x80($2); movn $5,$3,$6).
- * This extends, and does not preserve the size of, the local view master
- * carried as MenuCritActorView (0x84 bytes: 0x80 unmodeled bytes and a task
- * pointer at +0x80 that menuCritObj only tested for null): the record is now
- * 0xA0 bytes, flags at +0x00 and position at +0x90 are new members, and the
- * +0x80 word is the int count rather than a pointer.
+ * The critical-indicator object's work, shared by menuCritObj and
+ * menuCritObjDraw: menuStatDispCreate registers both on the same task and
+ * menuCritDispOn writes the work. +0x80 is an int count, stored by
+ * menuCritDispOn and tested by menuCritObjDraw and menuCritObj.
  */
 typedef struct MenuCritWork {
     u32 flags;                        /* +0x00: bit 2 hides the indicator */
     unsigned char unmodeled_04[0x7C];
-    int count;                        /* +0x80: 0 draws the plain banner */
+    int count;                        /* +0x80: 0 draws the banner without a digit */
     unsigned char unmodeled_84[0xC];
     MenuObjTransform transform;       /* +0x90: menuCritObjDraw reads
                                        * position.x/z; menuCritDispOn
-                                       * takes work+0x90 once (addiu
-                                       * $3,$3,0x90) and seeds both points */
+                                       * takes work+0x90 once and seeds both points */
 } MenuCritWork;
 
 /* Bit of MenuCritWork.flags that hides the indicator: menuCritDispOff sets
- * it (|= 4), menuCritObjDraw skips drawing while it is set (andi $2,$2,0x4).
- * An enum constant, not a macro (a macro can never be published by
- * header_harvest.py); it stays TU-local until a declaration needs it. */
+ * it and menuCritObjDraw skips drawing while it is set. An enum constant
+ * rather than a macro. */
 enum MenuCritWorkFlag {
     MENU_CRIT_HIDDEN = 0x4
 };
 
-/* A record view read from the work slot as an int-sized word, like
- * menuStockWorkGet below: menuCritDispOn reloads the slot after each int
- * store (lw $2,0x10($4) after sw $5,0x0($2); lw $5,0x10($4) after
- * sw $16,0x80($2)). */
+/* Reads the work slot as an int-sized word, like menuStockWorkGet below.
+ * menuCritDispOn reloads the slot after each int store, as the original does. */
 static __inline__ MenuCritWork *menuCritWorkGet(ObjectTask *task)
 {
-    /* Read as a u32 on purpose: `(MenuCritWork *)task->work` compiles the
-     * callers' loads differently and OV01.OVL stops matching. */
+    /* Read as a u32 on purpose: a direct `(MenuCritWork *)task->work` cast
+     * compiles the callers' loads differently. */
     return (MenuCritWork *)*(u32 *)&task->work;
 }
 
 typedef struct MenuStockWork {
-    u32 flags;                         /* +0x00: bit 0x4 hides the face
-                                        * (menuStockObjDraw, andi 0x4) */
+    u32 flags;                         /* +0x00: bit 0x4 hides the face */
     unsigned char unmodeled_04[0x6C];
     int frameCount;                    /* +0x70: menuStockObj adds 1 every
                                         * update; command 3 moves the face
@@ -745,37 +725,27 @@ typedef struct MenuStockWork {
     /* A code-shape device, not data: width is only ever read and written as
      * `value`. `alias` is never accessed; it makes the int store to width
      * conflict with the void * load of ObjectTask.work in gcc 2.96's alias
-     * analysis, so menuStockObj reloads the slot after storing width
-     * (lw $4,0x10($16) after sw $3,0x78($5)) as the original does. */
+     * analysis, so menuStockObj reloads the slot after storing width, as the
+     * original does. */
     union {
         int value;
         void *alias;
-    } width;                           /* +0x78: menuStockStart seeds 4
-                                        * (sw $22,0x78); menuStockObj adds 4
-                                        * while it is below 0x14 and writes
-                                        * 0x14 otherwise; menuStockObjDraw
-                                        * passes it as the sprite width */
+    } width;                           /* +0x78: menuStockStart seeds 4;
+                                        * menuStockObj adds 4 while it is below
+                                        * 0x14 and writes 0x14 otherwise;
+                                        * menuStockObjDraw passes it as the
+                                        * sprite width */
     int stockSlot;                     /* +0x7C: menuStockDead indexes
-                                        * actStockGet() with it
-                                        * (lw $3,0x7C($5) at 0x00A28C40) */
-    int index;                         /* +0x80: the face's pStockObj slot
-                                        * (sw $18,0x80); menuStockDead
-                                        * decrements every later face's
-                                        * index by one */
+                                        * actStockGet() with it */
+    int index;                         /* +0x80: the face's pStockObj slot;
+                                        * menuStockDead decrements every later
+                                        * face's index by one */
     unsigned char unmodeled_84[0xC];
-    /*
-     * The +0x90..+0x110 tail of this work record (src/ov01/obj.h's
-     * ObjectWorkTransform restates the same span for objStdMove/objStdInit;
-     * that type is TU-local to obj.c and not published, so this is a
-     * second local view of the same storage -- flagged for Opok).
-     * menuStockDead takes this address once (addiu $8,$9,0x90) and writes
-     * target through it (sw $0,0x64($8) / swc1 0x60/0x68($8)).
-     */
-    MenuObjTransform transform;      /* +0x90 */
+    MenuObjTransform transform;        /* +0x90: menuStockDead writes its target */
 } MenuStockWork;
 
-/* gr_gp_init.c data (still asm-owned): each face's x/z on screen, read as
- * int pairs (lwc1 0x0/0x4, cvt.s.w). menuStockDead also indexes this. */
+/* Screen x/z of each stock face, read as int pairs. menuStockDead also indexes
+ * this table. */
 typedef struct MenuStockPos {
     int x;
     int z;
@@ -785,22 +755,17 @@ extern MenuStockPos stockPosTbl[5];
 void *objCmdTailGet(ObjectTask *task);
 
 /* Bit of MenuStockWork.flags that hides a face: menuStockStart sets it for
- * the fifth face (ori $2,$2,0x4) and clears it for the other four
- * (and $2,$2,$21 with $21 = -5); menuStockObjDraw tests it (andi 0x4). */
+ * the fifth face and clears it for the other four; menuStockObjDraw tests it. */
 enum MenuStockWorkFlag {
     MENU_STOCK_HIDDEN = 0x4
 };
 
 /*
- * A stock face's MenuStockWork, read from its ObjectTask work slot as an
- * int-sized word. The original reloads the slot after each int store into
- * the record (menuStockStart: lw $3,0x10($17) after objCmdTailGet,
- * lw $2,0x10($17) after sw $18,0x80($3), lw $3,0x10($17) after
- * sw $22,0x78($2)) but schedules the reload above the float stores
- * (lw $2,0x10($17) above swc1 $f1,0x0($16)): the slot's load conflicts
- * with int stores only. Read as the published `void *`, gcc keeps the first
- * load across those stores (lw $2 at 0x00A289FC disappears). Flagged for
- * Opok: the original slot type looks int-sized (ObjectTask.work, shared.h).
+ * Reads a stock face's MenuStockWork from its ObjectTask work slot as an
+ * int-sized word. The original reloads the slot after each int store into the
+ * record, but schedules the reload above the float stores: the slot's load
+ * conflicts with int stores only. Read as the published `void *`, gcc keeps
+ * the first load across those stores.
  */
 static __inline__ MenuStockWork *menuStockWorkGet(ObjectTask *task)
 {
@@ -808,11 +773,9 @@ static __inline__ MenuStockWork *menuStockWorkGet(ObjectTask *task)
 }
 
 /*
- * The status window's +0x90 block (MenuObjTransform's span in the other
- * objects' work): the window position, then the displayed values that
- * menuPlStatPut truncates to ints. It reads position.x/z (lwc1 0x90/0x98
- * off work) and ap/hp/ep/bp (work + 0xA0/0xA4/0xA8/0xC0, each address
- * formed once and dereferenced with lwc1 0x0).
+ * The status window's +0x90 block (the same span as MenuObjTransform in the
+ * other objects): the window position, then the displayed values that
+ * menuPlStatPut truncates to ints.
  */
 typedef struct MenuStatDisplay {
     Vector4 position;                  /* +0x00 */
@@ -825,12 +788,11 @@ typedef struct MenuStatDisplay {
 
 /*
  * The status-icon task's own work record, as far as menuStatObjDraw,
- * menuStatNamePut and menuPlStatPut read it. menuStatNamePut (0x00a2a5c0..0x00a2a5c8) loads
- * `lw $17,0x78($2)` / `lw $5,0x7c($2)` from task->work and passes them to
+ * menuStatNamePut and menuPlStatPut read it. menuStatNamePut reads the
+ * character id and the icon slot (+0x78, +0x7c) and passes them to
  * menuStatIconChk/dataStatNameGet as the character id and the icon slot to
- * check; menuStatObjDraw (0x00a29bf4..0x00a29c00) loads `lw $17,0x80($2)`
- * from the same block and compares it against actUnitGet()'s BattleUnit *,
- * showing the name popup only for the currently active unit.
+ * check. menuStatObjDraw reads +0x80 and compares it against actUnitGet()'s
+ * BattleUnit *, showing the name popup only for the currently active unit.
  */
 typedef struct MenuStatObjWork MenuStatObjWork;
 struct MenuStatObjWork {
@@ -843,35 +805,27 @@ struct MenuStatObjWork {
 };
 
 /*
- * objCmdPtrGet's return, as far as menuCritObj reads it: `lw $3,0x0($2)`
- * loads the word at +0x00. obj.c's own view of the same 20-byte record
- * (src/ov01/obj.h ObjectCommandEntry.selector) already names that word;
- * this TU cannot redefine that tag, so it names its own bounded view of
- * the same record instead.
+ * objCmdPtrGet's return record as this TU reads it: the selector word at
+ * +0x00 and the argument at +0x04.
  */
 typedef struct MenuCmdEntryView MenuCmdEntryView;
 struct MenuCmdEntryView {
     int selector; /* +0x00 */
-    int argument; /* +0x04: menuATBObj counts it down under selector 1
-                   * (lw $2,0x4($4); addiu $2,$2,-1; sw $2,0x4($4)) */
+    int argument; /* +0x04: menuATBObj counts it down under selector 1 */
 };
 
 /*
- * The battle map's height value (bss C-owned, like ETRotDist;
- * original ELF symbol name). menuStatDispCreate starts it and mapHDist at
- * 0x40 (`sw $5,%lo(mapH)` / `sw $5,%lo(mapHDist)` at 0x00a26df0..0x00a26df4),
- * menuMapHSet below moves mapHDist to 0x14 or 0x40, and menuATBObj
- * steps mapH by 8 per update toward mapHDist (0x00a27320..0x00a2733c).
- * menuMapDisp offsets the map by 0x40 - mapH (0x00a2848c); menuATBObjDraw
- * draws the map item and target line only while it is 0x40 (0x00a283d4),
- * menuCritObjDraw the critical indicator only while it is 0x14
- * (`bnel` against 0x14). The two rest values are MENU_MAP_H_SET/RESET.
+ * The battle map's height value. menuStatDispCreate starts it at 0x40 along
+ * with mapHDist, and menuATBObj steps it by 8 per update toward mapHDist.
+ * menuMapHSet moves mapHDist to one of the two rest values. menuMapDisp
+ * offsets the map by 0x40 - mapH; menuATBObjDraw draws the map item and
+ * target line only while it is 0x40, and menuCritObjDraw draws the critical
+ * indicator only while it is 0x14.
  */
 static int mapH;
 
-/* The two values mapH rests at: menuMapHSet(nonzero) sends it to 0x14
- * (`addiu $2,$0,0x14` at 0x00a28428), menuMapHSet(0) and menuStatDispCreate
- * to 0x40 (0x00a28438, 0x00a26ddc). */
+/* The two values mapH rests at: menuMapHSet(nonzero) selects MENU_MAP_H_SET,
+ * and menuMapHSet(0) and menuStatDispCreate select MENU_MAP_H_RESET. */
 enum MenuMapH {
     MENU_MAP_H_SET = 0x14,
     MENU_MAP_H_RESET = 0x40
@@ -895,9 +849,8 @@ void menuStatPreObj(void);
 void menuStatPreObjDraw(ObjectTask *task);
 extern void menuTimeSet(int time);
 extern int unitTblGet(int side, BattleUnit ***table);
-/* The rodata word at 0x00a46774 holds -88, the z every status icon starts
- * at (menuStatDispCreate converts it with lwc1 + cvt.s.w). Its own signed
- * type keeps that read out of the int alias set of the task work stores. */
+/* The z every status icon starts at. Its own enum type keeps that read out of
+ * the int alias set of the task work stores. */
 enum MenuStatStartZ { MENU_STAT_START_Z = -88 };
 extern const enum MenuStatStartZ menuStatStartZ;
 
@@ -917,6 +870,10 @@ static __inline__ MenuStatObjWork *menuStatWorkGet(ObjectTask *task)
     return (MenuStatObjWork *)*(u32 *)&task->work;
 }
 
+/*
+ * Creates the battle status display: the ATB, key guide, boost and critical
+ * objects, five stock faces, and one status object per unit in unit table 0.
+ */
 void menuStatDispCreate(void)
 {
     MenuCmdEntryView *entry;
@@ -934,6 +891,7 @@ void menuStatDispCreate(void)
     pPreObj = objEntry2(menuStatPreObj, menuStatPreObjDraw);
     objStdInit(pPreObj);
 
+    /* Fixed-position objects. */
     pAtbObj = objEntry2(menuATBObj, menuATBObjDraw);
     x = 376.0f;
     objStdInit(pAtbObj);
@@ -978,6 +936,7 @@ void menuStatDispCreate(void)
     transform->position.z = 310.0f;
     menuCritWorkGet(pCritObj)->flags |= MENU_CRIT_HIDDEN;
 
+    /* Stock faces; the fifth one starts hidden. */
     for (i = 0; i < 5; i++) {
         task = objEntry2(menuStockObj, menuStockObjDraw);
         objStdInit(task);
@@ -995,6 +954,7 @@ void menuStatDispCreate(void)
         pStockObj[i] = task;
     }
 
+    /* One status object per unit. */
     count = unitTblGet(0, &units);
     offset = 0;
     if (count != 0) {
@@ -1053,6 +1013,7 @@ void menuStatDispCreate(void)
 }
 
 
+/* Removes the status display objects and closes the battle, ether and item windows. */
 void menuStatDispRemove(void) {
     int i;
 
@@ -1095,7 +1056,7 @@ void menuStatDispRemove(void) {
     menuCloseItm();
 }
 
-/* 0x00a27278: `jr $31; nop`, an empty body in the original. */
+/* Empty body, as in the original. */
 void menuStatPreObj(void) {
 }
 
@@ -1124,8 +1085,8 @@ void menuATBObj(ObjectTask *task)
     float distance;
 
     entry = objCmdPtrGet(task);
-    /* Unsigned equality chain (beql 1, beqz 0, bnel 2); the case 2 body is
-     * laid out ahead of the case 1 body, as written here. */
+    /* Unsigned switch; the case 2 body is written ahead of case 1 to match the
+     * original's layout. */
     switch ((unsigned int)entry->selector) {
     case 0:
         break;
@@ -1164,26 +1125,18 @@ void menuATBObj(ObjectTask *task)
             ETRot = rot - twoPi;
         }
         distance = ETRot - ETRotDist;
-        /* The absolute value inside the condition: the original tests
-         * against step on both arms (two c.lt.s $f0,$f2) and reloads
-         * ETRotDist at the join. */
+        /* The absolute value sits inside the condition, as in the original,
+         * which tests against step on both arms. */
         if (((distance < 0.0f) ? -distance : distance) < step) {
             ETRot = ETRotDist;
         }
     }
 }
 
-/* 0x00a27438: `jr $31; nop`, an empty body in the original. */
+/* Empty body, as in the original. */
 void menuKeyGuideObj(void) {
 }
 
-/* ManWork and manWorkGet come from their definer, ov01/tu003 battle_init.c,
- * through include/ov01/battle_init.h. menuKeyGuideDisp null-checks
- * unitTask, then reads a flag (bit 3) from unitTask->work, and compares
- * controlPhase against 0xb and 0x1a. */
-/* The first parameter was spelled GrPacket *packet: menuKeyGuideDisp loads
- * its work (lw $2,0x10($17)) and the position floats there (lwc1 0x98/0x90
- * at 0x00A2A6E0), so it is the key guide object's own task. */
 void menuKeyGuideDisp(ObjectTask *guideTask, BattleUnit *unitTask, int phase);
 
 void menuKeyGuideObjDraw(ObjectTask *guideTask) {
@@ -1198,6 +1151,11 @@ void menuKeyGuideObjDraw(ObjectTask *guideTask) {
 int menuStatIconChk(int charaId, int iconSlot);
 extern int calcStatGetNorm(BattleUnit *unit, int category, int flag);
 
+/*
+ * Per-frame update of a unit's status object: runs its command, eases the
+ * displayed ap/hp/ep/bp values toward the unit's values, and cycles the
+ * status icon once its countdown runs out.
+ */
 void menuStatObj(ObjectTask *arg0) {
     u32 *cmd;
     BattleUnit *unit;
@@ -1241,6 +1199,8 @@ void menuStatObj(ObjectTask *arg0) {
         }
         return;
     }
+    /* Each displayed value snaps when it is within 0.5 of the target, and
+     * otherwise moves a fixed fraction of the way there. */
     p0 = &display->ap;
     p1 = &display->hp;
     p2 = &display->ep;
@@ -1300,6 +1260,7 @@ snap3:
 lerp3:
         *p3 = *p3 + (up->bpGauge - *p3) * 0.125f;
     }
+    /* Without any status bits, the object resets to character 7 and icon 0x8000. */
     j = 0;
     for (i = 0; i < 7; i++) {
         j |= calcStatGetNorm(unit, i, 0x7FFF);
@@ -1311,6 +1272,8 @@ lerp3:
     }
     cur = ((MenuStatObjWork *)*(u32 *)&arg0->work)->charaId;
     bit = *(u16 *)&((MenuStatObjWork *)*(u32 *)&arg0->work)->iconSlot;
+    /* When the countdown is spent, pick the next icon: first the current
+     * unit's next bit, then the other units in turn. */
     if ((int)cmd[1] <= 0 && bit != 0) {
         cmd[1] = 0x1E;
         ret = -1;
@@ -1344,6 +1307,7 @@ lerp3:
     cmd[1]--;
 }
 
+/* Advances the boost ring's rotation by one step. */
 void menuBoostObj(ObjectTask *task) {
     float twoPi;
     float rot;
@@ -1357,13 +1321,8 @@ void menuBoostObj(ObjectTask *task) {
     }
 }
 
-/*
- * actStockGet (ov01/tu003 battle_init.c, exact_c) returns &actStock; calcBoost's
- * own bounded view of the same record (src/ov01/calc.h CalcActStock) already
- * names the per-mode ObjectTask *slot[2] at +0x10. menuBoostObjDraw reads
- * the same two words only to test them for null, so it indexes actStockGet()
- * the same way rather than repeating a third bounded view of the record.
- */
+/* actStockGet returns the action-stock table; menuBoostObjDraw tests its
+ * entries 4 and 5 for null. */
 extern BattleUnit **actStockGet(void);
 void menuBoostObjDrawCha(ObjectTask *task);
 void menuBoostObjDrawSel(ObjectTask *task);
@@ -1401,6 +1360,7 @@ typedef struct BoostFT4Pair {
 } BoostFT4Pair;
 extern const BoostFT4Pair boostFT4Pair;
 
+/* Draws the boost ring, rotated by RingRot, around the selected unit's face. */
 void menuBoostObjDrawCha(ObjectTask *task) {
     GrPacket packet;
     float mtx[4][4];
@@ -1419,6 +1379,7 @@ void menuBoostObjDrawCha(ObjectTask *task) {
     int n;
     int k;
 
+    /* Entry 5 selects the unit; entry 4 overrides it with mode 2. */
     mode = 0;
     if (actStockGet()[5] != 0) {
         sel = actStockGet()[5];
@@ -1444,6 +1405,7 @@ void menuBoostObjDrawCha(ObjectTask *task) {
         rot[2] = RingRot;
         rot[3] = 0;
         grRotMatrix(mtx, mtx, rot);
+        /* Two ring quads, each vertex rotated and offset to the window origin. */
         for (j = 0, n = 0; j < 2; j++, n += 7) {
             Vector4 *src = (Vector4 *)((char *)(n * sizeof(Vector4)) + (int)tbl.e[0].vertex);
             for (k = 0; k < 4; k++) {
@@ -1488,6 +1450,7 @@ extern const BoostOfs3 boostOffsetsFirst;
 extern const BoostOfs3 boostOffsetsSecond;
 extern const BoostCol3 boostColors;
 
+/* Draws the boost window frame and the face of each unit whose calcBoostChk passes. */
 void menuBoostObjDrawSel(ObjectTask *task) {
     GrPacket packet;
     BoostOfs3 xo = boostOffsetsFirst;
@@ -1530,9 +1493,8 @@ void menuBoostObjDrawSel(ObjectTask *task) {
 }
 
 /*
- * The boost-ring display object (data still asm-owned; original ELF symbol
- * name).
- * Its work record's first word is a flag set; bit 2 (0x4) hides the object.
+ * The boost-ring display object. Its work record's first word is a flag set;
+ * bit 2 (0x4) hides the object.
  */
 extern ObjectTask *pBoostObj;
 
@@ -1550,9 +1512,7 @@ void *objCmdPush(ObjectTask *task);
 /*
  * Shows the critical indicator with count: unless it is already showing that
  * count, queues command 1 (move in from x 576 to x 376 at z 310) and clears
- * the hidden bit. The three constants are locals assigned in the original's
- * load order (576.0f -> $f2, 310.0f -> $f1, 376.0f -> $f0); written inline
- * in the stores, 310.0f takes $f2 instead.
+ * the hidden bit. The three constants stay locals, in the original's load order.
  */
 void menuCritDispOn(int count)
 {
@@ -1587,11 +1547,11 @@ void menuCritDispOff(void)
     menuCritWorkGet(pCritObj)->flags |= MENU_CRIT_HIDDEN;
 }
 /* The work slot holds the address of the indicator's MenuCritWork.
- * menuCritObj reads the slot once (lw $2,0x10($16) at 0x00A281F4) and so
- * keeps the record in a local; menuCritObjDraw loads it afresh before each
- * of its reads (lw 0x10($18) at 0x00A28254, 0x00A2828C and 0x00A282D8), so
- * every access there casts the slot itself instead of caching it. */
+ * menuCritObj reads the slot once and keeps the record in a local;
+ * menuCritObjDraw loads the slot afresh before each read, so every access
+ * there casts the slot itself instead of caching it. */
 
+/* Critical indicator callback: runs its move command, then advances the queue. */
 int menuCritObj(ObjectTask *task)
 {
     MenuCmdEntryView *entry;
@@ -1615,11 +1575,10 @@ void menuStatIconEnvMake(void *packet);
 
 
 /*
- * Draws the critical banner and, for a nonzero count, its digit cell
- * (0x18 wide, starting at sheet x 0xB1). The digit's sheet offset is its
- * own statement ahead of the first call: the original keeps (count - 1) * 3
- * in $16 across that call and finishes *8 and +0xB1 after it; one
- * (count - 1) * 0x18 + 0xB1 expression folds to count * 0x18 + 0x99.
+ * Draws the critical banner and, for a nonzero count, its digit cell (0x18
+ * wide). The digit's sheet offset is computed in its own statement ahead of
+ * the first call: the original keeps it live across that call, and one
+ * combined (count - 1) * 0x18 + 0xB1 expression would fold to a different form.
  */
 void menuCritObjDraw(ObjectTask *task)
 {
@@ -1659,6 +1618,10 @@ void menuMapDisp(ObjectTask *task, GrPacket *packet);
 void menuMapItemDisp(ObjectTask *task, GrPacket *packet);
 void menuTgtLineDisp(ObjectTask *task, GrPacket *packet);
 
+/*
+ * Draws the ATB window: the event timer ring and the map, plus the map item
+ * and target line while the map is at its reset height.
+ */
 void menuATBObjDraw(ObjectTask *task)
 {
     GrPacket packet;
@@ -1678,10 +1641,7 @@ void menuATBObjDraw(ObjectTask *task)
     grPacketSend(&packet);
 }
 
-/*
- * The battle map's height-scan distance (data still asm-owned; original
- * ELF symbol name).
- */
+/* Sets the rest height mapH moves toward: nonzero selects MENU_MAP_H_SET. */
 void menuMapHSet(int enable)
 {
     if (enable != 0) {
@@ -1696,6 +1656,7 @@ void menuStatSprite2(GrPacket *packet, int x, int y, int width, int height, int 
 void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, int srcLeft, int srcTop, int srcRight, int srcBottom, const MenuRGBA *rgba);
 extern const MenuRGBA menuBlueRedColors[2];
 
+/* Draws the battle map panel at the ATB window's position, sized by mapH. */
 void menuMapDisp(ObjectTask *task, GrPacket *packet)
 {
     int sp20;
@@ -1781,8 +1742,7 @@ void menuMapItemDisp(ObjectTask *task, GrPacket *packet)
     grCloseSpr();
 }
 
-/* The target line's screen end point (bss C-owned between
- * pStockObj and eventTimer; original ELF symbol names); 0 means unset. */
+/* The target line's screen end point; 0 means unset. */
 static int selX;
 static int selY;
 
@@ -1852,9 +1812,8 @@ extern BattleUnit **actStockGet(void);
 /*
  * Seeds the five stock faces: slot index, command 2, screen position from
  * stockPosTbl, width 4, and only the fifth face hidden. x and z are read
- * before the width store: the union width (see MenuStockWork) is stored
- * with alias set 0, and the original loads both table words
- * (lwc1 0x0/0x4($19)) above sw $22,0x78($2).
+ * before the width store: the original loads both table words first, and the
+ * union width (see MenuStockWork) is stored with alias set 0.
  */
 void menuStockStart(void)
 {
@@ -1888,9 +1847,8 @@ void menuStockStart(void)
 /*
  * Moves the first four stock faces one position left (command 1 toward
  * stockPosTbl[index - 1]); a face already at position 0 stays there and is
- * hidden. Every record access goes through menuStockWorkGet: the original
- * reloads the work slot after the int store to index
- * (lw $3,0x10($16) after sw $0,0x80($5)).
+ * hidden. Every record access goes through menuStockWorkGet, because the
+ * original reloads the work slot after the int store to index.
  */
 void menuStockNext(void)
 {
@@ -1921,10 +1879,9 @@ void menuStockNext(void)
 
 /*
  * Brings in the boost face (pStockObj[4]): command 3, shown from its
- * stockPosTbl slot and moving to the first one. The target is written
- * before the position (lwc1 0x24 first, swc1 0x0 last), and the work slot
- * is re-read through menuStockWorkGet after the command store
- * (lw $4,0x10($17) after sw $4,0x0($2)).
+ * stockPosTbl slot and moving to the first one. The target is written before
+ * the position, and the work slot is re-read through menuStockWorkGet after
+ * the command store.
  */
 void menuStockBoost(void)
 {
@@ -1946,12 +1903,9 @@ void menuStockBoost(void)
 }
 
 /*
- * menuStockDead's bounded view of the action-stock record actStockGet
- * returns (battle_init.c ActStock.stock, the calc.c CalcActStock idiom):
- * the lookup is addu $2,$2,$3 (record + slot*4), the member-array address
- * order; the published `int *` indexed directly gives slot*4 + record
- * (addu $3,$3,$2) instead. Restated locally because actStockGet's
- * published return type is plain int * -- flagged for Opok.
+ * menuStockDead's typed view of the action-stock record actStockGet returns.
+ * Indexing this member array, rather than the published int *, keeps the
+ * original's address-computation order.
  */
 typedef struct MenuActStockView {
     BattleUnit *stock[4]; /* +0x00: the queued unit per stock slot */
@@ -1963,8 +1917,7 @@ extern int printf(const char *format, ...);
 /*
  * A dead unit's face leaves the gauge: unless its action-stock slot is
  * still occupied, every later face is sent one position left. printf takes
- * only dead and i (the decremented index lands in a different register by
- * allocation, not as an argument: passing it adds a copy).
+ * only dead and i: passing the decremented index as well adds a copy.
  */
 void menuStockDead(int dead)
 {
@@ -1995,14 +1948,18 @@ void menuStockDead(int dead)
     }
 }
 
+/*
+ * Per-frame update of a stock face: runs its command (1 slides left, 3 slides
+ * in once frameCount is set) and grows its width toward 0x14.
+ */
 void menuStockObj(ObjectTask *task)
 {
     MenuCmdEntryView *entry;
     MenuStockWork *stock;
 
     entry = objCmdPtrGet(task);
-    /* Compared as an unsigned equality chain (beq 1, beql 0, beq 2, beq 3);
-     * a signed selector splits it with slti $2,$3,2 / bnel instead. */
+    /* Unsigned switch, which reproduces the original's equality chain; a
+     * signed selector would split it differently. */
     switch ((unsigned int)entry->selector) {
     case 0:
         break;
@@ -2024,7 +1981,7 @@ void menuStockObj(ObjectTask *task)
         break;
     }
     /* Not a clamp: a width below 0x14 grows by 4 (so 0x12 becomes 0x16),
-     * any other value is replaced by 0x14 (slti $2,$2,0x14; movn $3,$4,$2). */
+     * any other value is replaced by 0x14. */
     stock = ((MenuStockWork *)task->work);
     stock->width.value = (stock->width.value < 0x14) ? stock->width.value + 4 : 0x14;
     ((MenuStockWork *)task->work)->frameCount++;
@@ -2035,15 +1992,15 @@ void menuStockObj(ObjectTask *task)
  * MenuActStockView stock array, then the words this function reads).
  */
 typedef struct MenuActStockDrawView {
-    BattleUnit *stock[4];   /* +0x00: lw $16,0x0(record + slot*4) */
+    BattleUnit *stock[4];   /* +0x00 */
     BattleUnit *boost[2];   /* +0x10: battle_init.c ActStock.boost */
-    int count;              /* +0x18: lw $3,0x18($4); 0 draws no face */
-    int picked;             /* +0x1C: lw $2,0x1C($4), subtracted from count */
-    BattleUnit *boostUnit;  /* +0x20: lw $16,0x20($4), face 4's unit */
-    int boostState;         /* +0x24: lw $3,0x24($4), compared with 2 */
+    int count;              /* +0x18: 0 draws no face */
+    int picked;             /* +0x1C: subtracted from count */
+    BattleUnit *boostUnit;  /* +0x20: face 4's unit */
+    int boostState;         /* +0x24: compared with 2 */
 } MenuActStockDrawView;
 
-/* A stock unit's actor flags, read as one doubleword (ld $3,0x0($2)). */
+/* A stock unit's actor flags, read as one doubleword. */
 typedef struct MenuStockActor {
     u64 flags;
 } MenuStockActor;
@@ -2065,12 +2022,8 @@ void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, i
  * Draws one stock face beside the ATB gauge: the face of the unit queued in
  * its action-stock slot (the boost unit for face 4), raised by 4 for the
  * current target, and its frame; faces 0 and 4 get a pulsing frame.
- * The colour's initializer is what calls memset and stores a = 0x80 (sb
- * 0x23), sharing the constant 4 with the face compares ($16). faces is
- * formed before the count test (subu ahead of beqz $3), inset and the face
- * corner are their own values (li 10; subu $16 before grOpenSpr, addu
- * $16,$20,$16 after it), and the pulse is stored b, g, r to get the
- * original's sb 0x20/0x22/0x21 order.
+ * Ordering notes: faces is computed before the count test, and the pulse is
+ * stored as b, g, r to match the original's store order.
  */
 void menuStockObjDraw(ObjectTask *task)
 {
@@ -2096,6 +2049,8 @@ void menuStockObjDraw(ObjectTask *task)
     if (((MenuStockWork *)task->work)->flags & MENU_STOCK_HIDDEN) {
         return;
     }
+    /* Skip the face when there is no count, no slot for it, or the boost
+     * state hides it. */
     stock = (MenuActStockDrawView *)actStockGet();
     work = task->work;
     faces = stock->count - stock->picked + 1;
@@ -2124,6 +2079,7 @@ void menuStockObjDraw(ObjectTask *task)
     if ((((MenuStockActor *)unit->work)->flags & MENU_STOCK_ACTOR_MASK) != MENU_STOCK_ACTOR_PRESENT) {
         return;
     }
+    /* The face position is relative to the ATB window origin. */
     x = (int)work->transform.position.x;
     y = (int)work->transform.position.z;
     x += ((MenuObjWork *)pAtbObj->work)->transform.position.x;
@@ -2161,13 +2117,9 @@ void menuStockObjDraw(ObjectTask *task)
  * The 3x11 face-icon sheet's per-character source cell: chrId<32 indexes a
  * grid of 21x25 cells (column = chrId%3, row = chrId/3); chrId>=32 (no face
  * tile) leaves the row at 0 and picks one of three fixed columns from
- * CalcUnitParam.flags (lhu $3,0x1C($2) at 0x00A29144): bit 0x4000 set
- * (andi $3,$3,0x4000 at 0x00A2914C) selects sheet x 0xC0 (0x00A2915C),
- * otherwise bit 0x2000 set (andi $2,$3,0x2000 at 0x00A29148) selects 0xD5
- * (0x00A29164), otherwise 0xEA (0x00A29168). Neither bit has an established
- * name (include/ov01/calc.h and src/ov01/calc.h name other bits of this
- * halfword only), so they stay numeric; which characters carry them is not
- * evidenced here.
+ * CalcUnitParam.flags: bit 0x4000 selects sheet x 0xC0, else bit 0x2000
+ * selects 0xD5, else 0xEA. Neither bit has an established name, so they stay
+ * numeric.
  */
 void faceUVGet(BattleUnit *unit, int *srcX, int *srcY)
 {
@@ -2196,6 +2148,11 @@ void faceUVGet(BattleUnit *unit, int *srcX, int *srcY)
 extern const MenuRGBA menuGreenYellowRedColors[3];
 extern float *dataPosTblGet(int index);
 
+/*
+ * Draws the map markers of one unit list at (x, z). Index 0 uses one marker
+ * sprite and the other lists another. The target's marker position is stored
+ * to selX/selY.
+ */
 void menuMapItemDispSub(ObjectTask *task, GrPacket *packet, int index, int x, int z)
 {
     MenuRGBA col[3];
@@ -2269,8 +2226,8 @@ void menuMapItemDispSub(ObjectTask *task, GrPacket *packet, int index, int x, in
 
 /*
  * The target line: a 0x3A-pixel stub left of (x0, y0), then on to (x1, y1);
- * green, or magenta when the line is blocked. The depth is converted at run
- * time (lui/ori 0x00FFFFFC; cvt.s.w into $f20), so it is written as an integer.
+ * green, or magenta when the line is blocked. The depth is written as an
+ * integer constant, which the original converts at run time.
  */
 void menuSelLine(GrPacket *packet, int x0, int y0, int x1, int y1, int blocked)
 {
@@ -2327,6 +2284,10 @@ void menuEventTimerDisp(ObjectTask *task, GrPacket *packet)
 extern float xglSin(float angle);
 extern float xglCos(float angle);
 
+/*
+ * Draws the event timer ring: twelve quads on a circle of radius 28, rotated
+ * by ETRot. A quad is drawn only when its first vertex lies above its third.
+ */
 void menuEventTimerDispSub(ObjectTask *task, GrPacket *packet)
 {
     float ring[12][4];
@@ -2383,6 +2344,7 @@ void menuEventTimerDispSub(ObjectTask *task, GrPacket *packet)
     vtx.col[1] = 0x80;
     vtx.col[2] = 0x80;
     vtx.col[3] = 0x80;
+    /* Each cell's four vertices; its UVs come from its row and column in the sheet. */
     for (i = 0; i < 12; i++) {
         for (j = 0; j < 4; j++) {
             row = j >> 1;
@@ -2412,6 +2374,10 @@ void menuEventTimerDispSub(ObjectTask *task, GrPacket *packet)
     }
 }
 
+/*
+ * Sets the event timer, picks its X tier from a random roll, and sets the
+ * ring's target rotation (a quarter turn per timer step).
+ */
 void menuTimeSet(int time) {
     int timerRoll;
 
@@ -2431,6 +2397,7 @@ void menuTimeSet(int time) {
     }
 }
 
+/* Advances the event timer through 0..3, updates the ring target, and returns the timer. */
 int menuTimeNext(void) {
     eventTimer++;
     if (eventTimer >= 4) {
@@ -2469,15 +2436,10 @@ void menuStatObjDraw(ObjectTask *task) {
 }
 
 
-/* calcUPGet's return type comes from its definer, ov01/tu004 calc.c
- * (published include/ov01/calc.h); calcUPGet itself is still asm there, so
- * this TU declares it the same way ov01/tu002 unit_cmd.c and ov01/tu013
- * snd.c do. */
-
-
-/* A unit without CALC_UNIT_FLAG_IS_AGWS whose charaId falls in the range
- * ov01/tu013 snd.c's sndConvSe documents (0xBB..0xC2) reports the linked
- * unit's charaId instead of its own. */
+/*
+ * Returns the unit's charaId minus 1. An AGWS unit, or a non-AGWS unit with a
+ * charaId in 0xBB..0xC2, reports its linked unit's charaId instead.
+ */
 int menuStatChrIdGet(BattleUnit *unit)
 {
     int charaId;
@@ -2497,8 +2459,7 @@ int menuStatChrIdGet(BattleUnit *unit)
     return charaId - 1;
 }
 
-/* calc.c (ov01/tu004): nonzero while the unit's HP sits in the low range
- * (src/ov01/unit_cmd.h declares it the same way). */
+/* calc.c: nonzero while the unit's HP sits in the low range. */
 extern int calcIdol2Chk(BattleUnit *unit);
 void menuFaceEnvMake(void *packet);
 void menuApBarPut(GrPacket *packet, int x, int y, int amount, BattleUnit *unit);
@@ -2506,11 +2467,9 @@ void menuBpBarPut(GrPacket *packet, int x, int y, int length);
 void menuStatIconPut(GrPacket *packet, int x, int y, int charaId, int statFlags);
 
 /*
- * Draws one party member's status window at the work position: the active
- * unit's pulsing frame (ALPHA_1 FIX term from the frame counter), the face
- * (6 faces per texture row, 40 x 80 each), the four value labels, HP/EP
- * current and max, the AP bar, the BC digit, the BP bar and, when an icon
- * slot is selected, the status icon.
+ * Draws one party member's status window at the work position: the frame,
+ * the face, the value labels, HP/EP, the AP and BP bars, and the status icon
+ * when an icon slot is selected.
  */
 void menuPlStatPut(ObjectTask *task, GrPacket *packet, BattleUnit *unit)
 {
@@ -2540,13 +2499,11 @@ void menuPlStatPut(ObjectTask *task, GrPacket *packet, BattleUnit *unit)
     bp = &work->display.bp;
     charaId = work->charaId;
     iconSlot = work->iconSlot;
-    /* Last read of work: the scheduler hoists the instruction that frees
-     * it (addiu $3,$2,0xA0 right after lw $2,0x10($16)). */
+    /* Last read of work: the scheduler hoists the instruction that frees it. */
     ap = &work->display.ap;
-    /* One variable reassigned, not `(int)x - 8` in one expression: the
-     * original keeps x - 8 itself in $30 (addiu $30,$30,-8) and adds every
-     * window offset to it; the one-expression form folds the -8 into each
-     * offset (addiu $5,$22,4 for x + 0xC) and spills a second copy. */
+    /* x is reassigned rather than written as (int)x - 8 inline: the original
+     * keeps x - 8 live and adds every window offset to it, while the
+     * one-expression form folds the -8 into each offset. */
     x -= 8;
     chrId = menuStatChrIdGet(unit);
     faceU = (chrId % 6) * 40;
@@ -2644,8 +2601,10 @@ void menuNumPut(GrPacket *packet, int x, int y, int value, int digits, int style
     }
 }
 
-/* The unit is a fifth argument menuPlStatPut passes (daddu $8,$21,$0 at
- * 0x00A29FF4 right before its jal) and this body never reads. */
+/*
+ * Draws the six-cell AP bar; a cell shows its filled source while amount is
+ * still positive. The unit argument is passed by menuPlStatPut but never read.
+ */
 void menuApBarPut(GrPacket *packet, int x, int y, int amount, BattleUnit *unit)
 {
     int i;
@@ -2665,8 +2624,7 @@ void menuApBarPut(GrPacket *packet, int x, int y, int amount, BattleUnit *unit)
     }
 }
 
-/* grPutF4's quad (src/ov01/gr_gp_init.c GrF4Vertices, TU-local there): four
- * corners and one colour at +0x40 (sb 0x40..0x43 in menuBpBarPut). */
+/* grPutF4's quad: four corners and one colour at +0x40. */
 typedef struct GrF4Vertices {
     Vector4 points[4]; /* +0x00 */
     MenuRGBA color;    /* +0x40 */
@@ -2677,8 +2635,8 @@ extern void grPutF4(GrPacket *packet, GrF4Vertices *quad, const Matrix4 matrix);
 extern void grCloseF4(void);
 
 /*
- * The BP bar: an orange quad 4 pixels high, length pixels long, at
- * (x + 0x49, y + 0x36).
+ * The BP bar: a quad 4 pixels high and length pixels long, at
+ * (x + 0x49, y + 0x36), in the fixed colour (0xFF, 0x20, 0x80).
  */
 void menuBpBarPut(GrPacket *packet, int x, int y, int length)
 {
@@ -2742,20 +2700,16 @@ void menuStatIconPut(GrPacket *packet, int x, int y, int charaId, int statFlags)
 }
 
 /*
- * eBattleWinOpen2's own argument words (src/main/e_battle_win_open.c, still
- * asm there, no published parameter type). The header shape (textId/
- * speaker/flags/priority/target) and the flags constant 0x00FFFFFD match
- * src/ov01/cmd.c's BattleMsgOpenParams, the same window family's argument
- * record for the sibling eBattleWinOpen4; only flags and target are
- * confirmed for this callee, the textId/speaker/priority names are carried
- * over from that sibling record's field order. This call adds one more
- * word, an icon graphic table pointer, that eBattleWinOpen4 does not take.
+ * Argument record of eBattleWinOpen2. flags and target are confirmed for this
+ * callee; the other field names follow the sibling window's record
+ * (BattleMsgOpenParams in src/ov01/cmd.c). iconGraphic is an extra word that
+ * this call adds.
  */
 struct StatNameOpenParams {
-    int textId;                /* +0x00: 8 at this call site */
-    int speaker;                /* +0x04: 0x68 at this call site */
-    int flags;                   /* +0x08: 0x00FFFFFD */
-    int priority;                 /* +0x0C: 0x800000B0 at this call site */
+    int textId;                    /* +0x00: 8 at this call site */
+    int speaker;                   /* +0x04: 0x68 at this call site */
+    int flags;                     /* +0x08: 0x00FFFFFD */
+    int priority;                  /* +0x0C: 0x800000B0 at this call site */
     const char *target;            /* +0x10: dataStatNameGet's resolved name */
     const char *iconGraphic;       /* +0x14: menuStatusText */
 };
@@ -2764,6 +2718,7 @@ int menuStatIconChk(int charaId, int iconSlot);
 const char menuStatusText[8] = "Status";
 extern void eBattleWinMain2(void);
 
+/* Opens the status-name window for the unit's icon while the battle menu is open. */
 void menuStatNamePut(ObjectTask *task)
 {
     struct StatNameOpenParams params;
@@ -2787,18 +2742,17 @@ void menuStatNamePut(ObjectTask *task)
 }
 
 /*
- * One line of a key guide list (menu.data keyGuideL, keyGuideNull, ...;
- * still asm-owned): the pad button icon (uvTbl index, + 4 for its dimmed
- * variant) and the key command it triggers; a 0 button ends the list.
+ * One line of a key guide list: the pad button icon (uvTbl index, + 4 for its
+ * dimmed variant) and the key command it triggers; a 0 button ends the list.
  */
 typedef struct KeyGuideLine {
-    int button; /* +0x00: lw $7,0x0($16) */
-    int key;    /* +0x04: lw $6,0x4($16) */
+    int button; /* +0x00 */
+    int key;    /* +0x04 */
 } KeyGuideLine;
 
 /*
- * One row of keyGuideTblChr/keyGuideTblAgws (8 bytes, sll $3,$16,3): the
- * guide lines and the 0-terminated button icon list of one guide mode.
+ * One row of keyGuideTblChr/keyGuideTblAgws (8 bytes): the guide lines and the
+ * 0-terminated button icon list of one guide mode.
  */
 typedef struct KeyGuideMode {
     KeyGuideLine *lines; /* +0x00 */
@@ -2808,14 +2762,14 @@ typedef struct KeyGuideMode {
 static KeyGuideMode keyGuideTblChr[13];
 static KeyGuideMode keyGuideTblAgws[13];
 
-/* The battle actor flag the key guide requires (lw $2,0x0($3); andi 0x8). */
+/* The battle actor flag the key guide requires. */
 #define ACTOR_FLAG_KEY_GUIDE 0x8u
 
-/* Control phase with no guide (beq $16,0x1A). */
+/* Control phase with no guide. */
 #define KEY_GUIDE_PHASE_NONE 0x1A
-/* First control phase that needs calcTuigekiChk (slti $2,$16,0xB). */
+/* First control phase that needs calcTuigekiChk. */
 #define KEY_GUIDE_PHASE_TUIGEKI 0xB
-/* Key command without a check (bne $6,0x1C). */
+/* Key command without a check. */
 #define KEY_CMD_NO_CHECK 0x1C
 
 extern int menuChk(void);
@@ -2827,15 +2781,13 @@ void menuKeyGuideHelp(GrPacket *packet, BattleUnit *unit, int key, int x, int y)
 void menuKeyGuideVal(GrPacket *packet, BattleUnit *unit, int key, int x, int y);
 
 /*
- * Draws the key guide of phase for unitTask: the button icons of the phase in a
- * row, then each guide line with its button (dimmed while keyCmdChk gives
- * 1, skipped for 2 or more or a negative result) and, unless the help
- * display is in state 2, its help text and values; then the guide footer.
- * Each table is read in its own branch, lines before buttons (the original
- * keeps sll $3,$16,3 in both branches and forms two addresses, addu $4,$2,$3
- * and addu $3,$3,$2); both lists are walked by index (daddu $16,$7,$0 copies
- * the base, the element is reloaded at the loop head); the range check is
- * two nested ifs (slti $2,$3,0x2 then bltzl $3).
+ * Draws the key guide of phase for unitTask: the button icons of the phase in
+ * a row, then each guide line with its button (dimmed while keyCmdChk gives
+ * 1, skipped for 2 or more or a negative result) and, unless the help display
+ * is in state 2, its help text and values; then the guide footer. guideTask is
+ * the key guide object's own task, which holds the draw position. Each table
+ * is read in its own branch, lines before buttons, and both lists are walked
+ * by index, as the original's code shape requires.
  */
 void menuKeyGuideDisp(ObjectTask *guideTask, BattleUnit *unitTask, int phase)
 {
@@ -2916,9 +2868,8 @@ void menuKeyGuideDisp(ObjectTask *guideTask, BattleUnit *unitTask, int phase)
 }
 
 /*
- * One pad button icon's cell in the menu sheet (menu.data uvTbl, 8 entries
- * of 0x10 bytes; still asm-owned): keyGideDisp passes srcX/srcY (lw 0x0/0x4)
- * and width/height (lw 0x8/0xC) to menuStatSprite.
+ * One pad button icon's cell in the menu sheet: keyGideDisp passes its
+ * srcX/srcY and width/height to menuStatSprite.
  */
 typedef struct UvTblEntry {
     int srcX;   /* +0x00 */
@@ -2931,9 +2882,8 @@ static UvTblEntry uvTbl[8];
 
 /*
  * Draws pad button icon button (1-based: uvTbl[0] is button 1) at (x, y).
- * The index is decremented as its own statement: the original subtracts 1
- * before the shift (addiu $16,$16,-1; sll $16,$16,4) instead of folding the
- * -0x10 into the table address.
+ * The index is decremented in its own statement, as the original does before
+ * the table index.
  */
 void keyGideDisp(GrPacket *packet, int x, int y, int button)
 {
@@ -2944,7 +2894,7 @@ void keyGideDisp(GrPacket *packet, int x, int y, int button)
     grCloseSpr();
 }
 
-/* The guide frame's colour table, three RGBA entries (data still asm-owned). */
+/* The guide frame's colour table, three RGBA entries. */
 typedef struct GuideFrameCol {
     MenuRGBA c[3];
 } GuideFrameCol;
@@ -2971,6 +2921,10 @@ void menuGuideFrameDisp(GrPacket *packet, int x, int y, int width, int sel);
 void menuFontEnvMake(void *packet);
 void menuFontPut(GrPacket *packet, int x, int y, const char *text);
 
+/*
+ * Draws a unit's name: a frame, then the name right-aligned by its
+ * length. isEnemy selects the enemy or the player name table.
+ */
 void monsNameDisp(void *packet, BattleUnit *unitTask, int x, int y, int isEnemy)
 {
     const char *name;
@@ -2991,30 +2945,26 @@ void monsNameDisp(void *packet, BattleUnit *unitTask, int x, int y, int isEnemy)
 }
 
 /*
- * dataTecGet's record (src/ov01/data_unit_org_get.c, TecRecord), as far as
- * menuKeyGuideVal reads it.
+ * dataTecGet's record, as far as menuKeyGuideHelp and menuKeyGuideVal read it.
  */
 typedef struct MenuTecData {
-    unsigned char attr;     /* +0x00: `lbu`, menuKeyGuideVal's `& 3` picks atr1Name */
+    unsigned char attr;     /* +0x00: menuKeyGuideHelp's `& 3` picks atr1Name */
     unsigned char unmodeled_01[0x05 - 0x01];
-    signed char extraRow;   /* +0x05: `lb $8,0x5($2)`, nonzero gives the key
-                             * guide frame its second row */
+    signed char extraRow;   /* +0x05: nonzero gives the key guide frame its second row */
     unsigned char unmodeled_06[0x11 - 0x06];
-    signed char kind;       /* +0x11: `lb $3,0x11($2)`, compared with 6 */
-    unsigned short attr2;   /* +0x12: `lhu`, menuKeyGuideVal masks 0xE0 (atr2Name)
-                             * and 0x1F (the h switch); guessed name */
+    signed char kind;       /* +0x11: compared with TEC_KIND_FIXED_AP */
+    unsigned short attr2;   /* +0x12: masked by 0xE0 (atr2Name) and 0x1F in menuKeyGuideHelp; name not established */
 } MenuTecData;
 
 /*
- * dataWpnGet's record (src/ov01/data_unit_org_get.c, WpnRecord), as far as
- * menuKeyGuideVal reads it; names follow calc.c's WpnData view.
+ * dataWpnGet's record, as far as menuKeyGuideVal reads it.
  */
 typedef struct MenuWpnData {
     unsigned char unmodeled_00[0x0F];
-    signed char apCost;     /* +0x0F: `lb $23,0xF($20)` */
-    unsigned char equipped; /* +0x10: `lbu $2,0x10($20)` */
+    signed char apCost;     /* +0x0F */
+    unsigned char equipped; /* +0x10 */
     unsigned char unmodeled_11[0x14 - 0x11];
-    short tecId;            /* +0x14: `lh $5,0x14($20)`, calcTakeEpGet's argument */
+    short tecId;            /* +0x14: calcTakeEpGet's argument */
 } MenuWpnData;
 
 extern MenuTecData *dataTecGet(int tecId);
@@ -3032,6 +2982,10 @@ extern const char menuText[];
 extern int keyCmd2wno(BattleUnit *unit, int key);
 extern int keyCmd2tid(BattleUnit *unit, int key);
 
+/*
+ * Draws the help text of a key guide command: the technique or weapon name,
+ * or the attribute string when help mode is on.
+ */
 void menuKeyGuideHelp(GrPacket *packet, BattleUnit *task, int cmd, int x, int y) {
     char sp[32];
     const char *text;
@@ -3069,6 +3023,7 @@ void menuKeyGuideHelp(GrPacket *packet, BattleUnit *task, int cmd, int x, int y)
                 text = *dataWepNameGet(up->weaponId[keyCmd2wno(task, cmd)]);
             }
         } else {
+            /* Help mode: builds the attribute string from the technique's fields. */
             sp[0] = 0;
             text = sp;
             b = dataTecGet(tid)->attr & 3;
@@ -3133,8 +3088,8 @@ atr1_have:;
     menuStatEnvMake(packet);
 }
 
-/* battle_init.c (ov01), still INCLUDE_ASM there: the weapon slot and the
- * technique id a key command selects for a unit (-1: no weapon slot). */
+/* keyCmd2wno and keyCmd2tid (ov01 battle_init.c) give the weapon slot and the
+ * technique id a key command selects for a unit; -1 means no weapon slot. */
 
 extern MenuWpnData *dataWpnGet(int weaponId);
 
@@ -3143,15 +3098,13 @@ extern MenuWpnData *dataWpnGet(int weaponId);
 
 /*
  * The value panel of one key guide entry: the weapon slot's count, the EP
- * cost and the AP cost of the command bound to key. A technique command of
- * a unit without flag 0x40 shows only for TEC_KIND_FIXED_AP techniques.
- * The frame position is a variable stepped to the value row (valueX += 8,
- * valueY += 6): the original keeps y in $16 and adds 6 in place, and draws
- * the AP cell from that row ($18 + 0x42, + 0x54). The AP cell sits in a
- * do { } while (0) block: the original calls grCloseSpr with jal and
- * returns (no `j grCloseSpr` tail call) and sets the sprite's arguments
- * $5..$10 in order with `daddu $4,$17,$0` in the delay slot; a plain
- * statement list gives the tail call and another argument order.
+ * cost and the AP cost of the command bound to key. For a unit without
+ * CALC_UNIT_FLAG_IS_AGWS, a technique command shows only for TEC_KIND_FIXED_AP
+ * techniques. The frame position is a variable stepped to the value row
+ * (valueX += 8, valueY += 6), as the original does. The AP cell sits in a
+ * do { } while (0) block: the original calls grCloseSpr without a tail call
+ * and sets the sprite's arguments in order; a plain statement list gives a
+ * tail call and another argument order.
  */
 void menuKeyGuideVal(GrPacket *packet, BattleUnit *unit, int key, int x, int y)
 {
@@ -3200,18 +3153,16 @@ void menuKeyGuideVal(GrPacket *packet, BattleUnit *unit, int key, int x, int y)
     } while (0);
 }
 
-/* obj.c (ov01/tu001), exact_c: allocates a task from the free list and
- * stores the caller's callback into its ->exec slot. */
+/* obj.c (ov01/tu001): allocates a task from the free list and stores the
+ * caller's callback into its ->exec slot. */
 extern ObjectTask *objEntry2(void *argument, void (*callback)(ObjectTask *task));
-/* obj.c (ov01/tu001), still INCLUDE_ASM there. */
 extern void objStdInit(ObjectTask *task);
 
 void objDmgNum(ObjectTask *task);
 void objDmgNumDraw(ObjectTask *task);
 
-/* The work block objWorkGet allocates for an objDmgNum/objDmgNumDraw task.
- * Only the fields objDmgNumCreate itself writes are evidenced; the span
- * before them is read by neither this function nor any other claimed one. */
+/* The work block of an objDmgNum/objDmgNumDraw task. Only the fields that
+ * objDmgNumCreate writes are known; the span before them is not used here. */
 typedef struct {
     unsigned char unmodeled_00[0x70];
     int countdown;         /* +0x70: objDmgNumCreate always sets 30 */
@@ -3223,6 +3174,7 @@ typedef struct {
     Vector4 position;       /* +0x90: objDmgNum passes it to sefGetNullPosition */
 } DmgNumWork;
 
+/* Creates a damage number task for target that shows value; the low byte of flags selects the display type, the next byte the message icon. */
 ObjectTask *objDmgNumCreate(void *target, int value, int flags)
 {
     ObjectTask *task;
@@ -3243,6 +3195,10 @@ ObjectTask *objDmgNumCreate(void *target, int value, int flags)
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
 extern int grBBCalc(ObjectTask *task, int *screenX, int *screenY);
 
+/*
+ * Moves the damage number to the target's null position with the vertical
+ * offset for the current countdown step, and removes the task when it ends.
+ */
 void objDmgNum(ObjectTask *task)
 {
     int ofs[30] = {
@@ -3264,6 +3220,7 @@ void objDmgNum(ObjectTask *task)
 void dmgMsgPut(GrPacket *packet, int x, int y, int id);
 void dmgNumPut(GrPacket *packet, int x, int y, int num, int type);
 
+/* Draws the damage number and its message icon while grBBCalc returns nonzero for the task. */
 void objDmgNumDraw(ObjectTask *task)
 {
     GrPacket packet;
@@ -3315,7 +3272,7 @@ void objDmgNumDraw(ObjectTask *task)
     }
 }
 
-/* Five message cells (data still asm-owned), copied whole before indexing. */
+/* Five message cells, copied whole before indexing. */
 typedef struct DmgMsgUVTbl {
     UvTblEntry e[5];
 } DmgMsgUVTbl;
@@ -3390,6 +3347,7 @@ void dmgNumPut(GrPacket *packet, int x, int y, int num, int type)
     } while (place > 0);
 }
 
+/* Returns the index of text[0] in the single-byte font table, or -1 when it is absent. */
 int menuFontIdxGet(const signed char *text)
 {
     static const signed char *font = menu0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzText;
@@ -3403,6 +3361,7 @@ int menuFontIdxGet(const signed char *text)
     return -1;
 }
 
+/* Returns 175 plus the index of the two-byte glyph at text in the table menuJpText4, or -1 when absent. */
 int menuDFontIdxGet(const signed char *text)
 {
     static const signed char *font = menuJpText4;
@@ -3446,7 +3405,7 @@ void menuFontPut(GrPacket *packet, int x, int y, const char *text)
 {
     char hex[3];
     u32 glyph; /* sscanf "%X" target; menuFontIdxGet/menuDFontIdxGet store
-                * their index, -1 for none, into the same slot (sw $2,0x10) */
+                * their index, -1 for none, into the same slot */
     int consumed;
     const char *cursor;
 
@@ -3473,14 +3432,12 @@ void menuFontPut(GrPacket *packet, int x, int y, const char *text)
 }
 
 /*
- * The cursor object's transform, the work's +0x90..+0x110 tail that
- * grCalcMatrix reads through grBBCalc (a second local view of
- * src/ov01/gr_gp_init.c's TU-local TransformState: position at +0x90,
- * offset at +0xa0; flagged for Opok). menuActCurPut saves and restores all
- * 0x80 bytes with aligned ld/sd loops (0x00A2B930, 0x00A2BA10), so the
- * storage is eight-byte aligned: the union gives it that alignment the
- * include/ov01/m_ef_create.h way. It writes position through
- * sefGetNullPosition (addiu $17,$2,0x90) and offset.y (swc1 $f0,0x14($17)).
+ * The cursor object's transform: the work's +0x90..+0x110 tail that grBBCalc
+ * reads through the cursor task, with the same position and offset layout as
+ * TransformState in src/ov01/gr_gp_init.c (position at +0x90, offset at
+ * +0xa0). menuActCurPut saves and restores all 0x80 bytes with aligned copies,
+ * so the storage is eight-byte aligned: the union gives it that alignment, as
+ * in include/ov01/m_ef_create.h.
  */
 typedef union MenuCursorTransform {
     struct {
@@ -3496,11 +3453,9 @@ typedef struct MenuCursorWork {
     MenuCursorTransform transform; /* +0x90 */
 } MenuCursorWork;
 
-/* src/main/sef.c, spelled as src/ov01/cmd.h and src/ov01/m_cam.c do. */
+/* Same prototype as in src/ov01/cmd.h and src/ov01/m_cam.c. */
 extern void sefGetNullPosition(Vector4 *position, void *actor, int part, int flag);
-/* src/ov01/gr_gp_init.c takes a MatrixCommand *, whose only recovered member
- * (state at +0x10) is ObjectTask.work's slot; the cursor task is passed
- * as is (daddu $4,$19,$0). Flagged for Opok. */
+/* Declared in src/ov01/gr_gp_init.c with a MatrixCommand * parameter; the cursor task is passed as is. */
 extern int grBBCalc(ObjectTask *task, int *screenX, int *screenY);
 
 /*
@@ -3532,6 +3487,7 @@ void menuActCurPut(GrPacket *packet, ObjectTask *cursor, BattleUnit *unit, int f
     *transform = saved;
 }
 
+/* Adds a width x height sprite at (x, y) sampled from (srcX, srcY), in the neutral gray colour. */
 void menuStatSprite(GrPacket *packet, int x, int y, int width, int height, int srcX, int srcY) {
     GrSprite sprite;
     MenuColor color;
@@ -3551,6 +3507,7 @@ void menuStatSprite(GrPacket *packet, int x, int y, int width, int height, int s
     grPutSpr(packet, &sprite, 0);
 }
 
+/* Adds a sprite at (x, y) sampled from the texture rectangle srcLeft..srcRight, srcTop..srcBottom, in the neutral gray colour. */
 void menuStatSprite2(GrPacket *packet, int x, int y, int width, int height, int srcLeft, int srcTop, int srcRight, int srcBottom) {
     GrSprite sprite;
     MenuColor color;
@@ -3570,6 +3527,7 @@ void menuStatSprite2(GrPacket *packet, int x, int y, int width, int height, int 
     grPutSpr(packet, &sprite, 0);
 }
 
+/* Same as menuStatSprite, with the colour taken from rgba. */
 void menuStatSpriteRGB(GrPacket *packet, int x, int y, int width, int height, int srcX, int srcY, const MenuRGBA *rgba) {
     GrSprite sprite;
 
@@ -3587,6 +3545,7 @@ void menuStatSpriteRGB(GrPacket *packet, int x, int y, int width, int height, in
     grPutSpr(packet, &sprite, 0);
 }
 
+/* Same as menuStatSprite2, with the colour taken from rgba. */
 void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, int srcLeft, int srcTop, int srcRight, int srcBottom, const MenuRGBA *rgba) {
     GrSprite sprite;
 
@@ -3600,7 +3559,7 @@ void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, i
     sprite.z1 = SPRITE_Z;
     sprite.u1 = srcRight;
     sprite.v1 = srcBottom;
-    /* The colour is copied as four bytes (lwl/lwr), since the caller's record may be unaligned. */
+    /* The colour is copied as four bytes, since the caller's record may be unaligned. */
     __builtin_memcpy(&sprite.color, rgba, 4);
     grPutSpr(packet, &sprite, 0);
 }
@@ -3609,6 +3568,7 @@ void menuStatSprite2RGB(GrPacket *packet, int x, int y, int width, int height, i
 extern int *dataXtxFileGet(int index);
 extern void xglPacketTextureTrans(int textureId);
 
+/* Transfers the texture from xtx entry 1 and flushes the texture cache. */
 void menuTexTrans(void) {
     GrPacket packet;
 
@@ -3618,6 +3578,7 @@ void menuTexTrans(void) {
     grPacketSend(&packet);
 }
 
+/* Transfers the texture from xtx entry 0 and flushes the texture cache. */
 void menuStatTexTrans(void) {
     GrPacket packet;
 
@@ -3627,23 +3588,21 @@ void menuStatTexTrans(void) {
     grPacketSend(&packet);
 }
 
-/* Defined by ov01/tu008 (src/ov01/gr_gp_init.c). The six *EnvMake callers keep
- * their packet parameter as void *, which converts here. */
+/* Defined in src/ov01/gr_gp_init.c. The six *EnvMake callers pass their packet
+ * parameter as void *, which converts here. */
 extern void GS_REG_SET(GrPacket *packet, long long register_id, long long control);
 extern unsigned short dataXtxAdrGet(int index);
 
 /*
- * The six *EnvMake functions below write one GIF packet each. No neighbouring
- * code names the GS registers or the packed words (menuStatTexTrans above and
- * encEnvMake pass raw numbers to grGsRegSet/GS_REG_SET), so they stay numeric:
+ * The six *EnvMake functions below write one GIF packet each. The GS registers
+ * and packed words are written as numbers:
  * - 0xE is the GIF A+D descriptor; its word is the GIFtag (NLOOP 5 for the five
- *   register writes that follow, EOP set, NREG 1), the same word
- *   gr_gp_init.c's grGifAppendRegister(packet, 14, ...) opens its packets with;
+ *   register writes that follow, EOP set, NREG 1);
  * - 0x06 TEX0_1: tbp0 is the texture base, tbp1 << 37 the CLUT base (CBP); the
  *   constant carries the buffer width, pixel formats, size and function bits;
- * - 0x42 ALPHA_1 (blend equation; menuFontEnvMake's 0x44 differs from the 0 of
- *   the others), 0x47 TEST_1 (0x3000D: alpha test on, depth test on),
- *   0x08 CLAMP_1 and 0x14 TEX1_1 both 0.
+ * - 0x42 ALPHA_1 (blend equation; menuFontEnvMake uses 0x44, the others 0),
+ *   0x47 TEST_1 (0x3000D: alpha test on, depth test on), 0x08 CLAMP_1 and
+ *   0x14 TEX1_1 both 0.
  * The dataXtxAdrGet indices select which texture/CLUT pair each environment
  * binds.
  */
@@ -3732,6 +3691,7 @@ void menuStatIconEnvMake(void *packet)
     GS_REG_SET(packet, 0x14, 0);
 }
 
+/* Sets TEX0_1 for the ATB texture with the CLUT of palette 0, 1 or, for any other value, 2. */
 void menuATBEnvPalSet(GrPacket *packet, int palette)
 {
     unsigned short tbp;

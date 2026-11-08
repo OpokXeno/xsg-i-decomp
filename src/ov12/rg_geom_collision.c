@@ -19,16 +19,13 @@ const char geomCollisionSourcePath[32] = "../rg_geom_collision.euc.c";
 
 const char geomCollisionAssertArgNotNil[16] = "pArg != NIL";
 
-/* Declared here: defined elsewhere in the original image. */
+/* Declared here: defined in another file. */
 extern const char geomCollisionAssertRobot1NotNil[]; /* "pRobot1 != NIL" */
 extern const char geomCollisionAssertPoly2NotNil[]; /* "pPoly2 != NIL" */
 
 /*
- * A hit-normal scratch record _BallVsPillar builds beside the contact point:
- * a cleared RgVector whose Y lane is then set to 1.0 (main 0x00a2fe64/
- * 0x00a2fe6c), followed by the other collider's own pointer (main
- * 0x00a2fe78/0x00a2fe80). Neither of this function's own calls reads it
- * back, so its consumer is outside this allocation's evidence.
+ * Scratch hit record filled by the ball and robot handlers: the hit normal and the
+ * other collider. The values are written here but never read back in this file.
  */
 typedef struct {
     RgVector normal;      /* +0x00 */
@@ -36,11 +33,14 @@ typedef struct {
     unsigned char unmodeled_14[0xC];
 } RgGeomColiHit;
 
-/* The pair-dispatch table, scaffold data at 0x00a50090: handlers for the
- * [typeA][typeB] geometry pairs. */
+/* Handler table indexed by the [typeA][typeB] geometry types of a pair. */
 typedef int (*RgGeomCollisionHandler)(RgGeomCollisionPair *pPair);
 static RgGeomCollisionHandler s_apJobFuncTbl[RG_GEOM_TYPE_COUNT][RG_GEOM_TYPE_COUNT];
 
+/*
+ * Collides two balls. When both may be pushed out, the balls are separated in
+ * proportion to their weights. The contact point is reported to both callbacks.
+ */
 static int _BallVsBall(RgGeomCollisionPair *pArg)
 {
     int result;
@@ -76,6 +76,7 @@ static int _BallVsBall(RgGeomCollisionPair *pArg)
         weight1 = RgGeomPointGetWeight(&ball1->point);
         bothStatus &= RG_GEOM_STATUS_PUSH_OUT;
         weight2 = RgGeomPointGetWeight(&ball2->point);
+        /* Push both balls apart in proportion to their weights. */
         if (bothStatus != 0) {
             totalWeight = weight1 + weight2;
             XrgScaleVector(shift, check.penetration, weight2 / totalWeight);
@@ -85,6 +86,7 @@ static int _BallVsBall(RgGeomCollisionPair *pArg)
             XrgSubVector(newPosition, check.position2, shift);
             RgGeomPointSetPos(&ball2->point, newPosition);
         }
+        /* Contact point: midpoint of the two positions. */
         __asm__ __volatile__(
             "lqc2 vf30, 0(%0)\n\t"
             "lqc2 vf31, 0(%1)\n\t"
@@ -110,6 +112,10 @@ static int _BallVsBall(RgGeomCollisionPair *pArg)
     return 0;
 }
 
+/*
+ * Casts the ball's movement ray against a polygon. On a hit, the hit point and the
+ * plane normal are reported to the callbacks.
+ */
 static int _BallVsPoly(RgGeomCollisionPair *pArg)
 {
     RgGeomBall *ball;
@@ -124,6 +130,7 @@ static int _BallVsPoly(RgGeomCollisionPair *pArg)
 
     ball = (RgGeomBall *) pArg->pGeom1;
     poly = (RgGeomPoly *) pArg->pGeom2;
+    /* Positions are copied into the polygon's local space; the local copies are not read again. */
     __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%0)" : : "r"(localPosition), "r"(ball->point.position) : "memory");
     __asm__ __volatile__("lqc2 vf31, 0(%1)\n\tsqc2 vf31, 0(%2)" : : "r"(localOldPosition), "r"(ball->point.oldPosition), "r"(localOldPosition) : "memory");
     localPosition[3] = 1.0f;
@@ -205,6 +212,10 @@ static void _PolyVsBall(RgGeomCollisionPair *pArg)
     _BallVsPoly(&reordered);
 }
 
+/*
+ * Pushes a robot ball out of a polygon along the correction vector and removes the
+ * velocity component along that normal. Returns 0 when there is no contact.
+ */
 static int _RobotVsPoly(RgGeomCollisionPair *pArg)
 {
     RgGeomRobot *robot;
@@ -276,6 +287,7 @@ static void _PolyVsRobot(RgGeomCollisionPair *pArg)
     _RobotVsPoly(&reordered);
 }
 
+/* Collides a ball with a tray, using the averaged normal when several hits occur. */
 static int _BallVsTray(RgGeomCollisionPair *pArg)
 {
     RgGeomTrayContact check;
@@ -341,6 +353,7 @@ static void _TrayVsBall(RgGeomCollisionPair *pArg)
     _BallVsTray(&reordered);
 }
 
+/* Collides a ball with a pillar and reports the contact with a +Y hit normal. */
 static int _BallVsPillar(RgGeomCollisionPair *pArg)
 {
     RgGeomBall *point;
@@ -395,6 +408,10 @@ static void _PillarVsBall(RgGeomCollisionPair *pArg)
     _BallVsPillar(&reordered);
 }
 
+/*
+ * Collides a robot with a tray, reports the contact and pushes the robot out to the
+ * clipped position. Velocity is reduced along each contact normal that opposes it.
+ */
 static int _RobVsTray(RgGeomCollisionPair *pArg)
 {
     RgGeomTrayContact check;
@@ -458,13 +475,16 @@ static int _RobVsTray(RgGeomCollisionPair *pArg)
     return 1;
 }
 
-/* Reuses tray-versus-ball collision handling for a robot collider (elf_names
- * annotation); a plain tail call to _TrayVsBall with the caller's record. */
+/* Robot-versus-tray table entry: forwards to _TrayVsBall. */
 static void _TrayVsRob(RgGeomCollisionPair *pArg)
 {
     _TrayVsBall(pArg);
 }
 
+/*
+ * Collides a robot with a pillar, reports the contact and removes the velocity
+ * component along the pillar normal when the velocity opposes it.
+ */
 static int _RobVsPillar(RgGeomCollisionPair *pArg)
 {
     RgGeomTray *pillar;
@@ -531,6 +551,7 @@ static void _PillarVsRob(RgGeomCollisionPair *pArg)
     _RobVsPillar(&reordered);
 }
 
+/* Clears the geometry and callback fields of a collision pair. */
 void InitRgGeomColiArg(RgGeomCollisionPair *pArg)
 {
     if (pArg == 0) {
@@ -543,6 +564,10 @@ void InitRgGeomColiArg(RgGeomCollisionPair *pArg)
 }
 
 
+/*
+ * Runs the handler for the pair's geometry types. When the handler reports a hit,
+ * both geometries get their event flag set.
+ */
 int RgGeomCollisionJob(RgGeomCollisionPair *pArg)
 {
     RgGeomCollisionHandler handler;

@@ -126,6 +126,7 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         "sqc2 vf31, 0(%0)\n\t"
         : : "r"(last_contact), "r"(current_position) : "memory");
 
+    /* Z bounds: the lower bound first, then the upper bound. */
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
     if (movement.z < -RG_GEOM_TRAY_MOVE_EPSILON) {
         boundary = radius - height;
@@ -179,6 +180,7 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         hit_axes |= RG_GEOM_TRAY_HIT_Z_HIGH;
     }
 
+    /* X bounds: the lower bound first, then the upper bound. */
     XrgSubVectorXYZ(&movement.x, current_position, start_position);
     if (movement.x < -RG_GEOM_TRAY_MOVE_EPSILON) {
         left_boundary = radius - width;
@@ -231,6 +233,7 @@ static int _CalcIntersect(RgVector clipped_position, RgVector last_contact,
         hit_axes |= RG_GEOM_TRAY_HIT_X_HIGH;
     }
 
+    /* Floor (y). */
     if ((hit_axes & RG_GEOM_TRAY_HIT_FLOOR) == 0 && current_position[1] < radius) {
         current_position[1] = radius;
         __asm__ __volatile__(
@@ -277,6 +280,7 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBall *ball,
         assert_prog(geomTrayAssertResultNotNil, geomTraySourcePath, 228);
     }
 
+    /* Bring both path endpoints into tray-local space. */
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
@@ -311,11 +315,13 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBall *ball,
         "sqc2 $vf2, 0(%0)\n\t"
         : : "r"(end_position), "r"(tray->inverseLocal) : "memory");
 
+    /* Clip the path in tray-local space. */
     contact->hit_count = _CalcIntersect(clipped_position, last_contact,
                                         start_position, end_position,
                                         contact->normals, tray->width,
                                         tray->height, ball->radius);
 
+    /* Bring the last contact point, then the clipped position, back to world space. */
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"
@@ -343,6 +349,7 @@ int RgGeomTrayCheckBall(RgGeomTray *tray, RgGeomBall *ball,
         : : "r"(contact->clipped_position), "r"(clipped_position),
             "r"(tray->local) : "memory");
 
+    /* Each contact normal is transformed to world space; its w lane is cleared first. */
     for (i = 0; i < contact->hit_count; i++) {
         contact->normals[i][3] = 0.0f;
         __asm__ __volatile__(

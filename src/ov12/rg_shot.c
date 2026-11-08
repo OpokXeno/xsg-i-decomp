@@ -79,6 +79,7 @@ static void _InitFire(RgFireShot *fire, RgFireEssence *essence,
 static void _InitBeam(RgBeamShot *beam, RgBeamEssence *essence,
                       RgShotRequest *info);
 
+/* Returns the ball geometry of a shot, asserting that the shot and its geometry exist. */
 static RgGeomBall *_CommonGetGeom(RgShot *shot)
 {
     RgGeomBall *geom;
@@ -93,6 +94,10 @@ static RgGeomBall *_CommonGetGeom(RgShot *shot)
     return geom;
 }
 
+/*
+ * Asks the request's position callback for the shot position and aim point.
+ * Returns 0 when there is no owner or no callback.
+ */
 static int _GetShotPos2(RgShotRequest *request, RgVector position,
                         RgVector aimPoint)
 {
@@ -110,6 +115,10 @@ static int _GetShotPos2(RgShotRequest *request, RgVector position,
     return request->getPos(posOwner, position, aimPoint);
 }
 
+/*
+ * Gets the shot position and a normalized direction toward its aim point.
+ * Returns 0 when no position is available.
+ */
 static int _GetShotPosDir(RgShotRequest *request, RgVector position,
                           RgVector direction)
 {
@@ -136,6 +145,10 @@ static void _ShotCommonPassTimeGeom(RgShot *shot, float deltaTime)
     RgGeomPassTime(&_CommonGetGeom(shot)->point.geom, deltaTime);
 }
 
+/*
+ * Counts down the shot's life. When it runs out, the expire callback runs and the
+ * no-life sound plays, or the shot is freed when it has no callback.
+ */
 static void _ShotCommonPassTimeLife(RgShot *shot, float deltaTime)
 {
     float remainingLife;
@@ -160,6 +173,10 @@ static void _ShotCommonPassTimeLife(RgShot *shot, float deltaTime)
                     shot->noLifeSoundVolume);
 }
 
+/*
+ * Moves the shot's effect between the geometry point's old and current positions,
+ * then advances it.
+ */
 static void _ShotCommonPassTimeEffect(RgShot *shot, float deltaTime)
 {
     RgVector position;
@@ -185,6 +202,7 @@ static void _ShotCommonDisp(RgShot *shot)
     RgShotEffectDisp(shot->effect);
 }
 
+/* Frees the shot's geometry and effect and stops its hide sound. */
 static void _ShotCommonDestruct(RgShot *shot)
 {
     if (shot->geomTray != 0) {
@@ -211,6 +229,10 @@ static int _ShotCommonIsReleased(RgShot *shot)
 
 const char shotAssertShotGroupNotNil[24] = "pShotGroup != NIL";
 
+/*
+ * Sets the common method pointers and default values of a shot and creates its
+ * geometry ball (inside shotGroup when given) and its effect.
+ */
 static void _InitShotCommonSub(RgShot *shot, struct RgGeomGroup *shotGroup)
 {
     if (shotGroup == 0) {
@@ -250,6 +272,10 @@ static void _InitShotCommonSub(RgShot *shot, struct RgGeomGroup *shotGroup)
     } while (0);
 }
 
+/*
+ * Initializes the common part of a shot from its essence and request. The geometry
+ * takes the request's position and a velocity along the aim direction scaled by speed.
+ */
 static void _InitShotCommon(RgShot *shot, RgShotEssence *essence,
                             RgShotRequest *extInfo, float speed)
 {
@@ -281,6 +307,7 @@ static void _InitShotCommon(RgShot *shot, RgShotEssence *essence,
     XrgClearVector(position);
 }
 
+/* Resets the common fields of a shot essence to their defaults. */
 static void _InitRgShotEssence(RgShotEssence *essence)
 {
     essence->life = 0.0f;
@@ -313,6 +340,7 @@ static RgShot *_CreateRgNormalShot(RgShotEssence *essence,
     return shot;
 }
 
+/* Sets up a normal shot essence with its create function and default speed. */
 void InitRgNormalShotEssence(RgNormalShotEssence *essence)
 {
     if (essence == 0) {
@@ -323,6 +351,10 @@ void InitRgNormalShotEssence(RgNormalShotEssence *essence)
     essence->speed = 45.0f;
 }
 
+/*
+ * Advances a homing shot. When its delay has run out, it turns its velocity toward
+ * the target, with a random offset when the target is confused.
+ */
 static void _HomingPassTime(RgHomingShot *shot, float deltaTime)
 {
     RgVector targetPosition;
@@ -359,6 +391,10 @@ static void _HomingPassTime(RgHomingShot *shot, float deltaTime)
     }
 }
 
+/*
+ * Initializes a homing shot's turn rate, cosine threshold, delay, speed and target
+ * from its essence and request.
+ */
 static void _InitHoming(RgHomingShot *shot, RgHomingShotEssence *essence,
                         RgShotRequest *info)
 {
@@ -386,6 +422,7 @@ static void _InitHoming(RgHomingShot *shot, RgHomingShotEssence *essence,
     shot->speed = speed;
 }
 
+/* Allocates and initializes a homing shot. */
 static RgShot *_CreateHoming(RgShotEssence *essence, RgShotRequest *info)
 {
     RgShot *shot;
@@ -404,6 +441,7 @@ static RgShot *_CreateHoming(RgShotEssence *essence, RgShotRequest *info)
     return shot;
 }
 
+/* Sets up a homing shot essence with its create function and default values. */
 void InitRgHomingShotEssence(RgHomingShotEssence *essence)
 {
     float cosThreshold;
@@ -421,6 +459,10 @@ void InitRgHomingShotEssence(RgHomingShotEssence *essence)
     essence->delay = 0.3f;
 }
 
+/*
+ * Adds object to the grenade's hit history. Returns 1 when it was added, or 0 when
+ * it is null, already recorded or the history is full.
+ */
 static int _GrenadeEntryHistory(RgShot *shot, void *object)
 {
     RgGrenadeShot *grenade;
@@ -457,6 +499,11 @@ const char shotAssertRobotNotNil[16] = "pRobot != NIL";
 
 const char shotDamageParticleEffectName[16] = "eff06.ptcl";
 
+/*
+ * Advances an exploded grenade: its radius grows during the first half of its
+ * duration and its effect fades near the end. Once the duration has passed, it
+ * sets the shot's life to zero.
+ */
 static void _GrenadeBomPassTime(RgShot *shot, float deltaTime)
 {
     RgGrenadeShot *grenade;
@@ -481,6 +528,7 @@ static void _GrenadeBomPassTime(RgShot *shot, float deltaTime)
         RgGeomResetStatus(&geom->point.geom, RG_GEOM_STATUS_ACTIVE);
         shot->life = 0.0f;
     } else {
+        /* The radius reaches its maximum at half the duration. */
         twiceElapsed = grenade->elapsedTime + grenade->elapsedTime;
         if (twiceElapsed < 0.0f) {
             factor = 0.0f;
@@ -510,6 +558,7 @@ static void _GrenadeBomPassTime(RgShot *shot, float deltaTime)
         grenade->spinAngle = angle;
         RgShotEffectSetYRot(shot->effect, angle);
 
+        /* A confused grenade is made nearly transparent; otherwise it fades out near the end. */
         if (0.0f < (float)grenade->confuseTime) {
             RgShotEffectSetAddAlpha(shot->effect);
             RgShotEffectSetTransparent(shot->effect, 0.1f);
@@ -547,6 +596,10 @@ static void _GrenadeBomHit(RgShot *shot, RgVector position)
 {
 }
 
+/*
+ * Handles a grenade hitting a robot. A grenade with no confuse time damages the
+ * robot and pushes it horizontally away; otherwise it confuses the robot.
+ */
 static void _GrenadeHitRobot(RgShot *shot, RgStatus *robot, RgVector position)
 {
     RgGrenadeShot *grenade;
@@ -585,6 +638,11 @@ static void _GrenadeHitBg(RgShot *shot, struct RgBgObj *bgObject,
     }
 }
 
+/*
+ * Switches a grenade to its bomb state: it stops moving and its geometry collapses.
+ * A hit effect is created at its position when its confuse time is set, and its
+ * particle emission is stopped.
+ */
 static void _GrenadeSetBom(RgShot *shot)
 {
     RgGrenadeShot *grenade;
@@ -617,6 +675,10 @@ static void _GrenadeSetBom(RgShot *shot)
     }
 }
 
+/*
+ * Advances a homing grenade, and switches it to the bomb state once it is within
+ * its proximity distance of the target.
+ */
 static void _GrenadeHomingPassTime(RgGrenadeShot *bom, float deltaTime)
 {
     RgVector targetPosition;
@@ -641,6 +703,10 @@ static void _GrenadeHomingPassTime(RgGrenadeShot *bom, float deltaTime)
     }
 }
 
+/*
+ * Initializes a grenade's homing base, explosion radius, duration, proximity and
+ * confuse time from its essence and request.
+ */
 static void _InitGrenade(RgGrenadeShot *shot, RgGrenadeEssence *essence,
                          RgShotRequest *info)
 {
@@ -660,6 +726,7 @@ static void _InitGrenade(RgGrenadeShot *shot, RgGrenadeEssence *essence,
     shot->confuseTime = (unsigned int)essence->confuseTime;
 }
 
+/* Allocates and initializes a grenade shot. */
 static RgShot *_CreateGrenade(RgShotEssence *essence, RgShotRequest *info)
 {
     RgShot *bom;
@@ -678,6 +745,7 @@ static RgShot *_CreateGrenade(RgShotEssence *essence, RgShotRequest *info)
     return bom;
 }
 
+/* Sets up a grenade essence on top of the homing defaults. */
 void InitRgGrenadeEssence(RgGrenadeEssence *essence)
 {
     InitRgHomingShotEssence(&essence->homing);
@@ -688,6 +756,7 @@ void InitRgGrenadeEssence(RgGrenadeEssence *essence)
     essence->confuseTime = 0.0f;
 }
 
+/* Starts a fire shot fading. With quickFade the fade time is zero, otherwise one second. */
 static void _FireKill(RgShot *shot)
 {
     RgFireShot *fire;
@@ -705,6 +774,10 @@ static void _FireKill(RgShot *shot)
     RgShotEffectStopAlive(shot->effect, fire->fadeTime);
 }
 
+/*
+ * Advances a fire shot through its start, burn and fade states, updating its origin
+ * and tip. An unknown status raises an error.
+ */
 static void _FirePassTime(RgShot *shot, float deltaTime)
 {
     RgFireShot *fire;
@@ -723,6 +796,7 @@ static void _FirePassTime(RgShot *shot, float deltaTime)
     _ShotCommonPassTimeGeom(shot, deltaTime);
     _ShotCommonPassTimeLife(shot, deltaTime);
     status = fire->status;
+    /* Start, burn and fade states; the default case reports an unknown status. */
     switch (status) {
     default:
         RgError(shotUnknownFireStatusFormat, shotSourcePath, 876, status);
@@ -765,12 +839,14 @@ static void _FirePassTime(RgShot *shot, float deltaTime)
         }
         break;
     }
+    /* The geometry and effect follow the origin and tip chosen by the state. */
     RgGeomPointSetPos(&geom->point, originPos);
     RgGeomPointMovePos(&geom->point, tipPos);
     RgShotEffectSetPos(shot->effect, originPos, tipPos);
     RgShotEffectPassTime(shot->effect, deltaTime);
 }
 
+/* Returns nonzero once a fire shot has reached its fade state. */
 static int _FireIsReleased(RgShot *shot)
 {
     RgFireShot *fire;
@@ -782,6 +858,7 @@ static int _FireIsReleased(RgShot *shot)
     return (unsigned int)fire->status >= RG_FIRE_STATUS_FADE;
 }
 
+/* Starts a fire shot fading early, unless it is already fading. */
 static void _FireRelease(RgShot *shot)
 {
     if (shot == 0) {
@@ -796,6 +873,7 @@ static void _FireHit(RgShot *shot, RgVector position)
 {
 }
 
+/* Damages a robot on hit. A shot that hits only once skips robots it has already hit. */
 static void _FireHitRobot(RgShot *shot, RgStatus *robot, RgVector position)
 {
     RgFireShot *fire = (RgFireShot *)shot;
@@ -806,6 +884,10 @@ static void _FireHitRobot(RgShot *shot, RgStatus *robot, RgVector position)
     fire->alreadyHitRobot = 1;
 }
 
+/*
+ * Initializes a fire shot's origin, tip, timing, speed and damage from its essence
+ * and request.
+ */
 static void _InitFire(RgFireShot *fire, RgFireEssence *essence,
                       RgShotRequest *info)
 {
@@ -837,6 +919,7 @@ static void _InitFire(RgFireShot *fire, RgFireEssence *essence,
     fire->request.shotGroup = info->shotGroup;
 }
 
+/* Allocates and initializes a fire shot. */
 static RgShot *_CreateFire(RgShotEssence *essence, RgShotRequest *info)
 {
     RgShot *fire;
@@ -852,6 +935,7 @@ static RgShot *_CreateFire(RgShotEssence *essence, RgShotRequest *info)
     return fire;
 }
 
+/* Sets up a fire shot essence with its create function and default timing. */
 void InitRgFireEssence(RgFireEssence *essence)
 {
     if (essence == 0) {
@@ -865,6 +949,11 @@ void InitRgFireEssence(RgFireEssence *essence)
     essence->immDead = 0;
 }
 
+/*
+ * Advances a beam shot: it updates its damage, extends its length along the aim while
+ * alive, and draws its geometry from origin to tip. A hit shortens the beam, and the
+ * beam is freed once its length runs out.
+ */
 static void _BeamPassTime(RgBeamShot *beam, float deltaTime)
 {
     RgVector movement;
@@ -925,6 +1014,7 @@ static int _BeamIsReleased(RgShot *shot)
     return ((RgBeamShot *)shot)->lifetime <= 0.0f;
 }
 
+/* Ends a beam's lifetime when it hits something and marks it as hit. */
 static void _BeamHit(RgShot *shot, RgVector position)
 {
     RgBeamShot *beam;
@@ -942,6 +1032,10 @@ static void _BeamRelease(RgShot *shot)
     ((RgBeamShot *)shot)->lifetime = -0.5f;
 }
 
+/*
+ * Initializes a beam shot's origin, direction, length, lifetime and damage from its
+ * essence and request.
+ */
 static void _InitBeam(RgBeamShot *beam, RgBeamEssence *essence,
                       RgShotRequest *info)
 {
@@ -974,6 +1068,7 @@ static void _InitBeam(RgBeamShot *beam, RgBeamEssence *essence,
     beam->request.shotGroup = info->shotGroup;
 }
 
+/* Allocates and initializes a beam shot. */
 static RgShot *_CreateBeam(RgShotEssence *essence, RgShotRequest *info)
 {
     RgShot *beam;
@@ -987,6 +1082,7 @@ static RgShot *_CreateBeam(RgShotEssence *essence, RgShotRequest *info)
     return beam;
 }
 
+/* Sets up a beam shot essence with its create function and default speed. */
 void InitRgBeamEssence(RgBeamEssence *essence)
 {
     if (essence == 0) {
@@ -999,6 +1095,7 @@ void InitRgBeamEssence(RgBeamEssence *essence)
     essence->attachTime = 2.0f;
 }
 
+/* Creates a shot through the create function stored in its essence. */
 RgShot *CreateRgShotFromEssence(RgShotEssence *essence, RgShotRequest *info)
 {
     if (essence == 0) {
@@ -1052,6 +1149,10 @@ float RgShotGetDamage(RgShot *shot)
     return shot->damage;
 }
 
+/*
+ * Returns nonzero when the shot is released. A shot without a release check counts as
+ * released.
+ */
 int RgShotIsReleased(RgShot *shot)
 {
     if (shot == 0) {
@@ -1078,6 +1179,7 @@ void RgShotRelease(RgShot *shot)
         shot->release(shot);
 }
 
+/* Counts a hit on a robot, then runs the shot's robot-hit and notify callbacks. */
 void RgShotHitRobot(RgShot *shot, RgStatus *robot, RgVector position)
 {
     if (shot == 0)
@@ -1091,6 +1193,7 @@ void RgShotHitRobot(RgShot *shot, RgStatus *robot, RgVector position)
         shot->notifyHit(shot, position);
 }
 
+/* Reports a hit on a background object to the shot's background-hit and notify callbacks. */
 void RgShotHitBg(RgShot *shot, struct RgBgObj *bgObject, RgVector position)
 {
     if (shot == 0)
@@ -1103,6 +1206,10 @@ void RgShotHitBg(RgShot *shot, struct RgBgObj *bgObject, RgVector position)
         shot->notifyHit(shot, position);
 }
 
+/*
+ * Applies the shot's damage to a robot, or the invalid-attack reaction when the robot
+ * rejects the direction, and creates the hit effect.
+ */
 static void _ShotCommonHitRobot(RgShot *shot, RgStatus *robot,
                                 RgVector position)
 {
@@ -1139,6 +1246,7 @@ static void _ShotCommonHitRobot(RgShot *shot, RgStatus *robot,
     }
 }
 
+/* Breaks a background object by the shot's damage, then plays its hit sound and effect. */
 static void _ShotCommonHitBg(RgShot *shot, struct RgBgObj *bgObject,
                              RgVector position)
 {

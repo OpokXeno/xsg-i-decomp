@@ -10,7 +10,7 @@
 
 /* The size of the block CreateRgParticleEffect allocates. */
 #define RG_PARTICLE_EFFECT_SIZE 0x470
-/* The slot a serialized essence is written to. */
+/* Size of the buffer that RgParticleEffectEssenceSerialize clears before it copies an essence. */
 #define RG_PARTICLE_ESSENCE_SLOT_SIZE 0x100
 
 
@@ -30,6 +30,7 @@ const char particleEffectAssertSourceNotNil[16] = "pSrc != NIL";
 
 const char particleEffectAssertCharNotNil[16] = "pChar != NIL";
 
+/* Copies an essence's timing, life and appearance into a shoot and resets its emission state. */
 static void _InitShoot(RgParticleShoot *shoot, RgParticleEffectEssence *essence)
 {
     shoot->interval = essence->interval;
@@ -51,6 +52,11 @@ static inline int _MaxInt(int a, int b)
     return (a >= b) ? a : b;
 }
 
+/*
+ * Emits the particles of one shot. An opening shot emits its full count once its duration
+ * has run out; a running shot emits from duration * deltaTime plus the carried remainder.
+ * Particles are spread along the segment between the previous and the current origin.
+ */
 static void _ShootParticles(RgParticleShot *shot, float deltaTime, int opening)
 {
     RgParticleShoot *shoot;
@@ -82,6 +88,7 @@ static void _ShootParticles(RgParticleShot *shot, float deltaTime, int opening)
 
     end = shot->particles + shot->particleCount;
     shoot = &shot->shoot;
+    /* Opening shots emit once; running shots emit for the elapsed time. */
     if (opening != 0) {
         if (shoot->duration > 0.0f) {
             return;
@@ -193,6 +200,10 @@ const char particleEffectTooManyParticleTotalFormat[32] = "too many particle tot
 
 const char particleEffectMissingTextureFormat[48] = "there is not texture named '%s' for particle";
 
+/*
+ * Sets up an effect from an essence array: one particle array shared by all shots, and
+ * one shot per essence bound to its texture.
+ */
 static void _InitEffect(RgParticleEffect *effect, RgParticleEffectEssence *essence,
                         int essenceCount)
 {
@@ -265,6 +276,7 @@ static void _DestructEffect(RgParticleEffect *effect)
     }
 }
 
+/* Allocates an effect and initializes it from the essence array. */
 RgParticleEffect *CreateRgParticleEffect(RgParticleEffectEssence *essence,
                                          int essenceCount)
 {
@@ -291,6 +303,7 @@ void DisposeRgParticleEffect(RgParticleEffect *effect)
     RgHeapFree(InstanceOfRgHeap(), effect, particleEffectSourcePath, 333);
 }
 
+/* Fills an essence with the default emission values. */
 void InitRgParticleEffectEssence(RgParticleEffectEssence *essence)
 {
     if (essence == 0) {
@@ -314,6 +327,7 @@ void InitRgParticleEffectEssence(RgParticleEffectEssence *essence)
     essence->resist = 0.0f;
 }
 
+/* Copies an essence into a slot-sized buffer, clearing the rest of the slot first. */
 void RgParticleEffectEssenceSerialize(RgParticleEffectEssence *essence,
                                       RgParticleEffectEssence *destination)
 {
@@ -435,6 +449,7 @@ void RgParticleEffectSetControlData(RgParticleEffect *effect, RgParticleEffectCo
     dst->timer[2] = value2;
 }
 
+/* Returns nonzero when the effect is not locked and every shot still has life left. */
 int RgParticleEffectIsAlive(RgParticleEffect *effect)
 {
     unsigned int alive;
@@ -463,6 +478,7 @@ int RgParticleEffectIsActive(RgParticleEffect *effect)
            == RG_PARTICLE_EFFECT_STATE_ACTIVE;
 }
 
+/* Counts a running timer down by dt. Returns 0 when it expires, 1 while it runs, 2 when it is not running. */
 static int _decr_timer(float *timer, float dt)
 {
     float updated;
@@ -481,6 +497,10 @@ static int _decr_timer(float *timer, float dt)
     return status;
 }
 
+/*
+ * Applies the timers, then advances every shot by deltaTime. Shots emit while they are
+ * alive, and repeating shots restart when their life ends.
+ */
 void RgParticleEffectPassTime(RgParticleEffect *effect, float deltaTime)
 {
     XrgParticleDriver *driver;
@@ -513,6 +533,7 @@ void RgParticleEffectPassTime(RgParticleEffect *effect, float deltaTime)
     if (!(effect->state & RG_PARTICLE_EFFECT_STATE_ACTIVE)) {
         return;
     }
+    /* Each shot emits while alive and passes its particles to the driver's calc queue. */
     for (i = 0; i < effect->shootCount; i++) {
         shot = &effect->shots[i];
         shot->life -= deltaTime;
@@ -535,6 +556,7 @@ void RgParticleEffectPassTime(RgParticleEffect *effect, float deltaTime)
     XrgParticleDriverPassTime(driver, deltaTime);
 }
 
+/* Queues the display request of every living shot while the effect is active. */
 void RgParticleEffectDisp(RgParticleEffect *effect)
 {
     XrgParticleDriver *driver;
@@ -567,6 +589,7 @@ static void _DestructPtclChar(RgParticleChar *pChar)
     pChar->effect = 0;
 }
 
+/* Advances the effect and frees the character unless the effect is still alive and active. */
 static void _PassTimePtclChar(RgParticleChar *pChar, float deltaTime)
 {
     int alive;
@@ -610,6 +633,7 @@ static void _InitPtclChar(RgParticleChar *pChar, RgParticleEffect *effect)
     pChar->effect = effect;
 }
 
+/* Wraps effect in a new particle character, which then owns it. */
 void CreateRgParticleEffectChar(RgParticleEffect *effect)
 {
     _InitPtclChar((RgParticleChar *)RgCharAlloc(sizeof(RgParticleChar), 4), effect);

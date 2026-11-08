@@ -127,7 +127,7 @@ enum {
 #define SHOP_PAS_WINDOW_SHOWN_X (-16)
 #define SHOP_PAS_LABEL_HIDDEN_X 288
 #define SHOP_PAS_LABEL_SHOWN_X 16
-/* Caption index (msg00_0_0036DAF0): 0 "Store", 3..11 the categories, then the A.G.W.S. commands. */
+/* Caption index: 0 "Store", 3..11 the categories, then the A.G.W.S. commands. */
 #define SHOP_PAS_LABEL_STORE 0
 #define SHOP_PAS_LABEL_CATEGORY_FIRST 3
 #define SHOP_PAS_LABEL_AGWS_TUNING 12
@@ -422,8 +422,7 @@ struct MenuShopModelCallbackData {
     int modelId;
 };
 
-/* The map anchors nine 0x28-byte count records and a separate 8-byte tail.
- * The remaining bytes stay explicitly unmodeled. */
+/* Partial view: the A.G.W.S. item ids sit at +0x160; the bytes before them are unmodeled. */
 struct MenuShopAgwsListState {
     unsigned char unmodeled_00[0x160];
     unsigned short itemIds[4];
@@ -533,7 +532,7 @@ typedef struct ShopCalculatedPara {
     unsigned char unmodeled_36[0x14A];
 } ShopCalculatedPara;
 
-/* MenuShopNoSaleCheck reads the halfword at +0x4 (original VA 0x002a3c88). */
+/* MenuShopNoSaleCheck reads the halfword at +0x4. */
 typedef struct MenuShopAccessoryData {
     unsigned char unmodeled_00[4];
     unsigned short flags;
@@ -852,7 +851,7 @@ typedef struct MenuShopHelpWork {
     MenuShopPasBounds bounds;
 } MenuShopHelpWork;
 
-/* The display is seven halfwords; foreign MenuAgwsPara uses the same layout. */
+/* The display is seven halfwords; MenuAgwsPara uses the same layout. */
 typedef struct AgwsParaDisplay {
     short value[7];
 } AgwsParaDisplay;
@@ -1167,6 +1166,10 @@ static inline void MenuShopAppendUnitId(MenuShopWorkData *work, int *nextSlot,
     *destination = (short)*(*source)++;
 }
 
+/*
+ * Clears the A.G.W.S. slots that PartyTakeAgwsCheck reports as taken, then
+ * moves the remaining slots to the front.
+ */
 void MenuShopAgwsListChange(void)
 {
     int i;
@@ -1198,6 +1201,10 @@ static void TskObjectSet3(TskObject *task, TskObjectWorker worker, void *data)
     task->state = 0;
 }
 
+/*
+ * Task driver: runs the worker once when the task starts and then on every
+ * frame. Removes the task once the shop reaches SHOP_STATE_END.
+ */
 static void tskTskMain3(TskObject *task)
 {
     TskObjectWorker worker = task->worker;
@@ -1218,6 +1225,11 @@ static void tskTskMain3(TskObject *task)
     worker(task, task->data);
 }
 
+/*
+ * Extension callback of the shop's model unit (installed with
+ * MenuModelExtFuncSet). Runs the open, swap and fade-out steps selected by
+ * extFuncFlag.
+ */
 void MenuShopModelDisp(MenuModelUnit *unit)
 {
     Actor *actor = unit->actor;
@@ -1261,6 +1273,10 @@ void MenuShopModelDisp(MenuModelUnit *unit)
     }
 }
 
+/*
+ * Model task. State 0 sets up the studio cameras. State 2 creates the model
+ * of the selected A.G.W.S. or marks the model as pending.
+ */
 static void MenuShopModelMain(TskObject *task, void *data)
 {
     MenuShopModelTask *model = (MenuShopModelTask *)task;
@@ -1331,6 +1347,10 @@ static void MenuShopModelMain(TskObject *task, void *data)
     }
 }
 
+/*
+ * Help caption bar. State 0 opens its window and caption messages. State 2
+ * slides the window and the captions that match the current shop state.
+ */
 static void MenuShopPas(TskObject *task, void *data)
 {
     MenuShopHelpWork *work = data;
@@ -1367,6 +1387,7 @@ static void MenuShopPas(TskObject *task, void *data)
         break;
     case 2:
         windowX = SHOP_PAS_WINDOW_SHOWN_X;
+        /* Hide every caption, then show the ones for the current shop state. */
         for (i = 0; i < SHOP_PAS_LABEL_COUNT; i++)
             messageX[i] = SHOP_PAS_LABEL_HIDDEN_X;
         switch (MenuShopWork->state) {
@@ -1421,6 +1442,10 @@ static void MenuShopPas(TskObject *task, void *data)
     }
 }
 
+/*
+ * Description bar at the bottom of the shop. State 0 opens the window. State 2
+ * picks the description for the current shop state and slides the bar.
+ */
 static void MenuShopInfo(TskObject *task, void *data)
 {
     MenuShopInfoWork *work = data;
@@ -1473,6 +1498,7 @@ static void MenuShopInfo(TskObject *task, void *data)
         return;
     }
 
+    /* Pick the description text for the current shop state. */
     targetY = SHOP_INFO_SHOWN_Y;
     targetH = SHOP_INFO_HEIGHT;
     switch (MenuShopWork->state) {
@@ -1599,6 +1625,11 @@ static void MenuShopInfo(TskObject *task, void *data)
     WindowDXMain(&work->window);
 }
 
+/*
+ * Command menus and the choice popup (buy/sell confirm, restore, A.G.W.S.
+ * confirm). State 0 opens the panels; state 2 moves them to match the current
+ * shop state.
+ */
 static void MenuShopSelect(TskObject *task, void *data)
 {
     MenuShopSelectWork *work = data;
@@ -1686,6 +1717,7 @@ static void MenuShopSelect(TskObject *task, void *data)
                 choiceX[i] = SHOP_PANEL_HIDDEN_X;
         }
         shop = MenuShopWork;
+        /* Place the command menu and the popup for the current shop state. */
         switch (shop->state) {
         case SHOP_STATE_MODE_SELECT:
             if (shop->stateFlags & SHOP_FLAG_STATE_ENTERED) {
@@ -1709,6 +1741,7 @@ static void MenuShopSelect(TskObject *task, void *data)
 
             updatePopup = shop->stateFlags & SHOP_FLAG_STATE_ENTERED;
 
+            /* Heading and position of the confirm popup depend on the mode and category. */
             if (updatePopup) {
                 switch (*mode) {
                 case SHOP_MODE_BUY:
@@ -1816,6 +1849,10 @@ static void MenuShopSelect(TskObject *task, void *data)
     }
 }
 
+/*
+ * Fills the sort list `list` with item keys for `type`: the card items, or the
+ * record table of the category. The list ends with a zero entry.
+ */
 void MenuShopSortSet(int list, int type, int order, int option)
 {
     MenuShopSortTable table;
@@ -1856,6 +1893,10 @@ void MenuShopSortSet(int list, int type, int order, int option)
     *output = 0;
 }
 
+/*
+ * Counts the party units (or A.G.W.S.) that have `item` equipped in the slot
+ * group of `category`. Returns 0 when a unit record is missing.
+ */
 int subMenuShopEquipCheck(int item, int category)
 {
     int partyIds[16];
@@ -1956,6 +1997,7 @@ int subMenuShopEquipCheck(int item, int category)
     return matches;
 }
 
+/* Returns 1 when the item key (kind in the high word) has SHOP_ITEM_FLAG_NO_SALE set. */
 int MenuShopNoSaleCheck(int item)
 {
     int itemId;
@@ -1989,6 +2031,11 @@ int MenuShopNoSaleCheck(int item)
     return 0;
 }
 
+/*
+ * Sets the flag of the entries of `list` that cannot be picked. In buy mode
+ * (or kind 2) those cost more than the money box holds; otherwise they are
+ * the items that cannot be sold.
+ */
 void MenuShopListColorChange(int list, int kind)
 {
     int *sorted = MenuSortAddrGet(list);
@@ -2014,6 +2061,10 @@ void MenuShopListColorChange(int list, int kind)
     }
 }
 
+/*
+ * Rebuilds the item list window for the current category and mode, then runs
+ * its selection. Returns the result of WindowSPSelect.
+ */
 int MenuShopListChange00(int list)
 {
     struct MenuShopSortOptionTable sortOptions;
@@ -2058,6 +2109,10 @@ int MenuShopListChange00(int list)
     return WindowSPSelect(MenuShopWinSP, 0);
 }
 
+/*
+ * Rebuilds the frame or generator price list (A.G.W.S. purchase) and runs its
+ * selection. Returns the result of WindowSPSelect.
+ */
 int MenuShopListChange01(int list)
 {
     int type = SHOP_SORT_TYPE_FRAME;
@@ -2087,6 +2142,10 @@ int MenuShopListChange01(int list)
     return WindowSPSelect(MenuShopWinSP, 0);
 }
 
+/*
+ * Item list window. State 0 hides it. State 2 slides it in for the item or
+ * price list of the current state and out again when the shop leaves it.
+ */
 static void MenuShopList(TskObject *task, void *data)
 {
     struct MenuShopListDisplay *work = data;
@@ -2191,6 +2250,11 @@ static void MenuShopList(TskObject *task, void *data)
     }
 }
 
+/*
+ * Party and equipment panels beside the item list: headers, party rosters and
+ * the equipment total. State 0 sets up the panel objects; state 2 slides them
+ * to match the current shop state and category.
+ */
 static void MenuShopEx(TskObject *task, void *data)
 {
     struct MenuShopExDisplay *work = data;
@@ -2288,6 +2352,7 @@ static void MenuShopEx(TskObject *task, void *data)
         totalX[0] = SHOP_PANEL_HIDDEN_X;
         totalY[0] = 0xcb;
 
+        /* Choose which panels slide in for the current shop state. */
         switch ((*shop)->state) {
         case SHOP_STATE_BUY_LIST:
         case SHOP_STATE_SELL_LIST:
@@ -2489,6 +2554,11 @@ static void MenuShopEx(TskObject *task, void *data)
     }
 }
 
+/*
+ * Sale panel with the quantity and money of a purchase or sale. State 0 sets
+ * up the window; state 2 slides it in for the quantity and confirm states and
+ * updates its numbers.
+ */
 static void MenuShopSeisan(TskObject *task, void *data)
 {
     struct MenuShopSalePanel *work = data;
@@ -2587,6 +2657,7 @@ static void MenuShopSeisan(TskObject *task, void *data)
         work->ribbon.work = work->depth + 1;
         for (i = 0; i < 6; i++)
             eRibbonMain(&work->ribbon);
+        /* Fill the quantity and money numbers for the selected item. */
         {
         MenuShopWorkData *selection = MenuShopWork;
         if (selection->listIndex >= 0) {
@@ -2641,6 +2712,11 @@ static void MenuShopSeisan(TskObject *task, void *data)
     }
 }
 
+/*
+ * Price popup for the FHP restoration and the A.G.W.S. purchase. State 0 sets
+ * up the window; state 2 slides it in and out with the shop state and shows
+ * the price of the step.
+ */
 static void MenuShopSeisan02(TskObject *task, void *data)
 {
     MenuShopSeisan02Work *work = data;
@@ -2695,6 +2771,7 @@ static void MenuShopSeisan02(TskObject *task, void *data)
         work->state = 0;
         break;
     case 2:
+        /* Open, slide and close the popup for the restore or the buy step. */
         switch (work->state) {
         case SHOP_PAY_CLOSED:
             work->flag = 0;
@@ -2797,6 +2874,11 @@ static void MenuShopSeisan02(TskObject *task, void *data)
     }
 }
 
+/*
+ * A.G.W.S. target panel for the restore and buy steps: the unit portraits, the
+ * cursor and the slide. State 0 sets up the panel; state 2 slides it and marks
+ * the units that cannot take the selected part.
+ */
 static void MenuShopEx02(TskObject *task, void *data)
 {
     struct MenuShopUnitPanel *work = data;
@@ -2943,6 +3025,10 @@ static void MenuShopEx02(TskObject *task, void *data)
     }
 }
 
+/*
+ * Icon strip of the categories along the top of the shop. State 0 creates the
+ * sprites; state 2 slides and lifts them according to the shop state.
+ */
 static void MenuShopIcon(TskObject *task, void *data)
 {
     struct MenuShopIconDisplay *work = data;
@@ -3077,6 +3163,11 @@ static void MenuShopIcon(TskObject *task, void *data)
     }
 }
 
+/*
+ * Fills MenuShopPara with the stat change from equipping `item`. Modes 0 and 1
+ * put it in the accessory slot, mode 2 in the attachment slot. The unit record
+ * is restored afterwards.
+ */
 void MenuShopParaSet2(int item, int mode)
 {
     int attack[4];
@@ -3123,6 +3214,10 @@ void MenuShopParaSet2(int item, int mode)
     *unit = savedUnit;
 }
 
+/*
+ * Fills the stat comparison rows (MenuShopPara, and MenuShopPara2 for the
+ * restore mode) for the SHOP_PARA_* `mode`.
+ */
 void MenuShopParaSet(unsigned int mode)
 {
     int attack[4];
@@ -3246,6 +3341,10 @@ void MenuShopParaSet(unsigned int mode)
     }
 }
 
+/*
+ * Stat panel of the selected item. State 0 sets up the window and the labels;
+ * state 2 loads the stat rows for the current category and slides the panel.
+ */
 static void MenuShopParameter(TskObject *task, void *data)
 {
     struct MenuShopParameterDisplay *work = data;
@@ -3281,6 +3380,7 @@ static void MenuShopParameter(TskObject *task, void *data)
         break;
     case 2:
         targetX = -0x1f0;
+        /* Load the stat rows for the current state and category. */
         switch (MenuShopWork->state) {
         case SHOP_STATE_BUY_LIST:
         {
@@ -3421,6 +3521,10 @@ static void MenuShopParameter(TskObject *task, void *data)
     }
 }
 
+/*
+ * Bullet panel for the A.G.W.S. weapons of the buy list. It shows the bullet
+ * name of the selected weapon and slides in only when the weapon has one.
+ */
 static void MenuShopEx2(TskObject *task, void *data)
 {
     MenuShopEx2Work *work = data;
@@ -3467,6 +3571,10 @@ static void MenuShopEx2(TskObject *task, void *data)
 /* MenuShopEx2 takes the window title by address; the string follows it in .sdata. */
 const char menuShopBulletTitleText[8] = "Bullet";
 
+/*
+ * Underline of the selected category. State 0 sets up the vertices; state 2
+ * moves them under the current category icon and fades them in or out.
+ */
 static void MenuShopLine(TskObject *task, void *data)
 {
     MenuShopDividerWork *work = data;
@@ -3524,6 +3632,10 @@ static void MenuShopLine(TskObject *task, void *data)
     }
 }
 
+/*
+ * Builds MenuShopWork->categoryMask: the categories the current mode offers,
+ * from the record counts in buy mode or from the sort lists in sell mode.
+ */
 void MenuShopInfoSet(void)
 {
     MenuShopWork->categoryMask = 0;
@@ -3596,6 +3708,10 @@ static inline MenuShopParty *MenuShopPartyGet(void)
     return (MenuShopParty *)MenuShopWork->unitIds;
 }
 
+/*
+ * Advances the shop state machine by one frame: applies the pending state
+ * change, then handles the input of the current state.
+ */
 void MenuShopCore(void) {
     if (MenuShopWork->state != MenuShopWork->nextState) {
         MenuShopWork->state = MenuShopWork->nextState;
@@ -3747,6 +3863,7 @@ void MenuShopCore(void) {
         }
         break;
 
+    /* Quantity: up and down step by one, left and right by a page. */
     case SHOP_STATE_QUANTITY: {
         struct MenuShopQuantityChangeState {
             int maximumQuantity;
@@ -4239,6 +4356,7 @@ void MenuShopCore(void) {
         break;
     }
     MenuShopWork->stateFlags &= 0xFD;
+    /* Debug overlay of the state, the next state and the selection values. */
     xglFontDebugHex(0, 0x48, MenuShopWork->state, 2);
     xglFontDebugHex(0, 0x50, MenuShopWork->nextState, 2);
     xglFontDebugPrintf(0, 0x60, menuShopDebugModeFormat, MenuShopWork->mode);
@@ -4247,6 +4365,11 @@ void MenuShopCore(void) {
     xglFontDebugPrintf(0, 0x80, menuShopDebugUnitSelectionFormat, MenuShopWork->unitSelection);
 }
 
+/*
+ * Runs the shop menu for `shopType` (1-based row of the shop data): sets up the
+ * workspace and the UI tasks, loads the data, then runs MenuShopCore until the
+ * shop reaches SHOP_STATE_END.
+ */
 void MenuShopMain(int shopType)
 {
     int partyIds[16];
@@ -4318,6 +4441,7 @@ void MenuShopMain(int shopType)
     MenuShopTask = (XglTaskScheduler *)workspace;
     workspace = xglTaskInitial(workspace, SHOP_TASK_COUNT, 0);
 
+    /* Create the UI tasks, each on its own slice of the workspace. */
     TskObjectSet3((TskObject *)xglTaskEntryNext(MenuShopTask,
         (int (*)(XglTaskPrefix *))tskTskMain3,
         MenuShopTask != 0 ? MenuShopTask->active_tail : 0),

@@ -8,6 +8,10 @@ void YtachiTest(void)
     func_00A0A5F0();
 }
 
+/*
+ * Calls the three axis alignment helpers and func_00A0A5F0, all with zero
+ * arguments.
+ */
 void dummy_func(void)
 {
     alignXAxis(0, 0);

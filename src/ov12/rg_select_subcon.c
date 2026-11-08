@@ -37,6 +37,10 @@ void RgSelectIgnoreEventFlag(void)
     s_bIgnoreEventFlag = 1;
 }
 
+/*
+ * Returns a bit mask of the player characters the event allows, bit i for
+ * character i. Bit 0 is always set.
+ */
 int RgSelectGetPlayerChars(void)
 {
     unsigned int i;
@@ -53,6 +57,10 @@ int RgSelectGetPlayerChars(void)
     return mask;
 }
 
+/*
+ * Returns a bit mask of the enemy characters the event allows, bit i for
+ * character i. Bit 0 is always set.
+ */
 int RgSelectGetEnemyChars(void)
 {
     unsigned int i;
@@ -127,7 +135,7 @@ static unsigned int _get_all_weapons(RgWeaponEssence **list,
 }
 
 /*
- * Fills `list` with the weapons matching characterID/weaponType and returns
+ * Fills `list` with the weapons that fit characterID/weaponType and returns
  * their count; the filter mode forwarded to _get_all_weapons switches with
  * s_bIgnoreEventFlag (0 while events are ignored, 2 otherwise).
  */
@@ -142,6 +150,10 @@ unsigned int RgSelectWeapons(RgWeaponEssence **list,
                             WEAPON_FILTER_EVENT_USABLE);
 }
 
+/*
+ * Returns a random enemy character index among those the event allows, or 0
+ * when none is allowed. The result is clamped to the character range.
+ */
 int RgSelectGetEnemyChar(void)
 {
     int usableEnemies[RG_SELECT_CHAR_NUM];
@@ -175,6 +187,12 @@ int RgSelectGetEnemyChar(void)
     return result;
 }
 
+/*
+ * Picks one weapon per equipment slot for characterID, starting from random
+ * offsets, so that no two picked equipments conflict. Stores them in weapons
+ * and returns 1; returns 0 when a slot has no candidates or no conflict-free
+ * combination exists.
+ */
 int RgSelectGetEnemyWeapons(RgWeaponEssence **weapons,
                             int characterID)
 {
@@ -212,6 +230,7 @@ int RgSelectGetEnemyWeapons(RgWeaponEssence **weapons,
         }
         indices[i] = rand() % counts[i];
     }
+    /* Tries each combination, starting from the random offset of each slot. */
     for (i = 0; i < counts[2]; i++) {
         k = 0;
         selected[2] = (i + indices[2]) % counts[2];

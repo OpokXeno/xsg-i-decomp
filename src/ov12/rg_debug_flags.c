@@ -13,6 +13,7 @@ const char debugFlagsAssertFlagsNotNil[16] = "pFlags != NIL";
 const char debugFlagsSourcePath[24] = "../rg_debug_flags.euc.c";
 
 
+/* Disables the mode and sets the five flags to 1. */
 static void _InitRgDebugFlags(RgDebugFlags *flags)
 {
     if (flags == 0) {
@@ -39,6 +40,7 @@ static void _WrapperDestruct(void *pFlags)
     RgHeapFree(InstanceOfRgHeap(), pFlags, debugFlagsSourcePath, 29);
 }
 
+/* Returns the debug flags singleton, creating it on first use. */
 RgDebugFlags *InstanceOfRgDebugFlags(void)
 {
     RgDebugFlags *pFlags;

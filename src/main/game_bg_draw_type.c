@@ -12,7 +12,7 @@
 #define GAME_BG_GIF_EOP_NREG_1_REG_AD 0x51000004
 #define GAME_BG_VIF_DIRECT_COMMAND 0x8001
 #define GAME_BG_CLEAR_COLOR 0x80000000
-/* Scrolling star texture: one 32-texel row per frame, 64 rows. */
+/* Scrolling star texture: 64 rows of 32 texels. */
 #define GAME_BG_STAR_TEXTURE_WIDTH 32
 #define GAME_BG_STAR_TEXTURE_HEIGHT 64
 #define GAME_BG_STAR_TEXTURE_PIXELS (GAME_BG_STAR_TEXTURE_WIDTH * GAME_BG_STAR_TEXTURE_HEIGHT)
@@ -340,7 +340,7 @@ static unsigned char TestEnv_0_00367AA0[0x60] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x51, 0x01, 0x80, 0x00, 0x00, 0x00, 0x40, 0x03, 0x40, 0x1E, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x10, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x6F, 0x00, 0x00, 0xF7, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x8F, 0x00, 0x00, 0xF7, 0x8D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00
 };
 
-/* Original TestEnv.1, main VA 0x00367b00, 11 quadwords. */
+/* Original name TestEnv.1: GS setup data sent as 11 quadwords by GameBgDrawType2. */
 static GameBgSetupEnvironment TestEnv_1_00367B00[1] = {
     {
         .directhl = { .quadwords = 10, .command = 0x51 },
@@ -385,14 +385,15 @@ void GameBgDrawType0(void)
 {
 }
 
-/*
- * The do-nothing hook GameBgDrawType1Entry and GameBgDrawType2Entry install
- * at GameLoopState+0x30; GameDrawSync calls it with no arguments.
- */
+/* Empty background sync hook, installed at GameLoopState+0x30 by both entries. */
 static void nullfunc(void)
 {
 }
 
+/*
+ * Draws the type 1 particle background: moves each particle, respawns those
+ * that leave the visible area, and sends a start and end vertex per particle.
+ */
 void GameBgDrawType1(void)
 {
     GameBgDrawType1Packet *scratch;
@@ -412,6 +413,7 @@ void GameBgDrawType1(void)
         param->initialized = 1;
         /* fallthrough */
     case 1:
+        /* Advance each particle and respawn it once it leaves the window. */
         for (j = 0; j < param->particle_count; j++) {
             param->particles[j].x += param->particles[j].velocity_x;
             param->particles[j].y += param->particles[j].velocity_y;
@@ -426,6 +428,7 @@ void GameBgDrawType1(void)
         }
         clear();
         packet = xglPacketGetCurrent();
+        /* Fill the packet header, then one vertex pair per particle. */
         scratch = GAME_BG_DRAW_TYPE1_SCRATCH;
         scratch->header.header_pad_00[0] = 0;
         scratch->header.header_pad_00[1] = 0;
@@ -470,6 +473,7 @@ void GameBgDrawType1(void)
     }
 }
 
+/* Resets the type 1 particle state and installs its draw and sync hooks. */
 void GameBgDrawType1Entry(void)
 {
     GameBgDrawType1Param.particle_count = -16;
@@ -482,6 +486,11 @@ void GameBgDrawType1Entry(void)
     GameBgDrawType1Param.initialized = 0;
 }
 
+/*
+ * Draws the band background. The first call builds the star texture; every
+ * call scrolls it, updates the band phases and point rings, and emits the
+ * band quad strips.
+ */
 void GameBgDrawType2(void)
 {
     float point_component;
@@ -548,6 +557,7 @@ void GameBgDrawType2(void)
         param->initialized = 1;
         /* fallthrough */
     case 1:
+        /* Wrap each band's texture phase into [-1, 1] and recompute its point ring. */
         band_index = 0;
         do {
             band_angle = param->bands[band_index].angle;
@@ -587,6 +597,7 @@ void GameBgDrawType2(void)
         texture = param->texture_packet;
         source_pixel = &texture->pixels[32];
         destination_pixel = texture->pixels;
+        /* Scroll the star texture up one row, then clear its last row. */
         for (texture_pixel_index = GAME_BG_STAR_TEXTURE_PIXELS - GAME_BG_STAR_TEXTURE_WIDTH - 1; texture_pixel_index >= 0; texture_pixel_index--) {
             *destination_pixel++ = *source_pixel++;
         }
@@ -615,6 +626,7 @@ void GameBgDrawType2(void)
                 scratch->header.vif_nops = 0;
             }
         }
+        /* One quad strip per band and depth segment, one quad per ring point. */
         for (draw_band_index = 0; draw_band_index < 4; draw_band_index++) {
             for (depth_index = 0; depth_index < 6; depth_index++) {
                 t_front = param->depths[depth_index].z * 0.00025f + 0.5f +
@@ -656,6 +668,7 @@ void GameBgDrawType2(void)
                     xglRotTransPersN(scratch->projected, 0, scratch->points, 4, 0);
                     clipped = 0;
                     clip_index = 0;
+                    /* Skip the quad if a projected point leaves the 16-bit screen range or has negative z. */
                     do {
                         if (clip_index >= 4) {
                             break;
@@ -750,6 +763,7 @@ void GameBgDrawType2(void)
     }
 }
 
+/* Sets up the band background parameters and installs its draw hook; both arguments are unused. */
 void GameBgDrawType2Entry(int parameter, struct StageBackground *background)
 {
     GameBgBandParameters *param = &GameBgDrawType2Param;

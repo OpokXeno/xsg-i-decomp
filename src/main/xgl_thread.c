@@ -5,12 +5,10 @@
 #include "main/xgl_studio.h"
 
 /*
- * TU-local thread descriptor view (config/header-canon.json: ee_thread_t is
- * tu_local; xglThreadInitial reproduces only with the `entry` member).
- * The original allocation is 48 bytes, but this TU uses only its known prefix.
- * The suffix follows the documented EE kernel thread-status layout as a partial
- * storage hypothesis. Its original declaration and application semantics remain
- * unresolved; these field names do not establish that original semantic type.
+ * TU-local thread descriptor. This TU uses only the prefix through `entry`; the original
+ * allocation is 48 bytes. The fields after `entry` follow the EE kernel thread-status layout as a
+ * partial hypothesis. The original declaration and use of the type are unresolved, so these names
+ * do not establish its semantic type.
  */
 typedef struct {
     int status;
@@ -66,11 +64,8 @@ static unsigned int iCurrentThread;
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 /*
- * Storage-capacity hypothesis for original asActiveThreadList (0x00880fe8).
- * Its original ELF size is unspecified. A 400-byte allocation followed by
- * eight alignment bytes ends at the next TU's FS storage (0x00881180).
- * Only the first four records are used by the original consumers below;
- * this capacity does not establish twenty logical or initialized threads.
+ * Storage for the original asActiveThreadList. Only the first four records are used by the
+ * consumers below, so this capacity does not establish twenty logical threads.
  */
 static active_thread_t asActiveThreadList[20];
 
@@ -83,6 +78,10 @@ static int xglCreateSignal(void)
     return CreateSema(&sSemaParam);
 }
 
+/*
+ * Creates the rotate signal, then loops forever: wakes the current system thread, waits for the
+ * signal, and advances to the next thread in the rotation.
+ */
 void xglThreadRotate(void)
 {
     iRotateSignal = xglCreateSignal();
@@ -95,6 +94,10 @@ void xglThreadRotate(void)
     }
 }
 
+/*
+ * Cancels the caller's pending wakeup, signals the rotate semaphore so the next thread runs, and
+ * puts the caller to sleep.
+ */
 void xglSleep(void)
 {
     int thread_id = GetThreadId();
@@ -103,6 +106,10 @@ void xglSleep(void)
     SleepThread();
 }
 
+/*
+ * Creates and starts the system threads in asSystemThreadList, carving their stacks downward
+ * from XGL_THREAD_STACK_TOP.
+ */
 void xglThreadInitial(void)
 {
     static ee_thread_t sThreadParam;

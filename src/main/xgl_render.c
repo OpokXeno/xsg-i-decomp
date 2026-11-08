@@ -44,7 +44,10 @@
 /* PMODE.ALP of the blended circuit. */
 #define RENDER_CIRCUIT_BLEND_ALPHA 0x80
 
-/* s_nClearFrame: ClearOn arms the clear, which is drawn on the last frame of the countdown. */
+/*
+ * s_nClearFrame: ClearOn sets RENDER_CLEAR_ON, which counts down to RENDER_CLEAR_DRAW.
+ * The clear is drawn while the value is RENDER_CLEAR_DRAW, until ClearOff.
+ */
 #define RENDER_CLEAR_OFF 0
 #define RENDER_CLEAR_DRAW 1
 #define RENDER_CLEAR_ON 2
@@ -89,11 +92,11 @@
 #define GS_CSR ((volatile u64 *)0x12001000)
 
 /*
- * GS clear-environment block (0x004A9080, size 0x60). xglRenderClearDepth
- * and xglRenderClearFrame each write only the 8-byte tag at +0x10 (a
+ * GS clear-environment block, 0x60 bytes. xglRenderClearDepth and
+ * xglRenderClearFrame each write only the 8-byte target at +0x10 (a
  * GS-register-shaped value selecting what a queued clear targets);
  * xglRenderClearColor splits a packed 0xAABBGGRR colour into the four
- * one-byte-per-word fields at +0x20..+0x2c. Bytes no claimed function
+ * one-byte-per-word fields at +0x20..+0x2c. Bytes that no function here
  * touches stay unmodeled.
  */
 typedef struct GsClearEnv {
@@ -167,7 +170,7 @@ typedef union GsDisplayRegister {
 } GsDisplayRegister;
 
 /*
- * GS display-environment block (0x004A9000, size 0x50). xglRenderDispOff/On
+ * GS display-environment block, 0x50 bytes. xglRenderDispOff and xglRenderDispOn
  * only touch the 8-byte flag word at +0x00 (bit 0x2 gates display output).
  */
 typedef struct GsDispEnv {
@@ -314,7 +317,7 @@ typedef struct GsGifTagControl {
 } GsGifTagControl;
 
 /*
- * GS draw-environment block (0x004A8F00, size 0x100): a GIF A+D packet of
+ * GS draw-environment block, 0x100 bytes: a GIF A+D packet of
  * fifteen register writes, each an 8-byte value followed by its register
  * address, as sceGsPutDrawEnv sends it.
  */
@@ -413,14 +416,7 @@ typedef union ScratchpadQuad {
     u16 half[8];
 } ScratchpadQuad;
 
-/*
- * The packed global fade color that xglRenderGlobalFade (still asm, this TU)
- * draws over the scene: red/green/blue scaled to a byte (0-255) at
- * +0x00/+0x08/+0x10 and alpha scaled to a byte (0-128, the PS2 GS
- * convention) at +0x18, the same GS_RGBAQ-style packing xglRenderClearColor
- * above unpacks for ClearEnv's own color fields. Its storage belongs to
- * xglRenderGlobalFadeInit (still asm, this TU).
- */
+/* A 64-bit GIF command value, as one quadword or as two 32-bit words. */
 typedef union GifCommandData {
     u64 value;
     struct {
@@ -508,6 +504,10 @@ extern void sceGsPutDispEnv(GsDispEnv *env);
 
 static int s_nGblFadeInit = 0;
 
+/*
+ * Global fade colour as one packed int: red, green and blue as bytes 0 to 2 and
+ * alpha as byte 3, each scaled from 0..1 by xglRenderGlobalFadeSet.
+ */
 static int s_nGblFade = 0;
 
 static int s_nClearFrame = 0;
@@ -566,6 +566,10 @@ GsClearPacket ClearEnv = { .value = { 0 } };
 
 XglRenderState sRender = { 0 };
 
+/*
+ * Swaps the display and flip buffer bases, then sends FRAME_1 and FRAME_2 writes for
+ * the new display base through the GIF DMA channel.
+ */
 void xglRenderDrawFlip(void)
 {
     u64 *scratch;
@@ -589,6 +593,7 @@ void xglRenderDrawFlip(void)
     xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, SCRATCHPAD_BASE, RENDER_FLIP_QWORDS);
 }
 
+/* Copies the display buffer into the draw buffer with a local-to-local GIF transfer through DMA. */
 void xglRenderCopyDisp2Draw(void)
 {
     ScratchpadQuad *header;
@@ -621,6 +626,7 @@ void xglRenderCopyDisp2Draw(void)
     xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, SCRATCHPAD_BASE, RENDER_COPY_QWORDS);
 }
 
+/* Copies the draw buffer into the flip buffer and adds the transfer to packet as a VIF1 direct block. */
 void xglRenderDrawFlipPk(XglPacket *packet)
 {
     ScratchpadQuad *header;
@@ -655,6 +661,10 @@ void xglRenderDrawFlipPk(XglPacket *packet)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/*
+ * VSync callback: counts the vertical sync, and sets frame_status when the GIF or VIF1
+ * path is still busy at the second sync of a frame.
+ */
 int xglRenderVSyncCallback(void)
 {
     /* GIF and VIF1 hardware status gate the frame callback update. */
@@ -676,6 +686,10 @@ static void xglRenderSyncInit(void)
     VSyncCount = 0;
 }
 
+/*
+ * Waits for the frame's vertical syncs (one when FLAG_FRAME_60 is set). frame_delta is set
+ * when three or more syncs were counted.
+ */
 static void xglRenderSyncMove(void)
 {
     if (FLAG_FRAME_60 == 1) {
@@ -694,8 +708,10 @@ static void xglRenderSyncMove(void)
     VSyncCount = 0;
 }
 
+/* Fills DrawEnv with the frame, z-buffer, offset, scissor and test state for the current resolution. */
 static void xglRenderDrawEnvInit(void)
 {
+    /* GIF tag: fifteen A+D writes, one register each. */
     DrawEnv.value.gif_tag.nloop = 15;
     DrawEnv.value.gif_tag.eop = 1;
     DrawEnv.value.gif_tag.pre = 0;
@@ -729,6 +745,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test1.zte = 1;
     DrawEnv.value.test1.ztst = GS_ZTST_GEQUAL;
     DrawEnv.value.test1_address = SCE_GS_TEST_1;
+    /* Second draw context: the same frame, z-buffer, offset, scissor and test values. */
     DrawEnv.value.frame2.fbp = sRender.vram.row.height;
     DrawEnv.value.frame2.fbw = sRender.reso.row.frame_width / 64;
     DrawEnv.value.frame2.psm = sRender.reso.row.frame_psm;
@@ -755,6 +772,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.test2.zte = 1;
     DrawEnv.value.test2.ztst = GS_ZTST_GEQUAL;
     DrawEnv.value.test2_address = SCE_GS_TEST_2;
+    /* Remaining state: primitive mode, texture alpha, colour clamp, dither and dimming matrix. */
     DrawEnv.value.prmodecont.ac = 1;
     DrawEnv.value.prmodecont_address = SCE_GS_PRMODECONT;
     DrawEnv.value.texa.ta0 = GS_ALPHA_OPAQUE;
@@ -784,6 +802,7 @@ static void xglRenderDrawEnvInit(void)
     DrawEnv.value.dimx_address = SCE_GS_DIMX;
 }
 
+/* Updates the frame and z-buffer bases in DrawEnv from the current VRAM row and sends it. */
 void xglRenderDrawEnvMove(void)
 {
     DrawEnv.value.frame1.fbp = sRender.vram.row.height;
@@ -794,6 +813,7 @@ void xglRenderDrawEnvMove(void)
     sceGsPutDrawEnv(&DrawEnv.value);
 }
 
+/* Sets the default display environment for the current resolution, with the second display copied from the first. */
 static void xglRenderDispEnvInit(void)
 {
     sceGsSetDefDispEnv(&DispEnv, sRender.reso.row.frame_psm, sRender.reso.row.frame_width, sRender.reso.row.frame_height, 0, 0);
@@ -806,6 +826,10 @@ static void xglRenderDispEnvInit(void)
     DispEnv.extwrite = 0;
 }
 
+/*
+ * Updates the display environment for the scan-line interpolation mode, sends it, and
+ * writes the second display and extended registers directly.
+ */
 void xglRenderDispEnvMove(void)
 {
     DispEnv.dispfb1.field.fbp = sRender.vram.row.width;
@@ -852,6 +876,10 @@ void xglRenderClearColor(u32 color)
     ClearEnv.value.color_a = (color >> 24) & 0xff;
 }
 
+/*
+ * Initializes ClearEnv: the GIF tag, the frame clear target, the default black colour and
+ * the clear rectangle around the frame.
+ */
 static void xglRenderClearEnvInit(void)
 {
     int half_width;
@@ -880,6 +908,7 @@ void xglRenderClearEnvMove(void)
     xglDmaDirectNormal(XGL_DMA_CHANNEL_GIF, (u32) &ClearEnv.value, RENDER_CLEAR_QWORDS);
 }
 
+/* Selects a resolution row, rebuilds the draw, display and clear environments and reinitializes the studio cameras. */
 void xglRenderSetReso(int resolution)
 {
     sRender.reso.row = asDispReso[resolution];
@@ -893,6 +922,7 @@ void xglRenderSetReso(int resolution)
     xglStudioMainCameraInit();
 }
 
+/* Swaps the display and draw buffer bases and resets the per-frame render state. */
 void xglRenderSwapBase(void)
 {
     u32 accumulated_frames;
@@ -925,6 +955,7 @@ void xglRenderDispOn(void)
     DispEnv.flags |= GS_PMODE_EN2;
 }
 
+/* Resets the GS and VIF, sets the 512-wide resolution with circuit-blend interpolation and clears the render state. */
 void xglRenderInit(void)
 {
     int i;
@@ -958,6 +989,7 @@ void xglRenderInit(void)
     nmlModelConstruct();
 }
 
+/* Runs the final-packet callbacks on the current packet unless the back buffer is requested. */
 static void xglRenderFinalPacket(void)
 {
     XglPacket *packet;
@@ -975,6 +1007,7 @@ static void xglRenderFinalPacket(void)
     }
 }
 
+/* Enables the global fade and clears its colour and fade callback. */
 void xglRenderGlobalFadeInit(void)
 {
     s_nGblFadeInit = 1;
@@ -982,6 +1015,7 @@ void xglRenderGlobalFadeInit(void)
     s_nGblFade = 0;
 }
 
+/* Sets the global fade colour from red, green, blue and alpha values, clamped to 0..1 and packed as GS bytes. */
 void xglRenderGlobalFadeSet(float red, float green, float blue, float alpha)
 {
     if (red < 0.0f)
@@ -1020,6 +1054,10 @@ void xglRenderGlobalFadeSet(float red, float green, float blue, float alpha)
     s_nGblFade = s_nGblFade + (((((int) (blue * RENDER_FADE_COLOR_SCALE)) & 0xFF) << 0x10) + ((((int) (green * RENDER_FADE_COLOR_SCALE)) & 0xFF) << 8));
 }
 
+/*
+ * Calls the fade callback, then draws the global fade colour over the frame when its alpha
+ * is nonzero, as a VIF1 direct packet.
+ */
 static void xglRenderGlobalFade(void)
 {
     unsigned char alpha;
@@ -1080,6 +1118,7 @@ void xglRenderClearOff(void)
     s_nClearFrame = RENDER_CLEAR_OFF;
 }
 
+/* Copies the ClearEnv colour into the clear test packet and sends it through VIF1. */
 static void xglRenderClear(void)
 {
     TestEnv_0_004A8E80.value.color.red_green.words.low = ClearEnv.value.color_r;
@@ -1089,6 +1128,11 @@ static void xglRenderClear(void)
     sceVif1PkRef(xglPacketGetCurrent(), &TestEnv_0_004A8E80.value, 6, 0, 0, 0);
 }
 
+/*
+ * Per-frame render step: clear, 3D effects, models, final packets, fonts and global fade,
+ * then packet interpolation, packet move, vsync sync and the GS path reset. Scene passes
+ * are skipped while scene_disabled is set.
+ */
 static void xglRenderMove(void)
 {
     if (s_nClearFrame == RENDER_CLEAR_DRAW && sRender.scene_disabled == 0) {
@@ -1128,6 +1172,7 @@ static void xglRenderMove(void)
     nmlModelSendPacketChangeSignal();
 }
 
+/* Render thread entry: initializes the renderer, then runs the frame loop forever. */
 void xglRenderEntry(void)
 {
     xglSleep();

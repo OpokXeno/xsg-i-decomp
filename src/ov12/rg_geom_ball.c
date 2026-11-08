@@ -11,9 +11,7 @@
 #include "ov12/xrg_rand_int.h"
 
 
-/* This TU's own .rodata (scaffold-owned; kept under their splat names,
- * docs/naming.md "Scaffold-owned data keeps its splat name"): 0x00a55148
- * "pBall != NIL", 0x00a55158 "../rg_geom_ball.euc.c". */
+/* Assert message and source path for the assert_prog calls in this file. */
 const char geomBallAssertBallNotNil[16] = "pBall != NIL";
 
 /* A ball whose squared motion this frame is below this is treated as at rest
@@ -22,6 +20,8 @@ const char geomBallAssertBallNotNil[16] = "pBall != NIL";
 
 const char geomBallSourcePath[24] = "../rg_geom_ball.euc.c";
 
+/* Initializes the point part, sets the ball geom type and pass-time method,
+ * and stores the radius. */
 void InitRgGeomBall(RgGeomBall *pBall, float radius, float weight)
 {
     if (pBall == 0) {
@@ -34,6 +34,7 @@ void InitRgGeomBall(RgGeomBall *pBall, float radius, float weight)
     pBall->radius = radius;
 }
 
+/* Allocates a ball from the heap and initializes it. */
 RgGeomBall *CreateRgGeomBall(float radius, float weight)
 {
     RgGeomBall *pBall;
@@ -70,6 +71,8 @@ void RgGeomBallPassTime(RgGeomBall *pBall, float deltaTime)
     RgGeomPointPassTime(&pBall->point, deltaTime);
 }
 
+/* Swept test for two moving balls over this frame. Fills the contact points
+ * and penetration vector and returns 1 when the balls overlap. */
 int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                         RgGeomBallContact *contact)
 {
@@ -120,6 +123,8 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
     speedSq2 = motion2[0] * motion2[0] + motion2[1] * motion2[1] +
                motion2[2] * motion2[2];
 
+    /* Both balls move: find the closest-approach parameters s and t along
+       each motion, clamped to [0, 1]. */
     if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq1 && RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq2) {
         float one = 1.0f;
         float offsetDot1 = startOffset[0] * motion1[0] +
@@ -182,6 +187,7 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              : : "r"(contact->penetration), "r"(motion1) : "memory");
         contact->distance = XrgLengthVector(motion1);
     } else if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq1) {
+        /* Only ball 1 moves: project ball 2's position onto its path. */
         RgVector closest;
         float one = 1.0f;
         float *position2 = ball2->point.position;
@@ -221,6 +227,7 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
                              "sqc2 $vf31, 0(%0)\n\t"
                              : : "r"(contact->penetration), "r"(closest) : "memory");
     } else if (RG_GEOM_BALL_MIN_MOTION_SQ <= speedSq2) {
+        /* Only ball 2 moves: project ball 1's position onto its path. */
         RgVector closest;
         float one = 1.0f;
         float *position1 = ball1->point.position;
@@ -270,6 +277,8 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
         contact->distance = XrgLengthVector(startOffset);
     }
 
+    /* Overlap of the two radii at the contact distance; the penetration vector
+       is the normalized motion of ball 1 scaled by the overlap. */
     overlap = ball1->radius + ball2->radius - contact->distance;
     if (0.0f < overlap) {
         float *penetration = contact->penetration;
@@ -283,6 +292,8 @@ int RgGeomBallCheckBall(RgGeomBall *ball1, RgGeomBall *ball2,
     return 0;
 }
 
+/* Static distance test between two balls. On overlap, stores the penetration
+ * vector and the contact positions and returns 1. */
 int RgGeomBallCheckBallDist(RgGeomBall *ball1, RgGeomBall *ball2,
                             RgGeomBallContact *contact)
 {

@@ -9,6 +9,7 @@ typedef struct RingSlot {
 
 void CopyMemoryRingBuffer(void *destination, const void *source, int size);
 
+/* Allocates a ring of capacity slots of blockSize bytes each. Returns 0 when memory is short. */
 RingBuffer *InitRingBuffer(int blockSize, int capacity)
 {
     RingBuffer *ring = AllocSysMemory(SMEM_Low, capacity * (blockSize + RING_SLOT_HEADER_SIZE) + RING_HEADER_SIZE, 0);
@@ -29,6 +30,7 @@ void DisposeRingBuffer(RingBuffer *ring)
     FreeSysMemory(ring);
 }
 
+/* Returns the data pointer of the next free slot, or 0 when the ring is full. */
 void *GetRingInBufferPtr(RingBuffer *ring)
 {
     unsigned int offset;
@@ -39,6 +41,7 @@ void *GetRingInBufferPtr(RingBuffer *ring)
     return (void *)(offset + baseAddress + RING_HEADER_SIZE + RING_SLOT_HEADER_SIZE);
 }
 
+/* Records size in the next free slot and advances the input index. */
 void IncRingInBufferPtr(RingBuffer *ring, int size)
 {
     int input = ring->input;
@@ -52,6 +55,7 @@ void IncRingInBufferPtr(RingBuffer *ring, int size)
     ring->count++;
 }
 
+/* Copies size bytes from source into the next free slot. Returns 0 when the ring is full, else 1. */
 int InRingBuffer(RingBuffer *ring, const void *source, int size)
 {
     RingSlot *slot;
@@ -69,6 +73,7 @@ int InRingBuffer(RingBuffer *ring, const void *source, int size)
     return 1;
 }
 
+/* Removes the oldest slot: returns its data and stores its size in *size, or returns 0 when the ring is empty. */
 void *OutRingBuffer(RingBuffer *ring, int *size)
 {
     RingSlot *slot;
@@ -94,6 +99,7 @@ void ClearRingBuffer(RingBuffer *ring)
     ring->output = 0;
 }
 
+/* Copies in 16-byte units, so a size that is not a multiple of 16 still copies the rest of the last unit. */
 void CopyMemoryRingBuffer(void *destination, const void *source, int size)
 {
     unsigned int *dst = destination;

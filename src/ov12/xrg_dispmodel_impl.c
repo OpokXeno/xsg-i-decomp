@@ -29,17 +29,17 @@ const char dispModelImplAssertXtxDataNotNil[] = "pXtxData != NIL";
 const char dispModelImplAssertLexDataNotNil[] = "pLexData != NIL";
 
 /*
- * The object CreateXrgDispModelImpl (ov12:0x00a453cc) allocates: 112 bytes
- * from the RgHeap, initialised as a RgDispModel by _InitRgDispModelImpl and
- * then handed to RgDispModelDisplay through the base object's dispMethod.
+ * The object CreateXrgDispModelImpl allocates: 112 bytes from the RgHeap,
+ * initialised as a RgDispModel by _InitRgDispModelImpl and then handed to
+ * RgDispModelDisplay through the base object's dispMethod.
  * Past the base object it keeps the two link-data blocks
  * _InitRgDispModelImpl receives and asserts on, named by the assertion
  * expressions "pXtxData != NIL" and "pLexData != NIL": the texture block
  * _Disp passes to nmlModelSetTexture, which accepts it only when its first
- * three bytes spell "XTX" (main:0x0022fe60), and the model block _Disp
- * passes to nmlModelEntry. Offsets 0x54..0x5f stay an explicit unmodeled
- * span; no claimed function reads or writes the eight bytes past pLexData,
- * so the type ends with the two link-data pointers.
+ * three bytes spell "XTX", and the model block _Disp passes to nmlModelEntry.
+ * Offsets 0x54..0x5f stay an explicit unmodeled span; no claimed function
+ * reads or writes the eight bytes past pLexData, so the type ends with the
+ * two link-data pointers.
  */
 typedef struct XrgDispModelImpl {
     RgDispModel model;
@@ -48,6 +48,7 @@ typedef struct XrgDispModelImpl {
     const char *pLexData;
 } XrgDispModelImpl;
 
+/* Draws the model texture and lex data, applying its transparency, fog and map clip settings. */
 static void _Disp(void *pObject, RgDrawStudio *pStudio)
 {
     RgDispModel *pDisp = pObject;
@@ -118,6 +119,7 @@ static void _DestructRgDispModelImpl(RgDispModel *pDisp)
     }
 }
 
+/* Initializes the base model, sets its dispatch methods and stores the two link-data pointers. */
 static void _InitRgDispModelImpl(XrgDispModelImpl *pDisp, const char *pXtxData,
                                  const char *pLexData)
 {
@@ -138,6 +140,10 @@ static void _InitRgDispModelImpl(XrgDispModelImpl *pDisp, const char *pXtxData,
     pDisp->pLexData = pLexData;
 }
 
+/*
+ * Creates a dispmodel from the variant.lex and variant.xtx entries of archive,
+ * falling back to any .xtx entry. Returns 0 when either entry is missing.
+ */
 RgDispModel *CreateXrgDispModelImpl(void *archive, const char *variant)
 {
     char szLexName[128];

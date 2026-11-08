@@ -2,6 +2,11 @@
 #include "tya_elevator_task.h"
 #include "main/tya_elevator_task.h"
 
+/*
+ * Advances one elevator peer's state machine and copies its height into the
+ * shared height table, its map entry and the Java height field.
+ * field_offset is not used.
+ */
 void tyaElevatorTask(void *peer_context, int field_offset)
 {
     ElevatorPeer *peer = peer_context;
@@ -16,10 +21,11 @@ void tyaElevatorTask(void *peer_context, int field_offset)
     float target_height;
 
     initial_state = peer->elevator_state;
+    /* State 0 assigns the slot and map entry, 1 picks the direction, 2 moves toward the target. */
     switch (initial_state) {
     case 0:
         highest_slot = 0;
-        /* The peer cursor advances through all 64 consecutive MapUnit records. */
+        /* Scan every MapUnit record for other active elevators and take the slot after the highest one. */
         for (i = 0, other = MapUnit; i < ELEVATOR_UNIT_COUNT; i++, other++) {
             if (other->serial >= 0 && other->type_update == tyaElevatorTask &&
                 other != peer && other->elevator_state != 0) {

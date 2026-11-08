@@ -51,6 +51,10 @@ void CardModelFadeOut(CardGameWork *work)
     }
 }
 
+/*
+ * Raises each model channel color by modelFadeStep, capped at its
+ * modelColorTarget, and counts modelFadeInTimer down.
+ */
 void CardModelFadeIn(CardGameWork *work)
 {
     int slot;
@@ -70,6 +74,10 @@ void CardModelFadeIn(CardGameWork *work)
     }
 }
 
+/*
+ * Lowers each slot's fadeOutColor by fadeOutStep, clamped at zero, and
+ * counts fadeOutTimer down.
+ */
 void CardFadeOut(CardGameWork *work)
 {
     int slot;
@@ -86,7 +94,7 @@ void CardFadeOut(CardGameWork *work)
 }
 
 /*
- * Mirror of CardFadeOut for the slot colors (asm 0x00a08818): the timer counts
+ * Mirror of CardFadeOut for the slot colors: the timer counts
  * down, and each fadeOutColor rises by fadeOutStep, capped at its base color
  * fadeBaseColor.
  */
@@ -141,7 +149,7 @@ int CardMakeDispList(CardListEntry *entries, u16 filter, CardDefinition *definit
 
 /*
  * Expand the run-length deck list into the flat deck: each group i writes its
- * cardId copyCount times, in group order (asm 0x00a088f0).
+ * cardId copyCount times, in group order.
  */
 void CardCopyDeckWork(s16 *deck, CardListWindow *list)
 {
@@ -185,9 +193,9 @@ s32 CardGetDeckCardCnt(s16 cardId, CardListWindow *deck)
 
 /*
  * Sort the compact deck group list by ascending card id: a selection sort
- * that swaps whole group records, both halfwords of each (asm 0x00a08a18).
+ * that swaps whole group records, both halfwords of each.
  * The card ids are compared as unsigned halfwords. CardDelDeck calls it with
- * the group count before it decrements the count (lh at 0x00a08c94).
+ * the group count before it decrements the count.
  */
 void CardCleanUpDeck(CardListEntry *groups, s16 groupCount)
 {
@@ -219,7 +227,7 @@ void CardCleanUpDeck(CardListEntry *groups, s16 groupCount)
 }
 
 /*
- * Adds one copy of a card to the compact deck group list (asm 0x00a08ad0).
+ * Adds one copy of a card to the compact deck group list.
  * A group that already holds the card gains one copy while it has fewer than
  * three; otherwise a new group with one copy is appended. The list is then
  * sorted with CardCleanUpDeck, and the function returns the position of the
@@ -256,12 +264,12 @@ s32 CardAddDeck(CardListWindow *deck, s16 cardId)
 }
 
 /*
- * Removes one copy of cardId from the compact deck group list (asm
- * 0x00a08c28). A group with two or more copies keeps one fewer. A group with
- * one copy is dropped: its card id becomes -1 and CardCleanUpDeck sorts it to
- * the end, then the group count and the +0x0E count go down. The +0x0C and +0x05
- * counters then go down once each while nonzero. Returns 0 only when the group was
- * dropped and both counters were zero; otherwise 1.
+ * Removes one copy of cardId from the compact deck group list. A group with
+ * two or more copies keeps one fewer. A group with one copy is dropped: its
+ * card id becomes -1 and CardCleanUpDeck sorts it to the end, then the group
+ * count and shownCount (+0x0E) go down. Then top (+0x0C) goes down if it is
+ * nonzero, otherwise cursor (+0x05) does. Returns 0 only when the group was
+ * dropped and both top and cursor were zero; otherwise 1.
  */
 int CardDelDeck(CardListWindow *deck, s16 cardId)
 {
@@ -294,13 +302,12 @@ int CardDelDeck(CardListWindow *deck, s16 cardId)
 }
 
 /*
- * Rewrites the escape codes of a card name in place (asm 0x00a08d18). The
+ * Rewrites the escape codes of a card name in place. The
  * loop covers the first CDTSGetStrLen(text) bytes and stops at a zero byte.
  * '$' becomes a newline, '#' an apostrophe and '@' a comma. A backslash that
  * is followed by a second backslash becomes "#73" when a third backslash
  * follows the pair and "#23" when a '%' follows it. The case order '@', '#',
- * '$', '\\' follows the compare chain of the original (asm
- * 0x00a08d80..0x00a08db4).
+ * '$', '\\' follows the compare chain of the original.
  */
 void CardNameConvert(unsigned char *text)
 {
@@ -339,14 +346,11 @@ void CardNameConvert(unsigned char *text)
 }
 
 /*
- * Draws the deck window with card names (asm 0x00a08e38): the header string, then
- * for each of the windowRows rows below rowCount that holds a card (cardId >= 0) the
- * cursor marker, the name text (textLength characters of two bytes, read from the card
- * data buffer through the definition's nameOffset and run through CardNameConvert), and
- * the copy count printed DECK_DISP_COUNT_GAP past the name. Rows are
- * DECK_DISP_ROW_HEIGHT pixels apart. cursorLimit is set to rowCount whether or not any
- * row is shown, then the footer is printed. `row` is initialised at its declaration
- * (the original sets $s2 before the first xglFontPrint, 0x00a08e4c).
+ * Draws the deck window: the header, then one row per entry in view (deck->rows
+ * at most, starting at deck->top) that holds a card, each with its cursor marker,
+ * name and copy count, then the footer. Sets shownCount to count.
+ * `row` is initialised at its declaration (the original sets $s2 before the
+ * first xglFontPrint).
  */
 void CardDeckDisp(CardListWindow *deck, CardDefinition *definitions)
 {
@@ -396,7 +400,7 @@ void CardDeckDisp(CardListWindow *deck, CardDefinition *definitions)
 }
 
 /*
- * Counts the display characters of a text string (0x00A090B8, 0x88 bytes).
+ * Counts the display characters of a text string.
  * A byte below 0x20 starts a control code: xglFontGetSPcodeSize returns how
  * many bytes follow the code, and the code with those bytes is skipped
  * without being counted. A negative size leaves the position unchanged.
@@ -412,7 +416,7 @@ int CDTSGetStrLen(unsigned char *text)
         if (*text < CARD_TEXT_CONTROL_LIMIT) {
             codeSize = xglFontGetSPcodeSize(*text, text);
             if (codeSize >= 0) {
-                /* Skip the code byte and its codeSize parameter bytes (0x00A090F8 loop). */
+                /* Skip the code byte and its codeSize parameter bytes. */
                 for (i = codeSize; i >= 0; i--) {
                     text++;
                 }
@@ -426,10 +430,9 @@ int CDTSGetStrLen(unsigned char *text)
 }
 
 /*
- * Prints one line of card text at (x, y) with colour index colorIndex (asm
- * 0x00a09140, 452 bytes). First two font strings are printed: the constant
- * escape cardTextLineFontCode and colorCode, the escape 0x15 0x03 0x03 followed by the
- * 16-bit big-endian value colorIndex * 21 (0x00a09144..0x00a091DC). The text
+ * Prints one line of card text at (x, y) with colour index colorIndex. It prints
+ * the constant escape cardTextLineFontCode, then colorCode: the escape 0x15 0x03
+ * 0x03 followed by the 16-bit big-endian value colorIndex * 21. The text
  * is then rewritten in place for its first CDTSGetStrLen(text) bytes, with the
  * CardNameConvert rules: '$' becomes a newline, '#' an apostrophe, '@' a comma
  * and "\\" followed by "\\" or "%" the escapes "#73" and "#23". The rewritten
@@ -482,10 +485,10 @@ void CardDispTxtSub(u16 x, u16 y, unsigned char *text, u16 colorIndex)
 }
 
 /*
- * Prints one card text line at (x, y) with the default colour 0xFFF0 (asm
- * 0x00a09308, 420 bytes). It is CardDispTxtSub without the colour argument:
+ * Prints one card text line at (x, y) with the default colour 0xFFF0. It is
+ * CardDispTxtSub without the colour argument:
  * the font escape cardTextLineFontCode is printed, then the three-byte colour code
- * 0x15 0x03 0x03 (copied from .rodata 0x00a4d190 at 0x00a09328..0x00a09344).
+ * 0x15 0x03 0x03 (copied from .rodata).
  * The text is then rewritten in place with the CardNameConvert rules: '$' becomes
  * a newline, '#' an apostrophe and '@' a comma, and a backslash pair followed by
  * a third backslash or a '%' becomes "#73" or "#23".
@@ -502,8 +505,7 @@ void CardDispTxtSub2(u16 x, u16 y, unsigned char *text)
     length = CDTSGetStrLen(text);
     for (i = 0; i < length && text[i] != 0; i++) {
         /*
-         * The original tests '$' (0x00a093d8), '#' (0x00a093e8), '@' (0x00a093f8)
-         * and '\\' (0x00a09400) in that order; the labels are listed '@', '#',
+         * The original tests '$', '#', '@' and '\\' in that order; the labels are listed '@', '#',
          * '$', '\\' because that source order yields this compare chain.
          */
         switch (text[i]) {
@@ -538,10 +540,10 @@ void CardDispTxtSub2(u16 x, u16 y, unsigned char *text)
 
 /*
  * `number` is a float because the original does the icon index in the FPU:
- * digits are converted with `cvt.s.w` (0x00a09658), the fall-through cases add
- * 1.0 per step (`add.s`, 0x00a09afc..0x00a09b2c) and the model id is formed by
- * `mul.s`, `add.s` and `cvt.w.s` (0x00a09b4c..0x00a09b60), hence the casts to
- * unsigned int. CardDisp, the twin function, uses an int and has no such code.
+ * digits are converted with `cvt.s.w`, the fall-through cases add 1.0 per step
+ * (`add.s`) and the model id is formed by `mul.s`, `add.s` and `cvt.w.s`, hence
+ * `model` is an unsigned int. CardDisp, the twin function, uses an int and has
+ * no such code.
  */
 void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
 {
@@ -580,6 +582,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         }
         nmlModelEntryCard(CARD_MODEL_FACE);
     }
+    /* Battle cards: the hit point and power digits. */
     if (definition->kind == CARD_KIND_BATTLE) {
         if ((definition->flags & CARD_FLAGS_NO_HIT_POINTS) == 0) {
             /* hit points: tens digit (only when non-zero), then units digit */
@@ -682,6 +685,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         nmlModelSetTexture(CARD_ICON_TEXTURE);
         nmlModelEntryCard(model);
     }
+    /* Requirement icons, one per condition slot. */
     for (i = 0; i < CARD_CONDITION_COUNT; i++) {
         number = 0.0f;
         /* Each label falls through to the next and adds one icon step. */
@@ -757,7 +761,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
     case CARD_ELEMENT_55:
         model = CARD_MODEL_ELEMENT_55;
         break;
-    case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` (0x00a09ed8) */
+    case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` */
     default:
         model = CARD_MODEL_ELEMENT_NONE;
         break;
@@ -778,7 +782,7 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
             texture = CARD_OVERLAY_TEXTURE;
             model = CARD_MODEL_KIND2;
             break;
-        case CARD_KIND_UNUSED_3: /* never matched: the chain tests 2, then `slti 0x3` (0x00a09f6c) */
+        case CARD_KIND_UNUSED_3: /* never matched: the chain tests 2, then `slti 0x3` */
         default:
             texture = CARD_OVERLAY_TEXTURE;
             model = CARD_MODEL_DEFAULT;
@@ -805,8 +809,8 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
 }
 
 /*
- * Draws one card model without the selection flag (asm 0x00a0a068). The enabled flag
- * is sign-extended (`sll`/`sra` 16 on $6, 0x00a0a070..0x00a0a07c); no result is returned.
+ * Draws one card model without the selection flag. The enabled flag
+ * is sign-extended (`sll`/`sra` 16 on $6).
  */
 void CardDispCard(Matrix4 *matrix, s16 cardId, s16 enabled)
 {
@@ -819,7 +823,7 @@ void CardDispCard(Matrix4 *matrix, s16 cardId, s16 enabled)
     if (cardId < 0) {
         return;
     }
-    if ((unsigned short)cardId >= CARD_DISP_ID_COUNT) { /* unsigned compare: `sltiu $2,$2,0x94`, 0x00a0a0a8 */
+    if ((unsigned short)cardId >= CARD_DISP_ID_COUNT) { /* unsigned compare: `sltiu $2,$2,0x94` */
         printf("CardDispCallError No[%d]\n", cardId);
         return;
     }
@@ -874,11 +878,10 @@ void CardDispCard(Matrix4 *matrix, s16 cardId, s16 enabled)
 }
 
 /*
- * CardDisp (asm 0x00a0a2f0): the second argument bits are CARD_DISP_ENABLED (draw the
- * card face and its icons) and CARD_DISP_OVERLAY; the last argument shows the card text
- * when non-zero and CARD_DISP_MARKER adds the selection marker. A card that is not owned
- * (owned == 0) is drawn as CARD_UNOWNED_MODEL. The last two flags are sign-extended
- * halfwords (`sll`/`sra 16` on $6 and $7, 0x00a0a2f8..0x00a0a314); no result is returned.
+ * Draws one card at matrix. The owned bits are CARD_DISP_ENABLED (face and icons)
+ * and CARD_DISP_OVERLAY; without CARD_DISP_ENABLED the card is drawn as
+ * CARD_UNOWNED_MODEL. A non-zero selected shows the card text, and
+ * CARD_DISP_MARKER adds the selection marker.
  */
 void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
 {
@@ -908,9 +911,10 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         nmlModelSetPlace(&place);
         nmlModelSetTexture(texture);
         nmlModelEntryCard(CARD_MODEL_FACE);
+        /* Battle cards: hit point and power digits. */
         if (definition->kind == CARD_KIND_BATTLE) {
             if ((definition->flags & CARD_FLAGS_NO_HIT_POINTS) == 0) {
-                number = (u8)(definition->operationDuration / CARD_DIGIT_BASE); /* the quotient is cut to a byte: `divu` then `andi 0xFF`, 0x00a0a43c */
+                number = (u8)(definition->operationDuration / CARD_DIGIT_BASE); /* the quotient is cut to a byte: `divu` then `andi 0xFF` */
                 if (number != 0) {
                     model = CARD_DIGIT_MODEL + number * CARD_MODEL_STRIDE;
                     translation[0] = CardHpPos10[0];
@@ -930,7 +934,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
                 nmlModelSetTexture(CARD_ICON_TEXTURE);
                 nmlModelEntryCard(model);
             }
-            number = (u8)(definition->attackPower / CARD_DIGIT_BASE); /* byte quotient, `andi 0xFF` at 0x00a0a524 */
+            number = (u8)(definition->attackPower / CARD_DIGIT_BASE); /* byte quotient, `andi 0xFF` */
             if (number != 0) {
                 model = CARD_DIGIT_MODEL + number * CARD_MODEL_STRIDE;
                 translation[0] = CardPowPos10[0];
@@ -1053,7 +1057,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         case CARD_ELEMENT_55:
             model = CARD_MODEL_ELEMENT_55;
             break;
-        case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` (0x00a0a8b8) */
+        case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` */
         default:
             model = CARD_MODEL_ELEMENT_NONE;
             break;
@@ -1063,6 +1067,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         nmlModelEntryCard(model);
     }
     QuadwordCopyMatrix(place, *matrix);
+    /* Kind overlay for owned cards, the unowned model otherwise. */
     if ((owned & CARD_DISP_ENABLED) == 0) {
         nmlModelSetPlace(&place);
         nmlModelSetTexture(CARD_UNOWNED_TEXTURE);
@@ -1075,7 +1080,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
         case CARD_KIND_BATTLE:
             model = CARD_MODEL_KIND1;
             break;
-        case CARD_KIND_UNUSED_3: /* never matched: the chain tests 2, then `slti 0x3` (0x00a0a970) */
+        case CARD_KIND_UNUSED_3: /* never matched: the chain tests 2, then `slti 0x3` */
         default:
             model = CARD_MODEL_DEFAULT;
             break;
@@ -1095,6 +1100,7 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
     if (selected == 0) {
         return;
     }
+    /* Caption and description text, drawn only when selected. */
     if (definition->captionOffset != 0) {
         xglFontPrint(CARD_TEXT_TITLE_X, CARD_TEXT_TITLE_Y, CARD_TEXT_COLOR, cardOtherRowFontCode);
         if (owned > 0) {
@@ -1230,11 +1236,10 @@ void CardCopyRom2Deck(s16 *deck, s32 enemyId)
 }
 
 /* Copies the forty card ids of stored deck `slot`, one byte each into a halfword
- * entry. The original forms the address of the 42-byte record as slot * 32 plus
- * slot * 10 (0x00a0ae48..0x00a0ae60); CardSaveData.decks[slot] indexes it with
- * another multiplication. Measured: decks[slot].cards (one multiply by 42) and the pointer-sum
- * forms (save->decks[0].cards + slot * 32 + slot * 10 in either order) change the instruction
- * order, so the integer sum is kept: it is address(save) + 32 * slot + 10 * slot, +0x2C for the cards. */
+ * entry. The record address is one integer sum, save + slot * 32 + slot * 10
+ * (slot * 42 bytes of save data), read through decks[0].cards. The original keeps
+ * this form: indexing decks[slot].cards (one multiply by 42) and the pointer-sum
+ * forms change the instruction order. */
 void CardCopyRam2Deck(s16 *deck, CardGameWork *work, s32 slot)
 {
     unsigned char *stored;
@@ -1312,8 +1317,8 @@ s32 CardChkDeckRam(CardGameWork *work, int unused, s32 slot)
 
 /*
  * Owned copies (0..3) of one card id. The save block packs two bits per card
- * id, four ids per byte, least significant bits first (CardSaveData.cardCounts,
- * asm 0x00a0b038). The masks are 3, 0xC, 0x30 and 0xC0 for ids 0..3 of a byte.
+ * id, four ids per byte, least significant bits first (CardSaveData.cardCounts).
+ * The masks are 3, 0xC, 0x30 and 0xC0 for ids 0..3 of a byte.
  */
 int CardCntList(CardGameWork *work, int index)
 {
@@ -1340,7 +1345,7 @@ int CardCntList(CardGameWork *work, int index)
 }
 
 /*
- * Adds one owned copy of a card (0x00A0B0C8, 0x100 bytes). Each card id has a
+ * Adds one owned copy of a card. Each card id has a
  * two-bit count: cardCounts holds four ids per byte, and the id's field is
  * cardId % 4 counted from the least significant bits (field 0 is bits 0..1,
  * field 1 bits 2..3, and so on). The count saturates at three; the result is
@@ -1393,7 +1398,7 @@ int CardAddList(CardGameWork *work, int cardId)
 }
 
 /*
- * Starts a game for one side (asm 0x00a0b1c8): the zone reset of CPIWsub is
+ * Starts a game for one side: the zone reset of CPIWsub is
  * done inline, then every deck index is placed at a random position
  * (xglSRand() modulo the card count, as in CardPlayShuffleYama), the deck takes
  * the cards of the saved deck list in that order and six cards are drawn.
@@ -1449,6 +1454,7 @@ void CardPlayInitWork(CardPlaySide *side, s16 *deck)
             side->disposal[slot].battle.position[2] = DisposePos1P[slot][2];
         }
     }
+    /* Shuffle: each deck index goes to a random free position in order[]. */
     i = 0;
     while (i < CARD_LIST_SIZE) {
         int pick = xglSRand() % CARD_LIST_SIZE;
@@ -1467,13 +1473,11 @@ void CardPlayInitWork(CardPlaySide *side, s16 *deck)
 }
 
 /*
- * Resets one side's zones (asm 0x00a0b410): the hand, deck, discard, junk and
+ * Resets one side's zones: the hand, deck, discard, junk and
  * answer lists and the operation list are emptied (-1), the flag, duration
  * and movement records are cleared, and every layer of the four battle and
  * four disposal slots is cleared with the slot position copied from the
- * resting position tables. The deck argument is not read (the caller
- * CardPlayNoInitWork, 0x00A0B5A0, passes its deck list along); no result is
- * returned (the epilogue loads no $v0 and the caller reads none).
+ * resting position tables. The deck argument is not read.
  */
 void CPIWsub(CardPlaySide *side, s16 *deck)
 {
@@ -1527,10 +1531,9 @@ void CPIWsub(CardPlaySide *side, s16 *deck)
 }
 
 /*
- * Sets up the card lists of both players without shuffling (0x00A0B588,
- * 0x90 bytes). CPIWsub resets the zones first; then the side's deck takes
- * ids 0..33 of the deck list (0x00A0B5B8 loop) and the first six hand slots
- * take ids 34..39 (0x00A0B5E8 loop).
+ * Sets up one side's card lists without shuffling. CPIWsub resets the zones
+ * first; then the side's deck takes ids 0..33 of the deck list and the first
+ * six hand slots take ids 34..39.
  */
 void CardPlayNoInitWork(CardPlaySide *side, s16 *deck)
 {
@@ -1549,8 +1552,8 @@ void CardPlayNoInitWork(CardPlaySide *side, s16 *deck)
 }
 
 /*
- * Starts a game for the enemy side with a fixed opening (asm 0x00a0b618,
- * 0x2DC bytes). CPIWsub resets the zones and the deck list is copied. Then,
+ * Starts a game for the enemy side with a fixed opening. CPIWsub resets the
+ * zones and the deck list is copied. Then,
  * one per round, up to CARD_FAKE_PICK_COUNT kind-1 cards with flags 1 are
  * picked: from the list entries at or after the round, the card with the
  * fewest set need bytes (the earliest one on a tie) that is not already
@@ -1578,6 +1581,7 @@ void CardPlayInitWorkFake(CardPlaySide *side, s16 *deck, CardDefinition *definit
         order[round] = deck[round];
     }
 
+    /* Pick the opening-hand cards, one per round. */
     round = 0;
     do {
         best = -1;
@@ -1629,6 +1633,7 @@ void CardPlayInitWorkFake(CardPlaySide *side, s16 *deck, CardDefinition *definit
         round++;
     } while (round < CARD_LIST_SIZE);
 
+    /* The cards that were not picked form the draw pile. */
     count = 0;
     for (i = 0; i < CARD_LIST_SIZE; i++) {
         if (order[i] >= 0) {
@@ -1654,7 +1659,7 @@ void CardPlayInitWorkFake(CardPlaySide *side, s16 *deck, CardDefinition *definit
 }
 
 /*
- * Shuffles the draw pile (side->deck, CardPlayYamaCnt cards) (asm 0x00a0b8f8).
+ * Shuffles the draw pile (side->deck, CardPlayYamaCnt cards).
  * Every draw index in turn is placed at a random position, chosen with
  * xglSRand() modulo the pile size, until all indices are placed. Position i
  * then receives the card that was at the draw index order[i] before.
@@ -1687,10 +1692,10 @@ void CardPlayShuffleYama(CardPlaySide *side)
 
 /*
  * Draws the top card of the deck (side->deck) into the first free hand slot
- * and starts its slide to the hand (asm 0x00a0ba10). The top is the last
- * entry of the run of non-negative ids that starts at deck[0], capped at
- * index 39. Returns 1 when the deck is empty, 0 otherwise. The card id is
- * copied as an unsigned halfword (`lhu`, 0x00a0bae4).
+ * and starts its slide to the hand. The top is found by walking from deck[1]
+ * while the ids stay non-negative, capped at index 39 (index 0 when deck[1]
+ * is negative). Returns 1 when the deck is empty, 0 otherwise. The card id is
+ * copied as an unsigned halfword (`lhu`).
  */
 s32 CardPlayDrawCard(CardPlaySide *side)
 {
@@ -1728,11 +1733,10 @@ s32 CardPlayDrawCard(CardPlaySide *side)
 
 /*
  * Draws the top card of the discard pile (side->sute) into the first free
- * hand slot and starts its slide from the pile to the hand (asm 0x00a0bb88).
- * The top is the last entry of the run of non-negative ids that starts at
- * sute[0], capped at index 39. Returns 1 when the discard pile is empty, 0
- * otherwise. The card id is copied as an unsigned halfword (`lhu`,
- * 0x00a0bc50).
+ * hand slot and starts its slide from the pile to the hand. The top is found
+ * by walking from sute[1] while the ids stay non-negative, capped at index 39
+ * (index 0 when sute[1] is negative). Returns 1 when the discard pile is empty,
+ * 0 otherwise. The card id is copied as an unsigned halfword (`lhu`).
  */
 s32 CardPlayDrawSute(CardPlaySide *side)
 {
@@ -1769,9 +1773,9 @@ s32 CardPlayDrawSute(CardPlaySide *side)
 
 /*
  * Puts the top card of the discard pile back on the deck, at index
- * CardPlayYamaCnt, and starts its slide from the pile to the deck (asm
- * 0x00a0bcf0). The top is found as in CardPlayDrawSute. Returns 1 when the
- * discard pile is empty, 0 otherwise.
+ * CardPlayYamaCnt, and starts its slide from the pile to the deck. The top is
+ * found as in CardPlayDrawSute. Returns 1 when the discard pile is empty, 0
+ * otherwise.
  */
 s32 CardPlayRecavery(CardPlaySide *side)
 {
@@ -1802,6 +1806,7 @@ s32 CardPlayRecavery(CardPlaySide *side)
     return 0;
 }
 
+/* Moves the non-negative hand ids to the front, keeping their order. */
 void CardPlayCleanHand(CardHand *hand)
 {
     s32 kept;
@@ -1819,6 +1824,7 @@ void CardPlayCleanHand(CardHand *hand)
     }
 }
 
+/* Moves the non-negative draw-pile ids to the front, keeping their order. */
 void CardPlayCleanYama(CardPlaySide *side)
 {
     s32 kept;
@@ -1836,6 +1842,7 @@ void CardPlayCleanYama(CardPlaySide *side)
     }
 }
 
+/* Moves the non-negative junk ids to the front, keeping their order. */
 void CardPlayCleanJunk(CardPlaySide *side)
 {
     s32 kept;
@@ -1854,11 +1861,10 @@ void CardPlayCleanJunk(CardPlaySide *side)
 }
 
 /*
- * Sends the hand card at index to the first free junk slot (asm 0x00a0bf28):
- * the junk entry takes the card id, and its move record starts at the hand
- * card's position (handMove[index]) and slides to JunkPos1P[1] in
- * CARD_SLIDE_FRAMES frames. The hand entry becomes -1 and the hand is
- * closed up. Always returns 0 (`daddu $2,$0,$0`, 0x00a0c07c).
+ * Sends the hand card at index to the first free junk slot: the junk entry
+ * takes the card id, and its move record starts at the hand card's position
+ * (handMove[index]) and slides to JunkPos1P[1] in CARD_SLIDE_FRAMES frames.
+ * The hand entry becomes -1 and the hand is closed up. Always returns 0.
  */
 s32 CardPlayDesertCard(CardPlaySide *side, s32 index)
 {
@@ -1886,8 +1892,7 @@ s32 CardPlayDesertCard(CardPlaySide *side, s32 index)
 }
 
 /*
- * Moves the hand cards at firstIndex and secondIndex to the junk pile (asm
- * 0x00a0c090): each goes into the first empty junk slot, and its hand slot is
+ * Moves the hand cards at firstIndex and secondIndex to the junk pile: each goes into the first empty junk slot, and its hand slot is
  * set to -1. CardPlayCleanHand then closes the gaps in the hand.
  */
 int CardPlayDesert2Card(CardPlaySide *side, s32 firstIndex, s32 secondIndex)
@@ -1914,11 +1919,10 @@ int CardPlayDesert2Card(CardPlaySide *side, s32 firstIndex, s32 secondIndex)
 }
 
 /*
- * Sends the operation card operationIndex to the first free junk slot (asm
- * 0x00a0c198): the junk entry takes the operation's card id, and its move
- * record starts at the operation's position and slides to JunkPos1P[1] in
- * CARD_SLIDE_FRAMES frames. Always returns 0 (`daddu $2,$0,$0`,
- * 0x00a0c288).
+ * Sends the operation card operationIndex to the first free junk slot: the
+ * junk entry takes the operation's card id, and its move record starts at the
+ * operation's position and slides to JunkPos1P[1] in CARD_SLIDE_FRAMES frames.
+ * Always returns 0.
  */
 s32 CardPlayDesertOperation(CardPlaySide *side, s32 operationIndex)
 {
@@ -1944,11 +1948,10 @@ s32 CardPlayDesertOperation(CardPlaySide *side, s32 operationIndex)
 }
 
 /*
- * Sends every card of the battle stack to the junk pile (asm 0x00a0c2d0): the
+ * Sends every card of the battle stack to the junk pile: the
  * cards fill the junk slots from the first free one, and each move record
  * starts at the stack's position and slides to JunkPos1P[1] in
- * CARD_SLIDE_FRAMES frames, like CardPlayDesertOperation. Always returns
- * 0 (`daddu $2,$0,$0`, 0x00a0c3d0).
+ * CARD_SLIDE_FRAMES frames, like CardPlayDesertOperation. Always returns 0.
  */
 s32 CardPlayDesertBattle(CardPlaySide *side, CardLayerStack *battle)
 {
@@ -1981,10 +1984,9 @@ s32 CardPlayDesertBattle(CardPlaySide *side, CardLayerStack *battle)
 
 /*
  * Moves the top deck card onto the first free discard slot and starts its
- * slide from the deck to the discard pile (asm 0x00a0c3d8). The deck top is
- * the last entry of the run of non-negative ids that starts at deck[0],
- * capped at index 40 (deck[40] is sute[0]). Returns 1 when the deck is empty,
- * 0 otherwise.
+ * slide from the deck to the discard pile. The deck top is found by walking
+ * from deck[1] while the ids stay non-negative, capped at index 40 (deck[40]
+ * is sute[0]). Returns 1 when the deck is empty, 0 otherwise.
  */
 s32 CardPlayCostCard(CardPlaySide *side)
 {
@@ -2022,7 +2024,7 @@ s32 CardPlayCostCard(CardPlaySide *side)
 
 /*
  * Moves the card ids stacked on battle slot `index` onto the end of the hand
- * and clears the slot (0x00a0c510). `battle` points at battle[0].battle of the
+ * and clears the slot. `battle` points at battle[0].battle of the
  * side's board, so slots are one CardBoardSlot apart. The slot address is
  * recomputed in the loop and in the epilogue through BATTLE_SLOT; alternatives
  * that do not reproduce the original code: a hoisted slot local, an inline
@@ -2055,6 +2057,7 @@ int CardPlayReturnCard(CardHand *hand, CardLayerStack *battle, s16 index)
 
 #undef BATTLE_SLOT
 
+/* Counts the non-negative ids of the draw pile. */
 s32 CardPlayYamaCnt(CardPlaySide *side)
 {
     s16 *card;
@@ -2076,6 +2079,7 @@ s32 CardPlayYamaCnt(CardPlaySide *side)
     return count;
 }
 
+/* Counts the non-negative ids of the discard pile. */
 s32 CardPlaySuteCnt(CardPlaySide *side)
 {
     s16 *card;
@@ -2097,6 +2101,7 @@ s32 CardPlaySuteCnt(CardPlaySide *side)
     return count;
 }
 
+/* Counts the non-negative ids of the junk pile. */
 s32 CardPlayJunkCnt(CardPlaySide *side)
 {
     s16 *card;
@@ -2118,6 +2123,7 @@ s32 CardPlayJunkCnt(CardPlaySide *side)
     return count;
 }
 
+/* Counts the non-negative ids of the operation list. */
 s32 CardPlayOperationCnt(CardPlaySide *side)
 {
     s16 *op;
@@ -2139,6 +2145,7 @@ s32 CardPlayOperationCnt(CardPlaySide *side)
     return count;
 }
 
+/* Counts the occupied disposal slots (base layer card id >= 0). */
 s32 CardPlayDisposeCnt(CardPlaySide *side)
 {
     s16 *cardId;
@@ -2160,6 +2167,7 @@ s32 CardPlayDisposeCnt(CardPlaySide *side)
     return count;
 }
 
+/* Counts the non-negative ids of the hand. */
 s32 CardPlayHandCnt(CardHand *hand)
 {
     s16 *card;
@@ -2181,6 +2189,7 @@ s32 CardPlayHandCnt(CardHand *hand)
     return count;
 }
 
+/* Counts the occupied battle slots (base layer card id >= 0). */
 s32 CardPlayBattleCnt(CardPlaySide *side)
 {
     s16 *cardId;
@@ -2203,14 +2212,14 @@ s32 CardPlayBattleCnt(CardPlaySide *side)
 }
 
 /*
- * Sorts the count cards by kind (asm 0x00a0c768): for each of the three kinds
+ * Sorts the count cards by kind: for each of the three kinds
  * in order[], every pick moves the lowest card id of that kind still in
  * cards[] into sorted[] and marks its slot -1; sorted[] is then copied back.
  * best and bestValue keep their last values across picks, so a pick that
  * finds no card of the kind retries the previous slot.
  *
  * The original also copies the hand into a second local array before the
- * sort (loop 0x00a0c790..0x00a0c7ac, `sh` to sp+0x50) and never reads it
+ * sort (a copy loop with `sh` stores) and never reads it
  * again. Without the array and its loop the frame shrinks from 0xB0 to 0x60
  * bytes, 10 instructions disappear and the register assignment shifts.
  */
@@ -2260,13 +2269,13 @@ void CardPlayTypeSort(CardDefinition *definitions, s16 *cards, s32 count, s8 *or
 }
 
 /*
- * Check whether a card cannot be played for lack of room (asm 0x00a0c910).
+ * Check whether a card cannot be played for lack of room.
  * A card whose kind has bit 0x1 needs a free disposal slot (base layer card id
- * negative), unless its flags carry one of CARD_FLAGS_NO_SLOT_CHECK; any other
+ * negative), unless its flags equal CARD_FLAGS_NO_SLOT_CHECK; any other
  * card needs a free operation slot. Only the first four slots are searched.
  * Returns 1 when no slot is free, 0 otherwise. Once the definition has been
  * read, the cardId parameter is reused as the "slot found" flag (it lives in
- * $a2, asm 0x00a0c9cc `sltiu $v0,$a2,1`). A separate local only ever set to 0
+ * $a2, `sltiu $v0,$a2,1`). A separate local only ever set to 0
  * or 1 makes the compiler fold `!flag` into `xori`; a pseudo live at function
  * entry keeps the `sltiu` form. The work argument is not read.
  */
@@ -2304,7 +2313,7 @@ s32 CardPlayChkCost(CardDefinition *definitions, CardPlaySide *side, s32 cardId,
  * and the four battle slots each add one to the bucket picked from the card
  * definition flags (realian -> 1, mech -> 2, gnosis -> 3, unknown -> 4, anything else -> 0).
  * The battle slots are walked with a pointer to their cardId, advanced by one
- * CardBoardSlot per step (the original keeps it in a register from 0x00a0c9d0).
+ * CardBoardSlot per step (the original keeps it in a register).
  */
 void CardCountGeneration(u8 *counts, CardDefinition *definitions, CardPlaySide *side)
 {
@@ -2429,9 +2438,9 @@ s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side, s32 ca
 
     /*
      * Pass 2 reads the discard requirement bytes as `*(array + i)`: the array-pointer
-     * read keeps the address a strength-reduced pointer (starting at 0x00a0cd44 and
-     * 0x00a0ce18, `lbu $10,0($12)`), while `array[i]` recomputes it with an `addu` in
-     * every iteration and adds three instructions. Pass 1 indexes need[i].
+     * read keeps the address a strength-reduced pointer (`lbu $10,0($12)`), while
+     * `array[i]` recomputes it with an `addu` in every iteration and adds three
+     * instructions. Pass 1 indexes need[i].
      */
     satisfied = 0;
     for (i = 0; i < CARD_CHECK_MARK_COUNT; i++) {
@@ -2488,7 +2497,7 @@ s32 CardPlayChkCondition(CardDefinition *definitions, CardPlaySide *side, s32 ca
 /*
  * The attack type of the topmost card in play: the stack's layers are walked
  * from layers[39] down, skipping empty layers (cardId < 0) and the defensive
- * equipment Battle Suit and Shield (attack type 0), which never decide the type. The result is held in a u8, the width of
+ * equipment Battle Suit and Shield. The result is held in a u8, the width of
  * CardDefinition.attackType.
  */
 s32 CardChkAttackType(CardDefinition *definitions, CardLayerStack *card)
@@ -2565,7 +2574,7 @@ void CPCMSub(CardCursorControl *cursor, CardPlaySide *side, u16 buttons, u16 dra
 }
 
 /*
- * Moves the board cursor with the pad buttons (asm 0x00a0d0a8, 0x224 bytes).
+ * Moves the board cursor with the pad buttons.
  * The zone steps back (0x1000) or forward (0x4000) and the index forward
  * (0x2000) or back (0x8000); the zone is clamped to 0..4. Zones 0..3 go to
  * CPCMSub. The hand zone (4) sets the hand highlight and places the cursor on
@@ -2575,9 +2584,8 @@ void CPCMSub(CardCursorControl *cursor, CardPlaySide *side, u16 buttons, u16 dra
  * next test). After CPCMSub the position is copied from the table entry of the
  * zone and index. The copy is written on each of the two call paths (zones 0..3,
  * and the empty hand) because the compiler merges the identical tails into the
- * single jal/copy at 0x00a0d1d8..0x00a0d218 (reached by `b` at 0x00a0d180 and by
- * fall-through from 0x00a0d1d4); a single shared call or a static inline copy
- * helper does not reproduce that layout.
+ * single jal/copy (reached by a branch and by fall-through); a single shared
+ * call or a static inline copy helper does not reproduce that layout.
  */
 void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 buttons, u16 drawFlags)
 {
@@ -2638,15 +2646,15 @@ void CardPlayCursorMove(CardCursorControl *cursor, CardPlaySide *side, u16 butto
 }
 
 /*
- * Draws the card list window with the owned copies of each row (asm
- * 0x00a0d2d0, 0x2F8 bytes). The header (cardEnemyListHeaderFontCode) is printed at the window
- * origin. For each of the first windowRows rows below rowCount, the entry's card
- * id selects the owned copy count in work->ownedCount and the card name in
- * work->definitions. A row with no owned copy
- * prints its marker and the placeholder cardUnownedRowText instead of the name. With
- * flags bit 0 (`andi $2,$2,0x1`, 0x00a0d458) the owned count
- * (CARD_LIST_COPY_CAP when it reaches CARD_LIST_COPY_LIMIT) follows the name.
- * Rows are DECK_DISP_ROW_HEIGHT pixels apart; the footer is cardWindowFooterFontCode.
+ * Draws the card list window with the owned copies of each row. The header
+ * (cardEnemyListHeaderFontCode) is printed at the window origin. For each row
+ * below list->count (up to list->rows), the entry's card id selects the owned
+ * copy count in work->ownedCount and the card name in work->definitions. A row
+ * with no owned copy prints its marker and the placeholder cardUnownedRowText
+ * instead of the name. With list->active bit 0 set (`andi $2,$2,0x1`), the owned
+ * count follows the name, shown as CARD_LIST_COPY_CAP once it reaches
+ * CARD_LIST_COPY_LIMIT. Rows are DECK_DISP_ROW_HEIGHT pixels apart; the footer
+ * is cardWindowFooterFontCode.
  */
 void CardListDisp(CardListWindow *list, CardGameWork *work)
 {
@@ -2667,6 +2675,7 @@ void CardListDisp(CardListWindow *list, CardGameWork *work)
             if (row < list->count) {
                 cardId = list->entries[row + list->top].cardId;
                 if (work->ownedCount[cardId] > 0) {
+                    /* Owned card: the name, then the copy count when list->active bit 0 is set. */
                     definition = &definitions[cardId];
                     name = CARD_DATA_BUFFER + definition->nameOffset;
                     if (row == list->cursor) {
@@ -2712,10 +2721,10 @@ void CardListDisp(CardListWindow *list, CardGameWork *work)
 }
 
 /*
- * Draws the deck list window (asm 0x00a0d5c8): the header string, then the
- * rows of DeckListStr below rowCount, each preceded by the cursor marker when
- * it is the selected row and printed DECK_LIST_ROW_HEIGHT pixels apart, and
- * the footer. A row is the font prefix "\x19\x03" followed by textLength
+ * Draws the deck list window: the header string, then the rows of DeckListStr
+ * below list->count (up to list->rows), each preceded by the font code of the
+ * selected or the other row style and printed DECK_LIST_ROW_HEIGHT pixels apart,
+ * and the footer. A row is the font prefix "\x19\x03" followed by textLength
  * bytes of the name.
  */
 void CardDeckListDisp(CardListWindow *list)
@@ -2748,13 +2757,13 @@ void CardDeckListDisp(CardListWindow *list)
 }
 
 /*
- * Draws one list of strings in a window (0x00A0D740, 0x180 bytes). The list
- * header (a font escape, .rodata 0x00A4D518) is printed at the window origin first. Then, for each of
- * the first `count` rows, the row marker (0x00A4D148 on the row at `index`,
- * 0x00A4D150 on the others) is printed at the origin, followed by the row
+ * Draws one list of strings in a window. The list header (a font escape) is
+ * printed at the window origin first. Then, for each row below list->count
+ * (up to list->rows), the row marker is printed at the origin (the selected
+ * style on the row at `index`, the other style on the rest), followed by the row
  * text: `textLength` characters of the row's string after the two-byte
- * prefix 0x19 0x03, printed 25 pixels lower per row. Rows at or past
- * `limit` print nothing. The footer (0x00A4D170) is printed last.
+ * prefix 0x19 0x03, printed CARD_STR_LIST_ROW_HEIGHT pixels lower per row.
+ * The footer is printed last.
  */
 void CardStrListDisp(CardListWindow *list, char **strings, int index)
 {
@@ -2793,12 +2802,10 @@ void CardStrListDisp(CardListWindow *list, char **strings, int index)
 }
 
 /*
- * Draws a list of enemy deck names (0x00A0D8C0, 0x180 bytes). Same shape as
- * CardStrListDisp, but each row is a card entry: entries[row] indexes
- * DeckListStr (0x00A43508, sixteen bytes per name), the rows are 24 pixels
- * apart, and no prefix bytes are written before the text. The header font
- * escape is 0x00A4D500, the row marker 0x00A4D148 (row at `index`) or
- * 0x00A4D150, the footer 0x00A4D170.
+ * Draws a list of enemy deck names. Same shape as CardStrListDisp, but each row
+ * is a card entry: entries[row] indexes DeckListStr (sixteen bytes per name),
+ * the rows are DECK_LIST_ROW_HEIGHT pixels apart, and no prefix bytes are
+ * written before the text.
  */
 void CardEnemyListDisp(CardListWindow *list, s32 *entries, int index)
 {
@@ -2834,8 +2841,11 @@ void CardEnemyListDisp(CardListWindow *list, s32 *entries, int index)
     xglFontPrint(list->x, list->y, DECK_LIST_TEXT_COLOR, cardWindowFooterFontCode);
 }
 
-/* The power of a slot: that of the card stacked on its base card, except for the equipment that adds no attack of
- * its own (Eyeglasses, Battle Suit, Shield: attack 0 in card.dat), which leaves the base card's. */
+/*
+ * The power of a slot: that of the card stacked on its base card, except for the
+ * equipment that adds no attack of its own (Eyeglasses, Battle Suit, Shield:
+ * attack 0 in card.dat), which leaves the base card's.
+ */
 s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
 {
     CardDefinition *def;
@@ -2855,10 +2865,11 @@ s32 CardPlayCntPower(CardGameWork *work, CardLayerStack *slot)
 }
 
 /*
- * Draws the battle slots of one side (asm 0x00a0dac8): each live slot moves along its step or rests at
- * BattlePos1P, is drawn as a card with its frame and stacked card; a settled card also gets its info plate:
- * attack type icon, effective power, boost pips, equipment kind, life digits, life bar and flag markers.
- * An empty slot is reset to its resting position.
+ * Draws the battle slots of one side: each live slot moves along its step or rests
+ * at BattlePos1P, is drawn as a card with its frame and stacked card; a settled
+ * card also gets its info plate: attack type icon, effective power, boost pips,
+ * equipment kind, life digits, life bar and flag markers. An empty slot is reset
+ * to its resting position.
  */
 void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Matrix4 matrix)
 {
@@ -2912,6 +2923,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
             nmlModelSetPlace(&place);
             nmlModelSetTexture(CARD_FRAME_TEXTURE);
             nmlModelEntryCard(CARD_BATTLE_FRAME_MODEL);
+            /* The stacked card, drawn offset from the base card. */
             if (ownSide->battle[i].battle.layers[1].cardId >= 0) {
                 translation[0] = CardStackPos[0];
                 translation[1] = CardStackPos[1];
@@ -2923,6 +2935,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 nmlModelSetTexture(CARD_FRAME_TEXTURE);
                 nmlModelEntryCard(CARD_FRAME_MODEL);
             }
+            /* Settled card: its info plate and the digits, bars and markers on it. */
             if (ownSide->battle[i].battle.moveFrames == 0) {
                 infoPos = CPSInfoPos[i];
                 translation[0] = infoPos[0];
@@ -2948,7 +2961,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                 QuadwordCopyMatrix(place, matrix);
                 /* No code survives for this test or its unused assignment. The branch still divides the block
                  * at allocation time, which leaves the slot offset in $16 and the chain computing it in $3
-                 * (`sll $16,$3,0x2`, 0x00a0df24), so the offset stays live across the xglMatrixTrans call. */
+                 * (`sll $16,$3,0x2`), so the offset stays live across the xglMatrixTrans call. */
                 if (ownSide->battle[i].battle.flags != 0) {
                     power = ownSide->battle[i].battle.moveFrames;
                 }
@@ -3061,7 +3074,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
                     ownSide->battle[i].battle.layers[0].shownLife = 0;
                 }
                 /* Neither test below leaves code. They lengthen the life of the reloaded shownLife byte, which
-                 * ends up in $4 (`lbu $4,24($16)`, 0x00a0e3fc) rather than the next argument register. */
+                 * ends up in $4 (`lbu $4,24($16)`) rather than the next argument register. */
                 if (ownSide->battle[i].battle.flags != 0) {
                     power = ownSide->battle[i].battle.moveFrames;
                 }
@@ -3131,7 +3144,7 @@ void CardPlayDispBattle(s32 side, CardGameWork *work, CardPlaySide *ownSide, Mat
 }
 
 /*
- * Draws the hand of one side (asm 0x00a0e7a0): the hand size as tens and units digit models,
+ * Draws the hand of one side: the hand size as tens and units digit models,
  * then every hand card along its handMove record. A card in motion advances by its step and
  * flips by kind (4: growing face-down flip, 3: turning over, 2: face up, other: shrinking);
  * a card that has arrived starts the next stage of its kind (4 -> 3 -> 2 -> 1 -> 0, kind 2
@@ -3200,9 +3213,10 @@ void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matri
         flipScale[0] = 1.0f;
         scale[0] = CARD_PILE_CARD_SCALE;
 
-        cardIdMask = ~CARD_HAND_FLAG_BITS; /* `addiu $7,$0,-0xF01` (0x00a0ed8c) */
+        cardIdMask = ~CARD_HAND_FLAG_BITS; /* `addiu $7,$0,-0xF01` */
+        /* Advance each hand card's move record, then draw it. */
         for (i = 0; i < count; i++) {
-            /* The hand card base is formed at the loop top (`addiu $3,$7,8`, 0x00a0e9cc). */
+            /* The hand card base is formed at the loop top (`addiu $3,$7,8`). */
             cards = ownSide->hand.cards;
             if (ownSide->handMove[i].moveTimer != 0) {
                 ownSide->handMove[i].moveTimer--;
@@ -3292,9 +3306,10 @@ void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matri
             xglMatrixScale(place, place, flipScale);
             xglMatrixScale(cardMatrix, place, scale);
 
+            /* Side 0 shows its cards; for other sides a settled card shows the id from the other end. */
             if (side == 0) {
                 CardDispCard(&cardMatrix, cards[i] & cardIdMask, 1);
-            } else if (ownSide->handMove[i].kind != 0) { /* a card still moving shows its own id (kind test at 0x00a0ed7c) */
+            } else if (ownSide->handMove[i].kind != 0) { /* a card still moving shows its own id */
                 CardDispCard(&cardMatrix, cards[i] & cardIdMask, 1);
             } else {
                 CardDispCard(&cardMatrix, cards[count - 1 - i] & cardIdMask, 1);
@@ -3307,7 +3322,7 @@ void CardPlayDispHand(s32 side, s32 faceUp, CardPlaySide *ownSide, Matrix4 matri
 }
 
 /*
- * Draws the junk pile of one side (asm 0x00a0ee58): the pile count as digit models, the top
+ * Draws the junk pile of one side: the pile count as digit models, the top
  * card still resting (last slot with moveTimer == 0) at JunkPos1P[0], then every card in
  * motion along its junkMove record; a card that has landed is placed on the pile when it
  * is the last one.
@@ -3354,6 +3369,7 @@ void CardPlayDispJunk(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
     if (count == 0) {
         return;
     }
+    /* Find the resting top card, then draw it on the pile. */
     top = -1;
     translation[3] = 1.0f;
     scale[1] = CARD_PILE_CARD_SCALE;
@@ -3401,7 +3417,7 @@ void CardPlayDispJunk(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 }
 
 /*
- * Draws the four disposal slots of one side (asm 0x00a0f230). Each slot's cards move from
+ * Draws the four disposal slots of one side. Each slot's cards move from
  * DisposePos1P toward their resting place, the top card is drawn with its frame, a stacked card
  * sits at CardStackPos, the flag markers follow, and the slot value is shown as two digits.
  * The first argument (the side number) is not read.
@@ -3461,6 +3477,7 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
                 nmlModelSetTexture(CARD_FRAME_TEXTURE);
                 nmlModelEntryCard(CARD_FRAME_MODEL);
             }
+            /* Settled slot: the markers, then the slot value as two digits. */
             if (ownSide->disposal[slot].battle.moveFrames == 0) {
                 if ((ownSide->disposal[slot].battle.flags & CARD_STACK_FLAG_END) != 0) {
                     translation[0] = DisposePos1P[slot][0];
@@ -3483,7 +3500,7 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
                 if (ownSide->disposal[slot].battle.layers[0].shownLife < 0) {
                     ownSide->disposal[slot].battle.layers[0].shownLife = 0;
                 }
-                /* The compiled code reads shownLife as a signed byte here (lb at 0x00a0f510). The field stays u8
+                /* The compiled code reads shownLife as a signed byte here (lb). The field stays u8
                  * because CGPHPCheckSub fills it from the unsigned life byte, so the signed view is a cast. */
                 tens = ownSide->disposal[slot].battle.layers[0].shownLife / CARD_DIGIT_BASE;
                 if (tens != 0) {
@@ -3519,7 +3536,7 @@ void CardPlayDispDispose(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 }
 
 /*
- * Draws the operation cards of one side (asm 0x00a0f6a0): each live slot (operations[i] >= 0)
+ * Draws the operation cards of one side: each live slot (operations[i] >= 0)
  * moves along its operationMove record, then is drawn as a card with its frame; a settled card
  * with operationFlags bit 0 also gets a marker above its slot.
  * The first argument (the side number) is not read.
@@ -3578,11 +3595,10 @@ void CardPlayDispOperation(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 }
 
 /*
- * Draws the deck pile of one side (asm 0x00a0f928): the deck count as tens and units digit
+ * Draws the deck pile of one side: the deck count as tens and units digit
  * models, then the pile marker and a second marker below it (both only while the deck is not
  * empty), then every card in motion along its yamaMove record. side is 0 for the player and 1
- * for the enemy, which selects the enemy variant of the two marker models (asm 0x00a0fb40,
- * 0x00a0fb9c).
+ * for the enemy, which selects the enemy variant of the two marker models.
  */
 void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 {
@@ -3657,7 +3673,7 @@ void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
         }
     }
 
-    /* The original tests count < 0 first (bltz at 0x00a0fbc0) and then count == 0 (beqz at 0x00a0fbc8) before
+    /* The original tests count < 0 first (bltz) and then count == 0 (beqz) before
      * entering the loop; the signed guard around the loop reproduces that pair of branches. */
     if (count >= 0) {
         for (i = 0; i < count; i++) {
@@ -3692,7 +3708,7 @@ void CardPlayDispYama(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 }
 
 /*
- * Draws the discard pile of one side (asm 0x00a0fd28): the resting cards (those not sliding
+ * Draws the discard pile of one side: the resting cards (those not sliding
  * in) as digit models, the pile marker on top, then every card in motion along its suteMove
  * record, spun half a turn about Y. A card whose timer is 0 but whose kind is still set has
  * kind cleared and its timer restarted at CARD_SLIDE_FRAMES.
@@ -3794,7 +3810,7 @@ void CardPlayDispSute(s32 side, CardPlaySide *ownSide, Matrix4 matrix)
 }
 
 /*
- * Clears both mark tables of the board cursor (asm 0x00a100f0): the 24 marks
+ * Clears both mark tables of the board cursor: the 24 marks
  * of markTable (+0x30) and of markTableB (+0x48).
  */
 void CardCursorPassive(CardCursorControl *cursor)
@@ -3808,7 +3824,7 @@ void CardCursorPassive(CardCursorControl *cursor)
 }
 
 /*
- * Sets one mark of the board cursor (asm 0x00a10128). The zone (2..7) picks the
+ * Sets one mark of the board cursor. The zone (2..7) picks the
  * column of four marks in markTable and position->index the slot in it; mode
  * 1..4 is stored as the mark, any other mode clears it. A zone outside 2..7
  * changes nothing.
@@ -3841,7 +3857,7 @@ void CardCursorActive(CardCursorControl *cursor, CardCursorPosition *position, i
     if (column < 0) {
         return;
     }
-    /* Dispatched through the jump table at 0x00a4d640 (`sltiu 5`, 0x00a10188); each mark value
+    /* Dispatched through a jump table (`sltiu 5`); each mark value
      * has its own store, as in the original. */
     switch (mode) {
     case 0:
@@ -3881,7 +3897,7 @@ int CAMASub(int areaCode) {
 }
 
 /*
- * Draws the board cursor (asm 0x00a10260): the animated cursor frame of the side that holds
+ * Draws the board cursor: the animated cursor frame of the side that holds
  * the cursor with its marker model beside it, then the pulsing lights and the mark models of
  * the six zone columns of CardCursorControl.markTable (own side, then the far side turned
  * half a turn about Z). A zero `mode` also advances the animation and both light pulses.
@@ -3903,7 +3919,7 @@ void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix)
     float lightC;
     float lightD;
     int i;
-    /* block addresses the cursor files and marks from the base register 0x5B50 (`addiu $21,$16,0x5B50`);
+    /* block addresses the cursor files and marks from a base offset of 0x5B50;
      * the controlling side and the pulse counters stay on work->cursor, because reading them through
      * block->control changes the register assignment of the whole function. */
     CardCursorBlock *block = &work->cursorBlock;
@@ -4081,13 +4097,9 @@ void CardPlayDispCursor(s32 mode, CardGameWork *work, Matrix4 matrix)
 }
 
 /*
- * CardPlayIdentityCheck (ov10:0x00a10b60): `hand` is a side's CardHand,
- * CardPlaySide's first member (ov10/cgp.h), so it is also the address of the
- * enclosing side; this walks that side's four battle and four disposal board
- * slots, at every stacked layer, for a card whose CardDefinition.identity
- * matches. `identity` masks to 16 bits at entry (`andi $a2,$a2,0xffff`, the
- * function's first instruction) rather than to a byte, so the parameter
- * itself is 16 bits wide.
+ * Returns 1 when a card on one side's four battle and four disposal slots, at any
+ * layer, has the given CardDefinition identity, and 0 otherwise. Identities from
+ * CARD_IDENTITY_COUNT up are never checked.
  */
 int CardPlayIdentityCheck(CardGameWork *work, CardPlaySide *side, u16 identity)
 {
@@ -4146,14 +4158,12 @@ int CardPlayIdentityCheck(CardGameWork *work, CardPlaySide *side, u16 identity)
 }
 
 /*
- * Draws the cards of one hand (asm 0x00a10ce0). The cards are spaced evenly along
- * the window edge win0pos, from its first corner to its second, and each card sits
- * CARD_HAND_DEPTH_STEP further back than the one before it. The card at `selected`
- * is placed one step deeper than the last card, (count + 1) steps back, and drawn at
- * CARD_HAND_SELECTED_SCALE; the others are drawn at CARD_HAND_SCALE. The hand model
- * is then placed with the same matrix and entered. flipped is passed in $a3 by
- * CGCPHandDispSub but is never read: the first use of $a3 is the write that
- * clears the last argument of CardDisp (0x00a10e74).
+ * Draws the cards of one hand. The cards are spaced evenly along the window edge
+ * win0pos, from its first corner to its second, and each card sits CARD_HAND_DEPTH_STEP
+ * further back than the one before it. The card at `selected` is placed one step deeper
+ * than the last card, (count + 1) steps back, and drawn at CARD_HAND_SELECTED_SCALE; the
+ * others are drawn at CARD_HAND_SCALE. The hand model is then placed with the same matrix
+ * and entered. flipped is never read; the parameter is kept as the original has it.
  */
 void CGCPHandDispSubCore(CardHand *hand, int selected, Matrix4 *matrix, int flipped)
 {
@@ -4203,10 +4213,10 @@ void CGCPHandDispSubCore(CardHand *hand, int selected, Matrix4 *matrix, int flip
 }
 
 /*
- * Draws one generation icon per entry of need (asm 0x00a10f00), CARD_GENERATION_ICON_STEP
- * apart along a row; flipped moves the row to the other side of the board. The entries
- * 1, 2, 8, 4 and 16 select the icon of generation 0..4 (the jump table at 0x00a4d690
- * falls through 16, 4, 8, 2 and counts one more per step); 31 draws the model with index 7
+ * Draws one generation icon per entry of need, CARD_GENERATION_ICON_STEP apart along a
+ * row; flipped moves the row to the other side of the board. The entries 1, 2, 8, 4 and
+ * 16 select the icon of generation 0..4 (the switch falls through 16, 4, 8, 2 and counts
+ * one more per step); 31 draws the model with index 7
  * (three past generation 4) and takes its count from the first non-zero entry of counts; any
  * other entry draws nothing. A used count is decremented; when it is already zero the
  * icon is drawn with the dim light HalfColor.
@@ -4240,13 +4250,14 @@ void CGCPNeedDispSub(int flipped, u8 *need, Matrix4 *matrix, u8 *counts)
     xglMatrixTrans(cardMatrix, *matrix, translation);
     translation[0] = CARD_GENERATION_ICON_STEP;
     translation[1] = translation[2] = 0.0f;
+    /* One icon per need entry: resolve its generation, then spend a count for it. */
     for (slot = 0; slot < CARD_NEED_SLOT_COUNT; slot++) {
         anyGeneration = 0;
         generation = 0;
         switch (need[slot]) {
         case CARD_NEED_ANY:
             anyGeneration = 1;
-            generation = 3; /* three increments below reach icon CARD_NEED_ICON_ANY (0x00a11014) */
+            generation = 3; /* this plus the four increments below is model index 7 */
             /* fall through */
         case CARD_NEED_GENERATION4:
             generation++;
@@ -4297,7 +4308,7 @@ void CGCPNeedDispSub(int flipped, u8 *need, Matrix4 *matrix, u8 *counts)
 }
 
 /*
- * Draws the generation markers of one side (asm 0x00a11168): CardCountGeneration
+ * Draws the generation markers of one side: CardCountGeneration
  * fills counts[0..4], then for each generation slot counts[slot] icons are drawn
  * in a row. The row starts at baseMatrix moved by (-0.145, 0.675), or by
  * (0.212, -0.418) when flipped is set; every icon is drawn scaled by 0.9 in x
@@ -4332,8 +4343,8 @@ void CGCPGeneDispSub(int flipped, CardDefinition *definitions, CardPlaySide *sid
     for (slot = 0; slot < CARD_GENERATION_COUNT; slot++) {
         if (counts[slot] != 0) {
             for (i = 0; i < counts[slot]; i++) {
-                /* Declared first: the slot * 0x400 offset (`sll 10`, 0x00a11274) is the first
-                 * value set up before the loop, ahead of the array addresses (0x00a11278..0x00a1127c). */
+                /* Declared here, not at the top: the slot * CARD_MODEL_STRIDE offset is
+                 * computed first, ahead of the array addresses. */
                 unsigned int model = CARD_ICON_MODEL_BASE + slot * CARD_MODEL_STRIDE;
 
                 xglMatrixScale(placement, matrix, scale);
@@ -4347,7 +4358,7 @@ void CGCPGeneDispSub(int flipped, CardDefinition *definitions, CardPlaySide *sid
 }
 
 /*
- * Draws the hand of one side on the battle window (asm 0x00a11320): the cards are
+ * Draws the hand of one side on the battle window: the cards are
  * spread from NewWin0pos[2] to NewWin0pos[3] like CGCPHandDispSubCore, each
  * CARD_WINDOW_DEPTH_STEP further back, with the card at `selected` drawn larger and in
  * front. Every card is drawn with CardDispCard and a frame model; the last card of the
@@ -4402,6 +4413,7 @@ void CGCPHandDispSub3(CardDefinition *definitions, CardPlaySide *side, int selec
     selectedScale[1] = CARD_HAND3_SELECTED_SCALE;
     selectedScale[2] = 1.0f;
     selectedScale[3] = 1.0f;
+    /* Per card: place it on the window edge, tint it from mode, then draw it unless it is moving. */
     for (i = 0; i < count; i++) {
         flags = CARD_DISP_ENABLED | CARD_DISP_OVERLAY;
         if (i == count - 1) {
@@ -4468,6 +4480,7 @@ void CGCPHandDispSub3(CardDefinition *definitions, CardPlaySide *side, int selec
             nmlModelEntryCard(CARD_FRAME_MODEL);
         }
     }
+    /* Hand base model, then the generation and need rows. */
     nmlModelSetPlace(&matrix);
     nmlModelSetLight(&CNColor, &asDir);
     nmlModelSetTexture(CARD_HAND3_BASE_TEXTURE);
@@ -4477,7 +4490,7 @@ void CGCPHandDispSub3(CardDefinition *definitions, CardPlaySide *side, int selec
 }
 
 /*
- * Draws the hand of one side on the battle window (asm 0x00a11820): like
+ * Draws the hand of one side on the battle window: like
  * CGCPHandDispSub3 but spread from NewWin0pos[0] to NewWin0pos[1], with the selected
  * card lifted from win0pos. The pile count is drawn as one or two digit models and the
  * generation and need rows follow the base model.
@@ -4525,6 +4538,7 @@ void CGCPHandDispSub2(CardDefinition *definitions, CardPlaySide *side, int selec
     selectedScale[1] = CARD_HAND2_SELECTED_SCALE;
     selectedScale[2] = 1.0f;
     selectedScale[3] = 1.0f;
+    /* Per card: place it on the window edge, tint it from mode, then draw it unless it is moving. */
     for (i = 0; i < count; i++) {
         flags = CARD_DISP_ENABLED | CARD_DISP_OVERLAY;
         if (i == count - 1) {
@@ -4533,7 +4547,7 @@ void CGCPHandDispSub2(CardDefinition *definitions, CardPlaySide *side, int selec
         position[0] = NewWin0pos[0][0] + spacing * (float)i;
         position[2] = NewWin0pos[0][2] + (float)i * CARD_WINDOW_DEPTH_STEP;
         if (i == selected) {
-            /* The selected card's depth is win0pos[0][2] (lwc1 0x8 off win0pos, 0x00a11a50; lui at 0x00a11a3c). */
+            /* The selected card's depth is taken from win0pos, not NewWin0pos. */
             position[2] = win0pos[0][2] + (float)(count + 1) * CARD_WINDOW_DEPTH_STEP;
         }
         if (mode != 0) {
@@ -4592,6 +4606,7 @@ void CGCPHandDispSub2(CardDefinition *definitions, CardPlaySide *side, int selec
             nmlModelEntryCard(CARD_FRAME_MODEL);
         }
     }
+    /* Pile count: the tens digit when there is one, then the units digit. */
     model = count / CARD_PILE_STACK_SIZE;
     position[2] = 0.0f;
     normalScale[0] = CARD_HAND2_PILE_SCALE;
@@ -4624,7 +4639,7 @@ void CGCPHandDispSub2(CardDefinition *definitions, CardPlaySide *side, int selec
 }
 
 /*
- * Draws the hand of cards for the given side (asm 0x00a11e50). The matrix
+ * Draws the hand of cards for the given side. The matrix
  * places the hand: a translation of (0, -0.95, 0.1) that becomes (0, 0.95, 0.1)
  * when flipped is set. CGCPHandDispSubCore draws the cards.
  */
@@ -4646,15 +4661,14 @@ void CGCPHandDispSub(CardHand *hand, int selected, int flipped)
 }
 
 /*
- * Draws the yama (deck) of one side (asm 0x00a11f00): the top `count` cards of the pile
- * are spaced evenly along the window edge win0pos like a hand, each
- * CARD_WINDOW_DEPTH_STEP further back than the one before it. The card at
- * `selectedOffset` is drawn larger and in front. `style` selects the highlighted
- * CardDisp mode; without a style and with button 0x10 held, the selected card is also
- * drawn as a mark at (0, CARD_YAMA_MARK_Y). Afterwards the deck back and the pile
- * model are entered and the caption string is printed.
+ * Draws the yama (deck) of one side: the top `count` cards of the pile are spaced evenly
+ * along the window edge win0pos like a hand, each CARD_WINDOW_DEPTH_STEP further back than
+ * the one before it. The card at `selectedOffset` is drawn larger and in front. `style`
+ * selects the highlighted CardDisp mode (CARD_YAMA_SELECTED_MODE); without a style and with
+ * CARD_YAMA_MARK_FLAG set in flags, the selected card is also drawn as a mark at
+ * (0, CARD_YAMA_MARK_Y). Afterwards the deck back and the pile model are entered and the
+ * caption string is printed.
  */
-/* CardDisp mode of the selected card when a style is set (asm 0x00a12118) and of its mark (asm 0x00a121a0) */
 void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flags, int style)
 {
     Matrix4 base;
@@ -4696,6 +4710,7 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
     selectedScale[1] = CARD_HAND_SELECTED_SCALE;
     selectedScale[2] = 1.0f;
     selectedScale[3] = 1.0f;
+    /* The top `count` cards of the pile, the selected one lifted and drawn in the highlighted mode. */
     for (i = yamaCount - count; i < yamaCount; i++) {
         position[0] = win0pos[0][0] + spacing * (float)(i - (yamaCount - count));
         position[1] = win0pos[0][1];
@@ -4706,8 +4721,8 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
         xglMatrixTrans(cardMatrix, base, position);
         if (i == yamaCount - count + selectedOffset) {
             xglMatrixScale(cardMatrix, cardMatrix, selectedScale);
-            /* The mode argument is set after xglMatrixScale, inside the loop: `addiu $a3,$0,5`
-             * (0x00a12118) with a `movz` on style in the call's delay slot (0x00a12130). */
+            /* The mode argument is set after xglMatrixScale, inside the loop, and is
+             * CARD_YAMA_SELECTED_MODE only when style is set. */
             effect = 0;
             if (style != 0) {
                 effect = CARD_YAMA_SELECTED_MODE;
@@ -4727,9 +4742,9 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
             CardDispCard(&cardMatrix, side->deck[i], 1);
         }
     }
-    /* The base matrix is copied by lq/sq through $2 (asm 0x00a121e4..0x00a12200), the
-     * SDK sceVu0CopyMatrix shape; QuadwordCopyMatrix (quadword.h) is that inline asm. */
+    /* The base matrix is copied with QuadwordCopyMatrix (quadword.h). */
     QuadwordCopyMatrix(cardMatrix, base);
+    /* A single card is moved to the one-card position and scaled as the selected card. */
     if (count == 1) {
         position[0] = CARD_WINDOW_SINGLE_X;
         position[1] = position[2] = 0.0f;
@@ -4761,7 +4776,7 @@ void CGCPYamaDispSub(CardPlaySide *side, int selectedOffset, int count, u16 flag
 }
 
 /*
- * Draws the junk pile of one side (asm 0x00a12380). The junk cards are spaced evenly
+ * Draws the junk pile of one side. The junk cards are spaced evenly
  * along the window edge win0pos like a hand, each CARD_WINDOW_DEPTH_STEP further back
  * than the one before it in reverse order (the first card is deepest); the card at
  * `selected` is placed (count + 1) steps back and drawn at CARD_HAND_SELECTED_SCALE.
@@ -4832,6 +4847,7 @@ void CGCPJunkDispSub(CardPlaySide *side, int selected)
     xglFontPrint(CARD_WINDOW_CAPTION_X, CARD_WINDOW_CAPTION_Y, CARD_WINDOW_CAPTION_COLOR, cardJunkCaption);
 }
 
+/* Counts the operation slots of both players that hold opId. */
 s32 CardPlayCntAllOpe(CardGameWork *work, s16 opId)
 {
     s16 *playerOp;
@@ -4863,6 +4879,7 @@ s32 CardPlayCntAllOpe(CardGameWork *work, s16 opId)
     return count;
 }
 
+/* Counts the operation slots of one side that hold opId. */
 s32 CardPlayCntOpe(CardPlaySide *side, s16 opId)
 {
     s16 *op;
@@ -4887,8 +4904,8 @@ s32 CardPlayCntOpe(CardPlaySide *side, s16 opId)
 }
 
 /*
- * Counts the copies of cardId on top of the side's disposal slots, sibling to
- * CardPlayCntBtl's battle slots.
+ * Counts the base-layer card ids of the side's disposal slots that equal cardId,
+ * sibling to CardPlayCntBtl's battle slots.
  */
 int CardPlayCntDsp(CardPlaySide *side, s16 cardId)
 {
@@ -4939,10 +4956,10 @@ int CardPlayCntBtl(CardPlaySide *side, s16 cardId)
 
 /*
  * Count the light cards on the base layer of a side's four battle slots and
- * four disposal slots: a card counts when its definition flags carry bit 0x1
- * or bit 0x2 (asm 0x00a127a0). An empty slot holds a negative card id and is
- * skipped. Each loop walks the card id field of its slots, one CardBoardSlot
- * apart.
+ * four disposal slots: a card counts when its definition flags carry
+ * CARD_ATTR_HUMAN or CARD_ATTR_REALIAN. An empty slot holds a negative card id
+ * and is skipped. Each loop walks the card id field of its slots, one
+ * CardBoardSlot apart.
  */
 s32 CardPlayCntLight(CardGameWork *work, CardPlaySide *side)
 {
@@ -4973,11 +4990,10 @@ s32 CardPlayCntLight(CardGameWork *work, CardPlaySide *side)
 }
 
 /*
- * Count the heavy cards (definition flags bit 0x8) that sit on the base layer
- * of a side's four battle slots and four disposal slots (asm 0x00a12860).
- * The base layer's card id is the halfword 0x1AA into a CardPlaySide, and the
- * slots are sizeof(CardBoardSlot) bytes apart. An empty slot holds a negative
- * id and is skipped.
+ * Count the mech cards (definition flags CARD_ATTR_MECH) that sit on the base
+ * layer of a side's four battle slots and four disposal slots. The slots are
+ * sizeof(CardBoardSlot) bytes apart. An empty slot holds a negative id and is
+ * skipped.
  */
 s32 CardPlayCntHeavy(CardGameWork *work, CardPlaySide *side)
 {
@@ -5008,9 +5024,8 @@ s32 CardPlayCntHeavy(CardGameWork *work, CardPlaySide *side)
 
 /*
  * Counts the battle and disposal slots whose base card (layers[0]) has the
- * heavy-weapon flag (definitions flags bit 0x8) and whose base card passes
- * CGPWeaponEquipChk against cardId (0x00a12900). The four battle slots are
- * checked first, then the four disposal slots.
+ * CARD_ATTR_MECH flag and whose base card passes CGPWeaponEquipChk against
+ * cardId. The four battle slots are checked first, then the four disposal slots.
  */
 s32 CardEquipCntHeavy(CardGameWork *work, CardPlaySide *side, s32 cardId)
 {
@@ -5041,6 +5056,7 @@ s32 CardEquipCntHeavy(CardGameWork *work, CardPlaySide *side, s32 cardId)
     return count;
 }
 
+/* Counts the copies of cardId in both sides' disposal and battle slots. */
 int CardPlayCntFld(CardGameWork *work, s16 cardId) {
     CardPlaySide *playerSide;
     CardPlaySide *enemySide;

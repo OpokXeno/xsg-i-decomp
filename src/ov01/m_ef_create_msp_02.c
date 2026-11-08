@@ -14,8 +14,7 @@ extern float MMathMakeRandom(void);
 extern float MMathMakeRandom2PI(void);
 extern float MMathCalcLengthXZ(Vector4 *vector);
 extern float MMathCalcLengthYZ(Vector4 *vector);
-/* Returns its destination: needed for the $2/$3 choice in MEfCreate_MSP02's
- * second quadword-copy pair. */
+/* Returns its destination. */
 extern Vector4 *MMathCalcAngle(Vector4 *angles, Vector4 *from, Vector4 *to);
 extern void MMathVectorInterpolation(Vector4 *destination, Vector4 *first,
                                      Vector4 *second, float parameter);
@@ -26,59 +25,23 @@ extern void MMathApplyMatrix(Vector4 *destination, Matrix4 matrix, Vector4 *sour
 extern float tanf(float value);
 
 /*
- * The MSP02 effect record: the work area the MEf effect object carries at its
- * own byte offset 0x20 (MEfCreate_MSP02 takes the object in $4, derives the
- * record as $4+0x20 and installs this TU's four callbacks at object+0x04..0x10).
- * Every member below is evidenced by an access in this TU; the spans whose
- * interior this TU never resolves keep the one role it does evidence for them,
- * and nothing here is sized to round the record out (docs/naming.md).
+ * Work area of an MSP02 effect. It sits at byte offset 0x20 of the MEf object,
+ * which also holds the four callbacks.
  *
- *   creationParameters  read, never written, by MEfCreate_MSP02 alone: the
- *                       actor/selector pairs it passes to MEfGetActorMatrix
- *                       (+0x08, +0x0c) and MEfGetActorCoord (+0x24, +0x28),
- *                       the Vector4 at +0x10 it rotates into spawnPoint, and
- *                       the pair fnMSP02_DM000 passes to MEfDrawModel (+0x40,
- *                       +0x44). Their producer is outside this TU, so their
- *                       individual roles are not recovered here.
- *   frame               cleared by MEfCreate_MSP02, incremented by
- *                       fnMSP02_PO000 (which fires sefHitEffect at 20 and
- *                       MEfObjDestroy at 30), gated against 20 here and in
- *                       fnMSP02_DM000.
- *   spawnPoint          MMathApplyMatrix writes it from the actor matrix and
- *                       the creation offset; MEfCreate_MSP02 copies it into
- *                       position, previousPosition, target and previousTarget.
- *   circumPoint         MEfCalcCircumXZ writes it; velocity is the step from
- *                       spawnPoint to it divided by twenty.
- *   position .. turn    seven contiguous Vector4 records, all seeded in order
- *                       by MEfCreate_MSP02. turn is a whole Vector4 and not
- *                       two floats: MMathCalcAngle writes four lanes into it
- *                       and fnMSP02_DM000 copies all sixteen bytes with one
- *                       lq/sq pair. This function uses only its x and y lanes.
- *   spread, angle       0.2 and MMathMakeRandom2PI() at creation, rewritten
- *                       here every seventh frame.
- *   drawPacket          MEfCreate_MSP02 calls MGsGPInit on +0x118 and stores
- *                       the two cloud textures' TEX0 values (svGetPrmFromName)
- *                       at +0x130 and +0x138; fnMSP02_DP000 re-initialises the
- *                       same packet every frame, walks its pointer/counter
- *                       fields and picks one of the two TEX0 values per slot.
- *                       Its interior belongs to the MGs packet builder, which
- *                       is outside this TU.
- *   active              MEfCreate_MSP02 memsets exactly 0x14 bytes here;
- *                       fnMSP02_DP000 walks ten halfwords and skips the empty
- *                       slots. This function loads and stores them unsigned.
- *   points, twist       MEfCreate_MSP02 memsets 0x140 bytes at +0x160 and
- *                       0x50 bytes at +0x2a0 -- exactly these two arrays, and
- *                       the record ends there; fnMSP02_DP000 walks both in
- *                       step, sixteen and four bytes per point.
+ *   creationParameters  Actor pairs, creation offset, model and texture name.
+ *                       Set outside this file; read here.
+ *   frame               Frame counter: cleared at creation, advanced by the post callback.
+ *   spawnPoint          Start point, computed from the actor matrix and the offset.
+ *   circumPoint         Point that the initial velocity is aimed at.
+ *   position .. turn    Seven Vector4 records, seeded in order at creation.
+ *   spread, angle       Swing parameters, redrawn every seventh frame while young.
+ *   drawPacket          GS packet, rebuilt on every draw.
+ *   cloudTexture        GS TEX0 values of the two cloud textures.
+ *   active, points, twist
+ *                       The trail: ten slots, each with two endpoints and two twist angles.
  *
- * The two twelve-byte spans at +0x074 and +0x154 carry no member. Each sits
- * immediately before a quadword field that this TU reaches with lq/sq/lqc2/
- * sqc2, which the R5900 only accepts on a sixteen-byte boundary, so the
- * original's vector type is sixteen-byte aligned and the compiler inserted
- * exactly these two spans itself. This dialect has no way to spell that
- * alignment without an attribute the route does not admit, so the spans are
- * declared, named for the alignment they reproduce and for nothing else, and
- * they represent only those alignment gaps.
+ * The two twelve-byte gaps at +0x074 and +0x154 are alignment padding before quadword
+ * fields. They carry no member.
  *
  * The trail is a ten-slot history: `active` says whether a slot holds a
  * segment, `points` holds its two endpoints and `twist` their two roll angles.
@@ -122,8 +85,7 @@ typedef struct MspEffect {
     float angle;                                                   /* 0x114 */
     MEfGsPacket drawPacket;                                        /* 0x118 */
     unsigned char unmodeled_12C[4];                                /* 0x12c */
-    /* GS TEX0 of the de_cld01 / de_cld02 cloud textures
-     * (MEfCreate_MSP02: sd $2, 0x130($19) / sd $2, 0x138($19)). */
+    /* GS TEX0 of the de_cld01 / de_cld02 cloud textures. */
     u64 cloudTexture[2];                                           /* 0x130 */
     unsigned short active[MSP02_TRAIL_SLOTS];                      /* 0x140 */
     unsigned char alignmentBeforePoints[0xc];                      /* 0x154 */
@@ -133,7 +95,7 @@ typedef struct MspEffect {
 
 /* svGetPrmFromName's output (SvImageParameter, src/main/sv_get_image_item.c):
  * the named texture's GS TEX0 value and its scaled width and height. Only
- * the TEX0 is kept (MEfCreate_MSP02: ld $2, 0x0($29) after each call). */
+ * the TEX0 is kept. */
 typedef struct Msp02ImageParameter {
     u64 texture;
     float width;
@@ -155,7 +117,6 @@ extern Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first,
                                    const Vector4 *second, float divisor);
 extern void MGsGPInit(void *packet, void *address, int size);
 extern Msp02ImageParameter *svGetPrmFromName(const char *name, Msp02ImageParameter *output);
-/* MEfCreate_MSP02: lui $4, %hi(efMsp02DeCld01Text) / %hi(efMsp02DeCld02Text) for svGetPrmFromName. */
 extern const char efMsp02DeCld01Text[]; /* "de_cld01" */
 extern const char efMsp02DeCld02Text[]; /* "de_cld02" */
 
@@ -166,6 +127,10 @@ static void fnMSP02_DM000(void *task, MspEffect *effect);
 static void fnMSP02_DP000(void *task, MspEffect *effect);
 static void fnMSP02_PO000(void *self, MspEffect *effect);
 
+/*
+ * Initializes an MSP02 effect: places it at its spawn point, aims its velocity at the
+ * circum point, loads the two cloud textures and installs the four callbacks. Returns 1.
+ */
 int MEfCreate_MSP02(MspObject *object)
 {
     MspEffect *effect = &object->work;
@@ -296,16 +261,8 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
         /* work = vf0, the VU0 constant (0, 0, 0, 1). */
         __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&work) : "memory");
         {
-            /* The swing offset in the rotated frame, in polar form: the two
-             * circular components of the current angle, scaled by the spread.
-             * They come from the VU0 microprogram, whose entry 0xe8 is
-             * Vu0CallCos and whose entry 0x20 is Vu0CallSin
-             * (src/main/vu0/Vu0MicroCode.dvp),
-             * so the cosine is computed first and lands in x. The angle goes in
-             * through VF4 and the result comes back from VF1, so each one
-             * crosses between the FPU register the EABI keeps a float in and the
-             * GPR the quadword transfer reads: that is what the mfc1/mtc1 pair
-             * is for. */
+            /* Swing offset in the rotated frame: cosine (VU0 entry 0xe8, Vu0CallCos) into x and
+             * sine (entry 0x20, Vu0CallSin) into y, both scaled by the spread. */
             float cosine;
             float sine;
 
@@ -385,10 +342,8 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
     }
 
     /*
-     * Shift the whole trail history down one slot. The endpoints are copied
-     * through the record's byte offsets: one slot is MSP02_SLOT_BYTES further
-     * on than the previous one, which is the single address chain the original
-     * walks for both endpoints of a slot.
+     * Shift the trail history down one slot per step, from the second-to-last slot
+     * to slot 0. The endpoints are copied at byte offsets from the record.
      */
     for (trail = MSP02_TRAIL_SLOTS - 2, slotOffset = (MSP02_TRAIL_SLOTS - 2) * MSP02_SLOT_BYTES;
          trail >= 0; slotOffset -= MSP02_SLOT_BYTES, trail--) {
@@ -406,6 +361,7 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
         }
     }
 
+    /* Clear the head slot; it is refilled below while the effect is young. */
     effect->active[0] = 0;
     for (point = 0; point < MSP02_TRAIL_POINTS; point++)
         __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&effect->points[0][point]) : "memory");
@@ -434,6 +390,7 @@ static void fnMSP02_PR000(void *task, MspEffect *effect)
     }
 }
 
+/* Draws the model with the trail turn as orientation, scaled, while the effect is young. */
 static void fnMSP02_DM000(void *task, MspEffect *effect)
 {
     static const Vector4 scale = {0.05f, 0.05f, 0.22f, 1.0f};
@@ -477,6 +434,10 @@ extern void MGsGPTerm(void *packet);
 extern Quadword McEfSTQtbl[];
 static const Quadword coltbl_1_00A516B0[10];
 static const float sztbl_2_00A51750[10];
+/*
+ * Builds the GS drawing packet for the trail: for each active slot, two textured strips
+ * of four vertices, one per endpoint.
+ */
 static void fnMSP02_DP000(void *task, MspEffect *effect)
 {
     int i;
@@ -501,6 +462,7 @@ static void fnMSP02_DP000(void *task, MspEffect *effect)
     int nloop;
     int texReg;
 
+    /* Packet header, then the state registers: test, texture filter, clamp, z buffer and alpha. */
     pk = &effect->drawPacket;
     MGsGPInit(pk, 0, 0);
     q = pk->current;
@@ -527,6 +489,7 @@ static void fnMSP02_DP000(void *task, MspEffect *effect)
     pk->current->nloop |= nreg;
     pk->current += n;
     pk->count += n;
+    /* One pass per trail slot; slots whose active flag is zero are skipped. */
     for (i = 0; i < 10; i++) {
         if (((short *)effect->active)[i] != 0) {
             color = coltbl_1_00A516B0[i];
@@ -549,6 +512,7 @@ static void fnMSP02_DP000(void *task, MspEffect *effect)
                     texReg = SCE_GS_TEX0_1;
                     regs = MEF_GS_TEXTURED_STRIP_REGS;
                     nloop = 3;
+                    /* Texture register, then a strip of four vertices with ST, color and position. */
                     t = gp->current;
                     t[0].gif.tag = MEF_GS_SETUP_TAG;
                     t[0].gif.registers = MEF_GS_SETUP_REGS;
@@ -592,11 +556,11 @@ static void fnMSP02_DP000(void *task, MspEffect *effect)
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* Same frame gating as MSP00's fnMSP00_PO000 (see m_ef_create_msp_00.c),
- * against this TU's own thresholds (MspEffect.frame above). */
+/* Frame at which the hit effect fires, and the frame at which the object is destroyed. */
 #define MSP02_HIT_FRAME 0x14
 #define MSP02_LIFETIME  0x1E
 
+/* Advances the frame counter, fires the hit effect at its frame and destroys the object at its lifetime. */
 static void fnMSP02_PO000(void *self, MspEffect *effect)
 {
     effect->frame++;
@@ -608,6 +572,7 @@ static void fnMSP02_PO000(void *self, MspEffect *effect)
     }
 }
 
+/* Returns first plus the step toward second, limited to +/- bound. */
 static float adjAngle(float first, float second, float bound)
 {
     float value = MMathCalcRotNear(first, second);

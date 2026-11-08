@@ -53,10 +53,8 @@ struct SystemArrayCopyArguments {
 extern void *memcpy(void *destination, const void *source, unsigned int size);
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in this
- * TU map show.
+ * The script VM's per-thread context (`JThread`, see include/main/jni.h).
+ * Every Java native receives (thread, arguments, result).
  */
 static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
                            int wait_parameter);
@@ -67,6 +65,11 @@ const char systemFloatFormat[6] = "%8.2f";
 
 static char tmpString[512];
 
+/*
+ * System.arraycopy: copies `count` elements from source to destination with
+ * memcpy. The element width comes from the innermost destination element
+ * class, and is 4 bytes for non-primitive elements.
+ */
 void *Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II(
     void *thread, void *argument_block)
 {
@@ -102,6 +105,11 @@ void *Java_xeno_vm_System_arraycopy__Ljava_lang_Object_ILjava_lang_Object_II(
     }
 }
 
+/*
+ * System.sleep(int): starts a wait of `frames` frames (negative counts become
+ * 0) on the calling thread. Nothing happens while a call is already running on
+ * the thread.
+ */
 void Java_xeno_vm_System_sleep__I(SceneVm *vm, const VMSlot *arguments,
                                   VMSlot *result)
 {
@@ -125,6 +133,10 @@ void Java_xeno_vm_System_sleep__I(SceneVm *vm, const VMSlot *arguments,
     }
 }
 
+/*
+ * Returns the first occurrence of `character` in the first `length` bytes of
+ * `start`, or 0 when there is none. A NUL byte ends the search.
+ */
 static const char *getStrIndex(const char *start, int length, int character)
 {
     int index = 0;
@@ -149,6 +161,11 @@ static const char *getStrIndex(const char *start, int length, int character)
     return 0;
 }
 
+/*
+ * Walks the string's /[...] markers. Each marker's text is copied into a
+ * temporary buffer and, for #n markers, register n is formatted as a float.
+ * The formatted text is not emitted.
+ */
 void Java_xeno_vm_System_println__Ljava_lang_String_(
     struct JThread *thread, SceneString **arguments, unsigned int *result)
 {
@@ -186,6 +203,7 @@ void Java_xeno_vm_System_println__Ljava_lang_String_(
             segmentLength = closing - slash - 2;
 
             (void)strncpy(tmpString, substitution, segmentLength);
+            /* A $ marker is skipped; a # marker formats a register value first. */
             if (tmpString[0] == '$') {
                 ++text;
             } else {
@@ -212,6 +230,11 @@ void Java_xeno_vm_System_println__Ljava_lang_String_(
     }
 }
 
+/*
+ * Suspends the calling thread on `wait_target`. Menu and Window targets wait
+ * on the component state. For Chr and Stage targets, wait_kind 0 waits for the
+ * target's thread to finish, and JTHREAD_WAIT_SIGNAL waits for a signal.
+ */
 static void System_waitFor(JThread *vmThread, void *wait_target, int wait_kind,
                            int wait_parameter)
 {

@@ -92,6 +92,7 @@ const char PauseMenuPageEnemyFleeRouteText[15] = "\245\353\241\274\245\310\276\3
  * EN: Pursuing along route */
 const char PauseMenuPageEnemyPursueRouteText[15] = "\245\353\241\274\245\310\276\345\244\362\304\311\300\327";
 
+/* Reads the enemy data, spline and lex files into consecutive areas of the work buffer. */
 void Enemy_SystemInit(void) {
     AdrsEnemyPreset = WorkEnd;
     GameLoopState[0x1c / sizeof(ActorEnemyInitView *)] = 0;
@@ -113,6 +114,7 @@ void Enemy_SystemInit(void) {
     WorkEnd += xglCdReadFile(enemySikakuLexPath, WorkEnd, 0, 0);
 }
 
+/* Reads the preset file data\matumoto\<preset_name>.dat into `buffer`; returns the read result. */
 int Enemy_LoadPreset(void *buffer, const char *preset_name)
 {
     EnemyPresetPathStorage path;
@@ -136,6 +138,10 @@ void TM_Script_Spline_Add(int number, float x, float y, float z)
     enepc[number].spline_points[point][3] = 1.0f;
 }
 
+/*
+ * Initializes the enemy actor for `number` with its default parameters and returns it.
+ * A negative `number` takes the first free actor slot; returns 0 when none is free.
+ */
 ActorEnemyInitView *ACT_createEnemy(int number, int id)
 {
     ActorEnemyInitView *enemy;
@@ -144,6 +150,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     short i;
     short j;
     short k;
+    /* A negative number searches for an actor slot whose id is 0. */
     if (number < 0) {
         for (i = 0; i < ACTOR_COUNT; i++) {
             if (actor[i].id == 0) {
@@ -229,6 +236,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     work->encount_lock = 0;
     params->value_2c0 = 0;
     params->locator_flags = 0;
+    /* Ids outside 0x4000..0x4805 also get the extra locator flags. */
     if ((unsigned short)enemy->id - 0x4000 >= 0x806U) {
         params->locator_flags = 0x1001b;
     }
@@ -253,6 +261,7 @@ ActorEnemyInitView *ACT_createEnemy(int number, int id)
     enemy->effect_next = 0;
     DataSpline[0] = AdrsEnemySpline;
     work->light = 0;
+    /* Clear the 256 x 4 action and motion tables. */
     for (j = 0; j < 256; j++) {
         for (i = 0; i < 4; i++) {
             work->action_motion_table[j][i] = -1;

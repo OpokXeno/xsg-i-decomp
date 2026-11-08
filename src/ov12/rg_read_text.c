@@ -20,8 +20,8 @@ static float _GetFloat(RgReadText *pReader);
 static int _GetInt(RgReadText *pReader);
 static int _GetBool(RgReadText *pReader);
 
-/* Defined elsewhere (scaffold data): the file-system root and the message
- * of the token-capacity assertion. */
+/* Defined at the end of this file: the data directory and the message of the
+ * token-capacity assertion. */
 extern const char readTextDirectory[];
 extern const char readTextAssertCapacityPositive[];
 
@@ -35,6 +35,7 @@ const char readTextAssertUngetTokenNotNil[] = "pszUngetToken != NIL";
 const char readTextDelimiterNotFoundError[0x18] = "not find delimiter";
 const char readTextQuestionMarkString[8] = "?";
 
+/* Opens the named file from the data directory into the reader. Returns 0 when it cannot be read. */
 static int _InitReader(RgReadText *pReader, const char *pszName)
 {
     RgFileSysData *pFile;
@@ -90,6 +91,10 @@ static int _IsWhiteSpace(unsigned char ch)
     return isWhiteSpace;
 }
 
+/*
+ * Skips white space and '#' comment lines from the cursor. Returns the start of the next
+ * token, or 0 at the end of the buffer or at a '%' paragraph delimiter, which is recorded.
+ */
 static char *_SkipWhiteSpace(RgReadText *pReader)
 {
     char *pCur;
@@ -142,6 +147,10 @@ static int _IsEOF(RgReadText *pReader)
     return _SkipWhiteSpace(pReader) == 0;
 }
 
+/*
+ * Copies the next white-space-delimited token into pszOut, turning '@' into a space.
+ * A pending ungotten token is returned first.
+ */
 static void _GetString(RgReadText *pReader, char *pszOut, unsigned int nCapacity)
 {
     unsigned char *pCur;
@@ -200,6 +209,7 @@ int _GetInt(RgReadText *pReader)
     return atoi(szToken);
 }
 
+/* Reads a token as a flag: "true" and "on" give 1, any other token gives 0. */
 static int _GetBool(RgReadText *pReader)
 {
     char szToken[RG_READ_TEXT_TOKEN_MAX];
@@ -217,6 +227,7 @@ static int _GetBool(RgReadText *pReader)
     return 0;
 }
 
+/* Creates a reader over the named file. Returns 0 when the file cannot be opened. */
 RgReadText *CreateRgReadText(const char *pszName)
 {
     RgReadText *pReader;
@@ -257,6 +268,7 @@ int RgReadTextIsOnDelimitor(RgReadText *pReader)
     return pReader->m_pszDelim != 0;
 }
 
+/* Stores a token to be returned by the next get call instead of reading the file. */
 void RgReadTextUnget(RgReadText *pReader, char *pszUngetToken)
 {
     if (pReader == 0) {
@@ -314,6 +326,7 @@ int RgReadTextGetBool(RgReadText *pReader)
     return _GetBool(pReader);
 }
 
+/* Moves the cursor past the current '%' paragraph delimiter. Raises an error when there is none. */
 void RgReadTextNextParagraph(RgReadText *pReader)
 {
     if (pReader == 0) {
@@ -326,6 +339,11 @@ void RgReadTextNextParagraph(RgReadText *pReader)
     pReader->m_pszDelim = 0;
 }
 
+/*
+ * Reads tokens until pszTag is found (and pszSubTag, when given, is the token after it).
+ * A paragraph delimiter reached on the way is stepped over. Returns 1 when found, 0 at
+ * the end of the file.
+ */
 int RgReadTextFindParagraph(RgReadText *pReader, const char *pszTag,
                             const char *pszSubTag)
 {

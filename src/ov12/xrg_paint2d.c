@@ -108,7 +108,7 @@ static int s_anHomePos[2];
 static float s_aSizeRatio[2];
 static RgVector s_aCurCenterPos;
 
-/* Scaffold-owned strings. */
+/* String constants for the assertions and debug formats below. */
 extern const char paint2dUnknownOffsetModeFormat[];
 extern const char paint2dUnknownGeomModeFormat[];
 extern const char paint2dAssertRequestCountBelowMax[];
@@ -141,9 +141,8 @@ static void _openVifGif(XglPacket *packet, u64 prim,
 }
 
 /*
- * ov12:0x00a59030 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
- * address+data register code), the constant _openVifGifAD passes to
- * sceVif1PkOpenGifTag.
+ * A fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D address+data register
+ * code), the constant _openVifGifAD passes to sceVif1PkOpenGifTag.
  */
 const XrgPaint2DGifTag paint2dGifTag = {
     .part = {0x1000000000008000ULL, 0xE}
@@ -165,17 +164,20 @@ static void _openVifGifAD(XglPacket *packet)
 }
 
 /*
- * The VIF1 direct/HL packet the paint renderer's draw calls build (_DrawNoTex,
- * _DrawWithTex, _Paint2DFlush, all outside this allocation) is closed through
- * this pair, both of which take the packet itself: the caller keeps its
- * argument live across both calls (a0 into s0) rather than discarding it
- * after the first.
+ * Closes the VIF1 direct/HL packet opened by the draw calls (_DrawNoTex,
+ * _DrawWithTex, _Paint2DFlush). Both calls take the packet, and the caller
+ * keeps its argument live across both rather than discarding it after the
+ * first.
  */
 static void _closeVifGif(XglPacket *packet) {
     sceVif1PkCloseGifTag(packet);
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/*
+ * Resets a draw request to the defaults: no-texture drawing, zeroed geometry
+ * and offset fields, and half-intensity color.
+ */
 static void _InitReq(XrgPaint2DDrawReq *req)
 {
     req->geom = _Geom2D;
@@ -204,6 +206,10 @@ static void _DeriveInfoReq(XrgPaint2DDrawReq *dst, XrgPaint2DDrawReq *src)
     dst->offsetResult = src->offsetResult;
 }
 
+/*
+ * Fills the four corners of rect with the given color and priority. The far
+ * corners are clamped to XRG_PAINT2D_COORD_MAX.
+ */
 static void _CalcRectangle(XrgPaint2DVertex corners[4], const XrgIntRect *rect,
                            int color, int prio)
 {
@@ -240,9 +246,7 @@ static void _CalcRectangle(XrgPaint2DVertex corners[4], const XrgIntRect *rect,
  * builds, after applying up to two independent overrides from a second
  * rectangle-shaped argument: bit 0 of `mode` adds its x/y to the base
  * rectangle's x/y, bit 1 replaces the base's width/height with its own.
- * The base rectangle is brought in as one 16-byte COP2 quadword transfer
- * (lqc2/sqc2), the same admitted idiom XrgPaint2DOffset3D and
- * XrgPaint2DColor use elsewhere in this allocation.
+ * The base rectangle is copied with one 16-byte COP2 quadword load and store.
  */
 static void _CalcUV(XrgPaint2DVertex corners[4], const XrgIntRect *base,
                     int mode, const XrgIntRect *override)
@@ -263,8 +267,8 @@ static void _CalcUV(XrgPaint2DVertex corners[4], const XrgIntRect *base,
 }
 
 /*
- * Both projections are whole VU0 sequences of the original: load the current
- * view (matrix, then screen scale and translation), then transform a point.
+ * Projects point through the current view into screen. scaledAxisX receives
+ * the view's X axis scaled by 0.375. Returns 1 when the point is not clipped.
  */
 static int _CalcPosOnScreen(XrgPaint2DOffset *screen, const XrgPaint2DOffset *point,
                             XrgPaint2DOffset *scaledAxisX)
@@ -306,6 +310,9 @@ static int _CalcPosOnScreen(XrgPaint2DOffset *screen, const XrgPaint2DOffset *po
     return clip == 0;
 }
 
+/*
+ * Projects point through the current view into screen without the clip test.
+ */
 static void _CalcPosOnScreenFloat(XrgPaint2DOffset *screen, const XrgPaint2DOffset *point)
 {
     Vu0SetCurrentMatrix(s_pCurView_00A51220->viewMatrix);
@@ -331,6 +338,12 @@ static void _CalcPosOnScreenFloat(XrgPaint2DOffset *screen, const XrgPaint2DOffs
 }
 
 
+/*
+ * Computes the screen offset of a draw request into out, from anchor and
+ * result, under the offset kind in mode. With the override bit set, result's
+ * y field points to an override block that receives the offset. Returns 0
+ * when a 3D point is clipped, 1 otherwise.
+ */
 static int _CalcOffset(XrgPaint2DOffset *out, int mode,
                        const XrgPaint2DOffset *anchor,
                        XrgPaint2DOffset *result)
@@ -409,6 +422,7 @@ static int _CalcOffset(XrgPaint2DOffset *out, int mode,
     default:
         RgError(paint2dUnknownOffsetModeFormat, paint2dSourcePath, 385, mode);
     }
+    /* Records the offset relative to home; LINEAR averages it with the result pair. */
     if (override) {
         override->dx = out->i.x - s_anHomePos[0];
         override->dy = out->i.y - s_anHomePos[1];
@@ -429,6 +443,12 @@ static int _CalcOffset(XrgPaint2DOffset *out, int mode,
     return flag;
 }
 
+/*
+ * Computes the four corners of a 2D draw request into corners, placed at the
+ * request's screen offset and rectangle. Returns XRG_PAINT2D_GEOM_QUAD when an
+ * angle is applied, XRG_PAINT2D_GEOM_SPRITE otherwise, or 0 when the offset
+ * is clipped.
+ */
 static int _Geom2D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
 {
     struct {
@@ -465,6 +485,7 @@ static int _Geom2D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
     }
     w.box[0] = (float) (((XrgIntRect *) &req->rectQuad)->x << 4);
     w.box[1] = (float) (((XrgIntRect *) &req->rectQuad)->y << 4);
+    /* Applies each axis's anchor selector from the low four mode bits. */
     bits = mode;
     for (i = 0; i < 2; i++) {
         unsigned int action = bits & 3;
@@ -550,6 +571,11 @@ static int _Geom2D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
     return status;
 }
 
+/*
+ * Builds the four corners of a line between two projected endpoints, offset
+ * to both sides along the screen normal. Returns XRG_PAINT2D_GEOM_LINE when
+ * both endpoints are visible, 0 otherwise.
+ */
 static int _Line3D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
 {
     XrgPaint2DOffset screen[2];
@@ -603,6 +629,7 @@ static int _Line3D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
         point++;
         off += 16;
     }
+    /* Both endpoints are visible: offset each corner pair along the normal. */
     if (flags[0] && flags[1]) {
         if (req->mode & 1) {
             for (i = 0; i < 4; i++) {
@@ -688,6 +715,10 @@ static int _Line3D(XrgPaint2DDrawReq *req, XrgPaint2DVertex *corners)
     return 0;
 }
 
+/*
+ * Emits the four corners as one flat-color tristrip, preceded by an ALPHA_1
+ * register write when req->alpha is set.
+ */
 static void _DrawNoTex(XrgPaint2DDrawReq *req, XglPacket *packet,
                        XrgPaint2DVertex *corners, int primitive)
 {
@@ -716,6 +747,11 @@ static void _DrawNoTex(XrgPaint2DDrawReq *req, XglPacket *packet,
     _closeVifGif(packet);
 }
 
+/*
+ * Emits a textured primitive: a sprite from two corners when primitive is
+ * XRG_PAINT2D_GEOM_SPRITE, otherwise a tristrip of four. TEX0 and the optional
+ * ALPHA_1 write go out first.
+ */
 static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
                          XrgPaint2DVertex *corners, int primitive)
 {
@@ -772,6 +808,10 @@ static void _DrawWithTex(XrgPaint2DDrawReq *req, XglPacket *packet,
     _closeVifGif(packet);
 }
 
+/*
+ * Initializes a paint with its source location, no requests yet and a reset
+ * request.
+ */
 static void _InitPaint(XrgPaint2D *paint, const char *sourceFile, int line)
 {
     if (paint == 0) {
@@ -839,10 +879,9 @@ void XrgPaint2DSetDrawPrio(XrgPaint2D *paint, int prio) {
 }
 
 /*
- * The three 2D anchor setters below store x through `req` but y through a
- * fresh paint->request load: the original reloads the request pointer after
- * the offsetMode store (lw -0x2FEC again before the +0x54 store), the same
- * reload XrgPaint2DOffset3DForce documents.
+ * The 2D anchor setters below store x through `req` but y through a fresh
+ * paint->request load: the original reloads the request pointer after the
+ * offsetMode store, the same reload XrgPaint2DOffset3DForce keeps.
  *
  * XRG_PAINT2D_SUBPIXEL_SHIFT converts whole pixels into the GS's 12.4
  * subpixel units (x << 4); XRG_PAINT2D_SCREEN_CENTER_X/Y are the centre of
@@ -906,7 +945,7 @@ void XrgPaint2DOffset3D(XrgPaint2D *paint, const RgVector anchor)
 }
 
 /*
- * XrgPaint2DOffset3DForce (0x00a4bc18) re-reads paint->request for the final
+ * XrgPaint2DOffset3DForce re-reads paint->request for the final
  * store instead of reusing `req`: the original reloads it into a second
  * register there rather than keeping the first one live across the COP2
  * transfer.
@@ -966,7 +1005,7 @@ void XrgPaint2DColor(XrgPaint2D *paint, const XrgPaint2DRGBA *color)
 }
 
 /*
- * XrgPaint2DAlpha (0x00a4bd98) selects one of six fixed GS ALPHA_1-shaped
+ * XrgPaint2DAlpha selects one of six fixed GS ALPHA_1-shaped
  * 64-bit blend-equation values by its own mode argument; an out-of-range
  * mode leaves the request's alpha at the zero this function seeds before
  * the switch (the same value case 4 also selects).
@@ -1004,6 +1043,10 @@ void XrgPaint2DAlpha(XrgPaint2D *paint, unsigned int mode)
 
 const char paint2dAssertPicNotNil[16] = "pPic != NIL";
 
+/*
+ * Binds a texture to the current request: sets TEX0 and the UV rectangle from
+ * the texture's position and size, in 1/16 units inset by half a texel.
+ */
 void XrgPaint2DUseTexture(XrgPaint2D *paint, RgBxxPic *texture)
 {
     XrgPaint2DDrawReq *req;
@@ -1058,9 +1101,8 @@ void XrgPaint2DSetUVSize(XrgPaint2D *paint, int width, int height)
 }
 
 /*
- * InitXrgPaint2DRect clears the rectangle request consumed by the adjacent
- * XrgPaint2DDrawRect/XrgPaint2DDrawXYWH routines: an all-zero rectangle at the
- * screen origin, unrotated, at its natural size.
+ * Initializes a rectangle for XrgPaint2DDrawRect or XrgPaint2DDrawXYWH: zero
+ * origin and size, scale 1, no rotation, and the given mode.
  */
 void InitXrgPaint2DRect(XrgPaint2DRect *rectangle, int mode)
 {
@@ -1073,6 +1115,10 @@ void InitXrgPaint2DRect(XrgPaint2DRect *rectangle, int mode)
     rectangle->angle = 0.0f;
 }
 
+/*
+ * Queues rect as the current request, then starts the next request from the
+ * defaults and the queued request's offset settings.
+ */
 void XrgPaint2DDrawRect(XrgPaint2D *paint, XrgPaint2DRect *rect)
 {
     XrgPaint2DDrawReq *current;
@@ -1114,7 +1160,10 @@ void XrgPaint2DDrawXYWH(XrgPaint2D *paint, int mode, int x, int y,
     XrgPaint2DDrawRect(paint, &rect);
 }
 
-/* flags is not read: mode is always cleared (RgShotEffectDisp passes 1). */
+/*
+ * Clears a line to a zero-length segment of the given width. flags is not
+ * read: mode is always cleared (RgShotEffectDisp passes 1).
+ */
 void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, int flags, float width)
 {
     line->mode = 0;
@@ -1123,6 +1172,10 @@ void InitXrgPaint2DLine3D(XrgPaint2DLine3D *line, int flags, float width)
     line->width = width;
 }
 
+/*
+ * Queues line as the current request, then starts the next request from the
+ * defaults and the queued request's offset settings.
+ */
 void XrgPaint2DDrawLine(XrgPaint2D *paint, XrgPaint2DLine3D *line)
 {
     XrgPaint2DDrawReq *current;
@@ -1155,6 +1208,11 @@ void XrgPaint2DDrawLine(XrgPaint2D *paint, XrgPaint2DLine3D *line)
     _DeriveInfoReq(paint->request, old);
 }
 
+/*
+ * Draw callback for a queued paint: sets the view's scale and center, then
+ * emits every request into VIF1 packets sent to the projection, starting a new
+ * packet when the texture or a full buffer requires it.
+ */
 static void _Paint2DFlush(void *pObject, RgDrawStudio *pStudio)
 {
     XrgPaint2D *paint = pObject;
@@ -1200,6 +1258,7 @@ static void _Paint2DFlush(void *pObject, RgDrawStudio *pStudio)
     s_aCurCenterPos[1] = 2048.0f + (float) (((rect.y0 + rectY1) >> 1) - 224);
     s_aSizeRatio[1] = (float) (rectY1 - rect.y0) / 448.0f;
 
+    /* Setup packet: texture flush, depth test always passing, clamp and alpha state. */
     sceVif1PkInit(packet, SCRATCHPAD_BASE);
     sceVif1PkCnt(packet, 0);
     sceVif1PkAddCode(packet, XRG_PAINT2D_VIF_FLUSHA);
@@ -1240,6 +1299,7 @@ static void _Paint2DFlush(void *pObject, RgDrawStudio *pStudio)
                     _closeVifGif(packet);
                 }
             }
+            /* The geometry callback picks the primitive and depth test; the draw follows it. */
             if (req->geom != 0) {
                 flags = ((int (*)(XrgPaint2DDrawReq *, XrgPaint2DVertex *)) req->geom)(req, corners);
                 if ((flags & XRG_PAINT2D_GEOM_DEPTH_TEST) != (prevFlags & XRG_PAINT2D_GEOM_DEPTH_TEST)) {

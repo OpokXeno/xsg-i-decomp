@@ -7,6 +7,7 @@
 void SsdKeyoffUnlinkVoice(SsdVoice *voice);
 void SsdCutoffVoice(SsdVoice *voice);
 
+/* Clears the per-core switch words and gives every voice its index, core and number. */
 void SsdInitVoiceManager(void)
 {
     int i;
@@ -36,6 +37,11 @@ void SsdInitVoiceManager(void)
     }
 }
 
+/*
+ * Chooses and unlinks the voice for a key-on within range. Allocation mode 2 takes
+ * range->first only when its priority is below the channel's, else returns null.
+ * Other modes take the lowest-priority voice in the range.
+ */
 SsdVoice *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
 {
     SsdVoice *voice;
@@ -82,6 +88,7 @@ SsdVoice *SsdGetKeyonVoice(SsdChannel *channel, SsdVoiceRange *range)
     return voice;
 }
 
+/* Marks a voice active with its flags fully set, and queues key-on for its hardware voice. */
 void SsdKeyonVoice(SsdVoice *voice)
 {
     int core;
@@ -95,6 +102,7 @@ void SsdKeyonVoice(SsdVoice *voice)
     SsdWork.cores.switches.key_on[core] |= mask;
 }
 
+/* Moves a voice's key bit from the key-on word to the key-off word. */
 void SsdKeyoffUnlinkVoice(SsdVoice *voice)
 {
     unsigned int mask;
@@ -106,6 +114,7 @@ void SsdKeyoffUnlinkVoice(SsdVoice *voice)
     SsdWork.cores.switches.key_off[core] |= mask;
 }
 
+/* Moves a voice's key bit from the key-on word to the cutoff word. */
 void SsdCutoffUnlinkVoice(SsdVoice *voice)
 {
     unsigned int mask;
@@ -117,6 +126,7 @@ void SsdCutoffUnlinkVoice(SsdVoice *voice)
     SsdWork.cores.switches.cutoff[core] |= mask;
 }
 
+/* Clears the voice's key-on bit and sets its cutoff bit. */
 void SsdCutoffVoice(SsdVoice *voice)
 {
     unsigned int mask;
@@ -128,6 +138,7 @@ void SsdCutoffVoice(SsdVoice *voice)
     SsdWork.cores.switches.cutoff[core] |= mask;
 }
 
+/* Clears the voice's key-on bit and sets its key-off bit. */
 void SsdKeyoffVoice(SsdVoice *voice)
 {
     unsigned int mask;
@@ -139,6 +150,7 @@ void SsdKeyoffVoice(SsdVoice *voice)
     SsdWork.cores.switches.key_off[core] |= mask;
 }
 
+/* Writes the dirty parameters of every active voice to the SPU, then applies the switches. */
 void SsdSetVoiceKeyon(void)
 {
     unsigned short changes[2];
@@ -150,6 +162,7 @@ void SsdSetVoiceKeyon(void)
     unsigned int mask;
     changes[1] = 0;
     changes[0] = 0;
+    /* Push each dirty active voice's parameters to its hardware voice. */
     for (i = 0; i < SSD_VOICE_COUNT; ++i) {
         if (voice->allocation.priority & SSD_VOICE_PRIORITY_ACTIVE) {
             dirty = voice->flags;
@@ -204,6 +217,7 @@ void SsdSetVoiceKeyon(void)
         }
         ++voice;
     }
+    /* Apply the changed effect switches, then send each core's pending key-on bits. */
     for (core = 0; core < SSD_CORE_COUNT; ++core) {
         if (changes[core] & SSD_VOICE_FLAG_EFFECTS) {
             if (changes[core] & SSD_VOICE_FLAG_PITCH_MOD)
@@ -226,6 +240,10 @@ void SsdSetVoiceKeyon(void)
     }
 }
 
+/*
+ * Applies pending key-offs per core. Cut-off voices first get their ADSR2 low bits
+ * set to 0x66; the key-off switch write then clears both pending masks.
+ */
 void SsdSetVoiceKeyoff(void)
 {
     int core;
@@ -250,6 +268,7 @@ void SsdSetVoiceKeyoff(void)
     }
 }
 
+/* Converts a note to a pitch: looks up the pitch table, then shifts the value by a key-table term. */
 int SsdNoteToPitch(int note)
 {
     int key = SsdAllKeyTable[(unsigned)(note & 0x7fff) >> 8];
@@ -268,6 +287,7 @@ int SsdNoteToPitch(int note)
     do { return (pitch) >> (normalized); } while (0);
 }
 
+/* Applies the release attribute to every voice, sends key-off to both cores and unlinks all voices. */
 void SsdCompellingKeyoff(void)
 {
     int i;
@@ -284,6 +304,10 @@ void SsdCompellingKeyoff(void)
     }
 }
 
+/*
+ * Computes the left and right output volumes from a volume and a pan value.
+ * The volume is squared first; mono output uses one level for both sides.
+ */
 void SsdCalcDirectVoiceVolume(short output[2], int volume, int pan)
 {
     int left;

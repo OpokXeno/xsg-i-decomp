@@ -7,6 +7,10 @@
 #include "ov12/rg_error.h"
 
 
+/*
+ * Returns the motion id for a motion table name (see rg_actor_motid.h).
+ * Unknown names are reported with RgError and return RG_MOT_NONE.
+ */
 int RgActorMotIDGetFromName(const char *pszName) {
     if (pszName == 0) {
         assert_prog("pszName != NIL", "../rg_actor_motid.euc.c", 19);
@@ -141,6 +145,7 @@ int RgActorMotIDGetFromName(const char *pszName) {
     if (strcasecmp(pszName, "HISSATU_VX06_HIT") == 0) {
         return RG_MOT_HISSATU_VX06_HIT;
     }
+    /* MOT_<n> names map to the plain ids n - 1. */
     if (strcasecmp(pszName, "MOT_1") == 0) {
         return 0;
     }
@@ -438,6 +443,7 @@ int RgActorMotIDGetFromName(const char *pszName) {
     if (strcasecmp(pszName, "MOT_99") == 0) {
         return 98;
     }
+    /* WMOT_<n> names map to weapon motion ids counted from RG_MOT_WEAPON_BASE. */
     if (strcasecmp(pszName, "WMOT_1") == 0) {
         return RG_MOT_WEAPON_BASE + 0;
     }
@@ -735,6 +741,7 @@ int RgActorMotIDGetFromName(const char *pszName) {
     if (strcasecmp(pszName, "WMOT_99") == 0) {
         return RG_MOT_WEAPON_BASE + 98;
     }
+    /* Every name that matched nothing is reported, except "nul". */
     if (strcasecmp(pszName, "nul") != 0) {
         RgError("unknown motion name '%s'", "../rg_actor_motid.euc.c", 26, pszName);
     }

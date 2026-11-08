@@ -99,6 +99,11 @@ void *findNativeMethod(const char *name)
     return 0;
 }
 
+/*
+ * Builds the JNI name Java_<class>_<method>_<descriptor> for method and looks it up
+ * in default_native[]. When that fails and the descriptor has array arguments, it
+ * retries with the array marks replaced by '_'. Sets method->native when found.
+ */
 void resolveNativeMethod(JavaMethod *method)
 {
     char name[512];
@@ -166,6 +171,7 @@ void resolveNativeMethod(JavaMethod *method)
     }
 }
 
+/* Returns a java.lang.String instance that refers to the constant's length and UTF-8 buffer. */
 StringInstance *Const2JavaString(StringConstant *constant)
 {
     StringInstance *string;
@@ -183,6 +189,7 @@ StringInstance *Const2JavaString(StringConstant *constant)
     return string;
 }
 
+/* Allocates an instance of clazz's instance size and sets its class pointer. */
 void *newObject(JavaClass *clazz)
 {
     ObjectHeader *instance = xmalloc(clazz->instanceSize, VM_HEAP_OBJECT);
@@ -191,6 +198,7 @@ void *newObject(JavaClass *clazz)
     return instance;
 }
 
+/* Allocates an empty JavaClass record. */
 void *newClass(void)
 {
     JavaClass *clazz;
@@ -202,6 +210,7 @@ void *newClass(void)
     return clazz;
 }
 
+/* Allocates an array of length elements: primitive elements use their size, references 4 bytes. */
 void *newArray(JavaClass *elementType, int length)
 {
     ArrayHeader *array;
@@ -219,6 +228,10 @@ void *newArray(JavaClass *elementType, int length)
     return array;
 }
 
+/*
+ * Advances clazz through the loading states up to targetState: members, constants,
+ * prepared, and finally initialized, which runs the class's <init> method.
+ */
 int processClass(JavaClass *clazz, int targetState)
 {
     JavaClass *super;
@@ -232,6 +245,7 @@ int processClass(JavaClass *clazz, int targetState)
     if (clazz->state >= targetState) {
         return 1;
     }
+    /* Members: resolve the superclass, interfaces, fields and dispatch table. */
     if (clazz->state < CLASS_STATE_MEMBERS_RESOLVED &&
         targetState >= CLASS_STATE_MEMBERS_RESOLVED) {
         allocStaticField(clazz);
@@ -266,6 +280,7 @@ int processClass(JavaClass *clazz, int targetState)
         }
         clazz->state = CLASS_STATE_MEMBERS_RESOLVED;
     }
+    /* Constants: move through the pre-constants state, then resolve the pool. */
     if (clazz->state < CLASS_STATE_BEFORE_CONSTANTS &&
         targetState >= CLASS_STATE_BEFORE_CONSTANTS) {
         clazz->state = CLASS_STATE_BEFORE_CONSTANTS;
@@ -279,6 +294,7 @@ int processClass(JavaClass *clazz, int targetState)
     if (clazz->state < preparedState && targetState >= CLASS_STATE_PREPARED) {
         clazz->state = CLASS_STATE_PREPARED;
     }
+    /* Initialization: run the <init> method with no arguments once. */
     if (clazz->state < initializedState && targetState >= CLASS_STATE_INITIALIZED) {
         clazz->state = initializedState;
         init = findMethodLocal(clazz, NAME_Init, TYPE_Void);
@@ -290,6 +306,7 @@ int processClass(JavaClass *clazz, int targetState)
     return 1;
 }
 
+/* Returns the superclass method with the same name and descriptor as method, searching up the chain, or 0. */
 static JavaMethod *findSuperMethod(JavaMethod *method, JavaClass *classEntry)
 {
     JavaClass *superClass = classEntry->superClass;
@@ -315,6 +332,10 @@ static JavaMethod *findSuperMethod(JavaMethod *method, JavaClass *classEntry)
     return 0;
 }
 
+/*
+ * Assigns dispatch indices to clazz's methods: an override reuses the superclass
+ * index, static methods and constructors get -1. Then builds the dispatch table.
+ */
 static void buildDispatchMethodTable(JavaClass *clazz)
 {
     int i;
@@ -365,6 +386,7 @@ static void buildDispatchMethodTable(JavaClass *clazz)
     }
 }
 
+/* Stores the constant values of static fields into their storage; string constants are interned first. */
 static void resolveStaticField(JavaClass *clazz)
 {
     SceneField *field;
@@ -422,6 +444,7 @@ static void resolveStaticField(JavaClass *clazz)
     }
 }
 
+/* Lays out the instance fields after the superclass's size, each aligned to its rounded size. */
 static void resolveInstanceField(JavaClass *classEntry)
 {
     int instanceSize = classEntry->instanceSize;
@@ -442,6 +465,7 @@ static void resolveInstanceField(JavaClass *classEntry)
     classEntry->instanceSize = instanceSize;
 }
 
+/* Replaces each string constant of the pool with a java.lang.String instance and retags it as resolved. */
 static int resolveConstants(JavaClass *classEntry)
 {
     int index = 0;
@@ -472,6 +496,7 @@ static int resolveConstants(JavaClass *classEntry)
     return 1;
 }
 
+/* Returns the array class whose element type is named by name, a descriptor without its leading '['. */
 JavaClass *loadArray(SceneString *name, void *classLoader)
 {
     void *elementClass = getClassFromSignature(name->bytes + 1, classLoader);
@@ -482,6 +507,7 @@ JavaClass *loadArray(SceneString *name, void *classLoader)
     return 0;
 }
 
+/* Returns the class for classKey, loading it through the class cache when needed, or 0 when it cannot be found. */
 JavaClass *loadClass(SceneString *classKey, void *classLoader)
 {
     ClassCacheEntry *entry;
@@ -506,6 +532,7 @@ JavaClass *loadClass(SceneString *classKey, void *classLoader)
     return result;
 }
 
+/* Loads the class named name into *class_slot and initializes it; the slot is set to 0 when the class is not found. */
 void loadStaticClass(void *class_slot, const char *name)
 {
     JavaClass **slot = class_slot;
@@ -524,6 +551,7 @@ void loadStaticClass(void *class_slot, const char *name)
     processClass(entry->resolvedClass, CLASS_STATE_INITIALIZED);
 }
 
+/* Unlinks the leading cache entries of each bucket that lie at or above heapBoundary. */
 void reloadClassEntry(void *heapBoundary)
 {
     ClassCacheEntry **bucket = classEntryPool;
@@ -548,6 +576,7 @@ void reloadClassEntry(void *heapBoundary)
     } while (bucketsRemaining >= 0);
 }
 
+/* Returns the cache entry for name and classLoader, creating the lookup table and the entry when missing. */
 ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader)
 {
     ClassCacheEntry **pool = classEntryPool;
@@ -584,6 +613,7 @@ ClassCacheEntry *lookupClassEntry(SceneString *name, void *classLoader)
     return entry;
 }
 
+/* Returns the array class for elementType, creating and caching it on first use. */
 JavaClass *lookupArray(JavaClass *elementType)
 {
     extern const char primitiveArrayDescriptorFormat[];
@@ -623,6 +653,7 @@ JavaClass *lookupArray(JavaClass *elementType)
     return entry->resolvedClass;
 }
 
+/* Reads one type from *cursor, advances past it and returns its class. */
 void *classFromSig(const char **cursor, void *classLoader)
 {
     const char *start;
@@ -671,6 +702,7 @@ JavaClass *getClassFromSignature(const char *signature, void *classLoader)
     return classFromSig(&cursor, classLoader);
 }
 
+/* Lays out the static fields in one allocated block and copies each field's initial value into it. */
 static void allocStaticField(JavaClass *classEntry)
 {
     int remaining = classEntry->staticFieldCount;
@@ -703,6 +735,7 @@ static void allocStaticField(JavaClass *classEntry)
     }
 }
 
+/* Computes the parameter size, return type and return size of a method descriptor. */
 void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize, s8 *returnType)
 {
     u8 *cursor = descriptor;
@@ -712,6 +745,7 @@ void methodDescripter(u8 *descriptor, s16 *paramSize, s16 *returnSize, s8 *retur
     *returnSize = sizeofDescripter(&cursor);
 }
 
+/* Sums the slot sizes of consecutive types from cursor, stopping at ')' or the end of the descriptor. */
 static int sizeofDescripter(u8 **cursor)
 {
     int size = 0;
@@ -776,6 +810,7 @@ static inline int inheritsFrom(JavaClass *from, JavaClass *to)
     return 0;
 }
 
+/* Returns 1 when an instance of from can be used as to: same class, array assignable, interface or superclass. */
 int instanceOf(JavaClass *from, JavaClass *to)
 {
     if (from == to) {
@@ -790,6 +825,10 @@ int instanceOf(JavaClass *from, JavaClass *to)
     return inheritsFrom(from, to);
 }
 
+/*
+ * Returns the slot size of the type at *cursor: 0 for '(' and void, 2 for J and D,
+ * 1 for other types, or -1 at the end of the descriptor. Advances past the type.
+ */
 static int sizeofDescripterType(u8 **cursor)
 {
     u8 *descriptorByte = *cursor;

@@ -156,8 +156,8 @@ typedef struct UmnDataBaseNameWork {
     UmnDataBaseNameRow rows[UMN_DB_NAME_ROWS]; /* +0x08, 620 bytes each */
     ECursolMainData cursor;             /* +0x21F0 */
 } UmnDataBaseNameWork;
-/* Partial view of PadPrefix (measured: tskUmnDataBaseAnalisis also performs an
- * `ld` from PadData + 0x28, a doubleword that PadPrefix cannot give). */
+/* Partial view of PadPrefix: tskUmnDataBaseAnalisis also reads a doubleword at
+ * PadData + 0x28, which PadPrefix does not describe. */
 typedef union UmnPadInputPrefix {
     PadPrefix canonical;
     struct {
@@ -285,7 +285,7 @@ typedef struct UmnDataBaseModelData {
 } UmnDataBaseModelData;
 
 extern void *UmnGunoDataBaseTop;
-/* The help line text of the database screen (original scaffold data, msg00.0). */
+/* The help line text of the database screen (msg00.0). */
 static const char *msg00_0_00A106F8;
 extern const char dataBaseRowTagText[];
 extern unsigned short monster_folder[];
@@ -320,6 +320,10 @@ int UmnDataBaseAnalisisCheck(int id);
 signed char MenuSelectMove(int cursor, int entries, int mode);
 void xglFontDebugHex(int x, int y, int value, int digits);
 
+/*
+ * Returns the database record for id, or the table base when id is outside
+ * the record range.
+ */
 UmnGunoDataBase *UmnGunoDataBaseGet(int id)
 {
     UmnGunoDataBase *base = UmnGunoDataBaseTop;
@@ -332,6 +336,10 @@ UmnGunoDataBase *UmnGunoDataBaseGet(int id)
 
 static const char *msg00_1_00A10700[3];
 
+/*
+ * The title window of the database screen with its message. The window and
+ * the message slide in or out according to the terminal's current step.
+ */
 void tskUmnDataBasePas(UmnObjectTask *task, void *data)
 {
     UmnDataBasePasWork *work = data;
@@ -377,6 +385,7 @@ void tskUmnDataBasePas(UmnObjectTask *task, void *data)
         for (i = 3; i >= 0; i--) {
             slideTargets[i] = slideValue;
         }
+        /* The open, list, detail and keyword steps bring the message on screen; the others move it off. */
         switch (UmnWork.tab_state) {
         case UMN_STEP_OPEN: case UMN_STEP_ACTIVE: case UMN_DB_STEP_LIST_OPEN: case UMN_DB_STEP_LIST:
         case UMN_DB_STEP_DETAIL_OPEN: case UMN_DB_STEP_DETAIL: case UMN_DB_STEP_KEYWORD_OPEN: case UMN_DB_STEP_KEYWORD:
@@ -455,7 +464,7 @@ void tskUmnDataBaseInfo(UmnObjectTask *task, void *data)
     case UMN_TASK_RUN:
         state = UmnWork.tab_state;
         slideTarget = 386;
-        /* Only the terminal's two entry-list steps keep the line this high. */
+        /* Only UMN_STEP_OPEN and UMN_STEP_ACTIVE raise the line to 386; other steps lower it. */
         if (state >= UMN_STEP_ACTIVE + 1) {
             slideTarget = 480;
         } else if (state < UMN_STEP_OPEN) {
@@ -468,6 +477,12 @@ void tskUmnDataBaseInfo(UmnObjectTask *task, void *data)
     }
 }
 
+/*
+ * The name list of the U.M.N. database: lays out the rows and slides them into
+ * the list, to the detail view of the selected row, or back out. While the
+ * list is open it also draws each visible row with its text and its list
+ * number, and the cursor.
+ */
 void tskUmnDataBaseName(UmnObjectTask *task, void *data)
 {
     UmnDataBaseNameWork *work = data;
@@ -518,6 +533,7 @@ void tskUmnDataBaseName(UmnObjectTask *task, void *data)
     }
     case UMN_TASK_RUN:
         {
+        /* Slides the rows into the list, then to the detail view or back out. */
         switch (work->step) {
         case UMN_DB_NAME_WAIT:
         case 1:
@@ -636,6 +652,7 @@ void tskUmnDataBaseName(UmnObjectTask *task, void *data)
         break;
     }
 
+    /* Orders the rows with the selected one last, then draws them and the cursor. */
     if (work->opened != 0) {
         int r;
         int *fill;
@@ -1092,6 +1109,11 @@ void tskUmnDataBaseKeyWord(UmnObjectTask *task, void *data)
     }
 }
 
+/*
+ * Model unit callback for the record model: sets its initial transform, opens
+ * it while the detail step is shown and closes it when that step ends. Once it
+ * is hidden, taskPhase is set to -1.
+ */
 void UmnDataBaseModel(MenuModelUnit *work, void *context)
 {
     UmnDataBaseModelData *model = (UmnDataBaseModelData *)work->actor;
@@ -1244,6 +1266,7 @@ void UmnDataBase(void)
         UmnWork.wait = UMN_WAIT_OPEN;
         UmnWork.moving = 1;
         /* fallthrough */
+    /* List step: the pad moves the cursor over the records; circle opens the detail view. */
     case UMN_DB_STEP_LIST:
         if (UmnWork.wait_or_moving == 0) {
             repeats = 1;
@@ -1314,6 +1337,7 @@ void UmnDataBase(void)
             }
         }
         break;
+    /* Detail step: L1 and R1 page through the records; cross returns to the list. */
     case UMN_DB_STEP_DETAIL_OPEN:
         if (UmnModelUkn != 0) {
             break;
@@ -1396,6 +1420,7 @@ void UmnDataBase(void)
             xglSoundEffectNormalID(SE_CANCEL, 0);
         }
         break;
+    /* Leaving waits for the record model to finish before returning to the top level. */
     case UMN_STEP_LEAVE:
         if (UmnModelSon != 0) {
             if (UmnModelSon->taskPhase == 0xFF) {

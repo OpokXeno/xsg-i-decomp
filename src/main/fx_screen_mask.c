@@ -9,6 +9,10 @@ static int (*fxFunction[1])(XglTaskPrefix *) = {
     (int (*)(XglTaskPrefix *))screenMask
 };
 
+/*
+ * Per-frame update of a screen mask: starts the fade on the first call, advances the frame counter,
+ * and removes the task once the frame passes duration.
+ */
 static void screenMask(ScreenMaskTask *task)
 {
     unsigned int next_frame;
@@ -25,6 +29,10 @@ static void screenMask(ScreenMaskTask *task)
     }
 }
 
+/*
+ * Task callback for a delayed effect: returns the countdown while it is still positive. When it
+ * expires, schedules a task that runs the stored callback with the same arguments, then removes itself.
+ */
 static int fxAdapter(XglTaskPrefix *entry)
 {
     FxAdapterTask *task = (FxAdapterTask *)entry;
@@ -64,9 +72,8 @@ static int fxAdapter(XglTaskPrefix *entry)
 }
 
 /*
- * FX_ScreenMask (0x0026adb8) stores its own three fade arguments directly
- * into `color`, `duration` and `mode` (sw 0x20/0x24/0x28 at
- * 0x0026ae20..0x0026ae28).
+ * Starts a screen mask task. The first argument is unused. The color, duration and mode arguments
+ * are stored directly in the task's fields.
  */
 void FX_ScreenMask(int unused, int color, int duration, int mode)
 {
@@ -86,6 +93,11 @@ void FX_ScreenMask(int unused, int color, int duration, int mode)
     task->mode = mode;
 }
 
+/*
+ * Queues effect effect_index through an fxAdapter task that waits command frames, copying up to
+ * four of the arguments. Also starts a model fade: a fade-in when bit 0 of arguments[2] is set,
+ * a fade-out otherwise.
+ */
 void FX_call(int command, int effect_index, const void *arguments,
              int argument_count)
 {

@@ -62,9 +62,13 @@ static void fnECM01_PR000(void *self, ECM01Work *work);
 static void fnECM01_DP000(void *self, ECM01Work *work);
 static void fnECM01_PO000(void *self, ECM01Work *work);
 
+/*
+ * Initializes an ECM01 effect: places it at the creation offset on the actor, sets its
+ * per-step motion toward the coordinate actor, and randomizes its angle and dimensions.
+ */
 int MEfCreate_ECM01(MEfObjRecord *self)
 {
-    /* This constructor interprets its own variant of the pooled work. */
+    /* Uses ECM01Object, this effect's layout of the pooled object. */
     ECM01Object *object = (ECM01Object *)self;
     ECM01Work *work = &object->work;
     Matrix4 actor_matrix;
@@ -102,11 +106,14 @@ int MEfCreate_ECM01(MEfObjRecord *self)
     return 1;
 }
 
-/* This callback advances the per-frame state and its 31-entry history. */
 #define ECM01_ACTIVE_FRAMES 60
 #define ECM01_HISTORY_COUNT 31
 #define ECM01_ENDPOINT_MARKER 2
 
+/*
+ * Process callback: shifts the 31-entry history by one, then records this frame's
+ * point, marking the first and last active frames as endpoints.
+ */
 static void fnECM01_PR000(void *self, ECM01Work *work)
 {
     ECM01Work *state = work;
@@ -165,8 +172,11 @@ static inline void ecm01CloseTag(MEfGsPacket *packet, int nloop)
     packet->count += size;
 }
 
-/* Draws the trail twice, one strip per side: each segment holds two vertices
- * placed on the swinging arc, and currentPosition walks position_delta per segment. */
+/*
+ * Draw callback: draws the trail twice, one strip per side. Each visible segment
+ * holds two vertices placed on the swinging arc; currentPosition walks position_delta
+ * per segment.
+ */
 static void fnECM01_DP000(void *self, ECM01Work *work)
 {
     MEfGsQword colour[2];
@@ -203,6 +213,7 @@ static void fnECM01_DP000(void *self, ECM01Work *work)
     ecm01CloseTag(target, 3);
     packet = target;
 
+    /* One pass per side of the trail, each starting from the work position. */
     for (side = -1; side < 2; side += 2) {
         drawn = 0;
         colour[0].whole = work->dimensions.quad;
@@ -212,6 +223,7 @@ static void fnECM01_DP000(void *self, ECM01Work *work)
         QuadwordCopyT0(&currentPosition, &work->position);
         qword = ecm01OpenTag(&work->packet, 1, MEF_GS_STRIP_PRIM, 4, MEF_GS_STRIP_REGS);
         work->initial_angle = work->angle_step * (float)work->frame;
+        /* Hidden history entries emit nothing, but the position and radius still advance. */
         for (segment = 0; segment < ECM01_HISTORY_COUNT;) {
             if (work->visibility[segment] != 0) {
                 width = (float)side * 0.3f;
@@ -222,6 +234,7 @@ static void fnECM01_DP000(void *self, ECM01Work *work)
                 if (work->frame_age[segment] >= 40) {
                     colour[0].channel[3] = colour[0].channel[3] * (60 - work->frame_age[segment]) / 20;
                 }
+                /* Build the segment's rotation, then place its two vertices on the arc. */
                 MMathRotateMatrixYX(&matrix, 0, &work->angles);
                 __asm__ __volatile__("lqc2 vf1, 0(%0)\n\tvmove.w vf1, vf0\n\tsqc2 vf1, 48(%1)"
                                      :

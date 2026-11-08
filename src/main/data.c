@@ -9,6 +9,7 @@ extern u16 bltBox[DATA_BOX_SLOTS];
 extern u16 evtBox[DATA_BOX_SLOTS];
 extern u16 itmBox[DATA_BOX_SLOTS];
 extern u16 wpnBox[DATA_BOX_SLOTS];
+/* Returns the quantity table of an item category, or 0 for an unknown category. */
 u16 *dataBoxPtrGet(int category) {
     switch (category) {
     case ITEM_CATEGORY_ITEM:
@@ -26,11 +27,13 @@ u16 *dataBoxPtrGet(int category) {
     }
 }
 
+/* Returns the quantity of item `id` (1-based) in the category's table. */
 int dataBoxChk(int category, int id)
 {
     return dataBoxPtrGet(category)[id - 1];
 }
 
+/* Adds one to the quantity of item `id` unless it is at DATA_BOX_QUANTITY_MAX; returns 1 when added. */
 int dataBoxInc(int category, int id)
 {
     unsigned short *quantity;
@@ -43,6 +46,7 @@ int dataBoxInc(int category, int id)
     return 0;
 }
 
+/* Removes one from the quantity of item `id` when it is nonzero; returns 1 when removed. */
 int dataBoxDec(int category, int id)
 {
     unsigned short *quantity;
@@ -135,6 +139,7 @@ int dataMoneyBoxChk(void)
     return moneyBox;
 }
 
+/* Adds `amount` to the money box, clamping it to MONEY_BOX_MAX at the limit; returns 0 when the limit is reached. */
 int dataMoneyBoxInc(int amount)
 {
     moneyBox += amount;
@@ -146,6 +151,7 @@ int dataMoneyBoxInc(int amount)
     return 1;
 }
 
+/* Subtracts `amount` from the money box when it holds enough; returns 1 when done, 0 otherwise. */
 int dataMoneyBoxDec(int amount)
 {
     if (moneyBox < amount) {

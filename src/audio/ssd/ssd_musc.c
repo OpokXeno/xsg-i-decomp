@@ -11,6 +11,7 @@ int SsdGetSeqWorkSize(SsdMusicData *data);
 int SsdCheckMidiChannel(SsdSequence *sequence);
 void SsdSetDataAddress(SsdSequence *sequence);
 
+/* Adds a sequence from data and starts it at volume over fade. Returns the sequence id or an error code. */
 int SsdPlaySequence(void *data, int volume, int fade)
 {
     int sequenceId = SsdAddSequenceData(data);
@@ -20,6 +21,7 @@ int SsdPlaySequence(void *data, int volume, int fade)
     return sequenceId;
 }
 
+/* Adds a sequence as a sound effect, at the effect volume. Returns the sequence id or an error code. */
 int SsdAddSeqEffectData(struct SsdMusicData *data)
 {
     int sequenceId = SsdAddSequenceData(data);
@@ -32,6 +34,11 @@ int SsdAddSeqEffectData(struct SsdMusicData *data)
     return sequenceId;
 }
 
+/*
+ * Creates a sequence from music data: copies the data, allocates the work memory,
+ * track table and MIDI device, then links the sequence in. Returns the sequence id
+ * or an error code.
+ */
 int SsdAddSequenceData(SsdMusicData *data)
 {
     SsdMusicData *source;
@@ -51,6 +58,7 @@ int SsdAddSequenceData(SsdMusicData *data)
         SsdWarringProc(SSD_WARNING_SEQUENCE_EXISTS, sequenceId);
         return SSD_WARNING_SEQUENCE_EXISTS;
     }
+    /* Copy the data into memory the sequence owns. */
     size = data->size;
     data = SsdNewPtr(size);
     SsdMemoryCopy(data, source, size);
@@ -99,6 +107,7 @@ int SsdAddSequenceData(SsdMusicData *data)
     return sequenceId;
 }
 
+/* Stops the sequence if it is playing, unlinks it and frees its buffers. */
 int SsdDisposeSequence(int sequenceId)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -121,6 +130,7 @@ int SsdDisposeSequence(int sequenceId)
     return 0;
 }
 
+/* Returns sequenceId when that sequence is in the list, else the not-found error code. */
 int SsdCheckSequence(int sequenceId)
 {
     SsdSequence *sequence = SsdWork.sequences;
@@ -133,6 +143,7 @@ int SsdCheckSequence(int sequenceId)
     return SSD_ERROR_SEQUENCE_NOT_FOUND;
 }
 
+/* Resets a sequence's tracks, then ramps its master volume to volume over fade. */
 void SsdStartSequence(int sequenceId, int volume, int fade)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -157,6 +168,7 @@ void SsdStartSequence(int sequenceId, int volume, int fade)
     SsdSetSeqMasterVolume(sequenceId, volume, fade);
 }
 
+/* Ramps a sequence's master volume to volume over fade. */
 void SsdResumeSequence(int sequenceId, int volume, int fade)
 {
     if (SsdGetSequencePtr(sequenceId) == 0) {
@@ -176,6 +188,7 @@ void SsdStopSequence(int sequenceId)
     }
 }
 
+/* Fades a running sequence's master volume to zero over fade. */
 void SsdPauseSequence(int sequenceId, int fade)
 {
     SsdSequence *sequence = SsdGetSequencePtr(sequenceId);
@@ -186,6 +199,7 @@ void SsdPauseSequence(int sequenceId, int fade)
     }
 }
 
+/* Resets every track of a sequence to its initial state: timing, gate, note, velocity, volume and pan. */
 void SsdInitMusicTrackRec(SsdSequence *sequence)
 {
     SsdTrack *track = sequence->tracks;
@@ -242,6 +256,7 @@ void SsdInitMusicTrackRec(SsdSequence *sequence)
     } while (index < sequence->track_count);
 }
 
+/* Returns one more than the highest MIDI channel that a track chunk uses. */
 int SsdCheckMidiChannel(SsdSequence *sequence)
 {
     int scanning = 1;
@@ -263,6 +278,7 @@ int SsdCheckMidiChannel(SsdSequence *sequence)
     return highestChannel + 1;
 }
 
+/* Walks the chunks of a sequence's data and records its metadata, patch chunk, and each track's events and channel. */
 void SsdSetDataAddress(SsdSequence *sequence)
 {
     int scanning = 1;
@@ -296,6 +312,7 @@ void SsdSetDataAddress(SsdSequence *sequence)
     } while (scanning);
 }
 
+/* Returns the work memory a sequence needs: its track table plus a fixed part, or -1 for a bad signature. */
 int SsdGetSeqWorkSize(SsdMusicData *data)
 {
     if (data->signature != SSD_MUSIC_DATA_SIGNATURE) {

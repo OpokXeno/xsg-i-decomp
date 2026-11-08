@@ -23,6 +23,10 @@ const char shotMotControlAssertParentNotNil[24] = "pCont->m_pParent != NIL";
 
 static void _DestructCont(RgShotMotCont *pCont);
 
+/*
+ * Creates the matrix effector that combines the shadow and attached actors.
+ * The right arm uses combine selector 1, the left arm selector 0.
+ */
 static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
                                           XrgActor *shadowActor,
                                           XrgActor *attachActor,
@@ -52,6 +56,10 @@ static MatrixEffector *_CreateMatEffector(XrgActor *pParentActor,
                                        attachedActor, combineSelector);
 }
 
+/*
+ * Sets up a controller: duplicates the parent as the shadow actor, attaches a copy
+ * of attachActor, creates the effector and leaves the controller inactive.
+ */
 static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
                       XrgActor *attachActor, unsigned int eArmType)
 {
@@ -76,6 +84,7 @@ static void _InitCont(RgShotMotCont *pCont, XrgActor *pParentActor,
     pCont->motion = -1;
 }
 
+/* Disposes the actors of a controller and removes its effector from the parent. */
 static void _DestructCont(RgShotMotCont *pCont)
 {
     if (pCont == 0) {
@@ -92,6 +101,7 @@ static void _DestructCont(RgShotMotCont *pCont)
     XrgActorDisposeEffector(pCont->m_pParent, pCont->effector);
 }
 
+/* Allocates and initializes a shot motion controller for the arm eArmType. */
 RgShotMotCont *CreateRgShotMotCont(XrgActor *pParentActor, XrgActor *attachActor,
                                    unsigned int eArmType)
 {
@@ -163,6 +173,10 @@ int RgShotMotContIsEndOfShadowMotion(RgShotMotCont *pCont)
     return XrgActorIsEndOfMotion(pCont->shadowActor);
 }
 
+/*
+ * Advances both actors while the controller is active. Deactivates it once the
+ * shadow actor reaches the end of its motion.
+ */
 void RgShotMotContPassTime(RgShotMotCont *pCont, float deltaTime)
 {
     if (pCont == 0) {

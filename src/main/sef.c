@@ -17,17 +17,16 @@
 #include "quadword.h"
 #include "vu0_macro.h"
 
-/* Original-backed literal aliases; keep the accepted function bodies intact. */
 #define circle_angle_scale_literal (0.01745329238474369f)
 
 #define effect_scale_literal_0_1 (0.10000000149011612f)
 #define SEF_ACTOR_LIGHT_FLAG 0x00008000u
-/* The effect random generator: the ANSI C linear congruential step
- * seed = seed * 1103515245 + 12345, taking bits 16..30 as a 15-bit sample. */
 /* SchedulerState.flags bit 0x40: finished (sefCheckFinish), or created
  * detached (sefCreateEffect2); sefIsFinishEffect skips such schedulers. */
 #define SEF_SCHED_FINISHED 0x40
 
+/* The effect random generator: the ANSI C linear congruential step
+ * seed = seed * 1103515245 + 12345, taking bits 16..30 as a 15-bit sample. */
 #define SEF_RAND_MULTIPLIER 0x41C64E6Du
 #define SEF_RAND_INCREMENT 0x3039u
 #define SEF_RAND_MASK 0x7FFF
@@ -138,11 +137,10 @@ typedef struct SefBossDeathEffect {
 } SefBossDeathEffect;
 
 /*
- * sefKillEffect walks an interior cursor at SchedulerState
- * +0xa70 (request.character_id at +4, request.effect_no at +8, inUse at
- * -0x3c0); SchedulerState has no member at +0xa70, and every index or
- * SchedulerState-cursor form tried either moves that base or the function's
- * label count, so this partial view of the record tail stays local to it.
+ * sefKillEffect walks an interior cursor at SchedulerState +0xa70
+ * (request.character_id at +4, request.effect_no at +8, inUse at -0x3c0).
+ * SchedulerState has no member at +0xa70, so this partial view of the record
+ * tail is declared local to that function.
  */
 typedef struct SefEffectControl {
     unsigned char unmodeled_00[4];
@@ -234,9 +232,9 @@ typedef struct SefIntegerProgressState {
 } SefIntegerProgressState;
 
 /*
- * GNU EE native TI storage/copy type (docs/native-ti.md), used only for the
- * 16-byte aligned zero-fill blocks sefMemZero clears with por+sq; no wide
- * arithmetic is done on it.
+ * GNU EE native TI storage/copy type, used only for the 16-byte aligned
+ * zero-fill blocks sefMemZero clears with por+sq; no wide arithmetic is done
+ * on it.
  */
 typedef unsigned int Quadword __attribute__((mode(TI)));
 
@@ -246,10 +244,9 @@ typedef union SefQuadBlock {
 } SefQuadBlock;
 
 /*
- * A 10-byte keyed-animation record (config/units, sefProgressKey5): the
- * end_frame this function tests against 1024 and the following record's own
- * jump index are the only fields any accepted function of this TU touches;
- * the six bytes between them are not yet evidenced.
+ * A 10-byte keyed-animation record (sefProgressKey5). Only end_frame and jump
+ * are read by the code in this file; the vector between them is not yet
+ * evidenced.
  */
 typedef struct SefKey5 {
     short end_frame;
@@ -281,12 +278,10 @@ typedef struct SefLightInput {
 } SefLightInput;
 
 /*
- * SefParticleOffset (sefGetStartPos/sefGetTargetPos, main:0x002e2960 and
- * main:0x002e29b0): the only fields sefCreateParticle's effect record these
- * two functions evidence -- a start and a target position vector, and a
- * start and a target offset-table/index pair consumed opaquely by
- * sefGetOfsRange. The bytes between and around them are
- * not evidenced by any accepted function in this TU.
+ * Particle creation offsets read by sefGetStartPos and sefGetTargetPos: a
+ * start and a target position vector, and a start and a target
+ * offset-table/index pair passed to sefGetOfsRange. The other bytes are
+ * unmodeled.
  */
 typedef struct SefParticleOffset {
     unsigned char unmodeled_00[0x30];
@@ -323,7 +318,7 @@ typedef struct SefLocalData {
     short cursor;                                      /* +0x80e */
 } SefLocalData;
 
-/* Only fields read or written by sefCreateParticle are named here. */
+/* Named fields are placed at their offsets; gaps are unmodeled byte runs. */
 typedef struct SefParticle {
     Matrix4 local_matrix;                            /* +0x000 */
     Matrix4 transform;                               /* +0x040 */
@@ -646,10 +641,7 @@ extern unsigned char _lineData[];
 extern GameLoopFlagsView GameLoopState;
 extern const char addEnemyFailedFormat[];
 
-/* _battleData + 0x200, still owned by the scaffold, so it keeps the original
- * object's own name for the address (docs/naming.md). The two callees below
- * materialise the same address differently, which is why both spellings are
- * here: the flag path reaches it from the block base it already holds. */
+/* _battleData + 0x200. */
 extern unsigned char localPointVector[];
 
 extern SefRenderState sRender;
@@ -704,9 +696,9 @@ int sefSearchMapperIndex2(int effect_id, int number, int category);
 extern void sefGetPoint(Vector4 *position, const unsigned char *source, int mode);
 
 /*
- * sefGetCubePosBtm (main:0x002e23c8) is defined later in this TU;
- * declared here so sefGetCubePosTop (main:0x002e24c0) can call it. Both are
- * LOCAL in the original, so both stay static. `extent` is the cube's
+ * sefGetCubePosBtm is defined later in this file; it is declared here so
+ * sefGetCubePosTop can call it. Both are file-local, so both are static.
+ * `extent` is the cube's
  * integer extent vector (four ints, loaded with lqc2 and converted with
  * vitof0); the Top variant forwards it untouched.
  */
@@ -821,8 +813,8 @@ short _seSignal = 0;
 /* Original global battle-mode flag; the current C callers set and clear it. */
 short _sefBattleMode = 0;
 
-/* The original local pointer stores the KSEG0 alias of the named table
- * sefAtanTbl at 0x0040FAC0 (main symbol map: 0x0040FAC0, size 0x1004). */
+/* Arctangent table at 0x0040FAC0 (0x1004 bytes), addressed through the
+ * 0x20000000 alias of that address. */
 static float *atanTbl_0 = (float *)0x2040FAC0u;
 
 static int revEft_3[10] = {0x0b03, 0x0b04, 0x0afd, 0x0b07, 0x0b05, 0x0b32, 0x0b31, 0x0afb, 0x0afe, 0x0b06};
@@ -860,7 +852,7 @@ static unsigned char _eftBuffer[SEF_EFFECT_BUFFER_SIZE];
 
 static SefBattleParameters _battlePrm;
 
-/* Original TU-local scheduler storage, kept named for its recovered users. */
+/* TU-local scheduler storage. */
 static SchedulerState _scheduler[SEF_SCHEDULER_COUNT];
 
 static SefSavePrm _savePrm[SEF_SAVE_PRM_COUNT];
@@ -874,7 +866,7 @@ static const unsigned char _zeroPos_004CBF00[16] = {
 
 static const int offset_2[5] = {0, 0, 1, 2, 2};
 
-/* These values remain mutable objects so the recovered callers use storage. */
+/* Fixed-size name strings (16 bytes each) of the effect groups below. */
 const char sefBoss033Name[16] = "boss_033";
 
 const char sefBoss032Name[16] = "boss_032";
@@ -1100,6 +1092,8 @@ static const char addPlayerFailedMessage[24] = {
     (char)0xA4, (char)0xF3, 0, 0
 };
 
+/* Returns the angle in radians for the pair (x, y), using the atanTbl_0
+ * lookup and the signs of x and y to pick the quadrant. */
 float srsAtan2(float x, float y)
 {
     int y_is_positive = y >= 0.0f;
@@ -1157,6 +1151,7 @@ float srsAtan2(float x, float y)
     return result;
 }
 
+/* Advances the effect random seed and returns a sample in [0, 1). */
 static float sefRandf(void)
 {
     unsigned int seed = sefRandSeed;
@@ -1170,15 +1165,13 @@ static float sefRandf(void)
     return (float)sample * sef_rand_unit_scale_literal;
 }
 
-/*
- * sefIsBossID (main:0x002e11e8): true when character_id falls in the boss ID
- * range [0x97, 0xba] (sefCnvDeathEffectNo, sefSetupEnemy, this TU).
- */
+/* True when character_id falls in the boss ID range [0x97, 0xba]. */
 static int sefIsBossID(int character_id)
 {
     return (unsigned int)(character_id - SEF_BOSS_ID_FIRST) < SEF_BOSS_ID_COUNT;
 }
 
+/* Zeroes size bytes at dest: whole 16-byte blocks first, then the trailing words. */
 void sefMemZero(void *dest, int size)
 {
     SefQuadBlock *blocks = dest;
@@ -1195,6 +1188,7 @@ void sefMemZero(void *dest, int size)
     }
 }
 
+/* Builds matrix from the translation, then applies the XYZ rotation of angles and the scale. */
 void sefCalcRotTransSMatrix(Vector4 *angles, Vector4 *translation, Vector4 *scale, Matrix4 *matrix)
 {
     __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(translation) : "memory");
@@ -1217,6 +1211,10 @@ static void sefCalcInvView(Matrix4 *matrix) {
     MMathRotateMatrixYXZ(matrix, matrix, &camera->rotation.vector);
 }
 
+/*
+ * Returns the _srsMemRes slot that holds effect_id, looked up by its category
+ * (effect, weapon or character table), or 0 when no slot matches.
+ */
 int sefSearchMapperIndex2(int effect_id, int number, int category) {
     int index;
     int column;
@@ -1285,10 +1283,9 @@ int sefSearchMapperIndex(int effect_id) {
 }
 
 /*
- * sevInitPtAllocator (main:0x002e1580): clears the whole _ptAlloc particle
- * allocator table and _battleData, then rebuilds _ptAlloc's own trailing
- * free-index queue (1024 entries, main VA 0x00794110's 0xa07fe-byte offset)
- * with the descending indices 0x3ff..0. sefInitEffect is its only caller.
+ * Clears the _ptAlloc particle records and _battleData, then fills the
+ * allocator's trailing free-handle ring with the indices 0x3ff down to 0.
+ * sefInitEffect is its only caller.
  */
 static void sevInitPtAllocator(void)
 {
@@ -1330,6 +1327,7 @@ static void sevFreePtAllocator(unsigned int handle)
     }
 }
 
+/* Advances a SefKey3 cursor by one frame, following the key's jump when its frame is reached. */
 static void sefProgressKey3(SefKey3 *keys, SefProgressCursor *state)
 {
     int frame = state->frame + 1;
@@ -1350,6 +1348,7 @@ static void sefProgressKey3(SefKey3 *keys, SefProgressCursor *state)
     }
 }
 
+/* Advances a SefKey5 cursor by one frame and returns the key holding the current frame. */
 static SefKey5 *sefProgressKey5(SefKey5 *keys, SefProgressCursor *state)
 {
     int key_index = state->key_index;
@@ -1374,6 +1373,7 @@ static SefKey5 *sefProgressKey5(SefKey5 *keys, SefProgressCursor *state)
     return key;
 }
 
+/* Converts the packed key vector at keys to floats and stores it at dest, without interpolation. */
 static void sefLerpVectorA(void *keys, Vector4 *dest)
 {
     __asm__ __volatile__(
@@ -1392,6 +1392,7 @@ static void sefLerpVectorA(void *keys, Vector4 *dest)
     );
 }
 
+/* Interpolates the float vector at the cursor of state_data. Returns 0 once the keys end. */
 int sefLerpVector(SefKey5 *keys, void *state_data)
 {
     SefProgressState *state = state_data;
@@ -1445,6 +1446,7 @@ int sefLerpVector(SefKey5 *keys, void *state_data)
     return 1;
 }
 
+/* Runs sefLerpVector, then scales the vector stored after dest by 0.1. */
 static int sefLerpVectorSC(void *keys, Vector4 *vectors)
 {
     int status = sefLerpVector(keys, vectors);
@@ -1474,6 +1476,7 @@ void sefLerpIVectorA(const void *keys, void *vector)
         : "$9", "$10", "memory");
 }
 
+/* Interpolates the integer key vector at the cursor into state->vector. */
 void sefLerpIVector(SefKey5 *keys, SefProgressState *state)
 {
     SefKey5 *key = keys + state->cursor.key_index;
@@ -1525,6 +1528,7 @@ void sefLerpIVector(SefKey5 *keys, SefProgressState *state)
     sefLerpIVectorA(key->vector, vector);
 }
 
+/* Scalar form of sefLerpIVector: fills state->vector.ints, storing the negated jump index in ints[3]. */
 void sefLerpIVector2(SefKey5 *keys, SefProgressState *state)
 {
     SefKey5 *key = keys + state->cursor.key_index;
@@ -1552,6 +1556,7 @@ void sefLerpIVector2(SefKey5 *keys, SefProgressState *state)
     vector->ints[3] = -key->jump;
 }
 
+/* Interpolates a float value from the SefKey3 keys into state->value; key values are in hundredths. */
 void sefLerpFloat(SefKey3 *keys, SefFloatProgressState *state)
 {
     SefKey3 *key;
@@ -1570,6 +1575,7 @@ void sefLerpFloat(SefKey3 *keys, SefFloatProgressState *state)
     state->value = (float)key->value * 0.01f;
 }
 
+/* Interpolates an integer value from the SefKey3 keys into state->value. */
 void sefLerpInt(SefKey3 *keys, SefIntegerProgressState *state)
 {
     SefKey3 *key;
@@ -1609,6 +1615,11 @@ static inline int sefIsNonZeroVector(Vector4 *vector)
     return (((int *)vector)[2] | *(unsigned long *)vector) != 0;
 }
 
+/*
+ * Sets matrix to the actor's joint matrix for accessory joint index + 8. When
+ * that matrix is empty it falls back to the actor's transform, and to the
+ * identity when there is no actor.
+ */
 void sefGetMotionNullMatrix(Matrix4 *matrix, Actor *actor, int index)
 {
     int joint;
@@ -1627,6 +1638,7 @@ void sefGetMotionNullMatrix(Matrix4 *matrix, Actor *actor, int index)
     Vu0UnitMatrix(matrix);
 }
 
+/* Sets position to the translation of the actor's null joint index (accessory joint index + 8), or to y = 20 when the joint is missing. */
 void sefGetNullPosition(Vector4 *position, Actor *actor, unsigned int index,
                         int flag)
 {
@@ -1644,6 +1656,7 @@ void sefGetNullPosition(Vector4 *position, Actor *actor, unsigned int index,
     }
 }
 
+/* Like sefGetNullPosition, but takes the accessory joint index directly, with y = 20 when the joint is missing. */
 void sefGetWeaponPosition(Vector4 *position, Actor *actor, unsigned int index)
 {
     int joint;
@@ -1660,6 +1673,11 @@ void sefGetWeaponPosition(Vector4 *position, Actor *actor, unsigned int index)
     }
 }
 
+/*
+ * Resolves the point code part to a position in position, then applies the
+ * offset in source: through the matrix of the chosen block when there is one,
+ * otherwise by plain addition.
+ */
 void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
 {
     SefBattleStatus *battle;
@@ -1683,6 +1701,7 @@ void sefGetPoint(Vector4 *position, const unsigned char *source, int part)
         part = (battle->phase >= 2) ? SEF_TARGET_DAMAGE_NULL_A : SEF_TARGET_DAMAGE_NULL_B;
     }
 
+    /* Choose the matrix block for the point code, or fill position directly. */
     if (part < 4 || part == SEF_POINT_CASTER_ALT) {
     } else if (part == SEF_POINT_CASTER) {
         if (battle->caster != 0) {
@@ -1734,6 +1753,7 @@ copy_site:
         MMathApplyMatrix(position, battle->casterMatrix, position);
     }
 
+    /* Apply the offset through the chosen block, or add it to position. */
     if (point_block) {
         if (has_source) {
             MMathApplyMatrix(position, point_block, (const Vector4 *)source);
@@ -1756,6 +1776,7 @@ void sefGetPosition(Vector4 *position, void *source, int mode)
     position->w = 1.0f;
 }
 
+/* Random point on a circle of the given radius in the XZ plane, with y = 0. */
 static void sefGetCirclePos(Vector4 *pos, float radius)
 {
     float angle = sefRandf() * 360.0f * circle_angle_scale_literal;
@@ -1772,6 +1793,7 @@ static void sefGetCirclePos(Vector4 *pos, float radius)
     pos->z = z_unit * radius;
 }
 
+/* Random point on a sphere of the given radius, built from three random components. */
 static void sefGetSpherePos(Vector4 *position, float radius)
 {
     int random_vector[4];
@@ -1821,6 +1843,7 @@ static void sefGetSpherePos(Vector4 *position, float radius)
     __asm__ __volatile__("sqc2 vf2, 0(%0)" : : "r"(position) : "memory");
 }
 
+/* Random point in the box spanned by extent, from the base upward, scaled by 0.1. */
 void sefGetCubePosBtm(Vector4 *pos, const int *extent)
 {
     Vector4 extent_vector;
@@ -1870,6 +1893,7 @@ static void sefGetCubePosTop(Vector4 *pos, const int *extent)
     pos->y = -pos->y;
 }
 
+/* Random point in the box spanned by extent, centred on the origin, scaled by 0.1. */
 static void sefGetCubePos(Vector4 *pos, const int *extent)
 {
     Vector4 extent_vector;
@@ -1910,6 +1934,12 @@ static void sefGetCubePos(Vector4 *pos, const int *extent)
     Vu0SefScaleVectorXYZ(pos, &random_vector, final_scale);
 }
 
+/*
+ * Places position inside the shape selected by index: 0 and 1 a sphere, 2 a
+ * cube, 3 the cube's top, 4 its bottom, 5 a rotated circle and 6 a circle with
+ * a random height. The values come from offset_table; an unknown index traces
+ * an error.
+ */
 static void sefGetOfsRange(Vector4 *position, const void *offset_table, int index)
 {
     const int *offsets = offset_table;
@@ -1977,6 +2007,7 @@ static void sefGetOfsRange(Vector4 *position, const void *offset_table, int inde
     tracePrint(badRangeParamFormat, index);
 }
 
+/* Builds in dest the rotation that points along dir, from the yaw and pitch angles of dir. */
 static void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir)
 {
     Vector4 flipped;
@@ -2035,6 +2066,7 @@ static void sefGetDirMatrix(Matrix4 *dest, Vector4 *dir)
         : : "r"(&angle), "r"(dest) : "memory");
 }
 
+/* Builds in dest the direction matrix for the vector source_a - source_b. */
 void sefGetVecMatrix(Matrix4 *dest, Vector4 *source_a, Vector4 *source_b)
 {
     Vector4 dir;
@@ -2057,6 +2089,7 @@ static void sefGetTargetPos(Vector4 *position, SefParticleOffset *record) {
     Vu0SefAddVectorXYZ(position, &record->target_position, position);
 }
 
+/* Writes the speed of the particle record to position; mode picks the direction source. */
 static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
 {
     unsigned char *record = (unsigned char *)particle;
@@ -2116,6 +2149,11 @@ static void sefGetSpeed(Vector4 *position, void *particle, int mode, int option)
         : : "r"(&vector), "r"(dest), "f"(speed), "r"(out) : "$8", "memory");
 }
 
+/*
+ * Advances one particle by a frame: adds its speed while it is not flagged,
+ * applies gravity and the offset, and bounces it off the _height plane when
+ * _colision is set.
+ */
 void sefMoveParticle(void *arg0, void *arg1, int arg2) {
     unsigned char *particle = (unsigned char *)arg0;
     Vector4 speed;
@@ -2159,30 +2197,20 @@ void sefMoveParticle(void *arg0, void *arg1, int arg2) {
 }
 
 /*
- * sefCalcLocalMatrix (main:0x002e2d48), re-treated from the accepted assembly
- * group src/main/sef/sefCalcLocalMatrix.s toward readable C with constrained
- * ee-vu-cop2 inline assembly (route ee-vu-cop2, docs/ps2-capabilities.md).
- * The second function of that group, sefCalcRotChange, converted the same
- * way further down this file; the group now holds no tracked assembly.
+ * Builds record->local_matrix for the point code target, then multiplies in
+ * base_matrix when the offset in the record is nonzero. The matrix comes from
+ * the parent particle's direction, a copy of base_matrix, a direction toward
+ * the target, a vector source, or the identity.
  *
- * Names recovered from config/symbols/main.txt: _battleData (0x00794110),
- * _parentLine, _nowParentLocal, _ptAlloc. The battle state block and the
- * scheduler local record are read through narrowly evidenced scalar accesses
- * rather than through structs with invented members: only the fields below
- * are evidenced, the bytes between them are not, and docs/naming.md forbids
- * inventing padding members to close the gaps.
+ * The battle block and the scheduler are read at fixed offsets. Only these
+ * fields are named; the bytes between them are not padded with invented members:
  *   _battleData + 0x00c  short  battle phase compared against 2
+ *   _battleData + 0x200         the matrix source (localPointVector)
  *   _battleData + 0x22c  int    "battle is running" flag
- *   _battleData + 0x200         the matrix source both callees take
- *   record     + 0x000         the local matrix this call produces
- *   record     + 0x080         the base matrix it is multiplied by
- *   record     + 0x0c0         the rotation vector
- *   record     + 0x0f0/0x0f8   the offset the multiply is gated on
- *
- * record is the SefParticle whose local_matrix (+0x000) this call produces;
- * base_matrix, start_position and the rotated offset fields are the
- * particle's own members at the same offsets. sefGetDirMatrix/sefGetVecMatrix
- * take the destination matrix at offset 0 (src/main/sef.h).
+ *   record     + 0x000          local_matrix, the result
+ *   record     + 0x080          base_matrix, multiplied in
+ *   record     + 0x0c0          start_position
+ *   record     + 0x0f0/0x0f8    the offset the multiply is gated on
  */
 static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_target)
 {
@@ -2210,8 +2238,7 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
             sefGetDirMatrix(&record->local_matrix, (Vector4 *)(parent + SEF_PARENT_DIR_MATRIX));
         }
     } else if (target == 1) {
-        /* The base matrix becomes the local one: the four quadword moves the
-         * original performs inline through the EE's own scratch GPRs. */
+        /* The base matrix becomes the local one. */
         QuadwordCopyMatrixT0(&record->local_matrix, &record->base_matrix);
         return;
     } else if (in_battle != 0 && (target & SEF_POINT_TARGET_BIT) != 0) {
@@ -2223,8 +2250,6 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
         sefGetVecMatrix(&record->local_matrix, (Vector4 *)localPointVector,
                         &record->start_position);
     } else {
-        /* The identity matrix, built by rotating $vf0 = (0,0,0,1) one lane at
-         * a time and storing the rows back to front. */
         Vu0UnitMatrix(&record->local_matrix);
     }
 
@@ -2235,47 +2260,14 @@ static void sefCalcLocalMatrix(SefParticle *record, int target, int previous_tar
 }
 
 /*
- * sefCalcRotChange (main:0x002e2f00), re-treated from the accepted assembly
- * group src/main/sef/sefCalcRotChange.s (itself the re-cut remainder of
- * src/main/sef/sefCalcLocalMatrix.s once its sibling sefCalcLocalMatrix
- * converted, config/units/math-correction13-5.json) toward readable C with
- * constrained ee-vu-cop2 inline assembly (route ee-vu-cop2,
- * docs/ps2-capabilities.md). The group now holds no assembly of its own.
+ * Converts particle->rotation from degrees to radians in place, then sums
+ * random_rotation and rotation into rotated_position. When update is nonzero,
+ * base_matrix is rebuilt from the angles selected by flags: the XYZ rotation of
+ * transform, or Y, Z and X rotations, or a YXZ or XYZ rotation of the combined
+ * offset. update == 0 stops after the offset sum.
  *
- * particle's SefParticle fields hold what this function reads and writes
- * (the byte offsets sefCalcLocalMatrix's comment evidences are the same
- * fields, base_matrix at 0x080 among them):
- *   particle->transform (+0x040)   the source matrix MMathRotateMatrixXYZ
- *                    multiplies by when the masked mode selects it
- *   particle->base_matrix (+0x080) the matrix every path here rotates in
- *                    place and sefCalcLocalMatrix later reads
- *   particle->random_rotation (+0x0e0) the accumulated offset before this
- *                    frame's change
- *   particle->rotated_position (+0x0f0/0x0f4/0x0f8)
- *                    the combined offset this call produces and
- *                    sefCalcLocalMatrix gates its multiply on. The three
- *                    components are the x/y/z of one Vector4, so the
- *                    single-axis rotations below read them as its fields;
- *                    SEF_LOCAL_OFFSET_Z stays for sefCalcLocalMatrix, which
- *                    reads +0x0f8 on its own
- *   particle->rotation (+0x1c0) the per-frame rotation delta: degrees on
- *                    entry, converted to radians in place by the first block
- *
- * flags selects the rotation order: masking off bits 0x6000 and comparing to
- * 1 picks the XYZ path (Y/Z/X one axis at a time when bit 0x4000 is also set,
- * or one MMathRotateMatrixXYZ call over the source matrix otherwise); with
- * that not selected, bit 0x6000 clear takes MMathRotateMatrixYXZ, and
- * otherwise bit 0x4000 takes the same Y/Z/X order and bit 0x2000 takes
- * MMathRotateMatrixXYZ again, this time from the identity default and the
- * combined offset. update disables all of it: only the vector scale and
- * offset accumulation happen. MMathRotateMatrixX/Y/Z/XYZ/YXZ are main/tu219
- * (src/main/m_math.c); a null matrix argument here reaches their own
- * null-default idiom (docs/tu-worker.md), not a call site concern.
- *
- * The degrees-to-radians factor is loaded by `li.s` inside the asm
- * statement, as in sefDeg2RadVector: the assembler places each `li.s`
- * constant in .lit4 (its own word, gp-relative) and the template converts
- * it through $f8 and $8 into vf1 (docs/ee-hand-asm.md).
+ * The degrees-to-radians factor is loaded with li.s inside the asm statement
+ * and moved through $f8 and $8 into vf1, as in sefDeg2RadVector.
  */
 static void sefCalcRotChange(SefParticle *particle, int flags, int update)
 {
@@ -2372,6 +2364,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
     index = 0;
     handle_pointer = line_data->local_point_handles;
     loop_mode = previous_mode != 0 ? loop_mode | 0x8000 : loop_mode;
+    /* Step each particle slot in turn; a slot whose particle is done is released. */
     for (; index < SEF_LINE_PARTICLE_COUNT; index++, handle_pointer++) {
         short handle = *handle_pointer;
         if (handle >= 0) {
@@ -2483,6 +2476,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
     return (scanFlags[0] & 0x100) == 0 ? active_count : 1;
 }
 
+/* Returns the particle handle in slot index to the allocator and clears the slot. */
 static int sefFreeLocalData(unsigned char *line_data, unsigned int index) {
     int valid = index < SEF_LINE_PARTICLE_COUNT;
     int offset = (int)(index * 2) + SEF_LOCAL_DATA_PT_TABLE;
@@ -2497,6 +2491,7 @@ static int sefFreeLocalData(unsigned char *line_data, unsigned int index) {
     return offset;
 }
 
+/* Takes a free slot from the handle table, searching from the cursor, and gives it a particle handle. Returns the slot or -1. */
 static int sefAllocLocalData(SefLocalData *data)
 {
     int index;
@@ -2533,6 +2528,7 @@ static void sefDestroyLocalData(SefLocalData *data)
     }
 }
 
+/* Random offset in [-range / 2, range / 2) for the range word, or 0 when the range is 0. */
 static __inline__ float sefLineRandomOffset(short *range_word)
 {
     int range = *range_word;
@@ -2548,6 +2544,11 @@ static __inline__ float sefLineRandomOffset(short *range_word)
     return 0.0f;
 }
 
+/*
+ * Initializes a line-data record from its script header: the timers and the
+ * gravity, collision and height inputs, the key tables, a random origin offset
+ * and the initial position.
+ */
 static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
                             SefLineScriptHeader *line_script, int link_index,
                             int global_data_count, int has_line_flag)
@@ -2608,6 +2609,7 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
     line_data->second_integer_keys = (struct SefKey3 *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 8);
     line_data->key_1F0 = (unsigned char *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 9);
 
+    /* Random origin offset, from the range words of the scale keys. */
     scale_words = line_data->scale_keys;
     line_data->origin_offset.x = sefLineRandomOffset(&scale_words[1]);
     line_data->origin_offset.y = sefLineRandomOffset(&scale_words[2]);
@@ -2653,6 +2655,7 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
 
     sefAnalyzeAnim((unsigned char *)line_data);
 
+    /* Initial position, from the source mode in the first scale word. */
     initial_position = &line_data->global_position;
     source_mode = line_data->scale_keys[0];
     if (source_mode != 4) {
@@ -2678,6 +2681,7 @@ static int sefAllocLineData(void)
     return -1;
 }
 
+/* Destroys the local data of a line-data entry and marks the entry free. */
 static void sefFreeLineData(int line_index)
 {
     SefLocalData *data;
@@ -2693,6 +2697,10 @@ static void sefFreeLineData(int line_index)
     }
 }
 
+/*
+ * Fills the 32-byte texture entries of object (from offset 512) with the
+ * image pair of each analyze record; an entry whose images are missing is cleared.
+ */
 static void sefAnalyzeAnim(unsigned char *object)
 {
     SefAnalyzeRecord *records = *(SefAnalyzeRecord **)(object + 496);
@@ -2820,6 +2828,11 @@ static int sefAnimate(unsigned char *object, unsigned char *state, int advance)
     return result;
 }
 
+/*
+ * Creates one particle of the given kind in a free slot of data, setting its
+ * start and target positions, frame, rotation, translation, scale and colour
+ * from the line keys. Returns the slot index, or -1 when no slot is free.
+ */
 int sefCreateParticle(SefLocalData *data, int kind)
 {
     SefBattleStatus *battle;
@@ -2893,6 +2906,7 @@ int sefCreateParticle(SefLocalData *data, int kind)
             particle->random_scale = sefRandf() * (float)data->uniform_scale_keys[0] * UNIFORM_SCALE_KEY_UNIT;
             particle->kind = kind;
 
+            /* Colour: a flat default without position keys, else the animated colour. */
             if (data->position_keys == 0) {
                 particle->color[2] = 64;
                 particle->color[1] = 64;
@@ -2912,6 +2926,7 @@ int sefCreateParticle(SefLocalData *data, int kind)
                 }
             }
 
+            /* Size from the rotation keys, scaled unless the colour key mode is 3. */
             if (data->rotation_keys != 0 && *(short *)(data->rotation_keys + 10) == 1024) {
                 sefLerpVectorA(data->rotation_keys, &particle->size);
                 if (data->color_keys[0] != 3) {
@@ -2946,6 +2961,7 @@ int sefCreateParticle(SefLocalData *data, int kind)
 
             particle->one_initialized_scalar = 1.0f;
             particle->random_translation.w = 1.0f;
+            /* Random translation: one random value per axis, or a single shared value. */
             if (data->position_keys != 0) {
                 if (*(short *)(data->position_keys + 6) == 0) {
                     short range_x;
@@ -2987,6 +3003,10 @@ int sefCreateParticle(SefLocalData *data, int kind)
     return result;
 }
 
+/*
+ * Updates the global position and parent position of a line from its source
+ * keys, and emits particles once every particle_count frames.
+ */
 static int sefExecLineGlobalData(SefLineData *line_data, int frame)
 {
     SefBattleStatus *battle;
@@ -3036,6 +3056,7 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
     if (!rotation_is_fixed) {
         sefGetPosition(&global->parent_position, &global->parent_position_source, keys[2][0]);
     }
+    /* Emit on this frame: per live particle of the parent line, or emit_count particles without one. */
     if (frame % particle_count == 0) {
         emit_count = global->emit_count;
         if (_parentLine >= 0) {
@@ -3080,6 +3101,7 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
     return 1;
 }
 
+/* Runs one frame of a line-data record. Returns 0 once the line has ended. */
 static int sefExecLineData(SefLineData *line_data)
 {
     unsigned short frame = line_data->frame;
@@ -3195,6 +3217,11 @@ static void sefCheckFinish(int effect_no, int condition) {
     }
 }
 
+/*
+ * Runs one frame of an effect's data: applies its signal and finish flags,
+ * starts the script commands that are due as lines, and steps its lines.
+ * Returns 0 once the effect has ended.
+ */
 int sefExecEffectData(EffectData *effect, int frame, short *active_count)
 {
     SefEffectRequest *battle;
@@ -3316,6 +3343,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
         }
 
         effect->frame = 1;
+        /* Step every live line; a line that has ended is freed, along with the lines linked to it. */
         for (index = 0; index < SEF_EFFECT_LINE_COUNT; index++) {
             int handle;
 
@@ -3364,6 +3392,7 @@ int sefExecEffectData(EffectData *effect, int frame, short *active_count)
     return 1;
 }
 
+/* Clears the scheduler table and resets each scheduler's script binding and effect slots. */
 void sefInitScheduler(void)
 {
     SchedulerState *scheduler = _scheduler;
@@ -3388,6 +3417,10 @@ void sefInitScheduler(void)
     }
 }
 
+/*
+ * Claims a free scheduler slot for table, searching from _schridx_1, and binds
+ * it to the current script and event. Returns the slot index, or -1.
+ */
 static int sefAllocScheduler(void *table)
 {
     int start = _schridx_1;
@@ -3421,6 +3454,7 @@ static int sefAllocScheduler(void *table)
     return -1;
 }
 
+/* Releases a scheduler: stops its sound, destroys its effect data and clears its binding. */
 void sefFreeSchedulerCf(SchedulerState *scheduler)
 {
   int soundId;
@@ -3445,6 +3479,11 @@ void sefFreeSchedulerCf(SchedulerState *scheduler)
   }
 }
 
+/*
+ * Releases the scheduler at scheduler_index: destroys its effect data, drops
+ * its script task count and clears its binding. Schedulers with flags 0x202
+ * are released by sefFreeSchedulerCf.
+ */
 void sefFreeScheduler(unsigned int scheduler_index)
 {
     enum {
@@ -3490,6 +3529,7 @@ void sefFreeScheduler(unsigned int scheduler_index)
     binding->state = 0;
 }
 
+/* Frees every scheduler bound to script_index. */
 void sefDestroyScriptScheduler(int script_index)
 {
     int index;
@@ -3503,6 +3543,7 @@ void sefDestroyScriptScheduler(int script_index)
     } while (index < SEF_SCHEDULER_COUNT);
 }
 
+/* Frees every scheduler bound to script_index and task_index. */
 void sefDestroyScriptScheduler2(int script_index, int task_index)
 {
     int index;
@@ -3544,6 +3585,10 @@ static inline void sefApplyDescriptorCommand(EffectData *effect, short command)
     }
 }
 
+/*
+ * Fills the effect slots of scheduler_index from the descriptor entries, then
+ * clears the owner of each slot that has no descriptor.
+ */
 static void sefInitEffectTbl(SefEffectDescriptor *entry, int scheduler_index, int init_flags)
 {
     int index = 0;
@@ -3583,6 +3628,12 @@ process_descriptor:
     }
 }
 
+/*
+ * Creates a scheduler for effect_no from the script table: copies the request,
+ * sets its position, parameter blocks and effect descriptors, and uses index
+ * when it is nonnegative, otherwise a free slot. Returns the scheduler index,
+ * or -1 when no slot is free.
+ */
 int sefCreateScheduler2(int effect_no, void *parameters, void *position, int table, int flags, int index)
 {
     int number;
@@ -3621,6 +3672,7 @@ int sefCreateScheduler2(int effect_no, void *parameters, void *position, int tab
         return -1;
     }
 
+    /* Copies the request and sets the caster, target and position fields. */
     origin = position;
     saved_script_adr = *(unsigned char **)&_nowScriptAdr;
     _nowScriptAdr = table;
@@ -3641,6 +3693,7 @@ int sefCreateScheduler2(int effect_no, void *parameters, void *position, int tab
     _scheduler[scheduler_index].flags = 0;
     _scheduler[scheduler_index].signalByte = 0;
     _scheduler[scheduler_index].schedulerIndex = (short)scheduler_index;
+    /* Clears the sound, camera, effect and alter blocks, then sets words in the sound, effect and alter blocks and selects the camera. */
     param_block = (int *)&_scheduler[scheduler_index].soundParameters;
     memset(param_block, 0, 0x18);
     camera_block = (int *)&_scheduler[scheduler_index].cameraChoice;
@@ -3681,6 +3734,7 @@ static int sefGetSizeOffset(int index) {
     return offset_2[index];
 }
 
+/* Creates the reaction effects selected by the battle request's special value, mode bits and reaction mask. */
 void sefCreateReactionEffect(void)
 {
     SefEffectRequestBlock block;
@@ -3762,6 +3816,11 @@ float sefGetMatrixScale(float *matrix)
     return MMathCalcLength(matrix);
 }
 
+/*
+ * Builds in matrix the parent matrix of a scheduler from its caster, or from
+ * its caster unit when there is no caster actor. When a matrix is built, its
+ * inverse is stored in inverseParentMatrix.
+ */
 void sefGetParentMatrix(SchedulerState *scheduler, int index, Matrix4 *matrix)
 {
     Actor *target;
@@ -3848,6 +3907,11 @@ published:
 
 #define BATTLE (&_battleData.status)
 
+/*
+ * Runs every scheduler slot for one frame: loads its state into the battle
+ * block, runs its effects, sounds and camera work, and releases the schedulers
+ * that have finished. Returns the number of schedulers still active.
+ */
 int sefExecScheduler(void)
 {
     SchedulerState *scheduler;
@@ -3880,6 +3944,7 @@ int sefExecScheduler(void)
         running = (unsigned short)SLOT(flags) & 0x2;
         hit_flag = _hitFlag;
 
+        /* Slots that are in use and displayed are stepped; the others are skipped. */
         if (SLOT(inUse) != 0 && SLOT(display) != 0) {
             if (func_A33248() != 0) {
                 active_count += 1;
@@ -3944,6 +4009,7 @@ int sefExecScheduler(void)
 
             BATTLE->effectSpeed = SLOT(effectSpeed);
             sefSetReverseDir(SLOT(effectNo), (short)SLOT(requestParam));
+            /* Run this scheduler's effect slots. */
             for (k = 0; k < SEF_EFFECT_COUNT; k++) {
                 exec_binding = (ScriptBinding *)((unsigned int)_scheduler + binding_offset);
                 if (sefExecEffectData((EffectData *)(schedulerStates + index * sizeof(SchedulerState) + k * sizeof(scheduler->effects[0])),
@@ -3959,6 +4025,7 @@ int sefExecScheduler(void)
             sdvExecSpecial(soundParameterRecords + 0x64 + record_offset);
             sdvScheduleAlter(soundParameterRecords + 0x384 + record_offset, soundParameterRecords + 0x398 + record_offset);
 
+            /* A hit flag creates the reaction effects on the binding's first hit; the count is kept on the binding. */
             if (_hitFlag != 0 || _hitSignal != 0) {
                 unsigned int reaction_offset = record_offset + offsetof(SchedulerState, scriptBinding);
                 signed char *binding = (signed char *)(reaction_offset + (unsigned int)table);
@@ -4030,6 +4097,7 @@ int sefExecScheduler(void)
 #undef SLOT
 #undef BATTLE
 
+/* Returns 1 when scheduler_index is out of range or its slot is not in use. */
 int sefIsDeadSchduler(unsigned int scheduler_index)
 {
 
@@ -4039,6 +4107,7 @@ int sefIsDeadSchduler(unsigned int scheduler_index)
     return _scheduler[scheduler_index].inUse == 0;
 }
 
+/* Sets _revDirZ when the effect is in the reversed-direction list for its category; returns it. */
 static int sefSetReverseDir(int effect_id, int category)
 {
     int normalized_id;
@@ -4062,6 +4131,10 @@ static int sefSetReverseDir(int effect_id, int category)
     return 0;
 }
 
+/*
+ * Rebuilds the battle actor table from the active schedulers that run
+ * effect_no, adding their caster and target actors.
+ */
 void sefCreateBattleActorTbl(int effect_no)
 {
     SchedulerState *scheduler;
@@ -4115,6 +4188,7 @@ void sefCreateBattleActorTbl(int effect_no)
     }
 }
 
+/* Clears the light and signal counts of each battle actor and sets the centre to the average actor position. */
 static void sefInitBattlePrm(void)
 {
     SefBattleActor *record;
@@ -4141,6 +4215,7 @@ static void sefInitBattlePrm(void)
     }
 }
 
+/* Sets target to the average position of the battle actors that are not excluded. */
 void sefCaclAllTarget(Vector4 *target)
 {
     SefBattleActor *record;
@@ -4245,6 +4320,10 @@ int sefIsSeSignal(Actor *actor)
     return 0;
 }
 
+/*
+ * Gives the light at position to each battle actor within its range that has
+ * no light yet, weighted by the distance to that actor.
+ */
 static void sefAddLightActor(const Vector4 *position, const SefLightInput *light)
 {
     float range_squared = (float)light->range * lightRangeScale;
@@ -4307,6 +4386,7 @@ static void sefAddLightActor(const Vector4 *position, const SefLightInput *light
     }
 }
 
+/* Initializes the effect system: memory pools, the particle allocator, schedulers, script and special work. */
 void sefInitEffect(void)
 {
     smInitilize(_eftBuffer, SEF_EFFECT_BUFFER_SIZE);
@@ -4325,6 +4405,7 @@ void sefInitEffect(void)
     _initialize = 1;
 }
 
+/* Switches the effect system to battle mode, drawing through the battle callback. */
 void sefInitEffectBattle(void)
 {
     _sefBattleMode = 1;
@@ -4339,6 +4420,7 @@ void sefInitEffectBattle(void)
     }
 }
 
+/* Switches the effect system to CF mode: loads the CF memory and draws through the CF callback. */
 void sefInitEffectCf(void)
 {
     _sefBattleMode = 0;
@@ -4355,6 +4437,10 @@ static inline SefBattleParameters *sefBattleParameters(void)
     return &_battlePrm;
 }
 
+/*
+ * Puts character_id in a free player slot with its three setup values and
+ * reloads the battle data. Reports through tracePrint when no slot is free.
+ */
 void sefSetupPlayer(int character_id, int setup_value_1,
                     int setup_value_2, int setup_value_3)
 {
@@ -4384,6 +4470,10 @@ void sefSetupPlayer(int character_id, int setup_value_1,
     tracePrint(addPlayerFailedMessage, character_id);
 }
 
+/*
+ * Puts character_id in a free enemy slot and reloads the battle data; a boss
+ * character also sets has_boss. Reports through tracePrint when no slot is free.
+ */
 void sefSetupEnemy(int character_id)
 {
     int index;
@@ -4416,6 +4506,7 @@ void sefSetupEnemy(int character_id)
     tracePrint(addEnemyFailedFormat, character_id);
 }
 
+/* Clears effect_id from the player or enemy slot that holds it. */
 void sefReleaseID(int effect_id)
 {
     int index;
@@ -4452,6 +4543,10 @@ int sefIsEntryBoss(void) {
     return entryBossFlags[0];
 }
 
+/*
+ * Clears the battle state: kills the effects and scripts, frees the reloader
+ * memory, and resets the battle parameter, data and actor blocks.
+ */
 void sefDestroyEffect(void)
 {
     _sefLoadEftQue = 0;
@@ -4465,6 +4560,7 @@ void sefDestroyEffect(void)
     sdvDestroyAlters();
 }
 
+/* Clears the effect state like sefDestroyEffect, but frees the CF reloader memory. */
 void sefDestroyEffectCf(void)
 {
     _sefLoadEftQue = 0;
@@ -4493,6 +4589,7 @@ int sefCheckLoad(void)
     return srsLeaveCdRead() > 0;
 }
 
+/* Runs one frame of the scripts and effect alters, then clears the hit and sound signals. */
 void sefExecEffect(void)
 {
     scExecEffect();
@@ -4515,6 +4612,7 @@ void sefProgressEffect(int frame_count)
     }
 }
 
+/* Draws the scheduler effects, after updating the inverse view matrix; skipped while a draw is pending. */
 void sefDrawEffect(void)
 {
     if (_initialize != 0) {
@@ -4541,6 +4639,10 @@ void sefDrawEffect2D(void) {
     }
 }
 
+/*
+ * Replaces the death-effect placeholder in request with an effect number: the
+ * boss table for boss characters, otherwise by the kind flags and the size.
+ */
 static void sefCnvDeathEffectNo(SefEffectRequest *request)
 {
     int character_id;
@@ -4573,6 +4675,7 @@ static void sefCnvDeathEffectNo(SefEffectRequest *request)
     }
 }
 
+/* Replaces the wait-effect placeholder in request with the character's wait effect number, or 0 when it has none. */
 static void sefCnvWaitEffectNo(SefEffectRequest *request)
 {
     int character_id;
@@ -4591,6 +4694,7 @@ static void sefCnvWaitEffectNo(SefEffectRequest *request)
     }
 }
 
+/* Deletes every scheduler that runs the wait effect of character_id. */
 void sefDeleteEffectWait(int character_id)
 {
     SefEffectRequest request;
@@ -4614,6 +4718,7 @@ void sefDeleteEffectWait(int character_id)
     }
 }
 
+/* Shifts effect_no by a small offset that depends on whether character_id is 1 or 2. */
 static int sefCnvEtEffectNo(int effect_no, int character_id)
 {
     if ((unsigned int)effect_no - 0x7ebu < 3u) {
@@ -4634,6 +4739,7 @@ static int sefCnvEtEffectNo(int effect_no, int character_id)
     return effect_no;
 }
 
+/* Creates a script effect from request, through the battle request block. Effect 55 also sets special. */
 void sefCreateEffect(SefEffectRequest *request)
 {
     SefEffectRequest *script_request;
@@ -4650,6 +4756,7 @@ void sefCreateEffect(SefEffectRequest *request)
     }
 }
 
+/* Creates a detached scheduler for the request's effect and returns it, or 0 when the effect has no script. */
 SchedulerState *sefCreateEffect2(SefEffectRequest *request)
 {
     SefEffectRequest *script_request;
@@ -4721,6 +4828,11 @@ int sefLoadMemoryEffectCfName(void *data, char *effect_name, int size)
     return 0;
 }
 
+/*
+ * Creates a scheduler for effectNo at position, with orientation copied into
+ * its rotation when given. schedulerIndex is used when nonnegative. Returns
+ * the scheduler, or 0 when the effect has no script.
+ */
 static SchedulerState *sefCreateEffectCf2(int effectNo,
                                            const Vector4 *position,
                                            const Vector4 *orientation,
@@ -4771,6 +4883,7 @@ void sefRewindEffectCf(SchedulerState *scheduler)
     }
 }
 
+/* Destroys the line data handled by each owned effect of scheduler. */
 void sefClearEffectCf(SchedulerState *scheduler)
 {
     EffectData *effect;
@@ -4799,6 +4912,7 @@ void sefClearEffectCf(SchedulerState *scheduler)
     }
 }
 
+/* Returns 0 when func_A33248() is nonzero. Otherwise returns 1 when no in-use, unfinished scheduler matches effect_no; effect_no 0 matches every scheduler. */
 int sefIsFinishEffect(int effect_no)
 {
     unsigned int scheduler_address;
@@ -4828,6 +4942,7 @@ int sefIsFinishEffect(int effect_no)
     return active_count == 0;
 }
 
+/* Returns 1 when effect_no is not positive or no in-use scheduler maps to it. */
 int sefIsFinishEffect2(int effect_no)
 {
     SchedulerState *scheduler;
@@ -4866,6 +4981,7 @@ void sefExecLoadQue(void)
     }
 }
 
+/* Frees the schedulers running effect_no, or every scheduler when effect_no is negative. */
 void sefKillEffect(int effect_no)
 {
     int record_offset;
@@ -4894,6 +5010,7 @@ void sefHitEffect(void) {
     _hitFlag = 1;
 }
 
+/* Saves the state of every in-use scheduler into _savePrm. */
 void sefPushEffect(void)
 {
     SefEffectRequest *request;
@@ -4921,6 +5038,10 @@ void sefPushEffect(void)
     }
 }
 
+/*
+ * Kills all effects, restores the schedulers saved by sefPushEffect, clears the
+ * save area, and then calls sefProgressEffect(10).
+ */
 void sefPopEffect(void)
 {
     SefSavePrm *save;
@@ -4993,10 +5114,12 @@ unsigned char *sefGetParentLine(int line, int parent_local)
     return 0;
 }
 
+/* dest = float(scale_source) * scale + addend, for integer key vectors. */
 void sefScaleIVectorAdd(void *dest, void *scale_source, void *addend, float scale) {
     __asm__ __volatile__("lqc2 vf1, 0(%0)\n\tlqc2 vf3, 0(%1)\n\tvitof0.xyzw vf1, vf1\n\tqmtc2.ni %2, vf2\n\tvmulx.xyz vf1, vf1, vf2x\n\tvadd.xyz vf3, vf1, vf3\n\tsqc2 vf3, 0(%3)" :  : "r"(scale_source), "r"(addend), "r"(scale), "r"(dest) : "memory");
 }
 
+/* Converts the vector at src from degrees to radians and stores it at dst. */
 void sefDeg2RadVector(Vector4 *dst, Vector4 *src)
 {
     __asm__ __volatile__("lqc2 $vf2, 0(%0)" : : "r"(src) : "memory");
@@ -5017,6 +5140,7 @@ void sefMergeMatrixPos(Matrix4 *dest, Matrix4 *matrix, Vector4 *position)
     QuadwordMergeMatrixPosition(dest, matrix, position);
 }
 
+/* dest = first + (next - first) * factor, where next is the key 10 bytes after first. */
 void sefLerpVectorB(void *first, Vector4 *dest, float factor)
 {
     void *second = (char *)first + 10;
@@ -5048,6 +5172,7 @@ void sefLerpVectorB(void *first, Vector4 *dest, float factor)
     );
 }
 
+/* Like sefLerpVectorB, but the interpolated values are stored as integers. */
 void sefLerpIVectorB(void *first, Vector4 *dest, float factor)
 {
     void *second = (char *)first + 10;

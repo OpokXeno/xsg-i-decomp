@@ -177,17 +177,9 @@ extern JavaMethod *findMethod(JavaClass *clazz, SceneString *name,
 
 extern void JNI_initThread(SceneVm *vm);
 /*
- * The Java VM's per-thread execution context, already recovered as
- * `JThread` in src/main/chr.h (main's chr TU). This TU forwards a pointer
- * to it without touching any member, so only the tag is declared here.
- */
-/*
- * UNIT_rotY/UNIT_rotZ/UNIT_sclX/UNIT_sclY/UNIT_sclZ are this TU's own
- * INCLUDE_ASM functions (0x00301d58, 0x003020a8, 0x00302ef8, 0x00303168,
- * 0x003033d8). Their JNI trampolines below insert the interpolation-mode
- * literal as a new first argument and forward `thread`/`arguments`/
- * `failure_result` unchanged -- the same shape as Java_xeno_Chr_sclX__FFZ /
- * CHR_sclX in src/main/chr.c, which names the same three parameters.
+ * UNIT_rotY, UNIT_rotZ, UNIT_sclX, UNIT_sclY and UNIT_sclZ take the mode as a
+ * new first argument. The JNI trampolines below insert it and forward thread,
+ * arguments and failure_result unchanged.
  */
 static void UNIT_rotY(int mode, JThread *thread, void *arguments,
                u32 *failure_result);
@@ -205,11 +197,8 @@ static void UNIT_sclZ(int mode, JThread *thread, void *arguments,
                u32 *failure_result);
 
 /*
- * UNIT_moveXZ/UNIT_rotX/UNIT_motion are this TU's own INCLUDE_ASM functions
- * (0x00301710, 0x00301a38, 0x00302a10). Their JNI trampolines below are the
- * same shape as UNIT_rotY/UNIT_rotZ/UNIT_sclX/UNIT_sclY/UNIT_sclZ above:
- * insert the mode literal ahead of `thread`/`arguments`/`failure_result` and
- * forward those three unchanged.
+ * UNIT_moveXZ, UNIT_rotX and UNIT_motion take the mode the same way. Their
+ * JNI trampolines insert it ahead of thread, arguments and failure_result.
  */
 static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
                  u32 *failure_result);
@@ -220,8 +209,7 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
 void UNIT_motion(int mode, JThread *thread, void *arguments,
                  u32 *failure_result);
 
-/* MAP_callUnitGroup is still asm elsewhere (src/main/map_create_unit_peer.c):
- * it applies `callback` to every unit record of group `group`. */
+/* Defined in src/main/map_create_unit_peer.c: applies `callback` to the flags of every unit in `group`. */
 extern void MAP_callUnitGroup(int group, void (*callback)(int *flags));
 
 extern void MAP_updateUnitDefault(MapUnitRecord *peer);
@@ -248,6 +236,7 @@ static float defaultOffset_0043C1D0[4];
 
 static float defaultOffset_0043C1D0[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+/* Sets the peer's update callback from bits 8-11 of the unit's algorithm field. */
 static void UNIT_setUpdate(u8 *object, MapUnitRecord *unit)
 {
     JavaField *state_field;
@@ -278,6 +267,10 @@ static void UNIT_setUpdate(u8 *object, MapUnitRecord *unit)
     }
 }
 
+/*
+ * Native Unit.rotYCNS: starts a Y-rotation sequence on the unit's slot,
+ * tracking the chr object and storing the int and three float arguments.
+ */
 void Java_xeno_Unit_rotYCNS__Ljava_lang_Object_IFFF(
     JThread *thread, UnitChrSequenceCall *arguments)
 {
@@ -305,6 +298,10 @@ void Java_xeno_Unit_rotYCNS__Ljava_lang_Object_IFFF(
     block->target[2] = arguments->z.floating;
 }
 
+/*
+ * Native Unit.transCNS: starts a translation sequence on the unit's slot,
+ * tracking the chr object and storing the int and three float arguments.
+ */
 void Java_xeno_Unit_transCNS__Ljava_lang_Object_IFFF(
     JThread *thread, UnitChrSequenceCall *arguments)
 {
@@ -332,6 +329,10 @@ void Java_xeno_Unit_transCNS__Ljava_lang_Object_IFFF(
     block->z = arguments->z.floating;
 }
 
+/*
+ * Helper for the Unit move natives: mode 0 takes an int frame count, mode 1 a
+ * float speed per second, and modes 2 and 3 use a chr object as the track.
+ */
 static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
                 u32 *failure_result)
 {
@@ -404,6 +405,7 @@ static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
         break;
     }
 
+    /* Flags the peer and, when the native may wait, blocks the thread on it. */
     if (wait == 1) {
         peer->flags |= 2;
         if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
@@ -419,6 +421,12 @@ static void UNIT_moveXZ(int mode, JThread *thread, void *arguments,
     }
 }
 
+/*
+ * Helper for the Unit rotation natives about X; UNIT_rotY and UNIT_rotZ work
+ * the same way for Y and Z. Mode 0 takes a frame count, mode 1 a rate per
+ * second, and modes 2 and 3 follow another object's track. Angles given in
+ * degrees are stored as radians.
+ */
 static void UNIT_rotX(int mode, JThread *thread, void *arguments,
                u32 *failure_result)
 {
@@ -484,6 +492,7 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
         break;
     }
 
+    /* Flags the peer and, when the native may wait, blocks the thread on it. */
     if (wait == 1) {
         peer->flags |= 2;
         if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
@@ -499,6 +508,7 @@ static void UNIT_rotX(int mode, JThread *thread, void *arguments,
     }
 }
 
+/* Y-axis variant of UNIT_rotX. */
 static void UNIT_rotY(int mode, JThread *thread, void *arguments,
                u32 *failure_result)
 {
@@ -566,6 +576,7 @@ static void UNIT_rotY(int mode, JThread *thread, void *arguments,
         break;
     }
 
+    /* Flags the peer and, when the native may wait, blocks the thread on it. */
     if (wait == 1) {
         peer->flags |= 2;
         if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
@@ -581,6 +592,7 @@ static void UNIT_rotY(int mode, JThread *thread, void *arguments,
     }
 }
 
+/* Z-axis variant of UNIT_rotX. */
 static void UNIT_rotZ(int mode, JThread *thread, void *arguments,
                u32 *failure_result)
 {
@@ -650,6 +662,7 @@ static void UNIT_rotZ(int mode, JThread *thread, void *arguments,
         break;
     }
 
+    /* Flags the peer and, when the native may wait, blocks the thread on it. */
     if (wait == 1) {
         peer->flags |= 2;
         if (thread->kind != UNIT_THREAD_KIND && (thread->flags & UNIT_THREAD_FLAG_CAN_WAIT) == 0)
@@ -665,6 +678,7 @@ static void UNIT_rotZ(int mode, JThread *thread, void *arguments,
     }
 }
 
+/* Native Unit.getRotate: copies the peer's rotation into the rotationX/Y/Z fields, in degrees. */
 void Java_xeno_Unit_getRotate__(JThread *thread, UnitObjectCall *arguments)
 {
     JavaField *peer_field;
@@ -687,6 +701,7 @@ void Java_xeno_Unit_getRotate__(JThread *thread, UnitObjectCall *arguments)
     *(float *)(object + field->offset) = vector->z / UNIT_PI * UNIT_DEGREES_HALF_TURN;
 }
 
+/* Native Unit.getSignal: writes the peer's signal to the result, or 0 when the object is not a Unit. */
 void Java_xeno_Unit_getSignal__(JThread *thread, UnitObjectCall *arguments,
                                 u32 *failure_result)
 {
@@ -705,6 +720,7 @@ void Java_xeno_Unit_getSignal__(JThread *thread, UnitObjectCall *arguments,
     *failure_result = peer->signal;
 }
 
+/* Native Unit.getTranslate: copies the peer's position into the positionX/Y/Z fields. */
 void Java_xeno_Unit_getTranslate__(JThread *thread, UnitObjectCall *arguments)
 {
     JavaField *peer_field;
@@ -744,6 +760,10 @@ void Java_xeno_Unit_move__IFFZ(JThread *thread, void *arguments,
     UNIT_moveXZ(0, thread, arguments, failure_result);
 }
 
+/*
+ * Native Unit.move(Spline, int, boolean): starts a spline move on the
+ * translation sequence and blocks when the wait flag is set.
+ */
 void Java_xeno_Unit_move__Lxeno_util_Spline_IZ(JThread *thread,
                                            UnitSplineCall *arguments,
                                            u32 *failure_result)
@@ -792,6 +812,10 @@ void Java_xeno_Unit_move__Lxeno_util_Spline_IZ(JThread *thread,
     }
 }
 
+/*
+ * Native Unit.rotate(Spline, int, boolean): starts a spline rotation on the
+ * rotation sequence and blocks when the wait flag is set.
+ */
 void Java_xeno_Unit_rotate__Lxeno_util_Spline_IZ(JThread *thread,
                                            UnitSplineCall *arguments,
                                            u32 *failure_result)
@@ -852,6 +876,11 @@ void Java_xeno_Unit_move__Ljava_lang_Object_FZ(JThread *thread,
 {
 }
 
+/*
+ * Helper for Unit.mtn: mode 0 sets the motion, blend and speed; mode 1 also
+ * sets the first and last frame and the option. Sets the motion sequence and
+ * blocks the thread when the wait flag is set.
+ */
 void UNIT_motion(int mode, JThread *thread, void *arguments,
                  u32 *failure_result)
 {
@@ -992,6 +1021,10 @@ void Java_xeno_Unit_rotZ__Ljava_lang_Object_FZ(JThread *thread,
 {
 }
 
+/*
+ * Native Unit.scale: starts a spline scale on all three scale tracks and
+ * blocks when the wait flag is set.
+ */
 void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ(JThread *thread,
                                            UnitSplineCall *arguments,
                                            u32 *failure_result)
@@ -1037,6 +1070,11 @@ void Java_xeno_Unit_scale__Lxeno_util_Spline_IZ(JThread *thread,
     }
 }
 
+/*
+ * Helper for the Unit scale natives on X; UNIT_sclY and UNIT_sclZ work the
+ * same way for Y and Z. Mode 0 takes a frame count and mode 1 a rate per
+ * second.
+ */
 static void UNIT_sclX(int mode, JThread *thread, void *arguments,
                   u32 *failure_result)
 {
@@ -1113,6 +1151,7 @@ void Java_xeno_Unit_sclX__IFZ(JThread *thread, void *arguments,
     UNIT_sclX(0, thread, arguments, failure_result);
 }
 
+/* Y-axis variant of UNIT_sclX. */
 static void UNIT_sclY(int mode, JThread *thread, void *arguments,
                   u32 *failure_result)
 {
@@ -1189,6 +1228,7 @@ void Java_xeno_Unit_sclY__IFZ(JThread *thread, void *arguments,
     UNIT_sclY(0, thread, arguments, failure_result);
 }
 
+/* Z-axis variant of UNIT_sclX. */
 static void UNIT_sclZ(int mode, JThread *thread, void *arguments,
                   u32 *failure_result)
 {
@@ -1282,6 +1322,10 @@ void Java_xeno_Unit_setCollision__Z(JThread *thread, UnitBoolCall *arguments)
     }
 }
 
+/*
+ * Native Unit.setRotate: stores the rotationX/Y/Z fields into the peer's
+ * rotation, converting degrees to radians.
+ */
 void Java_xeno_Unit_setRotate__(JThread *thread, UnitObjectCall *arguments)
 {
     JavaField *peer_field;
@@ -1304,6 +1348,7 @@ void Java_xeno_Unit_setRotate__(JThread *thread, UnitObjectCall *arguments)
     vector->z = *(float *)(object + field->offset) / UNIT_DEGREES_HALF_TURN * UNIT_PI;
 }
 
+/* Native Unit.setTranslate: copies the positionX/Y/Z fields into the peer's position. */
 void Java_xeno_Unit_setTranslate__(JThread *thread, UnitObjectCall *arguments)
 {
     JavaField *peer_field;
@@ -1326,6 +1371,7 @@ void Java_xeno_Unit_setTranslate__(JThread *thread, UnitObjectCall *arguments)
     vector->z = *(float *)(object + field->offset);
 }
 
+/* Native Unit.setVisible(int, boolean): passes the mode and visibility flag to MDL_setVisible for the unit's model. */
 void Java_xeno_Unit_setVisible__IZ(JThread *thread, UnitVisibleCall *arguments)
 {
     JavaField *peer_field;
@@ -1377,6 +1423,10 @@ void Java_xeno_Unit_signal__I(JThread *thread, UnitSignalCall *arguments,
     peer->signal = arguments->value;
 }
 
+/*
+ * Native Unit.start(int, Object): sets the sequence mode. Mode 1 finds the
+ * named method, attaches it to the unit's thread and clears the sequences.
+ */
 void Java_xeno_Unit_start__ILjava_lang_Object_(JThread *thread,
                                               UnitStartCall *arguments)
 {
@@ -1438,6 +1488,10 @@ void Java_xeno_Unit_start__ILjava_lang_Object_(JThread *thread,
     }
 }
 
+/*
+ * Native Unit.stop: clears the suspended flag on the unit's thread and copies
+ * the peer's position and rotation into the Java fields.
+ */
 void Java_xeno_Unit_stop__(JThread *thread, UnitObjectCall *arguments)
 {
     JavaField *peer_field;
@@ -1478,6 +1532,11 @@ void Java_xeno_Unit_validate__(void)
 {
 }
 
+/*
+ * Native Unit.setParent(Object, int): sets the peer's parent to the chr's peer.
+ * When the accessory flag is set, the joint index is resolved with
+ * ACT_jointGetAccessories first.
+ */
 void Java_xeno_Unit_setParent__Ljava_lang_Object_I(
     JThread *thread, UnitParentCall *arguments)
 {
@@ -1507,6 +1566,7 @@ void Java_xeno_Unit_setParent__Ljava_lang_Object_I(
     UNIT_setUpdate(object, peer);
 }
 
+/* Copies `count` bytes from src to dst; does nothing when count is not positive. */
 static void copyArgs(u8 *dst, u8 *src, int count)
 {
     u8 byte;
@@ -1525,6 +1585,10 @@ static void copyArgs(u8 *dst, u8 *src, int count)
     }
 }
 
+/*
+ * Native Unit.setArgs(int, int, int): writes `value` into the peer's argument
+ * bytes at `offset`, for sizes 1 to 4.
+ */
 void Java_xeno_Unit_setArgs__III(JThread *thread, UnitArgsWordCall *arguments)
 {
     JavaField *peer_field;
@@ -1546,6 +1610,10 @@ void Java_xeno_Unit_setArgs__III(JThread *thread, UnitArgsWordCall *arguments)
     }
 }
 
+/*
+ * Native Unit.getArgs(int, int): returns `size` bytes (1 to 4) of the peer's
+ * arguments at `offset`.
+ */
 void Java_xeno_Unit_getArgs__II(JThread *thread, UnitArgsGetCall *arguments,
                                 u32 *failure_result)
 {
@@ -1570,6 +1638,10 @@ void Java_xeno_Unit_getArgs__II(JThread *thread, UnitArgsGetCall *arguments,
     }
 }
 
+/*
+ * Native Unit.setArgs(int, Object, int): copies `size` bytes from the source
+ * buffer into the peer's arguments.
+ */
 void Java_xeno_Unit_setArgs__ILjava_lang_Object_I(JThread *thread,
                                                   UnitArgsSetCall *arguments)
 {
@@ -1590,6 +1662,7 @@ void Java_xeno_Unit_setArgs__ILjava_lang_Object_I(JThread *thread,
     }
 }
 
+/* Native Unit.setArgs (row form): stores the four words into argument row `row` of the peer. */
 void Java_xeno_Unit_setArgs__IIIII(JThread *thread,
                                    UnitArgsRowCall *arguments)
 {
@@ -1609,6 +1682,7 @@ void Java_xeno_Unit_setArgs__IIIII(JThread *thread,
     peer->rows[row].word[3] = arguments->word[3];
 }
 
+/* Native Unit.getScale: returns the peer's scale as a Vector4f held in a static buffer. */
 void Java_xeno_Unit_getScale__(JThread *thread, UnitObjectCall *arguments,
                                UnitResultValue *result)
 {
@@ -1673,6 +1747,11 @@ void Java_xeno_Unit_mtnSetMask__I(JThread *thread, UnitIntCall *arguments)
     peer->motion_mask = mask;
 }
 
+/*
+ * Native Unit.mtnGetRoot(int, Vector4f): copies the motion root selected by
+ * `type` into the vector, converting type 1 from radians to degrees.
+ * Does nothing for a null vector.
+ */
 void Java_xeno_Unit_mtnGetRoot__ILxeno_util_Vector4f_(
     JThread *thread, UnitMotionRootCall *arguments)
 {
@@ -1725,6 +1804,7 @@ void Java_xeno_Unit_getState__(JThread *thread, UnitObjectCall *arguments,
     *failure_result = entry->state;
 }
 
+/* Native Unit.getPivot: copies the sequence pivot into the vector when it is not null. */
 void Java_xeno_Unit_getPivot__Lxeno_util_Vector4f_(JThread *thread,
                                                    UnitPivotOutCall *arguments)
 {
@@ -1764,6 +1844,7 @@ void Java_xeno_Unit_setPivot__FFF(JThread *thread, UnitVector3Call *arguments)
     entry->pivot_z = arguments->z;
 }
 
+/* Native Unit.getAxis: copies the sequence axis into the vector, with w set to 1, when it is not null. */
 void Java_xeno_Unit_getAxis__Lxeno_util_Vector4f_(JThread *thread,
                                                   UnitAxisOutCall *arguments)
 {
@@ -1825,6 +1906,10 @@ void Java_xeno_Unit_resume__I(JThread *thread, UnitGroupCall *arguments)
     MAP_callUnitGroup(arguments->group, unit_resume);
 }
 
+/*
+ * Native Unit.initElevatorFunc: sets the peer's elevator task to tyaElevatorTask
+ * and runs it once with the positionY field's offset.
+ */
 void Java_xeno_Unit_initElevatorFunc__(JThread *thread,
                                        UnitObjectCall *arguments)
 {
@@ -1877,6 +1962,10 @@ void Java_xeno_Unit_renderCommand__I(JThread *thread, UnitIntCall *arguments)
     peer->render_command = arguments->value;
 }
 
+/*
+ * Native Unit.setFilter(int): the filter mode is 1 for value 2, 2 for value 3,
+ * and 0 otherwise. Values 2 and 3 also set the result to 4.
+ */
 void Java_xeno_Unit_setFilter__I(JThread *thread, UnitIntCall *arguments,
                                  u32 *failure_result)
 {
@@ -1905,6 +1994,7 @@ void Java_xeno_Unit_setFilter__I(JThread *thread, UnitIntCall *arguments,
     }
 }
 
+/* Native Unit.setFilterParam(float[]): copies the array into the peer's filter parameters. */
 void Java_xeno_Unit_setFilterParam__aF(JThread *thread,
                                        UnitFilterParamCall *arguments)
 {
@@ -1951,6 +2041,7 @@ void Java_xeno_Unit_shadow_clip_scale__F(JThread *thread,
     peer->shadow_clip_scale = arguments->value;
 }
 
+/* Native Unit.shadow_map_id(int): appends the id to the peer's shadow map list, up to 8 entries. */
 void Java_xeno_Unit_shadow_map_id__I(JThread *thread, UnitIntCall *arguments)
 {
     JavaField *peer_field;
@@ -2028,8 +2119,7 @@ void Java_xeno_Unit_setMonitorPrio__I(JThread *thread, UnitIntCall *arguments)
 }
 
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
-/* Preserve the frozen compiled form's declarations before consumers and
- * original eight-byte definitions after the function bodies. */
+/* The eight-byte name strings follow the function bodies, as in the original data order. */
 const char unitPeerName[8] = "peer";
 
 const char unitPositionYName[8] = "py";

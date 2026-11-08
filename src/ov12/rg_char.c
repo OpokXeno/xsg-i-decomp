@@ -10,10 +10,7 @@
 #include "ov12/xrg_rand_int.h"
 
 
-/*
- * Defined here: the source file name and assertion text the scaffold data
- * window (ov12:0x00a51808, 0x00a51820) provides.
- */
+/* Defined here: the source file name and the assertion text of this file. */
 const char charSourcePath[] = "../rg_char.euc.c";
 const char charAssertCharNotNil[] = "pChar != NIL";
 
@@ -25,6 +22,7 @@ static void _nonDispMethod(RgChar *pChar)
 {
 }
 
+/* Builds the local matrix from the negated facing, the up reference and the position. */
 void RgCalcLocalForChar(RgMatrix dest_matrix, RgVector position,
                         RgVector facing, RgVector up_ref)
 {
@@ -36,6 +34,7 @@ void RgCalcLocalForChar(RgMatrix dest_matrix, RgVector position,
     XrgCopyVectorXYZ(&dest_matrix[12], position);
 }
 
+/* Allocates a character of the given size, initializes it as type and registers it with the manager. */
 RgChar *RgCharAlloc(unsigned int size, int type)
 {
     RgChar *pChar;
@@ -47,6 +46,7 @@ RgChar *RgCharAlloc(unsigned int size, int type)
     return pChar;
 }
 
+/* Frees a character; a manager-owned character is only marked deleted for the manager to release. */
 void RgCharFree(RgChar *pChar)
 {
     if (pChar == 0) {
@@ -69,6 +69,7 @@ void RgCharFree(RgChar *pChar)
     RgHeapFree(InstanceOfRgHeap(), pChar, charSourcePath, 76);
 }
 
+/* Sets the type and the default methods of a character and clears its manager. */
 void InitRgChar(RgChar *pChar, int type)
 {
     if (pChar == 0) {
@@ -130,6 +131,7 @@ void RgCharPassTimeMethod(RgChar *pChar, RgCharPassTimeFunc passTimeMethod)
     pChar->passTimeMethod = passTimeMethod;
 }
 
+/* Calls the control method of a character that is not deleted. */
 void RgCharControl(RgChar *pChar)
 {
     if (pChar == 0) {
@@ -142,6 +144,7 @@ void RgCharControl(RgChar *pChar)
     }
 }
 
+/* Calls the pass-time method of a character that is not deleted. */
 void RgCharPassTime(RgChar *pChar, float deltaTime)
 {
     if (pChar == 0) {
@@ -154,6 +157,7 @@ void RgCharPassTime(RgChar *pChar, float deltaTime)
     }
 }
 
+/* Calls the display method of a character that is not deleted. */
 void RgCharDisp(RgChar *pChar)
 {
     if (pChar == 0) {

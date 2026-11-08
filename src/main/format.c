@@ -4,10 +4,8 @@
 #include "main/init_vm.h"
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in this
- * TU map (and in main/tu238, src/main/runtime.c) show.
+ * The script VM's per-thread context (JThread, declared in src/main/chr.h).
+ * These natives never read the context.
  */
 typedef struct JThread JThread;
 
@@ -16,6 +14,7 @@ typedef struct JThread JThread;
 
 extern unsigned int strlen(const char *string);
 
+/* Shared temporary String that the toString natives format into and return. */
 FormatString *JAVA_tmpString = 0;
 
 const char integerFormat[4] = "%d";
@@ -32,11 +31,13 @@ void Java_xeno_util_Format_intBitsToFloat__I(JThread *thread, int *arguments, fl
     result[0] = (float) arguments[0];
 }
 
+/* Empty native: it neither computes nor stores a result. */
 void Java_xeno_util_Format_toInt__Ljava_lang_String_(JThread *thread, void *arguments,
                                                       unsigned int *result)
 {
 }
 
+/* Formats the char argument as a decimal number into a new String. */
 void Java_xeno_util_Format_toString__C(JThread *thread, VMSlot *arguments,
                                        VMSlot *result)
 {
@@ -55,6 +56,7 @@ void Java_xeno_util_Format_toString__C(JThread *thread, VMSlot *arguments,
     result[0].ref = string;
 }
 
+/* Formats the float argument into the shared temporary String and returns it. */
 void Java_xeno_util_Format_toString__F(JThread *thread, float *arguments,
                                        int *result)
 {
@@ -73,6 +75,7 @@ void Java_xeno_util_Format_toString__F(JThread *thread, float *arguments,
     *result = (int)*string_slot;
 }
 
+/* Formats the int argument into the shared temporary String and returns it. */
 void Java_xeno_util_Format_toString__I(JThread *thread, int *arguments,
                                        int *result)
 {
@@ -93,6 +96,7 @@ void Java_xeno_util_Format_toString__I(JThread *thread, int *arguments,
     *result = (int)JAVA_tmpString;
 }
 
+/* Formats the argument as a decimal integer into the shared temporary String and returns it. */
 void Java_xeno_util_Format_toString__Z(JThread *thread,
                                        unsigned char *arguments,
                                        int *result)

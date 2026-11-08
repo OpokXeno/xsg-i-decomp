@@ -27,6 +27,10 @@ extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkAddDirectDataN(XglPacket *packet, const void *data, int count);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 
+/*
+ * Adds `count` items of `data` to `packet` as direct GIF data, using the current
+ * packet when `packet` is NULL.  Reuses the open direct block when there is one.
+ */
 void xglPrimAddGifTagDirect(XglPacket *packet, const void *data, int count) {
     if (packet == NULL) {
         packet = xglPacketGetCurrent();
@@ -48,6 +52,7 @@ void xglPrimAddGifTag(XglPrim *prim, int count) {
     xglPrimAddGifTagDirect(prim->packet, prim->data, count);
 }
 
+/* Writes a Gouraud triangle strip of `vertex_count` vertices into the prim's output buffer as a direct GIF packet. */
 void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
 {
     u32 *output_buffer;
@@ -65,6 +70,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
         output_buffer = prim->output_buffer;
     }
 
+    /* GIF tag for the strip, then the tag's register list. */
     output[0] = (u32)vertex_count + GIF_TAG_EOP;
     output[1] = (prim->tag_control << XGL_PRIM_ADD_TAG_CONTROL_SHIFT) ^ XGL_PRIM_ADD_STRIP_TAG_HIGH;
     output[2] = XGL_PRIM_ADD_REGS_RGBAQ_XYZ2;
@@ -74,6 +80,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
     positions = prim->positions;
     colors = prim->colors;
 
+    /* Offset added to every position; all zero when the flag is clear. */
     if (prim->flags & XGL_PRIM_ADD_FLAG_POSITION_OFFSET) {
         position_offset.component[0] = prim->position_offset.component[0];
         position_offset.component[1] = prim->position_offset.component[1];
@@ -86,6 +93,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
         position_offset.component[3] = 0;
     }
 
+    /* Each vertex is written as colour (4 words) then position (4 words); the mode picks how indices are read. */
     mode = prim->flags & XGL_PRIM_ADD_MODE_MASK;
     switch (mode) {
     case XGL_PRIM_ADD_MODE_INDEX8: {
@@ -165,6 +173,7 @@ void xglPrimAddGouraudStripN(XglPrim *prim, int vertex_count)
     xglPrimAddGifTagDirect(prim->packet, output_buffer, vertex_count * 2 + 1);
 }
 
+/* Writes a line strip of `vertex_count` vertices into the prim's output buffer as a direct GIF packet. */
 void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
 {
     u32 *output_buffer;
@@ -185,6 +194,7 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
     positions = prim->positions;
     colors = prim->colors;
 
+    /* A one-register tag carrying the first vertex's colour, then the tag for the vertex list. */
     output[0] = 1;
     output[1] = (prim->tag_control << XGL_PRIM_ADD_TAG_CONTROL_SHIFT) ^ XGL_PRIM_ADD_LINE_PRIM_TAG_HIGH;
     output[2] = GIF_REG_RGBAQ;
@@ -214,6 +224,7 @@ void xglPrimAddLineStripN(XglPrim *prim, int vertex_count)
         position_offset.component[3] = 0;
     }
 
+    /* Each vertex is written as position only (4 words); the mode picks how indices are read. */
     mode = prim->flags & XGL_PRIM_ADD_MODE_MASK;
     switch (mode) {
     case XGL_PRIM_ADD_MODE_INDEX8: {

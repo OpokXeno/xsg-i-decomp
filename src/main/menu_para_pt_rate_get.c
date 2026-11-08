@@ -34,8 +34,8 @@
 
 #define CIRCLE_ORIGIN_Y 0x720
 
-/* Scaffold .lit4 constants: the pulse step (1/24) and the easing factor
- * (0.4) tskCharSpotLight loads gp-relative. */
+/* The pulse step (1/24) and the easing factor (0.4) that tskCharSpotLight
+ * loads gp-relative. */
 #define SPOT_LIGHT_PULSE_STEP (1.0f / 24.0f)
 
 #define SPOT_LIGHT_EASE_RATE (0.4f)
@@ -211,19 +211,15 @@ enum {
 #define LINE_FIELD_FADE_OUT_STEP (0.019999999552965164f)
 
 /*
- * The menu work block (window_tex_load's MenuWork data, 0x80 bytes). Only the
- * members tskCharSpotLight reads are modelled.
+ * The menu work block (window_tex_load's MenuWork data, 0x80 bytes). MenuCharactor
+ * keeps every cursor and selection here and the sub-screens only read them:
  * - state (+0x03): the MenuCharactor state (its jump table covers 0x10..0xFF);
  *   tskCharSpotLight and tskCharLineField remove themselves when it is 0xFF.
- * - partyMode (+0x31): MenuCharactor stores its argument here (sb at
- *   0x00297ccc); MainMenu calls MenuCharactor(0) and MenuCharactor(1).
+ * - partyMode (+0x31): MenuCharactor stores its argument here; MainMenu calls
+ *   MenuCharactor(0) and MenuCharactor(1).
  * - formationSlot (+0x46): the 1-based party position the spotlight marks,
  *   indexing the six-entry position table.
- */
-/*
- * MenuCharactor keeps
- * every cursor and selection here and the sub-screens only read them:
- * - weaponId/bulletId/accessoryId (+0x12/+0x14/+0x16): the item under the
+  * - weaponId/bulletId/accessoryId (+0x12/+0x14/+0x16): the item under the
  *   open list's cursor; bulletFits (+0x18) records that bulletId belongs to
  *   the equipped weapon.
  * - leaderLocked (+0x19): why the shown character cannot become the
@@ -306,8 +302,7 @@ typedef union MenuWorkData {
 
 /*
  * The spotlight task: the scheduler prefix, then the fields tskCharSpotLight
- * owns. MenuCharactor creates it with xglTaskEntryNext and clears mode
- * (sb zero,0x10 at 0x00297ca8).
+ * owns. MenuCharactor creates it with xglTaskEntryNext and clears mode.
  */
 typedef struct CharSpotLightTask {
     XglTaskPrefix task;             /* +0x00 */
@@ -322,10 +317,9 @@ typedef struct CharSpotLightTask {
 } CharSpotLightTask;
 
 /*
- * The circle endPrintDirectCircle draws. PrintCircleCore reads x/y (lh 0/2,
- * then adds 0x700/0x720 back at 0x0027dd94/0x0027ddf8), z (lw 4), the centre
- * RGBA (lbu 8..0xB), the radius (lw 0xC), the segment count (lw 0x10, the
- * loop bound) and the rim RGBA (lbu 0x14..0x17).
+ * The circle endPrintDirectCircle draws. PrintCircleCore reads x and y (adding
+ * back 0x700 and 0x720), z, the centre RGBA, the radius, the segment count (the
+ * loop bound) and the rim RGBA.
  */
 typedef struct DirectCircle {
     short x;                        /* +0x00 */
@@ -339,28 +333,23 @@ typedef struct DirectCircle {
 
 /*
  * The six spotlight positions (x = 1, 0, -1 on the z = 0.6 and z = -0.6 rows),
- * scaffold .rodata at 0x004C6770. tskCharSpotLight copies the whole table to
- * its frame with ld/sd and no alignment test (0x00297440..0x00297470), which
- * 2.96 emits only for an aligned source type; the quadword-aligned vectors
- * carry that alignment.
+ * stored in .rodata. tskCharSpotLight copies the whole table to its frame with
+ * ld/sd and no alignment test, which GCC 2.96 emits only for an aligned source
+ * type; the quadword-aligned vectors carry that alignment.
  */
 typedef struct SpotLightTable {
     AlignedVector4 position[6];
 } SpotLightTable;
 
 /*
- * One character's 0x180-byte parameter record. dataUnitOrgGet (ov01 VA
- * 0x00a191c0) returns orgData + (chrNo - 1) * 0x180, and calcTotalParaMenu
- * (ov01 VA 0x00a11108) returns a recalculated copy of the same record.
- * calcTotalParaMenuSub clamps the stored hp (+0x34) and ep (+0x36) to the
- * recalculated maxHp (+0x00) and maxEp (+0x02) (lh/slt/sh at
- * 0x00a11180..0x00a111ac), and it fills the two
- * caller buffers MenuCharParaSet adds into attack (+0x04), phyDefense (+0x06)
- * and magDefense (+0x0A): three weapon attack words from calcWpnAtkGet and the
- * calcPhyDefGet/calcMagDefGet pair. MenuCharParaSet compares the three
- * halfwords at +0x64 with the item ids 95 and 96.
- */
-/*
+ * One character's 0x180-byte parameter record. dataUnitOrgGet returns
+ * orgData + (chrNo - 1) * 0x180, and calcTotalParaMenu returns a recalculated
+ * copy of the same record. calcTotalParaMenuSub clamps the stored hp (+0x34)
+ * and ep (+0x36) to the recalculated maxHp (+0x00) and maxEp (+0x02), and it
+ * fills the two caller buffers MenuCharParaSet adds into attack (+0x04),
+ * phyDefense (+0x06) and magDefense (+0x0A): three weapon attack words from
+ * calcWpnAtkGet and the calcPhyDefGet/calcMagDefGet pair. MenuCharParaSet
+ * compares the three halfwords at +0x64 with the item ids 95 and 96.
  * The parameter window shows two more values past the statIndex table
  * MenuParaPtNowGet covers (+0x0E and +0x1E), and the equipment screens read
  * the three equipment slots of the same record: the weapon (+0x5E) and the
@@ -427,15 +416,14 @@ typedef struct CharPasWork {
 } CharPasWork;
 
 /*
- * PARTIAL ACCESSED PREFIX of PadData (the 0xD0-byte pad block at 0x00490d90):
+ * PARTIAL ACCESSED PREFIX of PadData (the 0xD0-byte pad block):
  * the halfwords this menu reads. held/pressed are the two the shared
  * include/shared.h PadPrefix view names (half_28/half_2a); repeat carries the
  * direction auto-repeat and repeatFirst equals it only on the frame a
  * direction is first pressed, so a list wraps only on a fresh press.
  *
  * TU-local view: a local extension of PadData past
- * PadPrefix, the same situation documented in src/main/game.h's
- * PadDataDebugLayout and src/main/set_path.c's PadDataEffectLayout.
+ * PadPrefix, the same situation as src/main/game.h's PadDataDebugLayout.
  */
 typedef struct MenuPadData {
     unsigned char unmodeled_00[0x28];
@@ -461,17 +449,14 @@ typedef struct CharInfoText {
 } CharInfoText;
 
 /*
- * The help window's work block, the 0x450 bytes MenuCharactor carves out of
- * the menu heap. state is 0 for the frame it was carved in and 2 from then on.
- * opened and selected are written once by the setup and no recovered function
- * reads them back. reasonShown remembers that the line in the buffer is the
- * explanation of a locked character, which stays until the next pad input.
- */
-/*
- * The help line at the bottom of the character menu: the window is built on
- * the frame MenuCharactor carves its work block, and from then on every frame
- * writes the line MenuCharactor's current state asks for into the block's own
- * message buffer and slides the window to that state's height.
+ * The help line at the bottom of the character menu, in the 0x450-byte work
+ * block MenuCharactor carves out of the menu heap. The window is built on the
+ * frame the block is carved, and from then on every frame writes the line
+ * MenuCharactor's current state asks for into the block's own message buffer
+ * and slides the window to that state's height. state is 0 for the frame it
+ * was carved in and 2 from then on. opened and selected are written once by
+ * the setup and never read back. reasonShown remembers that the line in the
+ * buffer explains a locked character, which stays until the next pad input.
  */
 typedef struct CharInfoWork {
     unsigned char state;            /* +0x00 */
@@ -480,8 +465,7 @@ typedef struct CharInfoWork {
     unsigned char reasonShown;      /* +0x03 */
     int color;                      /* +0x04 */
     /* +0x08: WindowDXMain calls MenuInfoWindow(window, &info) every frame;
-     * it switches on window->state (lb 0x10 at 0x0027a12c) and hands
-     * info.text (lw 0xC at 0x0027a158) to eMessageSet. */
+     * it switches on window->state and hands info.text to eMessageSet. */
     WindowDX window;
     unsigned char unmodeled_19c[0x1A0 - 0x19C];
     CharInfoText info;              /* +0x1A0 */
@@ -490,8 +474,8 @@ typedef struct CharInfoWork {
 
 /*
  * One of CharCategory's five equip-category icons (weapon/bullet/accessory/
- * status/point). eSpriteSet and eSpriteMain (main/e_number_main.c, not yet
- * published) own the fields CharCategoryMain does not touch; the sprite
+ * status/point). eSpriteSet and eSpriteMain (main/e_number_main.c) own the
+ * fields CharCategoryMain does not touch; the sprite
  * object they operate on starts at +0x00 of this record (no header bytes
  * precede it), so the array stride is the record size.
  */
@@ -509,7 +493,7 @@ typedef struct CharCategoryIcon {
  * The 0x244-byte block MenuCharactor carves for the category screen.
  * edgeDelta[0]/[1] nudge icons[0]/icons[1] left/right for a few frames after
  * the pad repeats PAD_LEFT/PAD_RIGHT; icons[2..4] dim to 0x40 or brighten to
- * -0x80 to mark the one matching MenuWork.character.accessoryList.
+ * -0x80 to mark the entry that is in MenuWork.character.accessoryList.
  */
 typedef struct CharCategoryWork {
     unsigned char state;          /* +0x00: 0 needs init, 2 active */
@@ -526,24 +510,24 @@ typedef struct CharCategoryWork {
     unsigned char unmodeled_b4[0x244 - 0xB4];
 } CharCategoryWork;
 
-/* Scaffold .rodata: the five icon sprite ids CharCategoryMain assigns at init. */
+/* The five icon sprite ids CharCategoryMain assigns at init. */
 typedef struct CharCategoryIconIdTable {
     short id[5];
 } CharCategoryIconIdTable;
 
 /*
  * The character screen's command windows: CharMenuMain builds one WindowDX
- * per command list and hands MenuSelectWindow the matching list block as the
+ * per command list and hands MenuSelectWindow the list block that belongs to it as the
  * window's close callback argument.
  */
 typedef struct CharMenuList CharMenuList;
 
 /*
  * One selection list MenuSelectWindow (main/menu_top_command_check.c) draws
- * inside such a window: it reads hasPrompt (lhu 2), the highlighted row
- * (lw 4, multiplied by the 24-pixel row height), the newline-separated item
- * text (lw 8) and the prompt line above the items (lw 0xC), and keeps its
- * cursor and twelve message objects in the rest of the 0x5F8 bytes.
+ * inside such a window: it reads hasPrompt, the highlighted row (multiplied by
+ * the 24-pixel row height), the newline-separated item text and the prompt
+ * line above the items, and keeps its cursor and twelve message objects in the
+ * rest of the 0x5F8 bytes.
  */
 struct CharMenuList {
     unsigned char unmodeled_00[0x02];
@@ -575,7 +559,7 @@ typedef struct CharMenuWork {
  * The character screen's point bar: three rows, each one ribbon with its
  * label and its value. The word that follows x and y in each element (work)
  * is the draw order the element's own Main copies verbatim into its render
- * record (eNumberMain: lw 0x4, sw 0x6C at 0x0027648c); this screen gives
+ * record (eNumberMain); this screen gives
  * every ribbon the bar's base order and puts the label and the value two in
  * front of it.
  */
@@ -618,10 +602,9 @@ typedef struct CharL1R1Work {
 } CharL1R1Work;
 
 /*
- * Scaffold .sdata tables read by CharL1R1Main. 0x004DADF0 holds the L1 and
- * R1 sprite ids (0x0112, 0x0110), 0x004DADF8 the per-side step (+1, -1) that
- * walks a pressed side's slide offset back to zero. Both are copied as a
- * pair; their extent past that pair belongs to the scaffold.
+ * Tables read by CharL1R1Main: the L1 and R1 sprite ids (0x0112, 0x0110) and
+ * the per-side step (+1, -1) that walks a pressed side's slide offset back to
+ * zero. Both are copied as a pair.
  */
 typedef struct L1R1SpriteIdPair {
     short id[2];
@@ -686,8 +669,8 @@ typedef union CharStatusBlock {
  * - state (+0x00): the CharListMain state its jump table dispatches on.
  * - active (+0x01): CharListMain runs the window only while it is set.
  * - cursorIndex/scrollIndex (+0x02/+0x03): cleared when the list opens.
- * - color (+0x08): the packed 0xRRGGBB tint CharListMain sets once, matching
- *   the list window's own tint.
+ * - color (+0x08): the packed 0xRRGGBB tint CharListMain sets once, the same
+ *   as the list window's own tint.
  */
 typedef struct CharListWork {
     unsigned char state;        /* +0x00 */
@@ -704,17 +687,15 @@ typedef struct CharListWork {
     WindowSPCursor weapon;
     WindowSPCursor paraWindow;   /* +0x1C3C: the parameter-up list window */
     /* +0x3374: the twelve twelve-byte list rows CharListMake_Para builds in
-     * place (addiu $16,$16,0xC at 0x00295900) and hands to the window as its
-     * item list; CharListMain clears them when the screen opens. */
+     * place and hands to the window as its item list; CharListMain clears them
+     * when the screen opens. */
     MenuListEntry paraItems[12];
 } CharListWork;
 
 /*
- * The bullet record dataAttGet (ov01 VA 0x00a1a428, still assembler) returns
- * for one ammunition id; only the id of the weapon it belongs to (+0xC) is
- * read here, the same member main/menu_1.c's MenuBulletCheck compares. Kept
- * under the scaffold's undefined_funcs_auto.txt placeholder name func_A1A428
- * until ov01 recovers dataAttGet itself.
+ * The bullet record dataAttGet returns for one ammunition id; only the id of
+ * the weapon it belongs to (+0xC) is read here, the same member
+ * main/menu_1.c's MenuBulletCheck compares.
  */
 typedef struct MenuBulletData {
     unsigned char unmodeled_00[0x0C];
@@ -735,8 +716,7 @@ typedef struct MenuBulletData {
 typedef struct CharParameterWork {
     unsigned char state;        /* +0x00 */
     /* +0x01: 1 while the window is built, then 7, or 15 once the equip list
-     * reports state 3; +0x02 is reset to -1 with it. No recovered function
-     * reads either back yet. */
+     * reports state 3; +0x02 is reset to -1 with it. */
     signed char mask;           /* +0x01 */
     signed char selectNo;       /* +0x02 */
     unsigned char unmodeled_03[1];
@@ -758,18 +738,18 @@ typedef struct ParaDigitCounts {
 
 
 /*
- * The weapon icon of every party character (chrNo 1..7), as the scaffold's
- * .rodata piece at 0x004C6398 holds it; the fourth character carries no
- * weapon of its own. CharWeaponMain reads it through a copy on its frame.
+ * The weapon icon of every party character (chrNo 1..7), stored in .rodata;
+ * the fourth character carries no weapon of its own. CharWeaponMain reads it
+ * through a copy on its frame.
  */
 typedef struct WeaponIconTable {
     short icon[7];
 } WeaponIconTable;
 
 /*
- * The accessory icon of every icon group, as the scaffold's small-data piece
- * at 0x004DAE48 holds it (the third group shares the empty-row sprite).
- * CharWeaponMain reads it through a copy on its frame.
+ * The accessory icon of every icon group, stored in small data (the third
+ * group shares the empty-row sprite). CharWeaponMain reads it through a copy
+ * on its frame.
  */
 typedef struct AccessoryIconTable {
     short icon[3];
@@ -779,7 +759,7 @@ typedef struct AccessoryIconTable {
  * The accessory record, as far as the equipment display needs it: the icon
  * group its sprite comes from. src/ov01/calc.h owns the AccessoryData type
  * and models its +0x0D term, so this screen keeps its own bounded view of
- * the same record until the two are harvested into one header.
+ * the same record.
  */
 typedef struct MenuAccessoryData {
     unsigned char unmodeled_00[0x0A];
@@ -807,10 +787,9 @@ typedef struct CharWeaponWork {
 } CharWeaponWork;
 
 /*
- * Partial view of the sprite object eSpriteSet/eSpriteMain (main/e_number_main.c,
- * still assembler at this TU's boundary) receive: the x/y/work fields this
- * call overwrites right after eSpriteSet, at the same offsets eSpriteSet's
- * own ESprite type uses for them.
+ * Partial view of the sprite object that eSpriteSet/eSpriteMain
+ * (main/e_number_main.c) fill: the x/y/work fields this call overwrites right
+ * after eSpriteSet, at the same offsets eSpriteSet's own ESprite type uses.
  */
 typedef struct CharSwitchArrow {
     unsigned char unmodeled_00[0x04];
@@ -821,8 +800,7 @@ typedef struct CharSwitchArrow {
 
 /*
  * The switch-character arrow indicator MenuCharactor carves from the menu
- * heap (still assembler there); only the members CharSwitchMain touches are
- * modelled.
+ * heap; only the members CharSwitchMain touches are modelled.
  */
 typedef struct CharSwitchWork {
     unsigned char state;            /* +0x00 */
@@ -897,7 +875,7 @@ typedef struct MenuWeaponData {
 } MenuWeaponData;
 
 /* The model task invokes callbacks with its model in a0 and the stored
- * context word in a1 (main 0x0028124c..0x00281254). */
+ * context word in a1. */
 typedef void (*MenuCharacterModelCallback)(MenuModelUnit *unit, void *argument);
 
 typedef union MenuCameraPair {
@@ -909,9 +887,6 @@ typedef struct MenuCameraRotationPair {
     AlignedVector4 vector[2];
 } MenuCameraRotationPair;
 
-/* TairetuRot/TairetuPos (.bss +0x320/+0x330) are copied as two doublewords,
- * but the original .bss is only 8-aligned, so their copy type is the 8-aligned
- * DoublewordAlignedVector4 rather than AlignedVector4. */
 typedef struct MenuCharacterPositions {
     AlignedVector4 vector[6];
 } MenuCharacterPositions;
@@ -969,8 +944,7 @@ typedef struct DirectLineVertex {
     unsigned char unmodeled_14[12];
 } DirectLineVertex;
 
-/* This TU defines these menu labels below; their pointer tables precede
- * the storage definitions. Declare their array type before use; the definitions retain each extent. */
+/* Menu label strings, defined further down in this TU with their sizes. */
 extern const char accessoryCommandLabel[];
 
 extern const char unequipCommandLabel[];
@@ -1039,8 +1013,7 @@ extern CharCategoryWork *CharCategory;
 extern const CharCategoryIconIdTable charCategoryIconTable;
 extern CharMenuWork *CharMenu;
 
-/* The window titles, the small .sdata string constants "Menu" (0x004DADC8)
- * and "Select" (0x004DADD0) the scaffold still owns. */
+/* The window titles "Menu" and "Select". */
 extern const char menuTitleLabel[];
 
 extern const char selectTitleLabel[];
@@ -1072,9 +1045,8 @@ extern CharWeaponWork *CharWeapon;
 extern char listWindowTag[];
 extern CharSwitchWork *CharSwitch;
 
-/* The character-switch prompt's text pointer (config/symbols/main.txt: msg_6,
- * size 4), whose stored address is the string "Set lead character"; the
- * pointer itself is still part of this TU's assembler data. */
+/* The character-switch prompt's text pointer; its stored address is the string
+ * "Set lead character". */
 static char * msg_6[];
 
 /* The "T.Pts" panel title window_tex_load's string table holds. */
@@ -1112,7 +1084,7 @@ extern const unsigned char columnOpacityTable[];
  * attack words. */
 static unsigned char setSlotTbl[];
 
-/* xglRotTransPersN (VA 0x00229ab0): projects count points through the
+/* xglRotTransPersN: projects count points through the
  * optional matrix and the camera, writing four words per point. */
 void xglRotTransPersN(int *screen, Matrix4 *matrix, Vector4 *points, int count, int cameraId);
 
@@ -1121,18 +1093,15 @@ void xglRotTransPersN(int *screen, Matrix4 *matrix, Vector4 *points, int count, 
  * passes the address of one. */
 void endPrintDirectCircle(DirectCircle *circle);
 
-/* dataUnitOrgGet (ov01 VA 0x00a191c0), linked by the scaffold's
- * undefined_funcs_auto.txt placeholder name. */
+/* dataUnitOrgGet (ov01): the parameter record of one character. */
 CharParaData *func_A191C0(int chrNo);
 
-/* calcTotalParaMenu (ov01 VA 0x00a11108), linked by the scaffold's label for
- * that address. */
+/* calcTotalParaMenu (ov01): the recalculated parameter record of chrNo, and
+ * its attack and defense words through the two pointers. */
 CharParaData *func_00A11108(int chrNo, int *attack, int *defense);
 
-/* dataPlChaGet (ov01 VA 0x00a19210; see src/main/menu_skill.h and
- * src/main/menu_tec.c, which model this same per-character record under the
- * same scaffold label). Kept under the scaffold's undefined_funcs_auto.txt
- * placeholder name func_A19210 until ov01 recovers dataPlChaGet itself. */
+/* dataPlChaGet (ov01): the per-character point record of chrNo. See
+ * src/main/menu_skill.h and src/main/menu_tec.c, which model the same record. */
 CharPointData *func_A19210(int chrNo);
 int MenuParaNextPointGet(int chrNo, int statIndex, int count);
 /* main/party.c: non-zero while the character fights in the active party. */
@@ -1171,29 +1140,25 @@ int MenuSortCheck(int listIndex);
 /* Whether the weapon takes the bullet row of the weapon window as well. */
 int MenuBulletCheck2(int weapon, int chrNo);
 
-/* dataAccGet (ov01 VA 0x00a1a548), linked by the scaffold's
- * undefined_funcs_auto.txt placeholder name. */
+/* dataAccGet (ov01): the accessory record of one accessory id. */
 MenuAccessoryData *func_A1A548(int accessory);
 
 char *MenuParaNameGet2(int statIndex);
 
-/* WindowSPSet and WindowSPMain are not yet recovered
- * (main/e_battle_win_open.c, still assembler); both read only the window
- * pointer in $4 (WindowSPSet overwrites $5 and $6 with its own values at
- * 0x00283b88 before reading them), so the window geometry this state stores
- * stays in the argument registers across the call without being passed. */
+/* WindowSPSet and WindowSPMain (main/e_battle_win_open.c) take only the window
+ * pointer. WindowSPSet overwrites $5 and $6 before reading them, so the window
+ * geometry this state stores stays in the argument registers across the call
+ * without being passed. */
 void WindowSPSet(WindowSPCursor *window);
 
 void WindowSPMain(WindowSPCursor *window);
 
-/* CharListMake_Acc and CharListMake_Para are still assembler in this TU;
- * like CharListMake_Wpn they take no arguments. */
+/* CharListMake_Acc and CharListMake_Para take no arguments, like CharListMake_Wpn. */
 void CharListMake_Acc(void);
 
 void CharListMake_Para(void);
 
-/* dataWpnGet (ov01 VA 0x00a1a3d8), linked by the scaffold's
- * undefined_funcs_auto.txt placeholder name. */
+/* dataWpnGet (ov01): the weapon record of one weapon id. */
 MenuWeaponData *func_A1A3D8(int weapon);
 
 void xglFontDebugHex(int x, int y, int value, int digits);
@@ -1206,20 +1171,12 @@ void MenuWorkEndCheck(unsigned char *end);
 void MenuKeepSelectReset(void);
 int MenuCursorKeepCheck(void);
 int MenuSelectMove(int cursor, int count, int wrap);
-/*
- * Whether chrNo may hold the party leader slot in the current scenario:
- * every scenario locks the leader to character 3 except 159-160, which
- * additionally allows 1 or 5; any other character is denied (1). A scenario
- * outside every named range skips the character check entirely. The
- * eligible character then still needs to be an active attacker (1..7),
- * an attacker in the current party (2), and the actual leader (0 or 3).
- */
 int MenuCharLeaderMask(unsigned short chrNo);
 int MenuBulletCheck(int weapon, int bullet);
 void MenuModelCreate(void **model, int chrNo);
 void MenuModelExtFuncSet(void *model, MenuCharacterModelCallback func, void *argument);
 void ChangeTopLevel(int level);
-/* MenuParaUp (this TU, still assembler): adds one level of the parameter. */
+/* Adds one level of the parameter and spends its cost (defined below). */
 void MenuParaUp(int chrNo, int statIndex);
 
 void MenuCharCameraSet(void);
@@ -1247,14 +1204,14 @@ static const char *msg01_1[3];
  */
 static char * msg00_2_0036D8E8[3];
 
-/* The three row-label text pointers at original .data address 0x0036D900. */
+/* The three row-label text pointers. */
 static const char *msg00_4_0036D900[3];
 
 /* The text pointer of each of the eight stat labels, in the order the window
  * lays them out. */
 static const char *msg_5[8];
 
-/* Initialized data, in the original section order of each object (git HEAD 9cb54bc placement). */
+/* Initialized data, kept in the section order of the original object. */
 static unsigned char setSlotTbl[] = {
     0, 1, 0, 0, 1, 0, 0, 0
 };
@@ -1311,6 +1268,9 @@ static unsigned short MenuCharPartyReser[4];
  * weapon/accessory list (+0x504) and the parameter-up list (+0x1C3C). */
 static WindowSPCursor *CharWinSP[2];
 
+/* TairetuRot/TairetuPos are copied as two doublewords, but the original .bss is
+ * only 8-aligned, so their type is the 8-aligned DoublewordAlignedVector4 rather
+ * than AlignedVector4. */
 static DoublewordAlignedVector4 TairetuRot;
 
 static DoublewordAlignedVector4 TairetuPos;
@@ -1332,8 +1292,11 @@ static inline int MenuCharCameraViewGet(int state)
     return view;
 }
 
-/* The rate table starts one character row (8 halfwords) before the row slot
- * ParaDataBuf addresses, so character chrNo (1-based) reads row chrNo - 1. */
+/*
+ * The rate of one stat for character chrNo (1-based). The rate table starts one
+ * character row (8 halfwords) before the row slot ParaDataBuf addresses, so
+ * character chrNo reads row chrNo - 1.
+ */
 unsigned short MenuParaPtRateGet(int chrNo, int statIndex)
 {
     unsigned short *entry = ParaDataBuf + chrNo * 8 + ParaDataChangeTbl[statIndex] - 8;
@@ -1407,6 +1370,11 @@ unsigned short MenuParaUpMaxGet(int statIndex)
     return max;
 }
 
+/*
+ * The value statIndex of chrNo reaches after count more points: the stat is
+ * raised first (maxHp in steps of 10, maxEp in steps of 2), then the base and
+ * the rate are applied.
+ */
 int MenuParaNextPointGet(int chrNo, int statIndex, int count)
 {
     unsigned short base;
@@ -1506,6 +1474,12 @@ int MenuCharWeaponAttCheck(void) {
     return 0;
 }
 
+/*
+ * Returns 0 when chrNo may hold the party leader slot in the current scenario,
+ * else 1 when the scenario or the id denies it, 2 when chrNo is not an active
+ * attacker in the party, 3 otherwise. In most scenario ranges only character 3
+ * may lead; 159-160 also allow 1 and 5, and other scenarios skip the check.
+ */
 int MenuCharLeaderMask(unsigned short chrNo)
 {
     int scenario = MenuScenarioNo;
@@ -1532,6 +1506,7 @@ int MenuCharLeaderMask(unsigned short chrNo)
     return (PartyLeaderCheck(chrNo) == 0) ? 0 : 3;
 }
 
+/* Pixel width of the text as the category tabs draw it. */
 int MenuPasLengthGet(const char *text)
 {
     char message[64];
@@ -1575,11 +1550,9 @@ const char skillCommandLabel[8] = "/Skill";
 const char equipCommandLabel[8] = "/Equip";
 
 /*
- * The category-tab strip at the top of the character menu. MenuWork.character.state
- * selects which sub-screen currently owns the display; CharPasMain hides
- * its own strip (slides it fully off-screen) unless MenuWork.character.state falls in
- * its own range, and highlights the incoming tab during the handful of
- * transition states that carry a category index.
+ * Draws the category-tab strip at the top of the character menu. The strip
+ * slides off-screen unless MenuWork.character.state is one of the states that
+ * show it, and the tabs of the current category move to their targets.
  */
 void CharPasMain(void)
 {
@@ -1709,13 +1682,10 @@ void CharPasMain(void)
 }
 
 /*
- * What the equipment the character wears adds to the parameter
- * MenuWork.character.paraIndex selects: the recalculated record minus the stored one,
- * plus the weapon attack word of the character's weapon slot or the defense
- * word calcTotalParaMenu reports separately. 0 for no character and for any
- * parameter outside the eight the window lists. The halfwords of the record
- * are read signed here (lh at 0x00291ee8 onwards), so the difference of the
- * three that CharParaData holds unsigned is taken on their signed value.
+ * The part of the parameter MenuWork.character.paraIndex that the character's
+ * equipment adds: the recalculated record minus the stored one (halfwords read
+ * signed), plus the weapon attack or defense word from calcTotalParaMenu. 0 for
+ * no character and for any parameter outside the eight the window lists.
  */
 int MenuCharEquipCalcPointGet(int chrNo)
 {
@@ -1770,6 +1740,11 @@ int MenuCharEquipCalcPointGet(int chrNo)
     return points;
 }
 
+/*
+ * Draws the help line at the bottom of the character menu: the first frame
+ * builds the info window, and every frame then writes the help text for the
+ * current MenuWork.character.state into its message buffer.
+ */
 void CharInfoMain(void)
 {
     char *menuHelp[3] = {
@@ -1845,6 +1820,7 @@ void CharInfoMain(void)
     short slideTarget;
     CharParaData *para;
 
+    /* Builds the window on the first frame, then writes the help line for the menu state. */
     switch (work->state) {
     case CHAR_INFO_SETUP:
         work->color = 0x00FFFFF0;
@@ -2086,6 +2062,11 @@ const char equipUnequipUsePtsText[32] = "\014\200\200\200Equip\nUnequip\nUse T.P
 
 const char confirmPromptText[24] = " Is this okay\?";
 
+/*
+ * Runs the category screen's five equip-category icons. State 0 creates the
+ * sprites and resets the counters; state 2 advances the pulse and flash and
+ * places the icons every frame.
+ */
 void CharCategoryMain(void)
 {
     CharCategoryWork *work = CharCategory;
@@ -2174,6 +2155,7 @@ void CharCategoryMain(void)
         }
         work->tickCounter++;
 
+        /* Icons 0 and 1 sit on the arc; icons 2..4 form a row, the accessoryList one brightened. */
         {
             short rowY = rowBase + 83;
 
@@ -2226,6 +2208,10 @@ void CharCategoryMain(void)
     }
 }
 
+/*
+ * Runs the character menu's command windows: state 0 builds them, and state 2
+ * slides each one to the position the current menu state asks for.
+ */
 static void CharMenuMain(void)
 {
     CharMenuWork *work = CharMenu;
@@ -2319,6 +2305,11 @@ static void CharMenuMain(void)
     }
 }
 
+/*
+ * Draws the point bar with the T.Pts, E.Pts and S.Pts ribbons: START builds
+ * them, and SLIDE moves them in or out and shows the points of the character
+ * MenuWork.character.chrNo.
+ */
 void CharExMain(void)
 {
     CharExWork *ex = CharEx;
@@ -2385,6 +2376,11 @@ void CharExMain(void)
     }
 }
 
+/*
+ * Draws the L1 and R1 hint sprites: state 0 builds them; state 2 slides them in
+ * on the two pages that show the hints and steps a pressed side's offset back
+ * to zero.
+ */
 void CharL1R1Main(void)
 {
     CharL1R1Work *self = CharL1R1;
@@ -2455,6 +2451,12 @@ void CharL1R1Main(void)
     }
 }
 
+/*
+ * Draws the character status windows. BUILD creates the party and reserve
+ * windows and the two swap cursors. RUN moves the windows to the layout of the
+ * current menu state (party list, parameter or equipment columns, reserve swap)
+ * and draws them.
+ */
 void CharStatusMain(void)
 {
     CharStatusBlock *block = CharStatus;
@@ -2540,6 +2542,7 @@ void CharStatusMain(void)
                 status->window[3 + i].state = 3;
             }
         }
+        /* cursor[1] marks the reserve slot; its state is set through the list node. */
         for (i = 0; i < 2; i++) {
             eCursolSet(&status->cursor[i], 0);
             if (i == 1) {
@@ -2819,6 +2822,11 @@ void CharStatusMain(void)
     }
 }
 
+/*
+ * Draws the parameter window: state 0 builds it, and state 2 slides it in or out
+ * for the parameter screens, then shows each stat's current and recalculated
+ * value.
+ */
 void CharParameterMain(void)
 {
     CharParameterWork *work = CharParameter;
@@ -2961,11 +2969,10 @@ void CharParameterMain(void)
                     work->tag[i].y = work->window.y + i % rows * 20 + 3;
                     eTagFontMain(&work->tag[i]);
                 }
-                /* The four battle parameters are stored unsigned (lhu in
-                 * MenuParaPtNowGet and MenuCharParaSet) but the pair of
-                 * halfwords eNumberMain shows is read signed here (the eight
-                 * lh at 0x00294cb0..0x00294cf8), so a value below its base
-                 * shows as a negative difference. */
+                /* The stats are stored unsigned (MenuParaPtNowGet and MenuCharParaSet read
+                 * them that way), but eNumberMain reads each halfword pair
+                 * signed, so a value below its base shows as a negative
+                 * difference. */
                 work->number[0].value = paraUnit[0].attack +
                                         ((paraUnit[1].attack + UpPara[2]) << 16);
                 work->number[1].value = paraUnit[0].phyDefense +
@@ -2980,6 +2987,7 @@ void CharParameterMain(void)
                                         ((paraUnit[1].stat7 + UpPara[7]) << 16);
                 work->number[6].value = paraUnit[0].stat8 + (paraUnit[1].stat8 << 16);
                 work->number[7].value = paraUnit[0].stat9 + (paraUnit[1].stat9 << 16);
+                /* Each arrow compares the current and the recalculated halfword. */
                 for (i = 0; i < 7; i++) {
                     short shown[2];
 
@@ -3025,6 +3033,11 @@ void CharParameterMain(void)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const WeaponIconTable charWeaponIconTable = {{0x0307, 0x0308, 0x032C, 0, 0x0308, 0x0309, 0x030A}};
 
+/*
+ * Draws the equipment screen's weapon window, with the weapon and bullet lines,
+ * and its accessory window with three rows. State 0 builds both windows and the
+ * cursor; state 2 moves them and places the lines of the shown character.
+ */
 void CharWeaponMain(void)
 {
     CharWeaponWork *work = CharWeapon;
@@ -3172,6 +3185,7 @@ void CharWeaponMain(void)
     }
 }
 
+/* Fills the weapon list of the equipment screen for the shown character. */
 void CharListMake_Wpn(void)
 {
     WindowSPCursor *window = &CharList->weapon;
@@ -3458,6 +3472,11 @@ void CharSwitchMain(void)
     }
 }
 
+/*
+ * Draws the T.Pts panel: state 0 builds the window and its slots; every frame
+ * the panel slides to the width of the menu state and shows the character's
+ * points, the cost of the pending levels and the points left.
+ */
 void CharPointMain(void)
 {
     CharPointWork *work = CharPoint;
@@ -3511,8 +3530,7 @@ void CharPointMain(void)
     }
 
     {
-        /* The menu state drives the panel's target width; it is compared as
-         * a signed int (slti), so it is read into one. */
+        /* The menu state drives the panel's target width. */
         int menuState = MenuWork.character.state;
         short targetWidth = 0x210;
         CharPointData *record;
@@ -3574,6 +3592,10 @@ const char setLeadCharacterText[24] = "\241\247Set lead character";
 /* Text: \x01Current */
 const char currentText[24] = "\001Current";
 
+/*
+ * Resets the menu camera to the view of the current party mode and seeds the
+ * formation pose (TairetuRot and TairetuPos).
+ */
 void MenuCharCameraSet(void)
 {
     MenuCameraSetPair position = { .storage = { .representation = { .vector = { { .x = 0.44999998807907104f, .y = 0.89999997615814209f, .z = 2.2999999523162842f, .w = 1.0f }, { .x = -1.5f, .y = 0.80000001192092896f, .z = 6.5f, .w = 1.0f } } } } };
@@ -3613,6 +3635,11 @@ const MenuCameraPair formationCameraRotationTable = { .vector = { { .x = -0.7853
 
 const MenuCameraPair formationCameraPositionTable = { .vector = { { .x = -1.7000000476837158f, .y = -0.20000000298023224f, .z = 1.5f, .w = 0.0f }, { .x = -1.7999999523162842f, .y = -0.30000001192092896f, .z = 1.0f, .w = 0.0f } } };
 
+/*
+ * Moves the menu camera one frame toward the view of MenuWork.character.state:
+ * the single-character view in party mode 0, otherwise the formation view. The
+ * camera eases toward the table entries.
+ */
 void MenuCharCameraMove(void)
 {
     MenuCameraPair singlePositions;
@@ -3724,6 +3751,11 @@ void MenuCharCameraMove(void)
     }
 }
 
+/*
+ * Model task of a menu character: it opens the model, rebuilds the weapon when
+ * weaponChanged is set, fades the model out when the screen exits, and eases its
+ * offset, rotation and scale toward the pose of the current menu state.
+ */
 void MenuCharModelMain(MenuModelUnit *unit, void *argument)
 {
     AlignedVector4 position;
@@ -3834,6 +3866,11 @@ void MenuCharModelMain(MenuModelUnit *unit, void *argument)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const MenuCharacterPositions battleModelPositionTable = { .vector = { { .x = 1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = 0.60000002384185791f, .w = 1.0f }, { .x = 1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = 0.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f }, { .x = -1.0f, .y = 0.0f, .z = -0.60000002384185791f, .w = 1.0f } } };
 
+/*
+ * Model task of a formation character: it eases the model toward its slot in the
+ * battle position table, or toward the swapped position while a formation
+ * exchange runs.
+ */
 void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
 {
     Actor *actor = unit->actor;
@@ -3907,6 +3944,7 @@ void MenuBattleModelMain(MenuModelUnit *unit, void *argument)
             MenuWork.character.swapOutId = 0;
             unit->extFuncFlag = 30;
         }
+        /* The target is the formation slot, or the slot a placing or exchanging character moves to. */
         target = &positions.vector[formationSlot - 1];
         if (MenuWork.character.state != CHAR_STATE_FORMATION_EXCHANGE_RUN) {
             if (MenuWork.character.state == CHAR_STATE_FORMATION_PLACE&& unit->modelId == MenuWork.character.chrNo) {
@@ -3949,6 +3987,10 @@ const char paraUpBinPath[32] = "data\\endou\\para\\paraup.bin";
 /* Text: {reset}charactor */
 const char charactorText[16] = "\013charactor";
 
+/*
+ * The line-field task of the formation screen: it grows and fades its lines in
+ * and out, and removes itself when the menu ends or in the single-character view.
+ */
 static int tskCharLineField(XglTaskPrefix *task)
 {
     CharLineFieldTask *line = (CharLineFieldTask *)task;
@@ -3968,6 +4010,7 @@ static int tskCharLineField(XglTaskPrefix *task)
     if (MenuWork.character.state == CHAR_STATE_EXIT_RUN) {
         line->state = 99;
     }
+    /* 10 grows the lines in, 20 holds them, 30 and 99 shrink them out (99 removes the task). */
     switch (line->state) {
     case 0:
         initialScale = lineFieldInitialScaleVector;
@@ -4102,6 +4145,11 @@ static int tskCharLineField(XglTaskPrefix *task)
     }
 }
 
+/*
+ * The spotlight task of the formation screen: it fades a circle in on the
+ * formation slot of the chosen character, eases it toward that slot, and draws
+ * it while visible.
+ */
 static void tskCharSpotLight(CharSpotLightTask *light)
 {
     SpotLightTable positions = spotLightPositionTable;
@@ -4179,6 +4227,12 @@ static void tskCharSpotLight(CharSpotLightTask *light)
     }
 }
 
+/*
+ * Recalculates the parameter record of chrNo into paraUnit[1], and into
+ * paraUnit[0] too unless previewOnly is set. An hp or ep above the new maximum
+ * is kept: the preview branch always, the stored one only when an accessory
+ * keeps it (ACCESSORY_KEEP_HP, ACCESSORY_KEEP_EP).
+ */
 void MenuCharParaSet(int chrNo, int previewOnly)
 {
     CharParaData *org;
@@ -4422,8 +4476,7 @@ void MenuCharactor(int partyMode)
                 /* L1/R1 step to the next party member, skipping the guest. The
                  * step is re-entered through its own head: written as a
                  * do-while, the whole tail of the function is allocated
-                 * differently from 0x002980c4 on and grows by one
-                 * instruction. */
+                 * differently and grows by one instruction. */
             retry:
                 xglSoundEffectNormalID(SE_CURSOR, 0);
                 if (PadData.pressed == PAD_L1) {
@@ -5155,7 +5208,7 @@ void MenuCharactor(int partyMode)
             if (PadData.pressed & PAD_CIRCLE) {
                 /* The slot's byte offset in the party state (4-byte slots
                  * from +0x30) is computed as an unsigned integer before it
-                 * is added to the pointer (0x00299a18..0x00299a24). */
+                 * is added to the pointer. */
                 PartyAttackPosition *slot = (PartyAttackPosition *)((unsigned char *)PartyDataGet()
                     + (unsigned int)(MenuWork.character.partyCursor * 4 + 0x30));
                 short inId = MenuCharPartyReser[MenuWork.character.reserveCursor];
@@ -5257,8 +5310,6 @@ void MenuCharactor(int partyMode)
 }
 
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
-/* Original LOCAL NOBITS storage, 16 bytes each; the existing union keeps
- * the named Vector4 view and the compiler's aggregate-copy view together. */
 const char MenuAgwsAssignPilotCommandLabel[16] = "/Assign Pilot";
 
 const char MenuAgwsEngineUnitCommandLabel[16] = "/Engine Unit";

@@ -11,16 +11,15 @@
 #include "ov10/card_fread.h"
 #include "ov10/ccu_038_exec_sub.h"
 
-/* Frames the move and set phases wait after their AI handler finishes
- * (`addiu $3,$0,0xF` and `sb` at 0x00a3260c..0x00a32610 and 0x00a326b8..0x00a326c0). */
+/* Frames the move and set phases wait after their AI handler finishes. */
 #define CARD_ENEMY_WAIT_FRAMES 15
 
-/* aiPhase values of CardEnemyMove (switch at 0x00a3259c..0x00a325c0). */
+/* aiPhase values of CardEnemyMove. */
 #define CARD_ENEMY_MOVE_START 0     /* shunt the positions, then fall into the search */
 #define CARD_ENEMY_MOVE_SEARCH 1    /* run CC_Kara_MoveFase until it finishes */
 #define CARD_ENEMY_MOVE_WAIT 2      /* count the wait down, then end the turn */
 
-/* aiPhase values of CardEnemySet (switch at 0x00a32688..0x00a32690). */
+/* aiPhase values of CardEnemySet. */
 #define CARD_ENEMY_SET_CHOOSE 0     /* run CC_Kara_SetFase until it finishes */
 #define CARD_ENEMY_SET_WAIT 1       /* count the wait down, then clear the flags and end the turn */
 
@@ -51,26 +50,26 @@
  * standby card (CCU061ExecSub) and Allen moves a battlefield card back to the standby area (CCC07ExecSub).
  */
 
-/* Investigation compares at most this many cards from the end of the draw pile
- * (`slti $2,$21,6` at 0x00a338c4, counter starts at 1); Revive DX takes at most
- * this many cards from the junk pile into the hand (`slti $2,$11,2` at 0x00a33830). */
+/* Investigation compares at most this many cards from the end of the draw pile;
+ * Revive DX takes at most this many cards from the junk pile into the hand. */
 #define CARD_DRAW_WINDOW 5
 #define CARD_JUNK_PICKUP_MAX 2
 
-/* An Lv10 card's id is its base card's id plus 7 (cardId - 7 at 0x00a33d50, 0x00a33f6c, 0x00a33fb0). */
+/* An Lv10 card's id is its base card's id plus 7. */
 #define CARD_LV10_ID_OFFSET 7
 
-/* Results; the callers (CC_Kara_*, 0x00a37618 / 0x00a37b4c) only test for zero. */
+/* Results. The callers (CC_Kara_*) only test for zero. */
 #define LV10_SET_OK 0               /* the `result = 0` initializer at function entry */
-#define LV10_SET_NO_BASE_CARD (-1)  /* not an Lv10 card, or its base card is not on the board; `li t1,-1` at 0x00a33d54 */
-#define LV10_SET_NO_POINTS 12       /* same code as CGPDispoSub0's "needs more play points"; `li t1,12` at 0x00a33d48 */
-#define LV10_SET_BASE_WAITING 9     /* the base card (id - 7) sits in a disposal slot; `li t1,9` at 0x00a33d68 */
-#define LV10_SET_ALREADY_WAITING 5  /* the Lv10 card itself sits in a disposal slot; `li t1,5` at 0x00a33d74 */
+#define LV10_SET_NO_BASE_CARD (-1)  /* not an Lv10 card, or its base card is not on the board */
+#define LV10_SET_NO_POINTS 12       /* same code as CGPDispoSub0's "needs more play points" */
+#define LV10_SET_BASE_WAITING 9     /* the base card (id - 7) sits in a disposal slot */
+#define LV10_SET_ALREADY_WAITING 5  /* the Lv10 card itself sits in a disposal slot */
 
 /* Functions of this TU called before their definition. */
 int CGPEnemyExecOperation(int side, CardGameWork *work, int operationIndex,
                           CGPBoardArea *arg);
 
+/* Loads deckdata.dat and copies its CPU deck entries into the enemy deck tables. */
 void InitCpuDeck(void) {
     int i;
 
@@ -83,8 +82,12 @@ void InitCpuDeck(void) {
     }
 }
 
+/*
+ * Runs the computer player's move phase: shunts the battle positions, runs
+ * CC_Kara_MoveFase until it finishes, then waits before ending the turn.
+ */
 void CardEnemyMove(int side, CardGameWork *work) {
-    /* Frames left in the wait (signed byte, `lb` at 0x00a32624, `sb` at 0x00a32610). */
+    /* Frames left in the wait (signed byte). */
     static s8 Timer;
     CardPlaySide *ownSide = side == 0 ? &work->player : &work->enemy;
 
@@ -112,16 +115,20 @@ void CardEnemyMove(int side, CardGameWork *work) {
     }
 }
 
+/*
+ * Runs the computer player's set phase: chooses the set with CC_Kara_SetFase,
+ * then waits before ending the turn. Unless exactly one battle is in play, the
+ * ALBEDO cards on the board lose their flag first.
+ */
 void CardEnemySet(int side, CardGameWork *work) {
-    /* Frames left in the wait (signed byte, `lb` at 0x00a326d4, `sb` at 0x00a326c0). */
+    /* Frames left in the wait (signed byte). */
     static s8 Timer;
     CardPlaySide *ownSide = side == 0 ? &work->player : &work->enemy;
     int i;
     /*
      * The value the battle count is compared with. The original tests it against
-     * a register that already holds 1 (`beq $2,$17` at 0x00a326f8, $17 being the
-     * phase in this arm); the literal 1 in the comparison changes the entry block
-     * (0x00a32664..0x00a3266c) and the branch at 0x00a32692, a local keeps it.
+     * a register that already holds 1; the literal 1 in the comparison would
+     * change the entry block and the branch, so a local keeps it.
      */
     int singleBattleCnt = 1;
 
@@ -160,6 +167,7 @@ s32 CardEnemyCommandRequest(int side, CardGameWork *work) {
     return CC_Kara_CommRequest(side, work);
 }
 
+/* Plays the playable operation cards in the side's operation slots, each with its own effect. Returns 1. */
 int CardEnemyOperationPlay(int side, CardGameWork *work) {
     CardPlaySide *ownSide;
     CardPlaySide *oppSide;
@@ -234,6 +242,11 @@ s32 CardEnemy1stAnswer(int side, CardGameWork *work) {
     return CC_Kara_1stAnswer(side, work);
 }
 
+/*
+ * Answers with Miyuki's Email or Song from the hand when the side's draw pile
+ * has at least two cards and the card's condition allows it. Returns 1 when a
+ * card was answered, 0 otherwise.
+ */
 int CardEnemyAnswer(int side, CardGameWork *work) {
     CardPlaySide *ownSide;
     int handCount;
@@ -264,6 +277,11 @@ int CardEnemyAnswer(int side, CardGameWork *work) {
     return 0;
 }
 
+/*
+ * Runs one step of the AI's answer card cardId. On step 0 the card finds its
+ * target and sets its effect message; on step 1 it applies the effect. Returns
+ * 1 when the answer is finished, 0 while it is still running.
+ */
 int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
     CardPlaySide *ownSide;
     CardPlaySide *oppSide;
@@ -300,6 +318,7 @@ int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
         ownDisposalZone = CARD_ZONE_SIDE1_DISPOSAL;
         oppBattleZone = CARD_ZONE_SIDE0_BATTLE;
     }
+    /* One case per answer character; each case's step 0 looks for a target and step 1 acts on it. */
     switch (cardId) {
     case CARD_ID_VX_9000:
         switch (work->command.step) {
@@ -504,7 +523,7 @@ int CardEnemyAnswerCardxx(int side, CardGameWork *work, s16 cardId) {
     return result;
 }
 
-/* The battle or disposal stack a cursor names; zones 6 and 2 are discard zones.
+/* The battle or disposal stack a cursor names; zones 6 and 2 are the disposal zones.
  * Kept after CardEnemyAnswerCardxx: an earlier place renumbers the local labels. */
 static inline CardLayerStack *CardEnemyTargetStack(CardPlaySide *side, CardCursorPosition *target) {
     if (target->zone == CARD_ZONE_SIDE0_DISPOSAL || target->zone == CARD_ZONE_SIDE1_DISPOSAL) {
@@ -514,10 +533,11 @@ static inline CardLayerStack *CardEnemyTargetStack(CardPlaySide *side, CardCurso
 }
 
 /*
- * The command cards CGPEnemyExecCommand plays for the AI are dispatched through the jump table at 0x00a4f7b0:
- * 37 entries for the card ids 83 (Cure-All) to 119 (Break Through) (`addiu $3,$3,-0x53`, `sltiu $2,$3,0x25` at
- * 0x00a33280/0x00a33284); the ids without a case share the table's default target 0x00a33938 and play through the generic
- * handler. Recycler and Destiny (0x00a3330c) end the turn with no effect applied here.
+ * Applies the command card the side played to the given targets. Command card
+ * ids 83 (Cure-All) to 119 (Break Through) are dispatched by a switch; ids
+ * without a case of their own go to the default case, which plays the card
+ * through CardPlayCommandPlay. Recycler and Destiny end the turn with no effect
+ * applied here.
  */
 int CGPEnemyExecCommand(int side, CardGameWork *work, CardCursorPosition *targets, int count) {
     CardPlaySide *ownSide;
@@ -535,8 +555,8 @@ int CGPEnemyExecCommand(int side, CardGameWork *work, CardCursorPosition *target
         opponentSide = 0;
     }
     /*
-     * The command card id is the halfword at +0x198 of the side (`lh` at 0x00a3327c), the
-     * playedCard member of the CardBoardSlot union (battle[0]); the other slots never use it.
+     * The command card id is the playedCard member of the CardBoardSlot union in
+     * battle[0] (at +0x198 of the side); the other slots never use it.
      */
     switch (ownSide->battle[0].cmdView.playedCard) {
     case CARD_ID_CURE_ALL:
@@ -760,6 +780,11 @@ int CGPEnemyExecCommand(int side, CardGameWork *work, CardCursorPosition *target
     return result;
 }
 
+/*
+ * Applies the operation card at operationIndex of the side; arg, when given,
+ * names its target. A card that took effect is discarded. Returns -1 when the
+ * card took effect, 0 otherwise.
+ */
 int CGPEnemyExecOperation(int side, CardGameWork *work, int operationIndex,
                           CGPBoardArea *arg) {
     CardPlaySide *ownSide;
@@ -826,10 +851,8 @@ int CGPEnemyExecOperation(int side, CardGameWork *work, int operationIndex,
 }
 
 /*
- * Cards CGPEnemyLv10SetSub accepts: the hand card has to be one of the Lv 10 characters (`beq v1,t0` with
- * t0 = 7 at 0x00a33ca8, `slti v0,v1,7` / `,14` / `,9` at 0x00a33cac/0x00a33cb8/0x00a33cc4,
- * `li v0,9` at 0x00a33cd0, `slti v0,v1,10` at 0x00a33cd8, `beq v1,t0` at 0x00a33ce4). Each is
- * the Lv 1 character's id + CARD_LV10_ID_OFFSET.
+ * Cards CGPEnemyLv10SetSub accepts: the Lv 10 characters, each the Lv 1
+ * character's id + CARD_LV10_ID_OFFSET.
  *
  * Plays the Lv10 version of a character from the hand over its base card on the board: the base
  * card's stack is cleared, the new card takes its place keeping the damage already taken, slides
@@ -837,11 +860,11 @@ int CGPEnemyExecOperation(int side, CardGameWork *work, int operationIndex,
  */
 int CGPEnemyLv10SetSub(int side, CardGameWork *work, int index) {
     CardPlaySide *ownSide;
-    CardCursorPosition position;  /* zone, hand index and card id of the card being played; never read back */
+    CardCursorPosition position;  /* zone, hand index and card id of the card being played */
     int result = 0;
     int i;
 
-    position.zone = CARD_ZONE_SIDE0_BATTLE;  /* `sh` at 0x00a33c78; side 1 at 0x00a33c84 */
+    position.zone = CARD_ZONE_SIDE0_BATTLE;
     ownSide = &work->player;
     if (side != 0) {
         position.zone = CARD_ZONE_SIDE1_BATTLE;
@@ -877,7 +900,7 @@ int CGPEnemyLv10SetSub(int side, CardGameWork *work, int index) {
                     result = LV10_SET_NO_BASE_CARD;
                     for (i = 0; i < CARD_BOARD_SLOTS; i++) {
                         /* Declared inside the body so the loop optimiser leaves the loop alone
-                         * and the subtraction stays in each iteration (0x00a33f6c). */
+                         * and the subtraction stays in each iteration. */
                         int baseCardId = ownSide->hand.cards[index] - CARD_LV10_ID_OFFSET;
 
                         if (baseCardId == ownSide->disposal[i].battle.layers[0].cardId) {
@@ -949,10 +972,9 @@ void CardEnemyComm(int side, CardGameWork *work) {
 }
 
 /*
- * Lv 10 Shion is the AI's search target here: the same draw-to-hand/CleanYama/
- * ShuffleYama sequence, keyed off the same card id, is already accepted for
- * the manual case in ccu_038_exec_sub.c (CCU038ExecSub step 4.3,
- * `ownSide->deck[NowNo_32] == 7`).
+ * Lv 10 Shion is the AI's search target here. The same draw-to-hand, CleanYama
+ * and ShuffleYama sequence, keyed off the same card id, is used by the manual
+ * case in ccu_038_exec_sub.c (CCU038ExecSub step 4.3, `ownSide->deck[NowNo_32] == 7`).
  */
 void CardEnemyAnswerSionSearch(int side, CardGameWork *work) {
     CardPlaySide *ownSide = side == 0 ? &work->player : &work->enemy;
@@ -970,6 +992,10 @@ void CardEnemyAnswerSionSearch(int side, CardGameWork *work) {
     }
 }
 
+/*
+ * Runs CC_Kara_EndFase once the hand holds CARD_ENEMY_END_HAND_COUNT cards, and
+ * ends the turn when it returns 0.
+ */
 void CardEnemyEnd(int side, CardGameWork *work) {
     int endFaseResult = 1;
 

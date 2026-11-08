@@ -2,9 +2,8 @@
 #include "thread_2.h"
 
 /*
- * Java_xeno_vm_Thread_create__ (main VA 0x002f6550, 52 bytes, GLOBAL
- * binding). Allocates a script VM thread (kind 4, 4 stack words, 0x40
- * frame words) and writes its handle back through the result pointer.
+ * Allocates a script VM thread (kind 4, 4 stack words, 0x40 frame words) and writes its handle
+ * back through the result pointer.
  */
 void Java_xeno_vm_Thread_create__(JThread *thread, void *arguments, JThread **result)
 {
@@ -12,11 +11,8 @@ void Java_xeno_vm_Thread_create__(JThread *thread, void *arguments, JThread **re
 }
 
 /*
- * Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_
- * (main VA 0x002f6588, 120 bytes, GLOBAL binding). Resolves the named
- * void-returning method on the target object's class and stores it, the
- * target object and the default reset hook (JTHREAD_default) into this
- * Thread's own native handle.
+ * Stores the target object, the named void-returning method looked up on its class, and the
+ * default reset hook (JTHREAD_default) in the thread's native handle.
  */
 void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_(
     JThread *thread, Thread2SetTargetArguments *arguments)
@@ -38,11 +34,7 @@ void Java_xeno_vm_Thread_setTarget__Ljava_lang_Object_Ljava_lang_String_(
     handle->reset = JTHREAD_default;
 }
 
-/*
- * Java_xeno_vm_Thread_start__ (main VA 0x002f6600, 52 bytes, GLOBAL
- * binding). Resets the thread's native handle and sets its start-pending
- * bit (0x10).
- */
+/* Resets the thread's native handle and sets its runnable flag (0x10). */
 void Java_xeno_vm_Thread_start__(JThread *thread, JThread **arguments)
 {
     JThread *handle;
@@ -52,10 +44,7 @@ void Java_xeno_vm_Thread_start__(JThread *thread, JThread **arguments)
     handle->flags |= JTHREAD_FLAG_RUNNABLE;
 }
 
-/*
- * Java_xeno_vm_Thread_stop__ (main VA 0x002f6638, 24 bytes, GLOBAL
- * binding). Clears the thread's start-pending bit (0x10).
- */
+/* Clears the thread's runnable flag (0x10). */
 void Java_xeno_vm_Thread_stop__(JThread *thread, JThread **arguments)
 {
     JThread *handle;

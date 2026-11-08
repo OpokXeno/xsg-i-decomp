@@ -17,9 +17,10 @@ const char shotEffectSourcePath[] = "../rg_shot_effect.euc.c";
 const char shotEffectAssertShotEffNotNil[] = "pShotEff != NIL";
 
 
-/* The one evidenced RgDispModelSetMode mode this TU passes. */
+/* RgDispModelSetMode mode that RgShotEffectSetAddAlpha selects. */
 #define RG_DISP_MODEL_MODE_ADD_ALPHA 4
 
+/* Sets a shot effect to its defaults: identity matrix, zero points, no models or effects, mid-grey line. */
 static void _InitEffect(RgShotEffect *pEff)
 {
     if (pEff == 0) {
@@ -84,6 +85,7 @@ void RgShotEffectStopAlive(RgShotEffect *pEff, float time)
     }
 }
 
+/* Replaces the effect's display model with one built from the shot model data and variant. */
 void RgShotEffectSetModel(RgShotEffect *pEff, const char *variant)
 {
     RgFileSysData *shotMdl;
@@ -101,6 +103,7 @@ void RgShotEffectSetModel(RgShotEffect *pEff, const char *variant)
     }
 }
 
+/* Creates the particle effect for the named particle data, when the environment has any. */
 void RgShotEffectSetParticle(RgShotEffect *pEff, char *name)
 {
     RgParticleEffectEssence essences[RG_PARTICLE_SHOT_MAX];
@@ -132,6 +135,7 @@ RgParticleEffect *RgShotEffectGetPtclEffect(RgShotEffect *pEff)
     return pEff->particleEffect;
 }
 
+/* Sets the line texture from the environment's picture set, unless name is empty. */
 void RgShotEffectSetTexLine(RgShotEffect *pEff, const char *name)
 {
     RgBxx *bxx;
@@ -163,6 +167,11 @@ void RgShotEffectSetTexLineModelColor(RgShotEffect *pEff, const XrgPaint2DRGBA *
                          : : "r"(color), "r"(&pEff->texLineModelColor) : "memory");
 }
 
+/*
+ * Sets the shot's start and end points and orients its matrix along the shot
+ * direction (+X when the points coincide). The particle emitter sits at the end
+ * point with its Y and Z axes flipped when shoot-reverse is set, else at the start point.
+ */
 void RgShotEffectSetPos(RgShotEffect *pEff, RgVector startPos, RgVector endPos)
 {
     RgVector direction;
@@ -242,6 +251,7 @@ void RgShotEffectSetAddAlpha(RgShotEffect *pEff)
     }
 }
 
+/* Advances the particle effect and releases it once it is no longer alive. */
 void RgShotEffectPassTime(RgShotEffect *pEff, float time)
 {
     RgParticleEffect *ptclEffect;
@@ -259,6 +269,7 @@ void RgShotEffectPassTime(RgShotEffect *pEff, float time)
     }
 }
 
+/* Draws the shot: its display model, its particle effect and the line texture from start to end. */
 void RgShotEffectDisp(RgShotEffect *pEff)
 {
     RgMatrix matrix;

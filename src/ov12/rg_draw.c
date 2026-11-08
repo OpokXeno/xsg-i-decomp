@@ -18,7 +18,7 @@
 
 /* Requests are drawn in priority order 0..RG_DRAW_PRIORITY_COUNT - 1. */
 #define RG_DRAW_PRIORITY_COUNT 7
-/* RgDraw.m_FadeCounter: RgDrawFadeIn counts it down by this step to the limit. */
+/* RgDraw.m_FadeCounter: RgDrawFadeIn subtracts this step on each pass of its loop, which runs while the counter is below RG_DRAW_FADE_LIMIT. */
 #define RG_DRAW_FADE_STEP 20
 #define RG_DRAW_FADE_LIMIT 50
 
@@ -55,9 +55,8 @@
 #define RG_DRAW_RIGHT_CLIPPING_MODE 8
 
 /*
- * The 0x20-byte VIF1 packet object sceVif1PkInit fills on the stack.
- * Partial view of XglPacket (measured: XglPacket is 0x28 bytes and the
- * frame of _FadeShadow needs 0x20).
+ * The 0x20-byte VIF1 packet object sceVif1PkInit fills on the stack. XglPacket
+ * is 0x28 bytes; this view covers the 0x20 bytes that the _FadeShadow frame uses.
  */
 typedef struct XglPacketSdkView {
     unsigned char opaque[0x20];
@@ -98,6 +97,10 @@ static void _DoubleScreenStudio(RgDraw *pDraw);
 static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect);
 static void _DrawMain(RgDraw *pDraw);
 static void _DrawReqTerminate(RgDraw *pDraw);
+/*
+ * Fixed GIF tag at ov12:0x00a54ac0: EOP set, NREG 1, REGS 0xE (the A+D
+ * address+data register code). _openVifGifAD passes it to sceVif1PkOpenGifTag.
+ */
 const GifTag drawDirectAdGifTag = {
     .part = {0x1000000000008000ULL, 0xE}
 };
@@ -132,11 +135,7 @@ const char drawAssertObjectAndHandlerNotNil[40] = "pObject != NIL && pHandler !=
 const char drawUnknownDrawIdFormat[24] = "unknown draw id %d";
 
 
-/*
- * ov12:0x00a54ac0 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
- * address+data register code), the constant _openVifGifAD passes to
- * sceVif1PkOpenGifTag.
- */
+/* Opens a direct VIF1 block whose GIF tag is built from prim, nreg and regs. */
 static void _openVifGif(XglPacket *packet, unsigned int prim,
                         unsigned int nreg, u64 regs)
 {
@@ -168,6 +167,7 @@ static void _closeVifGif(XglPacket *pPacket)
     sceVif1PkCloseDirectHLCode(pPacket);
 }
 
+/* Sets the ambient colour of the current studio light to white. */
 static void _SetGlobalLight(void)
 {
     RgLight *globalLight;
@@ -210,6 +210,7 @@ static void _CopyFog(RgFog *pDst, RgFog *pSrc)
     pDst->color[2] = pSrc->color[2];
 }
 
+/* Sets the view to identity matrices, no projection or clipping mode, and the full screen rect. */
 static void _InitRgDrawView(RgDrawView *pView, RgDrawStudio *pParentStudio)
 {
     if (pView == 0) {
@@ -258,6 +259,7 @@ static void _DisposeRgDrawView(RgDrawView *pView)
     RgHeapFree(InstanceOfRgHeap(), pView, drawSourcePath, 207);
 }
 
+/* Stores the fog and screen index. Only a screen studio gets a view; the global studio has none. */
 static void _InitRgDrawStudio(RgDrawStudio *pStudio, int screenIndex,
                               RgFog *pFog)
 {
@@ -350,13 +352,13 @@ static void _ClearStudioList(RgDraw *pDraw)
     pDraw->m_ActiveStudioMask = 0;
 }
 
-/*
- * ov12:0x00a50080 is a fixed camera window rectangle (config/symbols/ov12.txt
- * s_aView_0, size 0x10), the constant _FullScreenStudio passes to
- * xglCameraSetWindow for the single full-screen studio.
- */
+/* Camera window of the single full-screen studio, passed to xglCameraSetWindow. */
 static RgRect s_aView_0 = {0, 0, 512, 448};
 
+/*
+ * Switches the draw state to one full-screen studio on screen 0, with the
+ * full-screen camera window and the model sub-window settings.
+ */
 static void _FullScreenStudio(RgDraw *pDraw)
 {
     RgDrawStudio *pStudio;
@@ -379,6 +381,10 @@ static void _FullScreenStudio(RgDraw *pDraw)
     nmlModelUseSubWindow(3, 0);
 }
 
+/*
+ * Writes the rectangle of screenIndex under splitMode to pRect. Returns 0 for
+ * an unknown split mode.
+ */
 static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect)
 {
     switch (splitMode) {
@@ -402,6 +408,10 @@ static int _GetSplitRect(int splitMode, int screenIndex, RgRect *pRect)
     return 1;
 }
 
+/*
+ * Moves both screen views and their cameras to the split rectangles of
+ * splitMode. Does nothing in full-screen mode.
+ */
 static void _SetScreenSplitMode(RgDraw *pDraw, int splitMode)
 {
     RgRect rect;
@@ -429,6 +439,7 @@ static void _SetScreenSplitMode(RgDraw *pDraw, int splitMode)
     }
 }
 
+/* Switches the draw state to two studios, one per screen, split left and right. */
 static void _DoubleScreenStudio(RgDraw *pDraw)
 {
     RgFog *pFog;
@@ -450,6 +461,7 @@ static void _DoubleScreenStudio(RgDraw *pDraw)
     nmlModelUseSubWindow(3, 0);
 }
 
+/* Sets the draw defaults and creates the global studio, which has no screen. */
 static void _InitDraw(RgDraw *pDraw)
 {
     RgFog *pFog;
@@ -482,6 +494,7 @@ static void _WrapperDestruct(void *pDraw)
     RgHeapFree(InstanceOfRgHeap(), pDraw, drawSourcePath, 421);
 }
 
+/* Returns the draw singleton. The first call creates it with a full-screen studio. */
 RgDraw *InstanceOfRgDraw(void)
 {
     RgDraw *pDraw;
@@ -556,6 +569,7 @@ void RgDrawSetGlobalFog(RgDraw *pDraw, RgFog *pFog)
     _CopyFog(&pDraw->m_Fog, pFog);
 }
 
+/* Resets the camera of the view's screen to its default state, with zero position and rotation. */
 void RgDrawViewInit(RgDrawView *pView)
 {
     int screenIndex;
@@ -719,6 +733,11 @@ void RgDrawViewSetRotateZ(RgDrawView *pView, float angle)
 }
 
 
+/*
+ * Returns 1 when the point lies below -margin in clip space on both x and y,
+ * in both clip matrices of the view's camera. Returns 0 otherwise, and when the
+ * view has no camera.
+ */
 int RgDrawViewIsPointInView(RgDrawView *pView, const RgVector position, float margin)
 {
     int result;
@@ -784,6 +803,10 @@ void RgDrawViewGetScreenRect(RgDrawView *pView, RgRect *pRect)
     pRect->y1 = pView->screenRect.y1;
 }
 
+/*
+ * Refreshes the view of a screen studio from its screen's camera (view matrix,
+ * axes, projection and clipping modes) and returns it.
+ */
 RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
 {
     RgDrawView *pView;
@@ -840,6 +863,10 @@ RgDrawView *RgDrawStudioGetView(RgDrawStudio *pStudio)
     return pView;
 }
 
+/*
+ * Queues a draw request for the next draw pass. priority orders the requests;
+ * drawID selects the studios (all of them, the global studio, or screen 0 or 1).
+ */
 void RgDrawReq(RgDraw *pDraw, void *pObject,
                void (*drawFunc)(void *pObject, RgDrawStudio *pStudio),
                void (*clearFunc)(void *pObject), int priority, int drawID)
@@ -863,6 +890,11 @@ void RgDrawReq(RgDraw *pDraw, void *pObject,
     request->drawID = drawID;
 }
 
+/*
+ * Sends the four-vertex tristrip of drawFadeShadowVertexBlock as a direct VIF1
+ * packet, coloured with alpha, with the depth test set to always pass. mode is
+ * passed to nmlModelDirectSend.
+ */
 static void _FadeShadow(int alpha, int mode)
 {
     GifTagBlock vertices = drawFadeShadowVertexBlock;
@@ -894,6 +926,7 @@ static void _FadeShadow(int alpha, int mode)
                        sceVif1PkSize(pPacket));
 }
 
+/* Calls the clear function of each queued request, then empties the queue. */
 void _DrawReqTerminate(RgDraw *pDraw)
 {
     RgDrawRequest *pRequest;
@@ -913,6 +946,10 @@ void _DrawReqTerminate(RgDraw *pDraw)
     pDraw->m_RequestCount = 0;
 }
 
+/*
+ * Runs the queued draw requests in priority order, passing each request's
+ * studio or studios to its draw function. Does nothing while drawing is disabled.
+ */
 static void _DrawMain(RgDraw *pDraw)
 {
     unsigned int priority;
@@ -938,6 +975,7 @@ static void _DrawMain(RgDraw *pDraw)
             if (request->drawFunc == 0) {
                 continue;
             }
+            /* Pick the studio or studios that the request's drawID names. */
             switch (request->drawID) {
             case RG_DRAW_ID_ALL_STUDIOS: {
                 unsigned int screenIndex;
@@ -984,6 +1022,11 @@ void RgDrawJob(RgDraw *pDraw)
     _DrawReqTerminate(pDraw);
 }
 
+/*
+ * Runs a draw pass, sleeping between passes, while the fade counter is below
+ * the limit. Drawing happens only once the counter is not negative. Then drawing
+ * is disabled.
+ */
 void RgDrawFadeIn(RgDraw *pDraw)
 {
     int nextFadeCounter;

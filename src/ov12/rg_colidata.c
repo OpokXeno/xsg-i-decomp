@@ -34,8 +34,8 @@ enum {
 #define RG_COLI_PRISM_TRIANGLES (RG_COLI_PRISM_QUADS * 2)
 
 /*
- * Scaffold-owned quad prism template: 0x00a55590 holds eight vertices, and
- * 0x00a55610 holds six quads of four vertex indices each.
+ * Quad prism template: 0x00a55590 holds eight vertices, and 0x00a55610 holds
+ * six quads of four vertex indices each.
  */
 typedef struct RgColiQuadVertices {
     DoublewordAlignedVector4 m_vertices[RG_COLI_PRISM_VERTICES];
@@ -63,6 +63,10 @@ const char coliDataAssertTriangleCapacityLeftOver[] = "pData->m_nCapaOfTri > pDa
 
 const char coliDataAssertBallArgumentsNotNil[48] = "pPoly != NIL && pArg != NIL && pResult != NIL";
 
+/*
+ * Stores the three vertices of a triangle and its face plane, and sets up the
+ * three edge side planes and the face plane as the columns of m_planeMatrix.
+ */
 static void _InitTriColi(RgColiTriangle *triangle, void *pV0, void *pV1,
                          void *pV2)
 {
@@ -126,6 +130,10 @@ static void _AllocDataMemory(RgColiData *pData, int nCapa)
     pData->m_nTriangles = 0;
 }
 
+/*
+ * Adds up the push-out correction of every triangle the ball overlaps into
+ * pHit. Returns 1 when at least one triangle was hit, 0 otherwise.
+ */
 static int _CheckIntersectBall(RgColiData *pPoly, RgColiBall *pArg, RgColiBallResult *pHit)
 {
     int i;
@@ -153,6 +161,7 @@ static int _CheckIntersectBall(RgColiData *pPoly, RgColiBall *pArg, RgColiBallRe
             "sqc2 $vf31, 0(%0)\n\t"
             : : "r"(&ball), "r"(pArg) : "memory");
         ball.w = 1.0f;
+        /* Signed distances from the ball centre to the triangle's four planes. */
         __asm__ __volatile__(
             "lqc2 $vf2, 0(%2)\n\t"
             "lqc2 $vf3, 0(%1)\n\t"
@@ -210,6 +219,7 @@ static void _DisposeColiData(RgColiData *pData)
     _InitColiData(pData);
 }
 
+/* Replaces the triangle array with an empty array of nCapa entries. */
 static void _InitTriangles(RgColiData *pData, int nCapa)
 {
     if (pData == 0) {
@@ -223,6 +233,7 @@ static void _InitTriangles(RgColiData *pData, int nCapa)
     _AllocDataMemory(pData, nCapa);
 }
 
+/* Appends a triangle built from three vertices. The array must have room left. */
 static void _AddTriangle(RgColiData *pData, void *pV0, void *pV1, void *pV2)
 {
     /* separate load keeps the new triangle's index in its own register */
@@ -254,6 +265,10 @@ RgColiData *CreateRgColiData(void)
     return pData;
 }
 
+/*
+ * Creates a collision set of the quad prism template, scaled to width in x
+ * and z and to height in y.
+ */
 RgColiData *CreateRgColiDataQuadPrism(float width, float height)
 {
     RgColiData *pData;
@@ -320,10 +335,14 @@ int RgColiDataVsBall(RgColiData *pPoly, RgColiBall *pBall,
     return _CheckIntersectBall(pPoly, pBall, pResult);
 }
 
-/* 0x00a556a0 "pArg != NIL", 0x00a556b0 "pResult != NIL" */
 extern const char coliDataAssertSegmentNotNil[];
 extern const char coliDataAssertRayResultNotNil[];
 
+/*
+ * Finds the first triangle, in array order, that the segment enters through its
+ * front face. On a hit, stores the triangle's plane and the hit fraction in
+ * pResult and returns 1; returns 0 when no triangle is hit.
+ */
 int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                     RgColiSegmentHit *pResult)
 {
@@ -356,6 +375,7 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
         float t;
         float *pVertex1 = pTriangle->m_vertices[1];
 
+        /* Triangle edge vectors; the side tests below use them. */
         __asm__ __volatile__(
             "lqc2 $vf30, 0(%1)\n\t"
             "lqc2 $vf31, 0(%2)\n\t"
@@ -432,6 +452,7 @@ int RgColiDataVsRay(RgColiData *pData, RgColiSegment *pSegment,
                 if (offset.x * cross.x + offset.y * cross.y + offset.z * cross.z <= -RG_COLI_EPSILON) {
                     status = RG_COLI_MISS_OUTSIDE_TRIANGLE;
                 } else {
+                    /* Facing test, then the parameter t where the segment meets the plane. */
                     denom = pPlane[0] * pVector[0]
                           + pPlane[1] * pVector[1]
                           + pPlane[2] * pVector[2];

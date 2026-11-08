@@ -51,8 +51,7 @@
 #define CARD_PROMPT_ACCEPT_CANCEL \
     "\r\x04\x0c\x80\x40\x40\xa1\xfb \x0b\x19\x03\r\0Accept\xa1\xa1\r\x04\x0c\x40\x40\x80\xa1\xdf \x0b\x19\x03\r\0Cancel"
 
-/* Rows kept between the cursor and the window edge before the list scrolls (`slti v0,v1,2` and
- * rows - 2 in the scroll steps). */
+/* Rows kept between the cursor and the window edge before the list scrolls. */
 #define CARD_SCROLL_MARGIN 2
 
 /*
@@ -74,7 +73,7 @@
 /* The stored-deck list shows five slots. */
 #define CARD_DECK_SLOT_COUNT 5
 
-/* Entries of TypeMaskLst and AttriMaskLst (the symbol sizes in config/symbols/ov10.txt). */
+/* Entries of TypeMaskLst and AttriMaskLst. */
 #define CARD_TYPE_FILTER_COUNT 4
 #define CARD_ATTR_FILTER_COUNT 7
 
@@ -144,6 +143,7 @@ static CardListWindow *pCnow_7;
 static u8 TypeMaskLst[4];
 static u8 AttriMaskLst[7];
 
+/* Returns 1 when no card appears more than CARD_MAX_COPIES times and no entry after the first is negative. */
 int CardDeckChk(s16 *cards) {
     int first_index;
     int second_index;
@@ -170,13 +170,10 @@ int CardDeckChk(s16 *cards) {
 }
 
 /*
- * Deck-builder screen. The list window (list) holds the cards matching the
- * type/attribute filter, the deck window (deck) the cards chosen so far.
- * Pad input edits the filters, moves the cursor, switches focus between the
- * two windows and adds or removes the selected card; the function then draws
- * the filter icons, the selected card and the card number / deck count digits.
- * `exiting` is nonzero while the caller shows the exit prompt (the screen is
- * only drawn). Returns a CARD_DECK_MSG_* code when an edit is refused.
+ * Deck-builder screen: applies pad input to the card list (list) and the deck (deck),
+ * then draws both windows with the filter icons, the selected card and the digits.
+ * `exiting` is nonzero while the exit prompt shows (draw only). Returns a CARD_DECK_MSG_*
+ * code when an edit is refused.
  */
 int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work)
 {
@@ -224,6 +221,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
     xglMatrixTrans(matrix, matrix, offset);
     xglMatrixScale(matrix, matrix, scale);
 
+    /* Pad input: edit the filters, move the cursor, switch focus, add or remove cards. */
     if (exiting == 0) {
         if (PadData[0].half_2a & CARD_PAD_TYPE_NEXT) {
             xglSoundEffectNormalID(SE_CURSOR, 0);
@@ -290,6 +288,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
         list->attrFilter = 0;
     }
 
+    /* Apply the pending deck action, or else the pending list action. */
     if (deck->mode != CARD_ACTION_NONE) {
         switch (deck->mode) {
         case CARD_ACTION_SCROLL_DOWN:
@@ -396,7 +395,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                         } else {
                             deck->top = newIdx - deck->rows + 1;
                         }
-                        /* Row within the window, with CARD_PANE_INACTIVE set (the list has focus). */
+                        /* Row within the window; the subtraction sets CARD_PANE_INACTIVE on the deck cursor because the list has focus. */
                         deck->cursor = (newIdx % deck->rows) - CARD_PANE_INACTIVE;
                         result = 0;
                     } else {
@@ -419,6 +418,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
         deck->cursor = deck->shownCount - 1;
     }
 
+    /* Preview card while CARD_PAD_PREVIEW is held, then the list and deck windows. */
     hovered = 0;
     if ((PadData[0].half_28 & CARD_PAD_PREVIEW) && exiting == 0) {
         hovered = 1;
@@ -447,6 +447,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
         CardDeckDisp(deck, work->definitions);
     }
 
+    /* Type and attribute filter icons. */
     offset[0] = offset[2] = 0.0f;
     offset[1] = 1.292f;
     offset[3] = 1.0f;
@@ -477,11 +478,11 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
     xglMatrixTrans(filterMatrix, filterMatrix, offset);
     nmlModelSetPlace(&filterMatrix);
     /*
-     * Attribute masks CARD_ATTR_HUMAN, REALIAN, MECH, GNOSIS, CARD_ATTR_UNKNOWN and CARD_ATTR_WEAPON select type2_1..type2_6; any
-     * other value (no filter) shows type2_0. The texture assignments in the
-     * last two arms are never read: with a single assignment per arm the
-     * compiler turns the final test into a conditional move (the original
-     * branches), so both arms keep their second statement.
+     * Attribute masks CARD_ATTR_HUMAN, REALIAN, MECH, GNOSIS, CARD_ATTR_UNKNOWN and
+     * CARD_ATTR_WEAPON select type2_1..type2_6; any other value shows type2_0. The texture
+     * assignments in the last two arms are never read: with a single assignment per arm the
+     * compiler turns the final test into a conditional move (the original branches), so both
+     * arms keep their second statement.
      */
     attr = AttriMaskLst[list->attrFilter];
     if (attr != CARD_ATTR_HUMAN) {
@@ -528,6 +529,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
         CardDisp(&matrix, id, work->ownedCount[id] != 0, flag);
     }
 
+    /* Card number digits of the selected card (its id + 1). */
     total = list->entries[list->top + (list->cursor & CARD_CURSOR_INDEX_MASK)].cardId + 1;
     digit = total / 100;
     offset[1] = 1.764f;
@@ -567,6 +569,7 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
     nmlModelSetRenderLevel(CARD_MODEL_RENDER_LEVEL);
     nmlModelEntryCard(model);
 
+    /* Deck count digits. */
     total = CardGetDeckAllCnt(deck);
     digit = total / 100;
     offset[1] = 1.764f;
@@ -610,10 +613,9 @@ int CardMakeDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
 }
 
 /*
- * Deck-load screen: step 0 browses the five stored deck slots (list) and shows
- * the selected deck in the deck window (deck); step 1 asks for confirmation.
- * `exiting` is nonzero while the caller shows the exit prompt (the screen is
- * only drawn). Returns the chosen slot + 1, or -1 when cancelled (0 otherwise).
+ * Deck-load screen: step 0 browses the five stored deck slots (list) and shows the
+ * selected deck in the deck window (deck); step 1 asks for confirmation. `exiting` draws
+ * only. Returns the chosen slot + 1, -1 when cancelled, 0 otherwise.
  */
 int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work, const char *title)
 {
@@ -751,6 +753,7 @@ int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                 deck->mode = CARD_ACTION_NONE;
             }
 
+            /* Slot list: scroll, then show the highlighted slot's cards in the deck window. */
             if (list->mode != CARD_ACTION_NONE) {
                 list->count = CARD_DECK_SLOT_COUNT;
                 if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
@@ -779,8 +782,8 @@ int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                         }
                     }
                     slot = list->top + (list->cursor & CARD_CURSOR_INDEX_MASK);
-                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10) (measured: indexing
-                     * work->save->decks[slot] computes the address with a different instruction order). */
+                    /* Address of the stored deck slot: records are 42 bytes apart (slot * 32 + slot * 10);
+                     * work->save->decks[slot] computes it with a different instruction order. */
                     stored = (CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10);
                     prev = -1;
                     entry = -1;
@@ -805,6 +808,7 @@ int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                 deck->cursor = deck->count - 1;
             }
         break;
+    /* Step 1: confirm the highlighted slot. */
     case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);
@@ -830,11 +834,9 @@ int CardLoadDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
 }
 
 /*
- * Deck-save screen: step 0 browses the five stored deck slots (list) and shows
- * the selected deck in the deck window (deck); step 1 asks for confirmation.
- * `exiting` is nonzero while the caller shows the exit prompt (the screen is
- * only drawn). Returns the chosen slot + 1 to save into, or -1 when cancelled
- * (0 otherwise).
+ * Deck-save screen: step 0 browses the five stored deck slots (list) and shows the
+ * selected deck in the deck window (deck); step 1 asks for confirmation. `exiting` draws
+ * only. Returns the chosen slot + 1 to save into, -1 when cancelled, 0 otherwise.
  */
 int CardSaveDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, CardGameWork *work, const char *title)
 {
@@ -920,6 +922,7 @@ int CardSaveDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                 deck->mode = CARD_ACTION_NONE;
             }
 
+            /* Slot list: scroll, then show the highlighted slot's cards in the deck window. */
             if (list->mode != CARD_ACTION_NONE) {
                 list->count = CARD_DECK_SLOT_COUNT;
                 if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
@@ -948,8 +951,8 @@ int CardSaveDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                         }
                     }
                     slot = list->top + (list->cursor & CARD_CURSOR_INDEX_MASK);
-                    /* Stored deck slot: CardSaveData records 42 bytes apart (slot * 32 + slot * 10) (measured: indexing
-                     * work->save->decks[slot] computes the address with a different instruction order). */
+                    /* Address of the stored deck slot: records are 42 bytes apart (slot * 32 + slot * 10);
+                     * work->save->decks[slot] computes it with a different instruction order. */
                     stored = (CardSaveData *)((slot << 5) + (unsigned int)work->save + slot * 10);
                     prev = -1;
                     entry = -1;
@@ -1014,6 +1017,7 @@ int CardSaveDeckProc(int exiting, CardListWindow *list, CardListWindow *deck, Ca
                 }
             }
         break;
+    /* Step 1: confirm the highlighted slot to save into. */
     case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);
@@ -1179,6 +1183,7 @@ int CardLoadDeckProc2(int exiting, CardListWindow *list, CardListWindow *deck, C
                 deck->mode = CARD_ACTION_NONE;
             }
 
+            /* Slot list: scroll, then show the highlighted slot's cards in the deck window. */
             if (list->mode != CARD_ACTION_NONE) {
                 list->count = CARD_DECK_SLOT_COUNT;
                 if (list->mode == CARD_ACTION_SCROLL_UP || list->mode == CARD_ACTION_SCROLL_DOWN) {
@@ -1230,6 +1235,7 @@ int CardLoadDeckProc2(int exiting, CardListWindow *list, CardListWindow *deck, C
                 deck->cursor = deck->count - 1;
             }
         break;
+    /* Step 1: confirm the highlighted slot. */
     case CARD_DECK_STEP_CONFIRM:
             CardDeckListDisp(list);
             CardDeckDisp(deck, work->definitions);

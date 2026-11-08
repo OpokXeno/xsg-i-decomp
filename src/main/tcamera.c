@@ -15,10 +15,7 @@
 #define TCAMERA_ROTATION(camera)    (&((TCamera *)(camera))->rotation)
 #define TCAMERA_TRANSLATION(camera) (&((TCamera *)(camera))->translation)
 
-/*
- * TCAMERA_setFov/TCAMERA_fovSPL (this TU, VA 0x00308b58/0x00308f60) evidence
- * a field-of-view scalar at +0x94.
- */
+/* Field of view of a TCamera (+0x94), set by TCAMERA_setFov and TCAMERA_fovSPL. */
 #define TCAMERA_FOV(camera)         (((TCamera *)(camera))->fieldOfView)
 
 #define TCAMERA_MPACK_SCRATCH ((void *)SCRATCHPAD_BASE)
@@ -34,9 +31,8 @@ typedef union {
 } MpackInterest;
 
 /*
- * TCAMERA_get indexes the engine's camera table `tcamera` (main:0x00465e10);
- * Java_xeno_Camera_create__I (src/main/camera.c) computes the same
- * `tcamera + camera_id * 0x12c0` address for the same table.
+ * TCAMERA_get indexes the camera table `tcamera`; Java_xeno_Camera_create__I
+ * (src/main/camera.c) computes the same `tcamera + camera_id * 0x12c0` address.
  */
 extern CameraWork tcamera[];
 
@@ -84,6 +80,7 @@ TCamera *TCAMERA_get(int camera_id)
     return (TCamera *)&tcamera[camera_id];
 }
 
+/* Prints the active camera's translation, look-at or rotation, and field of view. */
 void TCAMERA_info(void)
 {
     StudioCamera *camera = xglStudioGetActiveCamera();
@@ -110,22 +107,11 @@ void TCAMERA_info(void)
 }
 
 /*
- * TCAMERA_transMPack samples eight consecutive values off the packed curve
- * `source` at `frame` through one FCV_resetPack/FCV_getPackValue cursor
- * (src/main/fcv2.c): translation xyz, an interest-point xyz (the same point
- * TCAMERA_mpackGetInterest reads, this TU), then roll and field of view. The
- * cursor lives in an FCVPack this function places at the EE scratchpad base
- * (docs/ee-reference/memory-dma.md); every call below addresses that same
- * fixed pack, matching the original's repeated `lui $4,0x7000` before each
- * call (FCVPack and FCV2Pack are declared in main/fcv2.h; FCV_resetPack's
- * source record stays an opaque pointer here).
- *
- * The interest point and the translation just written feed the same VU0
- * macro-mode subtraction TCAMERA_setView uses to turn a look-at point into
- * yaw/pitch: direction = translation - interest, yaw = atan2(dx, dz), pitch =
- * -atan2(dy, dx*sin(yaw) + dz*cos(yaw)). Roll and field of view are plain
- * degrees-to-radians conversions, each with its own .lit4 pi constant
- * (data_ownership in config/tu-build.json still owns that pool).
+ * Reads the camera's translation, look-at point, roll and field of view from
+ * the packed curve source at frame, using a packed cursor in the scratchpad.
+ * The translation and look-at point give yaw and pitch through the same
+ * subtraction TCAMERA_setView uses. Roll and field of view are degrees
+ * converted to radians.
  */
 void TCAMERA_transMPack(TCamera *camera, void *source, float frame)
 {
@@ -162,6 +148,10 @@ CameraVectorStorage TCAMERA_mpackGetInterest(volatile MpackInterest *interest)
     return value;
 }
 
+/*
+ * Same as TCAMERA_transMPack, read through the FCV2 pack reader. The look-at
+ * point it reads is also stored in mpack_interest.
+ */
 void TCAMERA_transMPack2(TCamera *camera, void *source, float frame)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);
@@ -219,6 +209,7 @@ void TCAMERA_setRotate(TCamera *camera, float pitchDegrees, float yawDegrees, fl
     rotation->z = rollDegrees / 180.0f * 3.1415927f;
 }
 
+/* Turns the camera to look at (x, y, z): sets yaw and pitch from the translation to that point. */
 void TCAMERA_setView(TCamera *camera, float x, float y, float z)
 {
     float home[4];
@@ -260,6 +251,7 @@ void TCAMERA_rotateSPL(TCamera *camera, void *spline, float frame)
     rotation->z = (angles[2] / 180.0f) * 3.1415927f;
 }
 
+/* Turns the camera to look at the spline point at frame, with yaw and pitch as in TCAMERA_setView. */
 void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);
@@ -281,6 +273,7 @@ void TCAMERA_viewSPL(TCamera *camera, void *spline, float frame)
     rotation->x = -xglAtan2(direction.y, pitchDenominator);
 }
 
+/* Sets the translation to a reference point plus offset; mode 1 uses entry 0 of the reference, other modes entry 1. */
 void TCAMERA_transCNS(TCamera *camera, Vector4 **reference_position, Vector4 *offset, int mode)
 {
     Vector4 *translation = TCAMERA_TRANSLATION(camera);
@@ -302,6 +295,7 @@ void TCAMERA_transCNS(TCamera *camera, Vector4 **reference_position, Vector4 *of
     Vu0AddVectorXYZ(translation, point, offset);
 }
 
+/* Turns the camera to look at a reference point plus offset, with the same mode choice as TCAMERA_transCNS. */
 void TCAMERA_viewCNS(TCamera *camera, Vector4 **reference_position, Vector4 *offset, int mode)
 {
     Vector4 *rotation = TCAMERA_ROTATION(camera);
@@ -348,6 +342,11 @@ void TCAMERA_fovSPL(TCamera *camera, void *spline, float frame)
     TCAMERA_FOV(camera) = SPL_getValue(spline, 0, frame) / 180.0f * 3.1415927f;
 }
 
+/*
+ * Per-frame camera update: applies each camera's translate, view, roll and
+ * field-of-view channels, advancing their frame counters, and sets the fog of
+ * the active camera. L1 with SELECT toggles the debug readout.
+ */
 void TCAMERA_update(void)
 {
     struct TCameraLoopState {
@@ -385,6 +384,7 @@ void TCAMERA_update(void)
         if (studioCamera->state != STUDIO_CAMERA_STATE_EXTERNAL) {
             CameraWork *work = &tcamera[cameraIndex];
 
+            /* Translation channel first, then the view channel. */
             switch (work->mode[CAMERA_CHANNEL_TRANSLATE]) {
             case CAMERA_MODE_MOTION_PACK2:
                 TCAMERA_transMPack2(camera, work->translate.packed.source,
@@ -464,6 +464,7 @@ void TCAMERA_update(void)
             }
         }
 
+        /* Fog comes from the definition of the active camera. */
         if (studioCamera->active != 0) {
             float *fog = CfCameraDefine[GameLoopState.activeCameraIndex].fog_parameters;
 
@@ -475,6 +476,7 @@ void TCAMERA_update(void)
     }
 }
 
+/* Sets every camera's mode channels to CAMERA_MODE_IDLE. */
 void TCAMERA_init(void)
 {
     CameraWork *cameras = tcamera;

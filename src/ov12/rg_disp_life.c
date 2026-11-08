@@ -21,7 +21,7 @@
 #define RG_DISP_LIFE_WIN_PICS_PER_PLAYER 3
 /* lifePic[6] and [7] (12 pointers past secondaryBoardPic) are the players' boards. */
 
-/* The win picture of the player who just won blinks with this period. */
+/* Blink cycle length of the winner's win picture; elapsedTime wraps after it. */
 #define RG_DISP_LIFE_BLINK_PERIOD 1.0f
 #define RG_DISP_LIFE_BLINK_HALF 0.5f
 
@@ -55,7 +55,6 @@ static void _InitDisp(RgDispLife *pDisp, RgBxx *pBxx, RgFont *timeFont);
 static void _DestructDisp(RgDispLife *pDisp);
 static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh);
 
-/* Scaffold-owned strings (string table at 0x00a54848..0x00a54940). */
 extern const char dispLifeAssertBxxNotNil[];
 extern const char dispLifeAssertTimeFontNotNil[];
 extern const char dispLifeAgwsNamePictureName[];
@@ -95,6 +94,10 @@ const char dispLifeVsPrimaryBoardPictureName[] = "board_nc.bmp";
 
 const char dispLifeVsSecondaryBoardPictureName[16] = "board_nd.bmp";
 
+/*
+ * Looks up the name-texture record for a character id and copies its UV
+ * rectangle to uvwh. Returns 1 when found, 0 otherwise.
+ */
 static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh)
 {
     unsigned int index;
@@ -118,6 +121,7 @@ static int _GetAgwsNameUVWH(int nameIndex, AgwsNameUvwh *uvwh)
     return 0;
 }
 
+/* Draws the character's name from the AGWS name texture at (x, y). */
 static void _DispAgwsName(XrgPaint2D *paint, RgBxxPic *pPic, int nameIndex,
                           int x, int y)
 {
@@ -135,6 +139,10 @@ static void _DispAgwsName(XrgPaint2D *paint, RgBxxPic *pPic, int nameIndex,
     }
 }
 
+/*
+ * Fills a new display object: looks up its board, window and bar pictures in
+ * pBxx, creates the two life gauges and the paint object.
+ */
 static void _InitDisp(RgDispLife *pDisp, RgBxx *pBxx, RgFont *timeFont)
 {
     unsigned int i;
@@ -254,6 +262,7 @@ static inline int _ClampWin(int count, int lo, int hi)
     return count > hi ? hi : count;
 }
 
+/* Stores both win counts, clamped to 0..RG_DISP_LIFE_MAX_WINS, and the winner mask. */
 void RgDispLifeSetWin(RgDispLife *pDisp, int win1P, int win2P, int winnerMask)
 {
     if (pDisp == 0) {
@@ -264,6 +273,7 @@ void RgDispLifeSetWin(RgDispLife *pDisp, int win1P, int win2P, int winnerMask)
     pDisp->winnerMask = winnerMask;
 }
 
+/* Switches the board pictures between the normal set and the VS-mode set. */
 void RgDispLifeSetVsMode(RgDispLife *pDisp, int vsMode)
 {
     if (pDisp == 0) {
@@ -280,6 +290,7 @@ void RgDispLifeSetVsMode(RgDispLife *pDisp, int vsMode)
     }
 }
 
+/* Updates the life gauges (taking life from the robots when set) and advances the blink timer. */
 void RgDispLifePassTime(RgDispLife *pDisp, float deltaTime)
 {
     unsigned int i;
@@ -299,6 +310,10 @@ void RgDispLifePassTime(RgDispLife *pDisp, float deltaTime)
     }
 }
 
+/*
+ * Draws the boards, timer text, robot name plates, gauges and win-count
+ * pictures, then flushes the paint object.
+ */
 void RgDispLifeDisp(RgDispLife *pDisp)
 {
     XrgPaint2D *paint;
@@ -325,6 +340,7 @@ void RgDispLifeDisp(RgDispLife *pDisp)
         XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, 0, 0, 0, 0);
     }
 
+    /* Timer text: minutes, seconds and centiseconds. */
     centis = (unsigned int) floorf(pDisp->timer * 100.0f);
     timeText[0] = (char) ('0' + (centis / (RG_DISP_LIFE_CENTIS_PER_MINUTE * 10U)) % 10U);
     timeText[1] = (char) ('0' + (centis / RG_DISP_LIFE_CENTIS_PER_MINUTE) % 10U);
@@ -338,6 +354,7 @@ void RgDispLifeDisp(RgDispLife *pDisp)
     timeText[8] = '\0';
     RgFontStr(paint, pDisp->timeFont, timeText, 62, 61, 0);
 
+    /* Name plates for the robots that are set. */
     if (pDisp->agwsNamePic != 0) {
         for (i = 0; i < 2; i++) {
             RgStatus *robot = pDisp->robots[i];
@@ -359,6 +376,7 @@ void RgDispLifeDisp(RgDispLife *pDisp)
         }
     }
 
+    /* Gauge bars. */
     i = 0;
     pBoard = &pDisp->secondaryBoardPic;
     for (; i < RG_DISP_LIFE_PLAYERS; i++) {
@@ -366,6 +384,10 @@ void RgDispLifeDisp(RgDispLife *pDisp)
     }
     playerPics = pBoard + 12;
 
+    /*
+     * Per player: the win-count picture, or for the winner the clamped
+     * picture during the second half of each blink cycle.
+     */
     clampBase = 0;
     countBase = 0;
     for (i = 0; i < 2; i++) {

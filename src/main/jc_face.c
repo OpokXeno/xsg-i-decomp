@@ -9,9 +9,10 @@ static inline void copyMatrix(void *destination, const void *source)
 }
 
 /*
- * The joint table is JntMatrix, a union of the float and quadword views
- * (alias set 0), which fixes the original store/load order of the w-column
- * stores against the quadword copies.
+ * Builds the joint matrices of one chain into work->matrix_buffer and returns
+ * the element cursor after it (0 for a null element array or source). JntMatrix
+ * is a union of the float and quadword views (alias set 0), which fixes the
+ * original store/load order of the w-column stores against the quadword copies.
  */
 JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *chain)
 {
@@ -61,6 +62,7 @@ JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *ch
     }
     flags_after_scan = work->flags;
 
+    /* Flag 0x20 selects the static-value path; otherwise the animated path below. */
     if (flags_after_scan & 0x20) {
         bound = chain_length + chain->index + 1;
         cursor = element_array;
@@ -128,6 +130,7 @@ JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *ch
             }
         }
     } else {
+        /* Animated path: channels are sampled at the current frame. */
         bound = chain_length + chain->index + 1;
         cursor = element_array;
         while (work->current_index < bound) {
@@ -204,6 +207,10 @@ JntStaticChannel *JC_face(JntWork *work, JntStaticChannel *elements, JcChain *ch
     return cursor;
 }
 
+/*
+ * Builds the joint matrices of one chain into work->matrix_buffer, like JC_face,
+ * and returns the element cursor (0 for a null element array or source).
+ */
 void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *chain)
 {
     JntStaticChannel *element_array;
@@ -253,6 +260,7 @@ void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *cha
     }
     flags_after_scan = work->flags;
 
+    /* Flag 0x20 selects the static-value path; otherwise the animated path below. */
     if (flags_after_scan & 0x20) {
 
         bound = chain_length + chain->index + 1;
@@ -314,7 +322,7 @@ void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *cha
             }
         }
     } else {
-
+        /* Animated path: channels are sampled at the current frame. */
         bound = chain_length + chain->index + 1;
         cursor = element_array;
         while (work->current_index < bound) {
@@ -400,6 +408,10 @@ void *JC_setParent(JntWork *work, JntStaticChannel *elements, const JcChain *cha
     return cursor;
 }
 
+/*
+ * Variant of JC_setParent that copies each matrix through copyMatrix. Returns
+ * the element cursor (0 for a null element array or source).
+ */
 JntStaticChannel *JC_setParent2(JntWork *work, JntStaticChannel *elements, JcChain *chain)
 {
     JntStaticChannel *element_array;
@@ -444,6 +456,7 @@ JntStaticChannel *JC_setParent2(JntWork *work, JntStaticChannel *elements, JcCha
             cursor = JNT_nextElement(cursor);
         } while (cursor->type != 4);
     }
+    /* Flag 0x20 selects the static-value path; otherwise the animated path below. */
     if (work->flags & 0x20) {
 
         bound = chain_length + chain->index + 1;
@@ -497,7 +510,7 @@ JntStaticChannel *JC_setParent2(JntWork *work, JntStaticChannel *elements, JcCha
             }
         }
     } else {
-
+        /* Animated path: channels are sampled at the current frame. */
         bound = chain_length + chain->index + 1;
         cursor = element_array;
         while (work->current_index < bound) {
@@ -589,6 +602,10 @@ static inline void copyChainSlot(JntWork *work, const JcChain *chain,
                     &records[chain->static_index + slot]);
 }
 
+/*
+ * Copies the static joint matrices of one chain into work->matrix_buffer and
+ * returns the element cursor (0 for a null element).
+ */
 void *JC_copyChain(JntWork *work, void *element, JcChain *chain)
 {
     const JntMatrix *records = *chain->source;

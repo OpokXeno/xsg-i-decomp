@@ -10,9 +10,8 @@
 #include "main/m_ef_obj.h"
 #include "main/xgl_packet.h"
 
-/* Trail history length: trail_active +0xa0..+0xe4, trail_segment
- * +0xe4..+0x128 (0x44 bytes = 34 shorts each, the memset sizes in
- * MEfCreate_DORA), trail +0x130..+0x350 (0x220 bytes = 34 quadwords). */
+/* Trail history length: the trail_active and trail_segment arrays hold 34 shorts each,
+ * and the trail array holds 34 quadwords. */
 #define DORA_TRAIL_SLOTS 34
 
 /* The Hermite control-point storage shares the post-process state object.
@@ -49,12 +48,11 @@ struct DoraState;
 typedef void (*DoraCallback)(void *self, DoraHermiteState *work);
 typedef void (*DoraPostCallback)(void *self, struct DoraState *work);
 
-/* The pooled effect object, offsets as MEfCreate_DORA proves them: the
- * callback stores `sw $3,0x4($17)` (process), `sw $4,0xC($17)` (draw_packet)
- * and `sw $2,0x10($17)` (post_process) on the object, and the record at +0x20
- * from `addiu $16,$17,0x20` whose +0x24/+0x28/+0x70 fields are then reached
- * with `lw`/`sh`. Same shape as GameraEffect in the landed
- * m_ef_create_gamera.c; no published header declares this prefix. */
+/*
+ * Pooled effect object. The process, draw_packet and post_process callbacks sit at
+ * +0x04, +0x0c and +0x10, and the work area starts at +0x20. GameraEffect in
+ * m_ef_create_gamera.c has the same prefix.
+ */
 typedef struct DoraObject {
     unsigned int : 32;
     DoraCallback process;      /* +0x04 */
@@ -76,6 +74,7 @@ static void fnDORA_PR000(void *self, DoraHermiteState *work);
 static void fnDORA_DP000(void *self, DoraHermiteState *work);
 static void fnDORA_PO000(void *self, struct DoraState *work);
 
+/* Initializes a DORA effect object: clears the trail, builds the control points and the GS packet, and installs the callbacks. */
 int MEfCreate_DORA(MEfObjRecord *self)
 {
     DoraObject *object = (DoraObject *)self;
@@ -104,8 +103,7 @@ int MEfCreate_DORA(MEfObjRecord *self)
     return 1;
 }
 
-/* Radial and forward distance of each Hermite control point from the
- * actor-relative origin (rodata owned by this TU's data file). */
+/* Radial and forward distance of each Hermite control point from the actor-relative origin. */
 static const float disttbl_0_00A51820[4];
 static const float rtbl_1_00A51830[4];
 
@@ -142,7 +140,7 @@ static void makePath(DoraHermiteState *state)
         __asm__ __volatile__(
             "mfc1 $8, %1\n"
             "qmtc2 $8, $vf4\n"
-            "vcallms 0xe8\n" /* VU0 micro cos, as m_ef.c MEfScatterXY and gamera makePath */
+            "vcallms 0xe8\n" /* VU0 micro cosine routine. */
             "qmfc2.i $8, $vf1\n"
             "mtc1 $8, %0\n"
             : "=f"(cosine)
@@ -152,7 +150,7 @@ static void makePath(DoraHermiteState *state)
         __asm__ __volatile__(
             "mfc1 $8, %1\n"
             "qmtc2 $8, $vf4\n"
-            "vcallms 0x20\n" /* VU0 micro sin, as m_ef.c MEfScatterXY and gamera makePath */
+            "vcallms 0x20\n" /* VU0 micro sine routine. */
             "qmfc2.i $8, $vf1\n"
             "mtc1 $8, %0\n"
             : "=f"(sine)
@@ -179,6 +177,7 @@ extern void MMathCalcHermitePrm(HermiteVector *tangent_start,
 #define DORA_TRAIL_FRAMES 15
 #define DORA_SEGMENT_FRAMES 5
 
+/* Computes the tangents of the Hermite segment that starts at control point segment. */
 static void makeHermiteParams(int segment, DoraHermiteState *state)
 {
     HermiteVector *point_previous;
@@ -203,6 +202,7 @@ static void makeHermiteParams(int segment, DoraHermiteState *state)
                         point_previous, point_start, point_end, point_next);
 }
 
+/* Evaluates the current Hermite position, at the segment frame, into destination. */
 static void makeHermiteCoord(float *destination, DoraHermiteState *state)
 {
     short segment = state->segment;
@@ -223,7 +223,7 @@ static void fnDORA_PR000(void *self, DoraHermiteState *work)
     int slot;
 
     /* Shift slots 0..32 into 1..33 (the last of DORA_TRAIL_SLOTS); written
-     * source-indexed because the destination-indexed loop moved the bytes. */
+     * source-indexed on purpose; a destination-indexed loop generates different code. */
     for (slot = DORA_TRAIL_SLOTS - 2; slot >= 0; slot--) {
         state->trail_active[slot + 1] = state->trail_active[slot];
         state->trail_segment[slot + 1] = state->trail_segment[slot];
@@ -290,6 +290,10 @@ static inline void doraCloseTag(MEfGsPacket *packet, int nloop)
     packet->count += size;
 }
 
+/*
+ * Draws the trail as strips, two sides per axis. Each vertex is offset across the trail,
+ * transformed by its segment's rotation, and clipped against the screen.
+ */
 static void fnDORA_DP000(void *self, DoraHermiteState *work)
 {
     DoraHermiteState *state = work;
@@ -316,6 +320,7 @@ static void fnDORA_DP000(void *self, DoraHermiteState *work)
     view = mefCamParams.matrix;
     packet = &state->mg_packet;
     MGsGPInit(packet, 0, 0);
+    /* Write the GS state for the strips: test, depth and additive alpha. */
     setting = packet->current;
     setting[0].gif.tag = MEF_GS_SETUP_TAG;
     setting[0].gif.registers = MEF_GS_SETUP_REGS;
@@ -327,6 +332,7 @@ static void fnDORA_DP000(void *self, DoraHermiteState *work)
 
     packet = &state->mg_packet;
     strip_packet = packet;
+    /* One strip per axis and side; the side sets the offset across the trail. */
     for (axis = 0; axis < 2; axis++) {
         Vu0SetOrigin(&offset[0]);
         Vu0SetOrigin(&offset[1]);
@@ -352,6 +358,7 @@ static void fnDORA_DP000(void *self, DoraHermiteState *work)
                 MEfCalcAngle(&angle, &state->trail[slot], &state->trail[slot + 1]);
                 angle.z = state->path_progress[state->trail_segment[slot]];
                 MMathRotateMatrixYXZ((Matrix4 *)matrix, 0, &angle);
+                /* Use the trail point as the translation of the strip matrix. */
                 __asm__ __volatile__(
                     "lqc2 vf1, 0(%1)\n"
                     "vmove.w vf1, vf0\n"

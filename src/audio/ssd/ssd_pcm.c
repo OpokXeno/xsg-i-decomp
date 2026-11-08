@@ -29,6 +29,10 @@ void SsdPcmStreamCallback(int result, void *argument);
 void SsdStreamMonoCopyMemory(unsigned char *destination, const void *source_buffer, int bytes);
 void SsdStreamClearMemory(void *buffer, int bytes);
 
+/*
+ * Sets up the PCM stream with two buffer halves of buffer_bytes each, from one
+ * allocation. The fill callback runs on each DMA transfer completion while playing.
+ */
 void SsdInitPcmStream(int buffer_bytes, void (*callback)(void *), void *context)
 {
     SsdPcmStrWork.flags = SSD_STREAM_FLAG_OPEN;
@@ -59,6 +63,7 @@ void SsdInitPcmStream(int buffer_bytes, void (*callback)(void *), void *context)
     }
 }
 
+/* Stops playback, detaches the DMA and callback hooks, and frees the buffer. */
 void SsdDisposePcmStream(void)
 {
     if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING)
@@ -77,6 +82,7 @@ void SsdDisposePcmStream(void)
     SsdPcmStrWork.flags = 0;
 }
 
+/* Clears the suspended flag and restarts the looped DMA transfer while playing. */
 void SsdResumePcmStream(void)
 {
     if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING) {
@@ -90,6 +96,7 @@ void SsdResumePcmStream(void)
     }
 }
 
+/* Stops the DMA transfer and marks the stream suspended while playing. */
 void SsdSuspendPcmStream(void)
 {
     if (SsdPcmStrWork.playing == SSD_STREAM_PLAYING) {
@@ -102,6 +109,10 @@ void SsdSuspendPcmStream(void)
     }
 }
 
+/*
+ * Starts playback at volume, ramped over duration. When the stream was not
+ * playing, its buffer is cleared and the looped DMA transfer is restarted.
+ */
 void SsdPlayPcmStream(int volume, int duration)
 {
     SsdPcmStrWork.volume.remaining = 0;
@@ -121,6 +132,10 @@ void SsdPlayPcmStream(int volume, int duration)
     SsdPcmStrWork.playing = SSD_STREAM_PLAYING;
 }
 
+/*
+ * Ramps the volume to zero over duration. With duration 0 the DMA transfer is
+ * also stopped when the stream is playing.
+ */
 void SsdStopPcmStream(int duration)
 {
     SsdSetPcmStreamVolume(0, duration);
@@ -141,6 +156,10 @@ int SsdGetPcmStreamStatus(void)
     return SsdPcmStrWork.playing;
 }
 
+/*
+ * Copies source (silence when null) into the buffer half the DMA is not reading.
+ * Mono expansion is used when output_mode is 0.
+ */
 void SsdSetPcmStreamData(const void *source)
 {
     int active;
@@ -160,6 +179,7 @@ void SsdSetPcmStreamData(const void *source)
     }
 }
 
+/* Sets the volume at once when duration is 0, otherwise ramps to it over duration. */
 void SsdSetPcmStreamVolume(int volume, int duration)
 {
     int target = volume << 16;
@@ -175,11 +195,12 @@ void SsdSetPcmStreamVolume(int volume, int duration)
         int difference = target - SsdPcmStrWork.volume.current.value;
         SsdPcmStrWork.volume.step = difference / duration;
     }
-    /* The immediate path stores its squared amplitude in target in the original. */
+    /* In the immediate path, target holds the squared amplitude when it is stored below. */
     SsdPcmStrWork.volume.target = target;
     SsdPcmStrWork.volume.remaining = duration;
 }
 
+/* Per-frame proc: advances the volume ramp and writes its squared level to both channels. */
 void SsdPcmStreamVolumeFadeProc(SsdGlobalWork *work, void *context)
 {
     SsdPcmStreamState *stream = context;
@@ -206,6 +227,7 @@ void SsdPcmStreamVolumeFadeProc(SsdGlobalWork *work, void *context)
     }
 }
 
+/* DMA completion callback: calls the fill callback while the stream plays and is not suspended. */
 void SsdPcmStreamCallback(int result, void *argument)
 {
     if (SsdPcmStrWork.flags & SSD_STREAM_FLAG_SUSPENDED)
@@ -216,6 +238,7 @@ void SsdPcmStreamCallback(int result, void *argument)
         SsdPcmStrWork.fill_callback(SsdPcmStrWork.callback_context);
 }
 
+/* Writes each 1024-byte source block to destination as two copies of its first 512 bytes. */
 void SsdStreamMonoCopyMemory(unsigned char *destination, const void *source_buffer, int bytes)
 {
     const unsigned char *source = source_buffer;
@@ -229,6 +252,7 @@ void SsdStreamMonoCopyMemory(unsigned char *destination, const void *source_buff
     }
 }
 
+/* Copies bytes from source to destination 16 bytes at a time. */
 void SsdStreamCopyMemory(void *destination_buffer, const void *source_buffer, int bytes)
 {
     unsigned int *destination = destination_buffer;
@@ -252,6 +276,7 @@ void SsdStreamCopyMemory(void *destination_buffer, const void *source_buffer, in
     }
 }
 
+/* Zeroes bytes of buffer 16 bytes at a time. */
 void SsdStreamClearMemory(void *buffer, int bytes)
 {
     unsigned int *destination = buffer;

@@ -66,12 +66,10 @@ struct JSClassRecord {
 typedef void (*JSNativeMethod)(void);
 
 /*
- * The script-class descriptor JS_loadClass hands back. JS_classAddMethod
- * (still assembler in this TU, 0x0026b260) proves the layout: it reads and
- * increments method_count through this same pointer's +0x8 word, then
- * multiplies the pre-increment count by 12 to place the next entry, so the
- * method table it appends to starts at +0xC. Only the two fields
- * JS_classSetup itself touches are modeled; the rest is unmodeled.
+ * The script-class descriptor. JS_classAddMethod reads and increments
+ * method_count through the +0x8 word and appends each entry (12 bytes)
+ * to a method table that starts at +0xC. Only the two fields
+ * JS_classSetup touches are modeled; the rest is unmodeled.
  */
 typedef struct JSClass {
     unsigned char unmodeled_00[4];
@@ -150,6 +148,7 @@ void JS_init(int heap, int primitiveCapacity, int classCapacity) {
     classes = RSRC_alloc(heap, classCapacity * JS_CLASS_RECORD_SIZE, 0);
 }
 
+/* Appends a class record and its class primitive entry, and returns the record. */
 JSClassRecord *JS_loadClass(const char *class_name) {
     int *class_count = &numClass;
     int *primitive_count = &numPrimitive;
@@ -194,6 +193,11 @@ void JS_classAddMethod(JSClassRecord *js_class, const char *method_name,
     method_entry->data.callback = callback;
 }
 
+/*
+ * Finds name among the entry keys. Failing that, a numeric literal resolves
+ * to the float or integer entry (float when it contains a '.'), and a
+ * leading quote to the string entry. Returns 0 when nothing matches.
+ */
 JSLookupEntry *JS_findObject(const char *name, JSLookupEntry *entries,
                              int entry_count) {
     int index;
@@ -222,6 +226,11 @@ JSLookupEntry *JS_findObject(const char *name, JSLookupEntry *entries,
     return 0;
 }
 
+/*
+ * Parses one method call from the token stream: an optional object index,
+ * the method name and its arguments. Invokes the method's callback and
+ * returns 1, or returns 0 when the call does not match the syntax.
+ */
 int JS_callMethod(JSClassRecord *class_record, int token_type) {
     char object_name[128];
     struct JSCallArguments call_arguments;
@@ -234,6 +243,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
     int index;
     int parsed_token_type;
 
+    /* Optional object index before the method name: name[index]. */
     if (token_type == '[') {
         token = STR_tokenGetNext(0, jsTokenDelimiters);
         parsed_token_type = STR_tokenGetType();
@@ -272,6 +282,7 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
         entry = JS_findObject(token, class_record->methods,
                               class_record->method_count);
     }
+    /* Collect the comma-separated arguments inside the parentheses. */
     if (parsed_token_type == '(') {
         do {
             token = STR_tokenGetNext(0, jsCallSeparators);
@@ -293,6 +304,11 @@ int JS_callMethod(JSClassRecord *class_record, int token_type) {
     return 1;
 }
 
+/*
+ * Classifies each argument string (type and value into call_arguments) as a
+ * primitive, a class with an optional index, or a plain string. Stores
+ * argument_count in call_arguments->count.
+ */
 int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                  char **argument_names) {
     int index;
@@ -347,6 +363,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
                     break;
                 }
             } else {
+                /* Not a primitive: try a class name, else keep the raw text. */
                 argument = STR_tokenGetNext(argument, jsArgumentDelimiters);
                 token_type = STR_tokenGetType();
                 entry = JS_findObject(argument, primitive, numPrimitive);
@@ -392,6 +409,7 @@ int JS_checkArgs(struct JSCallArguments *call_arguments, int argument_count,
     return 0;
 }
 
+/* Runs each statement of source up to limit, calling every class method it names. */
 void JS_exec(char *source, char *limit) {
     char line[1024];
     char object_name[512];
@@ -426,6 +444,11 @@ int STR_tokenGetType(void) {
     return tokenType;
 }
 
+/*
+ * Returns the next token of text (or of the previous text when text is 0),
+ * ending it at one of delimiters. The delimiter that ended it is stored in
+ * tokenType. Returns 0 when no token is left.
+ */
 char *STR_tokenGetNext(char *text, const char *delimiters) {
     char *token_start;
     char *cursor;
@@ -446,6 +469,7 @@ char *STR_tokenGetNext(char *text, const char *delimiters) {
     token_start = cursor;
     while (cursor < end) {
         character = (unsigned char)cursor[0];
+        /* A quoted string is skipped as part of the token. */
         if (character == '"') {
             cursor++;
             for (;;) {
@@ -510,6 +534,11 @@ char *STR_tokenGetNext(char *text, const char *delimiters) {
     return token_start;
 }
 
+/*
+ * Copies the next ';'-terminated statement from source into destination,
+ * dropping '//' and '#' comments. Returns the position after it, or 0 at
+ * the end of the buffer.
+ */
 static char *STR_getLine(char *destination, char *source, char *limit) {
     int character;
 
@@ -556,6 +585,7 @@ static char *STR_getLine(char *destination, char *source, char *limit) {
     return source;
 }
 
+/* Removes leading and trailing control characters and spaces in place. */
 static char *STR_trim(char *text) {
     int index;
 
@@ -575,6 +605,7 @@ static char *STR_trim(char *text) {
     return text;
 }
 
+/* Removes leading and trailing copies of delimiter in place. */
 static char *STR_trim2(char *text, int delimiter) {
     int index;
 

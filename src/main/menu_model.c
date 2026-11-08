@@ -118,8 +118,7 @@ typedef struct MenuModelWeaponLoadTask {
 } MenuModelWeaponLoadTask;
 
 /*
- * The object bound to a menu model draw task, recovered from
- * MenuModelDrawTypeMain's own access. Only +0x20 is evidenced.
+ * The object bound to a menu model draw task. Only the actor at +0x20 is known.
  */
 typedef struct MenuModelDrawContext {
     unsigned char unmodeled_00[0x20];
@@ -127,9 +126,8 @@ typedef struct MenuModelDrawContext {
 } MenuModelDrawContext;
 
 /*
- * +0x1: MenuModelSubWindowBreak forces this to -1 (0xFF) immediately before
- * tail-calling MenuModelSubWindowMainSub, which reads the byte as unsigned
- * (lbu) to decide how to tear the subwindow down.
+ * +0x1: MenuModelSubWindowBreak sets this to -1 (0xFF) before calling
+ * MenuModelSubWindowMainSub, which compares the byte as unsigned.
  */
 typedef struct MenuModelSubWindowAccess {
     unsigned char unmodeled_00[1];
@@ -160,8 +158,8 @@ typedef struct MenuModelResourceAccess {
 /*
  * Partial layout of the menu-model "memory" state buffer (main/tu165).
  * MenuModelMenuMotionCheck reads state; MenuModelMemoryInit sets base and
- * size; MenuModelMemoryGet and MenuModelResourceCancel3 establish the sixteen
- * 0x1C-byte resource regions at +0xC.
+ * size; MenuModelMemorySet lays out the sixteen 0x1C-byte resource regions
+ * at +0xC; MenuModelMemoryGet and MenuModelResourceCancel3 use them.
  */
 typedef struct MenuModelMemoryStateBuffer {
     int state; /* +0x0: memory-state code; 10-12 or 20 support menu motion */
@@ -246,7 +244,7 @@ static void MenuModelSubWindowMainSub(MenuModelUnit *unit);
 static void ActorAndResourceDispose(Actor **actorSlot, MenuModelResourceAccess **resourceSlot, int mode);
 
 /* Builds a task list of `capacity` 0x80-byte tasks at `pool` and returns the
- * first byte after them (0 when capacity is 0), see 0x0021c528. */
+ * first byte after them (0 when capacity is 0). */
 void *xglTaskInitial(void *pool, int capacity, int flags);
 
 void ACT_dispose(Actor *actor);
@@ -267,8 +265,8 @@ XglTaskScheduler *MenuModelTask = 0;
 
 int MenuModelFlag = 0;
 
-/* First .data object of the original TU (0x0036D2F0): MenuModelCreate reads
-   it through a folded base 34 entries before its start. */
+/* Resource ids for the unit model ids from 34 on: MenuModelCreate indexes
+   this table with modelId - 34. */
 static unsigned short guno_eid_tbl[29] = {
     0x4001, 0x4002, 0x4003, 0x4004, 0x4005, 0x4006, 0x4007, 0x4008,
     0x4009, 0x400A, 0x400B, 0x400C, 0x400D, 0x400E, 0x400F, 0x4010,
@@ -298,6 +296,7 @@ float modelDrawClose02MinProgress
 /* Defined here, not with the data above: moving it before the functions that use it changes the original code or data order. */
 const char wpMeqpMotionPath[0x18] = "data\\motion\\wp_meqp.fpk";
 
+/* Clears the region table and lays out the resource regions for a memory state. */
 void MenuModelMemorySet(int state)
 {
     MenuModelMemoryStateBuffer *memoryState;
@@ -316,6 +315,7 @@ void MenuModelMemorySet(int state)
     memset(memoryState->base, 0, memoryState->size);
     memory = memoryState->base;
     region = memoryState->regions;
+    /* Each region takes consecutive slices of the buffer for its file[] slots. */
     switch (state) {
     case 0:
         region->file[0] = memory;
@@ -442,6 +442,7 @@ void MenuModelMemorySet(int state)
     }
 }
 
+/* Returns the first free region of the given memory type, or 0. resourceId is unused. */
 MenuModelResourceAccess *MenuModelMemoryGet(unsigned short resourceId, int memoryType)
 {
     int i;
@@ -463,6 +464,7 @@ void MenuModelMemoryInit(void *base, int size) {
     MenuModelMemoryState.state = MENU_MODEL_MEMORY_NONE;
 }
 
+/* Clears the request queue and the active resource handles. */
 void MenuModelResourceInit(void)
 {
     int i;
@@ -479,6 +481,7 @@ void MenuModelResourceInit(void)
     state->resetWord = 0;
 }
 
+/* Returns 1 when the memory state supports the menu motion pack, otherwise 0. */
 int MenuModelMenuMotionCheck(void) {
     if ((MenuModelMemoryState.state >= MENU_MODEL_MEMORY_MAIN_MENU) &&
         ((MenuModelMemoryState.state < MENU_MODEL_MEMORY_TRIPLE_UNIT + 1) ||
@@ -488,6 +491,7 @@ int MenuModelMenuMotionCheck(void) {
     return 0;
 }
 
+/* Returns the menu motion handle when the pack is loaded in a supporting state, else 0. */
 MenuModelResourceAccess *MenuModelMenuMotionGet(void) {
     MenuModelResourceAccess *handle;
 
@@ -498,6 +502,10 @@ MenuModelResourceAccess *MenuModelMenuMotionGet(void) {
     return handle;
 }
 
+/*
+ * Cancels the load in progress, frees its region and reports failure (-1)
+ * to the first queued request's result word.
+ */
 void MenuModelResourceCancel(void)
 {
     MenuModelResourceAccess *resource;
@@ -522,6 +530,10 @@ void MenuModelResourceCancel(void)
     }
 }
 
+/*
+ * Cancels the queued requests and weapon regions of a unit's resources.
+ * The weapon region cleanup is skipped when skipWeaponRegionCleanup is set.
+ */
 void MenuModelResourceCancel3(MenuModelUnit *unit)
 {
     int resourceIds[4];
@@ -578,6 +590,10 @@ void MenuModelResourceCancel2(MenuModelUnit *unit)
     MenuModelResourceCancel3(unit);
 }
 
+/*
+ * Loads the files of one resource into its region, chosen by resourceMode.
+ * For a weapon task, the weapon motion is loaded when its name is found.
+ */
 void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
                            int resourceMode, MenuModelWeaponLoadTask *weaponTask)
 {
@@ -653,6 +669,7 @@ void MenuModelResourceLoad(int resourceId, MenuModelResourceAccess *buffers,
     }
 }
 
+/* Per-frame step of the resource queue: completes the active load, then starts the next one. */
 void MenuModelResourceMain(void)
 {
     int memoryTypes[5] = {1, 1, 2, 3, 2};
@@ -669,6 +686,7 @@ void MenuModelResourceMain(void)
     if (MenuLoadSync() != 0) {
         return;
     }
+    /* Completes the load in progress and hands its handle to the requester. */
     if (MenuModelResourceState.resource != 0) {
         MenuModelResourceAccess *resource;
         unsigned int *result;
@@ -685,6 +703,7 @@ void MenuModelResourceMain(void)
         __builtin_memcpy(result, &resource, sizeof(resource));
         MenuModelResourceState.resource = 0;
     }
+    /* Moves the first queued request into slot 0 when the slot is empty. */
     if (MenuModelResourceState.requests[0].result == 0) {
         for (i = 1; i < MENU_MODEL_REGION_COUNT; i++) {
             if (MenuModelResourceState.requests[i].result != 0) {
@@ -729,6 +748,7 @@ void MenuModelResourceMain(void)
                           memoryTypes[resourceClass], MenuModelResourceState.requests[0].loadParam);
 }
 
+/* Queues a request in the first free slot after the active one; drops it when none is free. */
 void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loadParam)
 {
     int i;
@@ -743,6 +763,7 @@ void MenuModelResourceRequest(void *result, unsigned short resourceId, void *loa
     }
 }
 
+/* Requests the menu motion pack for the current memory state, unless it is already loaded. */
 void MenuModelMenuMotionLoad(void)
 {
     MenuModelResourceAccess **motionHandle;
@@ -773,6 +794,7 @@ void MenuModelMenuMotionLoad(void)
     MenuModelResourceRequest(motionHandle, motionId, 0);
 }
 
+/* Applies the unit's sub window: closes it when flagged, otherwise sets its camera window and mode. */
 static void MenuModelSubWindowMainSub(MenuModelUnit *unit)
 {
     MenuModelSubWindowAccess *subWindow;
@@ -807,6 +829,7 @@ void MenuModelSubWindowMain(MenuModelUnit *unit)
     }
 }
 
+/* Marks the unit's sub window for closing and applies it at once. */
 void MenuModelSubWindowBreak(MenuModelUnit *unit)
 {
     MenuModelSubWindowAccess *subWindow;
@@ -818,6 +841,7 @@ void MenuModelSubWindowBreak(MenuModelUnit *unit)
     }
 }
 
+/* Attaches a sub window on studioId to the unit, with its own camera. Does nothing for studioId 0 or a unit without an actor. */
 void MenuModelSubWindowSet(MenuModelUnit *unit, int studioId, int mode)
 {
     MenuModelSubWindowAccess *subWindow;
@@ -853,6 +877,10 @@ void MenuModelSubWindowinit(void) {
     memset(MenuModelSubWindow, 0, MENU_MODEL_SUBWINDOW_COUNT * 0x10U);
 }
 
+/*
+ * Disposes the actor in actorSlot when it is in use, then clears the resource
+ * in resourceSlot unless mode is 1.
+ */
 static void ActorAndResourceDispose(Actor **actorSlot, MenuModelResourceAccess **resourceSlot, int mode)
 {
     Actor *actor;
@@ -889,6 +917,7 @@ void MenuModelWeaponDispose(MenuModelWeapon *weapon)
     }
 }
 
+/* Disposes a unit's weapons, then its body and face actors and their resources. */
 void MenuModelUnitDispose(MenuModelUnit *unit)
 {
     MenuModelUnit *self;
@@ -922,6 +951,10 @@ void MenuModelAlphaDraw(Actor *actor)
     }
 }
 
+/*
+ * Creates the unit's body actor and, for body ids below 0x2000, its face actor.
+ * Sets the resources, draw settings, motion, hand and lighting.
+ */
 void MenuModelUnitActorSet(MenuModelUnit *unit)
 {
     Actor *actor;
@@ -952,6 +985,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     actor->drawEnv.partAlphaCount = 0;
     actor->drawEnv.cameraCullDistance = 0.0f;
     actor->flags = 0;
+    /* Selects the body's animation pack from the actor kind in bits 12-15. */
     switch ((actorKind >> 12) & 0xF) {
     case 0:
         motionResource = MenuModelMenuMotionGet();
@@ -977,6 +1011,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     ACT_setModelWrapper(actor, 0);
     ACT_initMotion(actor);
     motionActorKind = actor->inUseId;
+    /* Chooses the initial motion from the character or AGWS table. */
     switch ((motionActorKind >> 12) & 0xF) {
     case 0:
         if (MenuModelMenuMotionGet() != 0 &&
@@ -1001,6 +1036,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     }
     ACT_setMotion(actor, motion);
     control->initialMotionId = motion;
+    /* Creates the face actor, sharing the body's matrix and animation pack. */
     if (actor->inUseId < 0x2000) {
         face = ACT_create(-2, actor->inUseId + 0x10000);
         unit->actor2 = face;
@@ -1032,6 +1068,7 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
         }
         ACT_setHand(actor, handMask);
     }
+    /* Ambient light plus three parallel lights, each with an intensity and a direction. */
     {
         XglLightVector lighting[7] = {
             { .value = {0.245f, 0.245f, 0.245f, 1.0f} },
@@ -1058,6 +1095,10 @@ void MenuModelUnitActorSet(MenuModelUnit *unit)
     }
 }
 
+/*
+ * Creates the actor for a weapon, parents its arms to the unit's actor and
+ * sets its motion for the weapon id.
+ */
 void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
 {
     Actor *actor;
@@ -1120,6 +1161,7 @@ void MenuModelWeaponActorSet(MenuModelUnit *unit, MenuModelWeapon *weapon)
     actor->flags &= ~8;
 }
 
+/* Applies controller 1 input to the unit's rotation and uniform scale while its menu control is enabled. */
 void MenuModelControl(MenuModelUnit *unit)
 {
     Actor *actor = unit->actor;
@@ -1151,6 +1193,10 @@ void MenuModelControl(MenuModelUnit *unit)
     }
 }
 
+/*
+ * Applies both controllers' input: with R2 held it changes rotation, with L2
+ * held it changes scale. preset selects the scale limit entry.
+ */
 void MenuModelControl2(MenuModelUnit *unit, int preset)
 {
     Actor *actor = unit->actor;
@@ -1205,6 +1251,7 @@ void MenuModelControl2(MenuModelUnit *unit, int preset)
     }
 }
 
+/* Places the unit's actor from its menu control and prints the rotation and scale values. */
 void MenuModelNavelMove(MenuModelUnit *unit)
 {
     Matrix4 matrix;
@@ -1240,6 +1287,7 @@ void MenuModelMotionSet(MenuModelMotionTarget *target, unsigned int dataId)
     actor->animation.slot.flags |= 8;
 }
 
+/* Draw type function: fades the actor in by one step, ending at full opacity. */
 void ModelDrawTypeOpen01(Actor *actor)
 {
     ActorMenuControl *control;
@@ -1254,6 +1302,7 @@ void ModelDrawTypeOpen01(Actor *actor)
     }
 }
 
+/* Draw type function: fades the actor out by one step, ending at fully transparent. */
 void ModelDrawTypeClose01(Actor *actor)
 {
     ActorMenuControl *control;
@@ -1268,6 +1317,7 @@ void ModelDrawTypeClose01(Actor *actor)
     }
 }
 
+/* Draw type function: fades the actor out by one step, ending at the minimum opacity. */
 void ModelDrawTypeClose02(Actor *actor)
 {
     ActorMenuControl *control;
@@ -1284,6 +1334,10 @@ void ModelDrawTypeClose02(Actor *actor)
     }
 }
 
+/*
+ * Applies a draw type: SHOW and HIDE set the transparency directly, the fade
+ * types install a per-frame draw type function.
+ */
 static void MenuModelDrawTypeSet(Actor *actor, int drawType)
 {
     ActorMenuControl *control;
@@ -1311,6 +1365,7 @@ static void MenuModelDrawTypeSet(Actor *actor, int drawType)
     }
 }
 
+/* Applies drawType to the weapon in weaponIndex, when it has an actor. */
 void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex) {
     Actor *actor;
     MenuModelWeapon *weapon;
@@ -1326,6 +1381,7 @@ void MenuModelWeaponOpen(MenuModelUnit *unit, int drawType, int weaponIndex) {
     }
 }
 
+/* Applies drawType to the unit's actor and to each of its weapons. */
 void MenuModelUnitOpen(MenuModelUnit *unit, int drawType)
 {
     int weaponIndex;
@@ -1348,6 +1404,7 @@ void MenuModelDrawTypeMain(MenuModelDrawContext *context)
     }
 }
 
+/* Per-frame task of a weapon: waits for its resource, spawns its actor, then runs it until it ends. */
 static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
 {
     MenuModelWeapon *weapon;
@@ -1371,6 +1428,7 @@ static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
             resource = unit->weapon[0]->resource;
         }
     }
+    /* END releases the weapon and resets its slot with CreateInit. */
     switch (weapon->taskPhase) {
     case MENU_MODEL_PHASE_INIT:
         weapon->extFuncFlag = 0;
@@ -1414,6 +1472,10 @@ static void tskMenuModelWeaponTaskMain(XglTaskPrefix *task)
     }
 }
 
+/*
+ * Per-frame task of a unit: waits for its resource, spawns its actor, then
+ * updates and draws it. END tears down the unit and its weapons.
+ */
 static void tskMenuModelTaskMain(XglTaskPrefix *task)
 {
     MenuModelUnit *unit;
@@ -1478,6 +1540,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
         control = &actor->menu;
         xglStudioChange(0);
         xglStudioGetCamera2(0)->active = 1;
+        /* While the control is disabled, the transforms are reset to their default values. */
         if (control->enabled == 0) {
             memset(&zero, 0, sizeof(zero));
             zero.w = 1.0f;
@@ -1507,6 +1570,7 @@ static void tskMenuModelTaskMain(XglTaskPrefix *task)
     }
 }
 
+/* Cancels the unit's pending resource requests and moves it to its end phase. */
 void MenuModelUnitBreak(MenuModelUnit *unit) {
     if (unit != 0) {
         MenuModelResourceCancel2(unit);
@@ -1514,6 +1578,7 @@ void MenuModelUnitBreak(MenuModelUnit *unit) {
     }
 }
 
+/* Resets a unit's task state, actor, resource and weapon slots to their initial values. */
 static void CreateInit(MenuModelUnit *unit)
 {
     int weaponIndex;
@@ -1537,6 +1602,10 @@ static void CreateInit(MenuModelUnit *unit)
     }
 }
 
+/*
+ * Creates the weapon task for weaponIndex from the unit's weapon data, replacing
+ * an existing weapon whose object id changed. Returns the new task, or 0.
+ */
 XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
                                      XglTaskPrefix **result,
                                      int weaponIndex)
@@ -1572,6 +1641,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
         }
     }
 
+    /* Resource 0x13 creates no weapon task; it only sets the unit's motion to 2. */
     if (unit->unitData->weaponResource[weaponIndex] == 0x13) {
         Actor *actor = unit->actor;
 
@@ -1607,6 +1677,7 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
         *result = (XglTaskPrefix *)weapon;
     }
 
+    /* For unit 7, weapon 1 shares weapon 0's resource: weapon 0 creates it and this one returns. */
     if (unit->objectId == 7 && weapon->weaponIndex == 1) {
         return (XglTaskPrefix *)weapon;
     }
@@ -1623,6 +1694,11 @@ XglTaskPrefix *MenuModelWeaponCreate(MenuModelTaskWork *unit,
     return (XglTaskPrefix *)weapon;
 }
 
+/*
+ * Creates a unit task for modelId and requests its resource. The resource id
+ * comes from the model id, the memory state or fixed tables. When result is
+ * not null, *result receives the unit.
+ */
 void MenuModelCreate(void **result, int modelId)
 {
     MenuModelUnit *unit;
@@ -1701,6 +1777,7 @@ void MenuModelMain(void)
     xglTaskExecute(MenuModelTask);
 }
 
+/* Breaks every menu model: runs one step with the break flag set, then resets the resource queue and sub windows. */
 void MenuModelAllBreak(void) {
     MenuModelFlag |= MENU_MODEL_FLAG_BREAK;
     MenuModelMain();
@@ -1709,6 +1786,7 @@ void MenuModelAllBreak(void) {
     MenuModelSubWindowinit();
 }
 
+/* Aligns pool to 16 bytes, builds the menu task list in it and returns the first byte after it. */
 void *MenuModelInit(void *pool)
 {
     pool = (void *) (((int) pool + 0xF) & ~0xF);

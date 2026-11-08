@@ -71,6 +71,7 @@ static void fnGAMERA_PO000(void *self, GameraWork *work);
     __asm__ __volatile__("lq $8, 0(%1)\n\tsq $8, 0(%0)"                  \
                          : : "r"(destination), "r"(source) : "$8", "memory")
 
+/* Initializes a GAMERA effect object: records the origin and the target, clears the trail, builds the path and the GS packet, and installs the callbacks. */
 int MEfCreate_GAMERA(MEfObjRecord *self)
 {
     GameraEffect *effect = (GameraEffect *)self;
@@ -100,7 +101,7 @@ extern float MMathMakeRandom(void);
 extern float MMathMakeRandom2PI(void);
 extern unsigned short xglSRand(void);
 
-/* Per-point forward distance and radius of the path (splat-named rodata). */
+/* Per-point forward distance and radius of the path. */
 static const float disttbl_0_00A517D0[4];
 static const float rtbl_1_00A517E0[4];
 
@@ -111,6 +112,10 @@ static const float rtbl_1_00A517E0[4];
 #define GAMERA_ANGLE_STEP_GROWTH 1.3f
 #define GAMERA_RADIUS_SCALE_MIN 0.05f
 
+/*
+ * Lays out the path control points on a spiral that starts at a random angle outside
+ * 210 to 330 degrees and turns either way at random.
+ */
 static void makePath(GameraWork *state)
 {
     Matrix4 matrix;
@@ -163,6 +168,7 @@ static void makePath(GameraWork *state)
     }
 }
 
+/* Computes the tangents of the Hermite segment that starts at control point segment. */
 static void makeHermiteParams(int segment, GameraWork *state)
 {
     const HermiteVector *point_prev;
@@ -186,6 +192,7 @@ static void makeHermiteParams(int segment, GameraWork *state)
                         point_end, point_next);
 }
 
+/* Evaluates the current Hermite position, at the path frame, into destination. */
 static void makeHermiteCoord(float *destination, GameraWork *state)
 {
     short segment = state->segment;
@@ -275,6 +282,10 @@ typedef struct GameraOffsets {
     float outer[4];
 } GameraOffsets;
 
+/*
+ * Draws the trail as strips with both sides per offset axis. Each vertex is offset across
+ * the trail, transformed by its segment's angle, and clipped against the screen.
+ */
 static void fnGAMERA_DP000(void *self, GameraWork *work)
 {
     GameraWork *state = work;
@@ -304,6 +315,7 @@ static void fnGAMERA_DP000(void *self, GameraWork *work)
     view = mefCamParams.matrix;
     packet = &state->packet;
     MGsGPInit(packet, 0, 0);
+    /* Write the GS state for the strips: test, depth and additive alpha. */
     setting = packet->current;
     setting[0].gif.tag = MEF_GS_SETUP_TAG;
     setting[0].gif.registers = MEF_GS_SETUP_REGS;
@@ -318,6 +330,7 @@ static void fnGAMERA_DP000(void *self, GameraWork *work)
     tail = packet;
 
     slots = (GameraOffsets *)offset;
+    /* Two passes, one per offset axis; each pass draws both sides of the strip. */
     for (; line < 2; line++) {
         __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(&offset[0]) : "memory");
         __asm__ __volatile__("sqc2 $vf0, 0(%0)" : : "r"(outer_offset) : "memory");
@@ -345,6 +358,7 @@ static void fnGAMERA_DP000(void *self, GameraWork *work)
                              &state->trail[segment + 1]);
                 angles.z = state->path_angle[state->trail_segment[segment]];
                 MMathRotateMatrixYXZ(&matrix, 0, &angles);
+                /* Use the trail point as the translation of the strip matrix. */
                 __asm__ __volatile__(
                     "lqc2 $vf1,0(%1)\n\t"
                     "vmove.w $vf1w,$vf0w\n\t"

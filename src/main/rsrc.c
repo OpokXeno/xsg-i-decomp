@@ -111,6 +111,7 @@ const char spaceText[4] = " ";
 
 static char *rsrcDefaultPath = EWDefaultResourcePath;
 
+/* Clears the key of every item whose key equals source and marks those items inactive. */
 void RSRC_inactiveSource(RsrcManager *manager, int source)
 {
     u16 count = manager->item_count;
@@ -129,6 +130,11 @@ void RSRC_inactiveSource(RsrcManager *manager, int source)
     }
 }
 
+/*
+ * Initialises a resource arena in memory. The manager sits at the end of the
+ * block, the item table of item_capacity slots just below it, and the heap
+ * grows upward from the start.
+ */
 RsrcManager *RSRC_create(void *memory, u32 memory_size, int item_capacity)
 {
     RsrcManager *manager;
@@ -149,6 +155,11 @@ void RSRC_setPrintParam(int index, int length)
     infoLength = length;
 }
 
+/*
+ * Walks the item range set by RSRC_setPrintParam, assembling each item's mark
+ * strings (chosen by mode) and, for files when path display is on, its short
+ * path; nothing is printed. Then resets the range.
+ */
 int RSRC_info(RsrcManager *manager, int mode)
 {
     char line[128];
@@ -215,6 +226,7 @@ char *RSRC_setDefaultPath(char *path)
     return path;
 }
 
+/* Empties the arena: resets the heap cursor, the item count and the flags of every item slot. */
 void RSRC_init(RsrcManager *manager)
 {
     u16 *item_flags;
@@ -233,6 +245,7 @@ void RSRC_init(RsrcManager *manager)
     }
 }
 
+/* Returns 0 when size more bytes fit in the heap, 1 when they do not. */
 int RSRC_check(RsrcManager *manager, int size)
 {
     if ((u32)((manager->heap_cursor + size) - manager->heap_origin) < manager->heap_bound) {
@@ -241,6 +254,10 @@ int RSRC_check(RsrcManager *manager, int size)
     return 1;
 }
 
+/*
+ * Allocates size zeroed bytes, rounded up to 16, reusing an inactive item
+ * when one is large enough. key is stored with the item.
+ */
 void *RSRC_alloc(RsrcManager *manager, u32 size, int key)
 {
     RsrcItem *item = RSRC_getDirtyItem(manager, size);
@@ -271,6 +288,7 @@ void *RSRC_alloc(RsrcManager *manager, u32 size, int key)
     return item->data;
 }
 
+/* Returns the data of the file item whose name starts with name, or 0. */
 void *RSRC_searchFile(RsrcManager *manager, char *name)
 {
     int index = 0;
@@ -295,6 +313,10 @@ static int isLeave(RsrcItem *item, int mode)
     return item->flags & RSRC_FLAG_SELECTED;
 }
 
+/*
+ * Compacts the arena: selected items are moved down to the heap origin and
+ * packed in the item table, and every other item is dropped.
+ */
 void RSRC_dispose(RsrcManager *manager, int mode)
 {
     RsrcItem *item = manager->items;
@@ -398,6 +420,11 @@ RsrcItem *RSRC_getItem(RsrcManager *manager, void *data)
     return 0;
 }
 
+/*
+ * Loads path + file_name into the heap as a file item, unless a file of that
+ * name is already loaded. Returns its data, or 0 when it cannot be opened or
+ * does not fit.
+ */
 void *RSRC_loadFileSub(RsrcManager *manager, char *path, char *file_name)
 {
     char buffer[1024];
@@ -458,6 +485,10 @@ void *RSRC_loadFile(RsrcManager *manager, char *file_name)
     return RSRC_loadFile2(manager, rsrcDefaultPath, file_name);
 }
 
+/*
+ * Finds an inactive item to reuse. size 0 returns the smallest inactive item;
+ * otherwise the first inactive item with at least size bytes, or 0.
+ */
 RsrcItem *RSRC_getDirtyItem(RsrcManager *manager, u32 size)
 {
     int index;

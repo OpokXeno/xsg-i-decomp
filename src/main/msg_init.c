@@ -14,8 +14,8 @@
 #define MIF2_WAITKEY_BYTE 0x80u
 #define MIF2_WAIT_BYTE 0x83u
 #define MIF2_SIGNAL_BYTE 0x82u
-/* Control opcodes (< 0x20) written by the ruby handler: a callback record
- * (callback address + 4-byte parameter) and a ruby-text on/off switch. */
+/* Control opcodes (< 0x20): a callback record (callback address + 4-byte
+ * parameter) and a ruby-text on/off switch. */
 #define MIF2_CALLBACK_BYTE 0x17u
 #define MIF2_RUBY_BYTE 0x18u
 
@@ -59,7 +59,7 @@ typedef struct Mif2Argument {
 
 /*
  * One row of the mfunc[] control-code table, which a NULL name terminates.
- * MSG_convert (still asm) calls the matched row's handler as
+ * MSG_convert calls the matched row's handler as
  * handler(out, argc, args), including the placeholder MIF2_dummy row. That
  * handler ignores args and returns out unchanged.
  */
@@ -86,7 +86,7 @@ typedef struct RubyFontContext {
 extern const char tokenDelimiters[];
 extern char msgWidthProbeControl[];
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
+/* Digit and radix tables. No function in this file reads them. */
 extern char digits[16];
 
 extern char radixTenTenths[100];
@@ -185,6 +185,10 @@ void MSG_init(void)
     ctrlCodeFlags = 0;
 }
 
+/*
+ * Converts text into the window's message queue. Render mode 4 prefixes the
+ * converted text with the font begin escape.
+ */
 void MSG_print2(void *window, const char *text, int length)
 {
     struct MsgPrintContext *context = window;
@@ -204,6 +208,7 @@ void MSG_send(void)
 {
 }
 
+/* Returns the length of a NUL-terminated message, skipping tag operands. */
 int MSG_getSize(const unsigned char *message)
 {
     int code;
@@ -339,6 +344,10 @@ int MSG_getSize(const unsigned char *message)
     return cursor - message - 1;
 }
 
+/*
+ * Converts each 16-byte row of data into printable characters ('.' for bytes
+ * below 0x20). The printable row is built in a local buffer; nothing is written out.
+ */
 void MSG_dump(const unsigned char *data, int size)
 {
     char line[16];
@@ -359,6 +368,10 @@ void MSG_dump(const unsigned char *data, int size)
     }
 }
 
+/*
+ * Sets or clears the control-code flag from flags, then clears the queue
+ * fields selected by the low byte of flags.
+ */
 void MSG_queueReset(MsgQueue *queue, unsigned int flags)
 {
     if (flags & MSG_QUEUE_RESET_CONTROL_CODE_FLAG) {
@@ -378,6 +391,10 @@ void MSG_queueReset(MsgQueue *queue, unsigned int flags)
     }
 }
 
+/*
+ * Measures the queued text: the widest line in pixels, the most characters
+ * on one line and the number of lines, stored in info.
+ */
 void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor)
 {
     int width = 0;
@@ -469,6 +486,11 @@ void MSG_queueGetInfo(MsgQueue *queue, MsgQueueInfo *info, unsigned char *cursor
     info->lines = lines;
 }
 
+/*
+ * Pops queued text into destination, up to a newline, limit characters or the
+ * end of the queue. A line that reaches the queue width ends with a newline.
+ * Returns the number of bytes written.
+ */
 int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
 {
     unsigned char *output;
@@ -603,6 +625,10 @@ int MSG_queuePop(MsgQueue *queue, unsigned char *destination, int limit)
     return output - destination;
 }
 
+/*
+ * Copies one line of message text from *source to *destination and returns
+ * its width. *source is set to NULL at the end of the text.
+ */
 int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, unsigned char *output, unsigned char *input)
 {
     unsigned int width;
@@ -726,6 +752,10 @@ int MSG_copyln(unsigned char **destination, unsigned char **source, int flags, u
     return width;
 }
 
+/*
+ * Appends length bytes of message text to the queue (the text length when
+ * length is negative). Returns the new tail, or -1 when the text does not fit.
+ */
 int MSG_queuePush(MsgQueue *queue, const unsigned char *text, int capacity, int length)
 {
     int newTail;
@@ -918,6 +948,11 @@ void MSG_setArgs(Mif2Argument *args, int argc, const char **strs)
     }
 }
 
+/*
+ * Ruby callback, driven by the phase in command: BEGIN saves the start
+ * position, BODY moves the position for the ruby reading, and END returns to
+ * the saved end x and undoes the vertical offset.
+ */
 static void rubyFont(RubyFontContext *context, unsigned int command)
 {
     unsigned int mode = command & RUBY_PHASE_MASK;
@@ -947,6 +982,10 @@ static void rubyFont(RubyFontContext *context, unsigned int command)
     return;
 }
 
+/*
+ * Writes 'base/reading' text as a ruby control sequence: rubyFont callbacks
+ * around the base text and the reading. Returns the end of the output.
+ */
 char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
 {
     const char *text = args[0].value.text;
@@ -970,6 +1009,7 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
         text--;
     }
     *out++ = '[';
+    /* Measure the reading to size the body callback. */
     {
         int ruby_width;
         const char *cursor;
@@ -994,6 +1034,7 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
         }
         width = ruby_width + RUBY_PHASE_BODY;
     }
+    /* Body callback carrying the measured width. */
     *out++ = MIF2_CALLBACK_BYTE;
     *out++ = callback >> 16;
     *out++ = callback >> 8;
@@ -1002,6 +1043,7 @@ char *MIF2_ruby(char *out, int argc, const Mif2Argument *args)
     *out++ = width >> 16;
     *out++ = width >> 8;
     *out++ = width;
+    /* Switch ruby text on, then copy the reading. */
     *out++ = MIF2_RUBY_BYTE;
     *out++ = 1;
     while ((ch = (unsigned char)*text++) != '/' && ch != 0) {
@@ -1163,6 +1205,10 @@ static MsgFuncEntry *findMsgFunc(const char *name)
     return 0;
 }
 
+/*
+ * Converts message text into destination. Each /[ ] tag runs the handler of
+ * its mfunc[] row; a tag with no matching row is copied as text. Returns cnvCH.
+ */
 unsigned int MSG_convert(unsigned char *destination, int capacity, const char *text, int length)
 {
     char bracket[256];
@@ -1263,6 +1309,7 @@ void MBUF_init(void)
     } while (slot >= 0);
 }
 
+/* Claims the first inactive message buffer with a plain workspace cursor. Returns 0 when none is free. */
 MsgBuffer *MBUF_create2(void)
 {
     int slot = -1;
@@ -1286,6 +1333,11 @@ MsgBuffer *MBUF_create2(void)
     return buffer;
 }
 
+/*
+ * Claims the first inactive message buffer and lays out entry_count entry
+ * pointers at the start of its workspace, each entry_size bytes (rounded up
+ * to a multiple of 4). Returns 0 when none is free.
+ */
 MsgBuffer *MBUF_create(int entry_size, int entry_count)
 {
     int slot = -1;

@@ -28,6 +28,7 @@ extern const char dispWpnDatSpeedFormat[];
 const char dispWpnDatRestNumFractionFormat[] = "%d/%d";
 const char dispWpnDatRestNumPercentFormat[] = "%d%%";
 
+/* Writes the remaining shots of a weapon into buffer as a count, a fraction or a percentage, by its rest unit. */
 void RgDispWpnDat_CreateRestNumStr(RgWeapon *weapon, char *buffer)
 {
     RgWeaponEssence *ess;
@@ -91,6 +92,7 @@ static RgWpnPicEntry s_aWepPicTbl_0[RG_WPN_PIC_COUNT] = {
     {"LW-VX4", {0}, {192, 112, 64, 16}},
 };
 
+/* Copies the picture UVWH block of the weapon named name into uvwh. Returns 1 when found, else 0. */
 int RgDispWpnDat_GetNameUVWH(const char *name, u64 *uvwh)
 {
     unsigned int i;
@@ -109,6 +111,7 @@ int RgDispWpnDat_GetNameUVWH(const char *name, u64 *uvwh)
 
 const char dispWpnDatSpeedFormat[] = "%d k";
 
+/* Writes the horizontal speed of a robot into buffer, with a small random offset when it moves; empties buffer for a null robot. */
 void RgDispWpnDat_CreateSpeedStr(RgStatus *robot, char *buffer)
 {
     RgVector velocity;

@@ -102,6 +102,7 @@ static int _IsEndOfMode(void)
     return result;
 }
 
+/* Returns the controller (0 or 1) whose START press pauses in this battle mode, or -1. */
 static int _DoAnyOnePausing(unsigned int mode)
 {
     switch (mode) {
@@ -132,6 +133,7 @@ static int _DoAnyOnePausing(unsigned int mode)
     return -1;
 }
 
+/* Returns PAD_START when START was pressed on controller (on either pad when it is negative), else 0. */
 static int _IsEndOfPause(int controller)
 {
     u16 held;
@@ -144,6 +146,7 @@ static int _IsEndOfPause(int controller)
     return held & PAD_START;
 }
 
+/* Flushes the 2D paint, particle and draw queues, then calls XrgSleep. */
 static void _EndOfFrame(void)
 {
     XrgPaint2DFlush(InstanceOfXrgPaint2D());
@@ -154,6 +157,10 @@ static void _EndOfFrame(void)
 
 const char mainSourcePath[] = "../rg_main.euc.c";
 
+/*
+ * Fills data with the background name, start positions and facing of stageId.
+ * Unknown stages report an error.
+ */
 static void _GetStageData(int stageId, RgBattleInit *data)
 {
     RgBattleInitPlayer *player[2];
@@ -217,17 +224,12 @@ static void _GetStageData(int stageId, RgBattleInit *data)
     }
 }
 
-/*
- * ov12:0x00a514d8 contains the format string "over stage-serial ID for
- * enemy (%d)"; ov12:0x00a51450 contains the source filename
- * "../rg_main.euc.c".
- */
-
 const char mainStageSerialOverEnemyFormat[] = "over stage-serial ID for enemy (%d)";
 
-/* Stage id per serial, indexed 0..3 (ov12:0x00a4f4c8, size 0x10). */
+/* Stage id per serial, indexed 0..3. */
 static int s_aeBgTbl_0[RG_STAGE_COUNT] = {0, 1, 2, 3};
 
+/* Stage data for serial; an out-of-range serial warns and uses stage 2. */
 static void _GetStageDataBySerial(u32 serial, void *data)
 {
     if (serial < RG_STAGE_COUNT) {
@@ -238,14 +240,17 @@ static void _GetStageDataBySerial(u32 serial, void *data)
     _GetStageData(2, data);
 }
 
-/* data: the caller's output record (asserted non-null; layout not yet recovered). */
-/* Same (serial, data) interface as _GetStageDataBySerial; the hard data is
- * always stage 3 and the caller's record is forwarded untouched. */
+/*
+ * Same (serial, data) interface as _GetStageDataBySerial. The hard data is
+ * always stage 3 and the serial is ignored; the caller's record is forwarded
+ * untouched.
+ */
 static void _GetStageHardDataBySerial(int serial, void *data)
 {
     _GetStageData(3, data);
 }
 
+/* Normal-mode enemy level per serial, indexed 0..3. */
 static int s_anEnemyLevel_1[RG_STAGE_COUNT] = {0x1000, 0x0B15, 0x05FE, 0x1DEF};
 
 static int _GetEnemyLevelBySerial(u32 serial)
@@ -261,10 +266,9 @@ static int _GetEnemyLevelBySerial(u32 serial)
     return level;
 }
 
-/* ov12:0x00a51500 contains "over stage-serial ID for (hard) enemy (%d)". */
 const char mainStageSerialOverHardEnemyFormat[] = "over stage-serial ID for (hard) enemy (%d)";
 
-/* Enemy level per serial for hard mode, indexed 0..3 (ov12:0x00a4f4e8, size 0x10). */
+/* Enemy level per serial for hard mode, indexed 0..3. */
 static int s_anEnemyLevel_2[RG_STAGE_COUNT] = {0x1DEF, 0x1DEF, 0x1DEF, 0x1DEF};
 
 static int _GetEnemyHardLevelBySerial(u32 serial)
@@ -284,6 +288,7 @@ static int abInit_3[2]  = {0, 0};
 
 int s_stack[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
+/* Picks the enemy character for the player slot and writes its name and three weapon names. */
 static void _GetEnemyChar(RgBattleInitPlayer *names, int player)
 {
     RgWeaponEssence *weapons[3];
@@ -335,6 +340,10 @@ const char mainWeaponNameLg24Vx[] = "LG24VX";
 
 const char mainWeaponNameBmp45Vx[] = "BMP45VX";
 
+/*
+ * Fills the player slot with the hard-mode enemy of stage. Stages 9999 and 9998
+ * select the special opponents; other stages use a normal enemy.
+ */
 static int _GetHardEnemyChar(RgBattleInitPlayer *names, int player, unsigned int stage)
 {
     switch (stage) {
@@ -386,6 +395,7 @@ const char mainShotInfoFileName[] = "rg_shot.info";
 
 const char mainWeaponInfoFileName[] = "rg_weapon.info";
 
+/* Reads the robot, shot and weapon databases from their info files. */
 static void _InitDataBase(void)
 {
     RgReadText *robotText;
@@ -399,6 +409,7 @@ static void _InitDataBase(void)
     RgWeaponDBRead(InstanceOfRgWeaponDB(), mainWeaponInfoFileName);
 }
 
+/* Runs the title screen for mode until it returns a result or the mode ends; returns the result. */
 static int _Title(int mode)
 {
     RgTitle *title;
@@ -420,6 +431,10 @@ static int _Title(int mode)
 
 static struct RgSelectAGWSData s_ainData_4[2];
 
+/*
+ * Runs the character select for player slot. Returns the select result; the
+ * chosen character and its weapon names are copied into init only when it is 1.
+ */
 static int _SelectOneChar(RgBattleInit *init, int player)
 {
     RgWeaponEssence *weapons[3];
@@ -632,12 +647,12 @@ static void _DisposeBattleDatas(void)
     XrgSoundSystemDisposeSequence(0);
 }
 
-/* ov12:0x00a51640 (0x5a,0x5a,0x5a,0x7f): the pause banner's blend color. */
+/* The pause banner's blend colour: r, g, b, a = 0x5A, 0x5A, 0x5A, 0x7F. */
 const XrgColorQuad mainPauseColor = {{0x0000005A0000005AULL, 0x0000007F0000005AULL}};
 
-/* ov12:0x00a51650 contains "PAUSE". */
 const char mainPauseText[] = "PAUSE";
 
+/* Draws the PAUSE banner, its panel and text, when the weapon font and paint handle exist. */
 static void _DispPause(void)
 {
     XrgPaint2D *paint;
@@ -673,6 +688,11 @@ static void _disp_hardmode(void)
 
 const char mainAssertBattleMgrNotNil[] = "pMgr != NIL";
 
+/*
+ * Runs one battle through its phases (round call, ready, fight, pause, result,
+ * game over, stage clear, game clear). Returns nonzero when the mode ended, which
+ * tells the caller to stop playing.
+ */
 static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info, int difficulty)
 {
     RgAnnounce *announce;
@@ -707,6 +727,7 @@ static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info,
         phaseTimer -= frameTime;
         simulateFrame = 1;
         if (battlePhase < RG_BATTLE_PHASE_DONE) {
+            /* Each case sets the phase for the next frame. */
             switch (battlePhase) {
             case RG_BATTLE_PHASE_START:
                 battlePhase = RG_BATTLE_PHASE_ROUND_CALL;
@@ -761,6 +782,7 @@ static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info,
 
                     RgBattleMgrSetPlayerControl(battle, 0);
                     winner = battleResult & RG_BATTLE_RESULT_WINNER_MASK;
+                    /* After the result banner, the mode picks the next step. */
                     switch (mode) {
                     case RG_BATTLE_MODE_PLAYER1_ONLY:
                         if (winner == mode && _GameInfoIsPlayerGetGame(info, 0) != 0) {
@@ -841,6 +863,7 @@ static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info,
                 break;
             }
         }
+        /* Simulate unless paused; the battle is drawn from the second frame on. */
         if (simulateFrame != 0) {
             RgBattleMgrControl(battle);
             RgBattleMgrPassTime(battle, frameTime);
@@ -864,6 +887,10 @@ static int _OneBattle(RgBattleMgr *battle, RgBattleInit *init, RgGameInfo *info,
     return modeEnded;
 }
 
+/*
+ * Plays battles of one game until it is over or a battle ends the mode. Returns
+ * nonzero when the mode was not ended.
+ */
 static int _OneGame(RgBattleInit *init, RgGameInfo *info, int difficulty)
 {
     RgBattleMgr *battle;
@@ -906,6 +933,11 @@ const char mainLogWeaponBackFormat[] = "weapon back  '%s'\n";
 
 const char mainLogPlayer2Format[] = "player 2 '%s'\n";
 
+/*
+ * Plays the vs-CPU game: character select, then the stages in order, each with
+ * its enemy, until the game ends early or all stages are played. difficulty
+ * selects the hard data.
+ */
 static void _VsCpuGame(int difficulty)
 {
     RgBattleInit init;
@@ -938,6 +970,7 @@ static void _VsCpuGame(int difficulty)
             } else {
                 _GetEnemyChar(init.players, 1);
             }
+            /* Logs the battle setup: mode, enemy level and both players. */
             XrgLog(mainLogSeparatorFormat, mainSourcePath, 1091);
             XrgLog(mainLogStageLevelFormat, mainSourcePath, 1092, init.bg, serial);
             XrgLog(mainLogModeFormat, mainSourcePath, 1093, init.mode);
@@ -979,6 +1012,7 @@ static void _VsCpuGame(int difficulty)
     _DisposeBattleDatas();
 }
 
+/* Two-player game: selects both characters, then plays stage 4 when both selections are valid. */
 static void _2PGame(void)
 {
     int result[2];
@@ -1006,11 +1040,11 @@ static void _2PGame(void)
     _DisposeBattleDatas();
 }
 
-/* OV12 TU001 file/path labels retained as local C data. */
 const char mainHelpFileName[16] = "help.npr";
 
 const char mainUnknownTitleStatusFormat[24] = "unknown title status";
 
+/* Runs the help screen until it reports the end or the mode ends. */
 static void _Help(void)
 {
     RgHelp *help;
@@ -1029,6 +1063,7 @@ static void _Help(void)
     RgFileSysDisposePrepares(InstanceOfRgFileSys());
 }
 
+/* Saves sRender words 9 to 16 into s_stack and clears them. */
 static void _push(void)
 {
     int i;
@@ -1041,6 +1076,7 @@ static void _push(void)
     }
 }
 
+/* Restores sRender words 9 to 16 from s_stack. */
 static void _pop(void)
 {
     int i;
@@ -1050,6 +1086,7 @@ static void _pop(void)
     }
 }
 
+/* Entry point of the robot game: runs the title menu and the chosen mode until the player exits. */
 void RobotGameMain(void)
 {
     int running;
@@ -1102,6 +1139,7 @@ void RobotGameMain(void)
     _pop();
 }
 
+/* Does nothing. */
 void RobotGameMainDebug(void)
 {
 }

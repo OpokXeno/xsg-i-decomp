@@ -89,11 +89,13 @@ int XrgPadIsSelect(void)
     return PadData[s_nPadID].pressed & PAD_SELECT;
 }
 
+/* Returns 1 while L1 and R1 are both held. */
 int XrgPadIsSelectLevelLR(void)
 {
     return (PadData[s_nPadID].buttons & (PAD_L1 | PAD_R1)) == (PAD_L1 | PAD_R1);
 }
 
+/* Returns 1 when L1 was pressed while R1 is held, or R1 was pressed while L1 is held. */
 int XrgPadIsLR(void)
 {
     u16 pressed;

@@ -17,8 +17,8 @@ typedef struct {
 } StudioCameraActivePrefix;
 
 /* MotionTrack is defined by this TU's owning near_dir.h. */
-/* Additional sequence-owned Actor slots. The canonical Actor describes the
- * common head; ACT_updateNPC and ACT_initSequence witness these later slots. */
+/* Sequence-owned Actor fields past the common head described by Actor.
+ * ACT_updateNPC and ACT_initSequence use these later slots. */
 typedef struct NearActorSequenceFields {
     u8 unmodeled_000[0x4c8];
     u32 undulation;
@@ -28,7 +28,7 @@ typedef struct NearActorSequenceFields {
     u32 cleared_on_init_words[2];
 } NearActorSequenceFields;
 
-/* ACT_initSequence advances the actor table by 0xa70 at main:0x0030b4d0. */
+/* Size in bytes of one actor record; ACT_initSequence steps through the table by this. */
 enum { ACTOR_RECORD_STRIDE = 0xa70 };
 
 #define ACTOR_SECOND_FLAGS_OFFSET 0x6f0
@@ -61,7 +61,7 @@ enum { ACTOR_RECORD_STRIDE = 0xa70 };
 #define ROTATION_FACE_Y 0x2
 #define ROTATION_FACE_Z 0x4
 
-/* Undulate.c (main); no header is published for it yet. */
+/* Pad state read through PadData. */
 typedef struct PlayerPad {
     u8 unmodeled_00[0x28];
     u16 held;
@@ -74,11 +74,10 @@ typedef struct PlayerPad {
 } PlayerPad;
 
 
-/* The 64-entry array itself (see the Actor doc comment above); no accepted
- * function in this TU has needed the symbol until now. */
+/* Raw bytes of the actor table: ACTOR_COUNT records of ACTOR_RECORD_STRIDE bytes. */
 extern u8 actor[ACTOR_COUNT * 0xa70];
 
-/* The original's own tables and entry points, still asm or data elsewhere. */
+/* Tables and entry points defined in other translation units. */
 extern Actor *GameLoopState[64];
 
 extern float newsToDirection[16];
@@ -91,25 +90,23 @@ extern float piForDoubledWhole;
 
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 
-/* play.c (main); no header is published for it yet. */
+/* Defined in play.c. */
 extern void *PLAY_getCurrent(void);
 
 /* Defined below in this file. */
 extern void SEQ_motion(Actor *actor);
 
-/* Undulate.c (main); no header is published for it yet, and its own
- * UnduWork type is TU-local there, so the destination stays opaque here,
- * exactly as UnduGet2 above already does. */
+/* Defined in Undulate.c. Its query type is local to that file, so the
+ * parameter stays opaque here, as it does for UnduGet2. */
 extern void UnduParamInit(void *undulation);
 
 extern void ACT_updateSequence(Actor *actor);
 extern void ACT_updateNPC(Actor *actor);
-/* Still original asm elsewhere. */
 extern void SEQ_setMotion(Actor *actor);
 
 extern void SEQ_setPositionRAND(Actor *actor);
 extern void SEQ_moveNPC_XZ(Actor *actor);
-/* Undulate.c (main); no header is published for it yet. */
+/* Defined in Undulate.c. */
 extern float UnduCheck(const Vector4 *position, void *exclude, void *param);
 
 /* Defined below in this file; forward-declared for the two callers here. */
@@ -120,6 +117,7 @@ extern void xglVectorMulMat(Vector4 *destination, Matrix4 matrix, const Vector4 
 
 ActSequenceEntry actSequence[64] = { 0 };
 
+/* Returns the signed shortest turn from `from` to `to`, in radians. */
 float nearDir(float from, float to)
 {
     float difference = to - from;
@@ -141,6 +139,7 @@ float nearDir(float from, float to)
     return difference;
 }
 
+/* Sets the actor's scale from its scale spline, one frame per call. */
 void SEQ_scaleSPL(Actor *actor)
 {
     /* Same walk as SEQ_rotateSPL below, over the scale track at +0x1b8. */
@@ -167,6 +166,7 @@ void SEQ_scaleSPL(Actor *actor)
         sequence->state_flags &= ~SEQ_CHANNEL_SCALE_ALL;
 }
 
+/* Moves the actor's scale toward its goal on each axis, one step per call. */
 void SEQ_scale(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -243,6 +243,10 @@ void SEQ_scale(Actor *actor)
     }
 }
 
+/*
+ * Turns the actor's rotation toward its goals, one step per axis per call.
+ * Axes flagged in face_flags aim at the target actor instead of the stored goal.
+ */
 void SEQ_rotate(Actor *actor)
 {
     Vector4 *rotation = &actor->rotation;
@@ -255,6 +259,7 @@ void SEQ_rotate(Actor *actor)
     Actor *target = track->target;
     float distance[3];
 
+    /* Set up each axis on its first frame of motion. */
     if ((sequence->state.flags & SEQ_CHANNEL_ROTATE_X) == 0) {
         if (sequence->state.state_flags & SEQ_CHANNEL_ROTATE_X) {
             start[0] = rotation->x;
@@ -307,6 +312,7 @@ void SEQ_rotate(Actor *actor)
         }
     }
 
+    /* Step each axis that is still moving toward its goal. */
     if (sequence->state.state_flags & SEQ_CHANNEL_ROTATE_X) {
         if (track->face_flags & ROTATION_FACE_X)
             goal[1] = xglAtan2(target->position.y - position->y, target->position.z - position->z);
@@ -348,18 +354,18 @@ void SEQ_rotate(Actor *actor)
     }
 }
 
+/* Sets the actor's rotation from its rotation spline, converting degrees to radians. */
 void SEQ_rotateSPL(Actor *actor)
 {
-    /* Byte +0x80 is the actor's own slot in the 64-entry `actor` array, the
-     * number ACT_create stores there (0x00305de0) and the one ACT_info prints
-     * as "ACT[%02x]"; it selects this actor's 0x260-byte actSequence entry.
-     * It is past the recovered head of Actor, so it keeps the byte view. */
+    /* Byte +0x80 is the actor's slot number; it selects this actor's 0x260-byte
+     * actSequence entry. It is past the recovered head of Actor, so it keeps the
+     * byte view. */
     u8 *actor_bytes = (u8 *)actor;
     ActSequenceEntry *entry = &actSequence[actor_bytes[ACTOR_SLOT_NUMBER_OFFSET]];
     SequenceState *sequence = &entry->state;
     /* The sequence entry carries several spline tracks; +0xb8 is the rotation
      * track, as +0x38 is the movement track SEQ_moveSPL below walks and
-     * Java_xeno_Chr_move fills in (0x002fd398..0x002fd3e4). */
+     * Java_xeno_Chr_move fills in. */
     SplineTrack *track = &entry->rotation_channel.spline;
     void *spline = track->spline;
     float sample[3];
@@ -380,11 +386,12 @@ void SEQ_rotateSPL(Actor *actor)
         sequence->state_flags &= ~SEQ_CHANNEL_ROTATE_ALL;
 }
 
+/* Sets the actor's position from its movement spline, one frame per call. */
 void SEQ_moveSPL(Actor *actor)
 {
-    /* +0x80 is this actor's slot number and +0x38 the sequence entry's movement
-     * track, the one Java_xeno_Chr_move fills in before it installs this
-     * routine (0x002fd398..0x002fd3e4). */
+    /* Byte +0x80 is the actor's slot number; the movement track at +0x38 of the
+     * entry is the one Java_xeno_Chr_move fills in before it installs this
+     * routine. */
     u8 *actor_bytes = (u8 *)actor;
     ActSequenceEntry *entry = &actSequence[actor_bytes[ACTOR_SLOT_NUMBER_OFFSET]];
     SequenceState *sequence = &entry->state;
@@ -408,10 +415,8 @@ void SEQ_moveSPL(Actor *actor)
     }
 
     if ((sequence->state_flags & SEQ_CHANNEL_MOTION) == 0) {
-        /* +0x6f0 is the actor's second flags word: ACT_info prints it with the
-         * same "FLAGS %08x" it uses for +0x00 (0x00306374) and ACT_pauseUpdate
-         * sets and clears bit 0x80000 in it across all 64 entries
-         * (0x00305ff0/0x00306060). It is past the recovered head of Actor. */
+        /* +0x6f0 is the actor's second flags word, the one ACT_pauseUpdate sets and
+         * clears bit 0x80000 in. It is past the recovered head of Actor. */
         u32 *move_flags = (u32 *)(actor_bytes + ACTOR_SECOND_FLAGS_OFFSET);
         Vector4 delta;
         float length;
@@ -438,6 +443,7 @@ void SEQ_moveSPL(Actor *actor)
         sequence->state_flags &= ~SEQ_CHANNEL_MOVE;
 }
 
+/* Walks the actor toward its move target, turning to face it, until it is within one step. */
 void SEQ_moveChr(Actor *actor)
 {
     Vector4 *rotation = &actor->rotation;
@@ -497,14 +503,13 @@ void SEQ_moveChr(Actor *actor)
     }
 }
 
-/* The four idle motion ids SEQ_setMotion picks from (data of this TU, to be
- * defined here once every user of its literals is recovered). */
+/* Starts one of four idle motions, chosen at random, on the actor. */
 void SEQ_setMotion(Actor *actor)
 {
     ActSequenceEntry *entry = &actSequence[actor->number];
     SequenceState *sequence = &entry->state;
     MotionTrack *track = &entry->motion;
-    /* The four idle motions; the original names this function-scope table mtnIDLE.0. */
+    /* The four idle motion ids SEQ_setMotion picks from. */
     static u32 mtnIDLE[4] = { 1, 6, 11, 9 };
     unsigned int variant;
 
@@ -518,6 +523,7 @@ void SEQ_setMotion(Actor *actor)
     track->blend = 8;
 }
 
+/* Sets a short random move target that keeps one axis at the actor's current position. */
 void SEQ_setPositionRAND(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -552,6 +558,7 @@ void SEQ_setRotY2Player(Actor *actor)
     ACT_setMotion(actor, 7);
 }
 
+/* Walks the NPC toward its target on the XZ plane, turning toward it, one step per call. */
 void SEQ_moveNPC_XZ(Actor *actor)
 {
     Vector4 *rotation = &actor->rotation;
@@ -610,6 +617,7 @@ void SEQ_moveNPC_XZ(Actor *actor)
     sequence->frame_counter++;
 }
 
+/* Walks the actor toward its target on the XZ plane, one step per call. */
 void SEQ_moveXZ(Actor *actor)
 {
     Vector4 *rotation = &actor->rotation;
@@ -664,6 +672,7 @@ void SEQ_moveXZ(Actor *actor)
     sequence->frame_counter++;
 }
 
+/* Starts the actor's motion channel on first use, then advances its playback time. */
 void SEQ_motion(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -704,6 +713,10 @@ void SEQ_motion(Actor *actor)
     track->time += speed;
 }
 
+/*
+ * Runs the actor's sequence handlers, clears the handlers of finished channels,
+ * and follows the ground while ACTOR_FLAG_FOLLOW_GROUND is set.
+ */
 void ACT_updateSequence(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -746,6 +759,10 @@ void ACT_updateSequence(Actor *actor)
     ACT_updateMotion(actor);
 }
 
+/*
+ * Runs the NPC's sequence handlers, picks its next idle behavior once no channel
+ * is active, and derives its velocity from the position change.
+ */
 void ACT_updateNPC(Actor *actor)
 {
     ActSequenceEntry *sequence = &actSequence[actor->number];
@@ -826,6 +843,10 @@ void ACT_updateRECTRand(Actor *actor)
     ACT_updateMotion(actor);
 }
 
+/*
+ * Moves the player actor from the pad stick or the d-pad, turns it toward the
+ * movement direction, and places it on the undulated ground.
+ */
 void ACT_updatePlayer(Actor *actor)
 {
     PlayerPad *pad = &PadData;
@@ -837,6 +858,7 @@ void ACT_updatePlayer(Actor *actor)
     Matrix4 matrix;
     float speed;
 
+    /* SELECT held: L2 returns the player to the origin, L1 toggles state84. */
     if (pad->held & PAD_SELECT) {
         if ((u16)(pad->pressed & PAD_L2)) {
             position->x = 0.0f;
@@ -850,6 +872,7 @@ void ACT_updatePlayer(Actor *actor)
     if (pad->pressed & PAD_R2)
         position->y -= 0.25f;
 
+    /* The analog stick takes priority over the d-pad; its length picks walk or run. */
     if (pad->stick_in_use) {
         stick.x = pad->stick_x;
         stick.y = 0.0f;
@@ -885,6 +908,7 @@ void ACT_updatePlayer(Actor *actor)
         stick.w = 1.0f;
     }
 
+    /* Turn toward the movement direction, then advance along the turned heading. */
     if (moved) {
         float yaw;
         float difference;
@@ -926,6 +950,7 @@ void ACT_updatePlayer(Actor *actor)
     ACT_updateMotion(actor);
 }
 
+/* Clears the flags, the handlers and the cleared-on-init fields of one actor's sequence entry. */
 void ACT_initSequenceAt(Actor *actor)
 {
     SequenceState *sequence =
@@ -944,6 +969,7 @@ void ACT_initSequenceAt(Actor *actor)
     sequence->handler[3] = 0;
 }
 
+/* Resets every sequence entry, then every actor record, to its initial state. */
 void ACT_initSequence(void)
 {
     ActSequenceEntry *sequence;
@@ -981,12 +1007,13 @@ void ACT_initSequence(void)
         UnduParamInit(&entry->undulation);
         entry->shadow_kind = 1;
         entry->shadowSize = ACTOR_SHADOW_SIZE_DEFAULT;
-        /* ACT_initSequence's original array stride is 0xa70. Actor is a
-         * partial shared prefix and its C sizeof does not express that stride. */
+        /* Records are ACTOR_RECORD_STRIDE bytes apart. Actor is only a partial
+         * prefix of a record, so its sizeof is not that stride. */
         entry = (Actor *)((u8 *)entry + ACTOR_RECORD_STRIDE);
     }
 }
 
+/* Clears the java object of `entry`; when it is null, resets the default flags and shadow size of every actor. */
 void ACT_initVMObject(Actor *entry)
 {
     int i;
@@ -1004,6 +1031,7 @@ void ACT_initVMObject(Actor *entry)
     }
 }
 
+/* Creates an actor and initializes it as a sequence-driven character. */
 Actor *ACT_createChr(int type, int id)
 {
     Actor *actor = ACT_create(type, id);
@@ -1037,6 +1065,7 @@ Actor *ACT_createChr(int type, int id)
     return actor;
 }
 
+/* Creates an actor and initializes it as an NPC that uses ACT_updateNPC. */
 Actor *ACT_createNPC(int type, int id)
 {
     Actor *actor = ACT_create(type, id);
@@ -1073,6 +1102,7 @@ void ACT_info(void)
     }
 }
 
+/* Returns the first active studio camera, or null if none is active. */
 static StudioCamera *getCurrentCamera(void)
 {
     StudioCamera *camera;
@@ -1087,6 +1117,10 @@ static StudioCamera *getCurrentCamera(void)
     return 0;
 }
 
+/*
+ * Updates a motion-pack actor: its frame follows the play time, and its
+ * undulation is re-sampled from the linked actor's velocity.
+ */
 void ACT_updateMPack(Actor *actor)
 {
     Play *play = PLAY_getCurrent();
@@ -1098,7 +1132,7 @@ void ACT_updateMPack(Actor *actor)
 
     /* PLAY_setupDefault and PLAY_ctrl establish currentTime at +0x44. */
     actor->animation.slot.frame = play->currentTime;
-    /* A u32 access: the union member form reorders this store (tucheck, 2026-11-01). */
+    /* A plain u32 store: the union member form reorders it. */
     *(u32 *)&actor->undulation = 0;
 
     linked_actor = actor->jointMatrices;
@@ -1106,6 +1140,7 @@ void ACT_updateMPack(Actor *actor)
              linked_actor->velocity.z);
 }
 
+/* Resets the state of every actor record for a new scene. */
 void ACT_initScene(void)
 {
     Actor *entry;
@@ -1130,6 +1165,10 @@ void ACT_initScene(void)
     } while (remaining >= 0);
 }
 
+/*
+ * Converts the hand code into the form ACT_setHumanHand takes. Does nothing when
+ * any bit of 0xf000 is set in the actor's inUseId.
+ */
 void ACT_setHand(Actor *actor, int hand)
 {
     int category;

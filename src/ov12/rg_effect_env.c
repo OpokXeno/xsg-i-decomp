@@ -12,7 +12,7 @@
 #include "ov12/rg_linkdata.h"
 #include "ov12/rg_particle_effect.h"
 
-/* Particle effect records returned per link-data entry, and their strides. */
+/* Number of particle effect slots that RgEffectEnvGetParticleData fills. */
 #define RG_EFFECT_ENV_PARTICLE_SLOTS 4
 
 /* One archive entry: the essence, then data nothing here reads, up to the 0x100-byte entry stride. */
@@ -20,8 +20,6 @@ typedef struct RgEffectEnvLinkEntry {
     RgParticleEffectEssence essence;
     u8 unmodeled_b0[0x100 - 0xB0];
 } RgEffectEnvLinkEntry;
-
-/* The link-data record and the essence slots are only forwarded, never read. */
 
 const char effectEnvAssertEnvNotNil[] = "pEnv != NIL";
 const char effectEnvSourcePath[] = "../rg_effect_env.euc.c";
@@ -43,6 +41,7 @@ static void _InitEnv(RgEffectEnv *pEnv)
     pEnv->particleData = 0;
 }
 
+/* Disposes the loaded bxx, shot model and particle data, then resets the environment. */
 static void _DestructEnv(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -66,6 +65,7 @@ static void _WrapperDestruct(void *pEnv)
     RgHeapFree(InstanceOfRgHeap(), pEnv, effectEnvSourcePath, 46);
 }
 
+/* Returns the singleton effect environment, creating it on first use. */
 RgEffectEnv *InstanceOfRgEffectEnv(void)
 {
     RgEffectEnv *pEnv;
@@ -79,6 +79,7 @@ RgEffectEnv *InstanceOfRgEffectEnv(void)
     return pEnv;
 }
 
+/* Loads the shot model, particle data and bxx file that are not loaded yet. */
 void RgEffectEnvLoadData(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -95,6 +96,7 @@ void RgEffectEnvLoadData(RgEffectEnv *pEnv)
     }
 }
 
+/* Disposes the loaded bxx, shot model and particle data and clears their pointers. */
 void RgEffectEnvDisposeData(RgEffectEnv *pEnv)
 {
     if (pEnv == 0) {
@@ -130,6 +132,10 @@ RgFileSysData *RgEffectEnvGetShotMdl(RgEffectEnv *pEnv)
     return pEnv->shotMdl;
 }
 
+/*
+ * Resumes the particle effect essences of the named link-data entry into aResult.
+ * Returns the number of slots that have a texture name, or 0 when the entry is missing.
+ */
 int RgEffectEnvGetParticleData(RgEffectEnv *pEnv, const char *pszName, void *aResult)
 {
     RgFileSysData *particleData;

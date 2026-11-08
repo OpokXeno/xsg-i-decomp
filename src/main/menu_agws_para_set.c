@@ -302,7 +302,6 @@ AgwsFaceWork *AgwsFace = 0;
 
 AgwsSwitchWork *AgwsSwitch = 0;
 
-/* Category help reads this table at +0x08 and +0x14; storage stays scaffold. */
 static const char * msg01_2_0036D990[4];
 
 static const char * msg02_3_0036D9A0[6];
@@ -364,6 +363,7 @@ const AgwsModelPositions modelPositionTable = {{
 
 const DoublewordAlignedVector4 modelUnitScaleVector = { 1.0f, 1.0f, 1.0f, 1.0f };
 
+/* Sums the WAGL value of the character's equipped weapons. */
 static short WaglGet(AgwsCharPara *para)
 {
     short total;
@@ -380,6 +380,9 @@ static short WaglGet(AgwsCharPara *para)
     return total;
 }
 
+/*
+ * Fills one parameter display block from the character's stats and the attack and defense bonuses.
+ */
 static void ParaSet(AgwsCharPara *para, AgwsParaDisplay *dest, int *attack, int *defense)
 {
     dest->value[AGWS_PARA_MAX_HP] = para->maxHp;
@@ -391,6 +394,10 @@ static void ParaSet(AgwsCharPara *para, AgwsParaDisplay *dest, int *attack, int 
     dest->value[AGWS_PARA_STAT9] = para->stat9;
 }
 
+/*
+ * Refreshes the parameter display blocks for one unit; chrNo 0 does nothing.
+ * State 0 and 10 also fill MenuAgwsPara, and state 10 keeps the unit's HP.
+ */
 void MenuAgwsParaSet(int chrNo, int state)
 {
     int attack[4];
@@ -414,6 +421,10 @@ void MenuAgwsParaSet(int chrNo, int state)
     }
 }
 
+/*
+ * Opens the pas window on the first call, then slides it and its tabs
+ * toward the targets for the current AGWS state.
+ */
 void AgwsPasMain(void)
 {
     AgwsPasWork *pas = AgwsPas;
@@ -460,6 +471,7 @@ void AgwsPasMain(void)
     for (i = 0; i < 17; i++)
         tabTarget[i] = AGWS_PAS_TAB_PARKED;
 
+    /* Choose the window and tab targets for the current menu state. */
     {
         AgwsMenuWork *menu = &MenuWork.agws;
 
@@ -521,6 +533,10 @@ void AgwsPasMain(void)
     }
 }
 
+/*
+ * Builds the help text for the current AGWS state and slides the help
+ * panel in or out.
+ */
 void AgwsInfoMain(void)
 {
     AgwsInfoWork *info = AgwsInfo;
@@ -562,6 +578,7 @@ void AgwsInfoMain(void)
         } else if (PadData.mappedRepeat != 0) {
             info->detail = 0;
         }
+        /* Help text for each state. */
         switch (MenuWork.agws.state) {
         case AGWS_STATE_SELECT:
             eMessageCpy(info->text, msg00_1_0036D988[0]);
@@ -691,6 +708,10 @@ void AgwsInfoMain(void)
     }
 }
 
+/*
+ * Opens the four select windows on the first call, then slides them to the
+ * targets for the current AGWS state.
+ */
 void AgwsSelectMain(void)
 {
     short targetX[4];
@@ -754,6 +775,10 @@ void AgwsSelectMain(void)
         targetY[2] = 176;
         targetX[3] = 544;
         targetY[3] = 128;
+        /*
+         * Per-state targets: the command window moves left, and the mount
+         * window lists the equipped weapons.
+         */
         switch (MenuWork.agws.state) {
         case AGWS_STATE_COMMAND:
             targetX[0] = 272;
@@ -782,6 +807,10 @@ void AgwsSelectMain(void)
     }
 }
 
+/*
+ * Builds the weapon list for the selected slot; entries that fail MenuWeaponEquipPosCheck get flag
+ * 0.
+ */
 void MenuAgwsListMake_Wpn(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -813,6 +842,7 @@ void MenuAgwsListMake_Wpn(void)
     WindowSPSetSelect(window, &MenuKeepSelect[MenuWork.agws.weaponSlot[MenuWork.agws.selectedIndex] * 5 - 5]);
 }
 
+/* Builds the ammo list for the selected weapon; entries that fail MenuBulletCheck get flag 0. */
 void MenuAgwsListMake_Gun(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -842,6 +872,10 @@ void MenuAgwsListMake_Gun(void)
     WindowSPSetSelect(window, &MenuKeepSelect[30]);
 }
 
+/*
+ * Builds the accessory list for the selected equip slot; entries that fail MenuAccessoryEquipCheck
+ * get flag 0.
+ */
 void MenuAgwsListMake_Acc(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -871,6 +905,7 @@ void MenuAgwsListMake_Acc(void)
     WindowSPSetSelect(window, &MenuKeepSelect[35]);
 }
 
+/* Builds the pilot list; entries whose AGWS unit is the selected unit get status 1. */
 void MenuAgwsListMake_Pilot(void)
 {
     MenuListEntry *entries = MenuListGet(0);
@@ -907,6 +942,10 @@ void MenuAgwsListMake_Pilot(void)
     WindowSPSetSelect(window, &MenuKeepSelect[40]);
 }
 
+/*
+ * Opens the list window for the current AGWS state, slides it in or out,
+ * and draws the pilot tags while the pilot list is shown.
+ */
 void AgwsListMain(void)
 {
     AgwsListWork *list = AgwsList;
@@ -1007,6 +1046,7 @@ void AgwsListMain(void)
         }
         break;
     }
+    /* Pilot tags and cursor; visible 2 is set only for the pilot list. */
     if (list->visible != 0) {
         WindowSPMain(&list->window[0]);
         if (list->visible == 2 && MenuWork.agws.listSelect >= 0) {
@@ -1044,6 +1084,10 @@ void AgwsListMain(void)
     }
 }
 
+/*
+ * Opens the status window on the first call, slides it for the current AGWS
+ * state, and refreshes the six parameter rows.
+ */
 void AgwsStatusMain(void)
 {
     AgwsStatusWork *status = AgwsStatus;
@@ -1119,6 +1163,7 @@ void AgwsStatusMain(void)
                 status->number[i].value =
                     MenuAgwsPara.value[i] + (MenuAgwsPara2.value[i] << 16);
             }
+            /* The color mode comes from comparing the two packed values of each row. */
             for (i = 0; i < 6; i++) {
                 unsigned short shown[2];
 
@@ -1150,6 +1195,10 @@ void AgwsStatusMain(void)
     }
 }
 
+/*
+ * Lays out the weapon panel rows on the first call, then slides them for the
+ * current AGWS state and draws each row's weapon, ammo and mount icons.
+ */
 void AgwsWeapon2Main(void)
 {
     int i;
@@ -1229,6 +1278,7 @@ void AgwsWeapon2Main(void)
             MoveSlide(&work->row[i].window.x, &x[i], 3.0f);
             MoveSlide(&work->row[i].window.y, &y[i], 3.0f);
         }
+        /* Rows 0 to 2: weapon name, ammo name, and mount icons. */
         for (i = 0; i < 3; i++) {
             WindowDXMain(&work->row[i].window);
             one = 1;
@@ -1285,6 +1335,7 @@ void AgwsWeapon2Main(void)
                 eSpriteMain(&work->row[i].sprite[2]);
             }
         }
+        /* Row 3: the three accessory slots. */
         WindowDXMain(&work->row[3].window);
         for (i = 0; i < 3; i++) {
             eSpriteSet(&work->row[3].sprite[i], 0x315);
@@ -1300,6 +1351,7 @@ void AgwsWeapon2Main(void)
             work->row[3].message[i].y = work->row[3].window.y + i * 24 + 3;
             eMessageMain(&work->row[3].message[i]);
         }
+        /* The cursor follows the selected hand and equip slot. */
         storage->cursor.cursol.control.x = work->row[MenuWork.agws.weaponHand].window.x + 3;
         lineY = (unsigned short)work->row[MenuWork.agws.weaponHand].window.y
                 + MenuWork.agws.equipSlot * 24;
@@ -1314,6 +1366,10 @@ void AgwsWeapon2Main(void)
     }
 }
 
+/*
+ * Drives the name panels of the AGWS units: builds them on the first call,
+ * then slides and selects them for the current AGWS state.
+ */
 void AgwsNameMain(void) {
     int settledRows;
     int rowIndex;
@@ -1433,6 +1489,7 @@ void AgwsNameMain(void) {
         name->cursol.state = E_MODE_SHOW_START;
         name->state = 0xB;
         /* fallthrough */
+    /* 0xB slides the panels into two columns; 0x33 slides them back to the off-screen x they started from. */
     case 0xB:
     case 0x33:
         settledRows = 0;
@@ -1467,6 +1524,10 @@ void AgwsNameMain(void) {
         name->cursol.state = 0;
         name->state = 0x15;
         /* fallthrough */
+    /*
+     * 0x15 moves the selected unit's panel to the front position; the others return to their grid
+     * cells.
+     */
     case 0x15:
         settledRows = 0;
         for (rowIndex = 0; rowIndex < MenuWork.agws.agwsCount; rowIndex++) {
@@ -1664,6 +1725,10 @@ void AgwsNameMain(void) {
     endPrintExtFunc(name->color, END_PRINT_CMD_SCISSOR_RESET, NULL);
 }
 
+/*
+ * Opens the face panel on the first call, then slides it in while the pilot
+ * list is open and draws the face of the highlighted pilot.
+ */
 void AgwsFaceMain(void)
 {
     AgwsFaceWork *self = AgwsFace;
@@ -1716,6 +1781,10 @@ void AgwsFaceMain(void)
     }
 }
 
+/*
+ * Opens the two switch sprites on the first call, then slides them for the
+ * current AGWS state. In state 34, L1 and R1 nudge the matching sprite.
+ */
 void AgwsSwitchMain(void)
 {
     AgwsSwitchWork *self = AgwsSwitch;
@@ -1775,6 +1844,7 @@ void AgwsSwitchMain(void)
     }
 }
 
+/* Resets the AGWS camera to the preset position and rotation. */
 void MenuAgwsCameraSet(void)
 {
     AgwsCameraPreset preset = cameraSetPreset;
@@ -1787,6 +1857,7 @@ void MenuAgwsCameraSet(void)
     camera->rotation.vector = preset.vectors[1];
 }
 
+/* Moves the AGWS camera a tenth of the way toward the target for the current state. */
 void MenuAgwsCameraMove(void)
 {
     Vector4 *position = &xglStudioGetCamera2(0)->position.vector;
@@ -1808,6 +1879,10 @@ void MenuAgwsCameraMove(void)
     position->z += (targets.value[target][2] - position->z) * 0.1f;
 }
 
+/*
+ * Per-frame update of one AGWS model unit: moves it toward its slot position,
+ * then runs its open, weapon-refresh and close states.
+ */
 void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
 {
     AgwsModelActor *actor = self->actor;
@@ -1851,6 +1926,7 @@ void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
         self->state = 30;
         MenuWork.agws.modelBreak = 0;
     }
+    /* 0 opens the unit; 10 and 20 refresh a changed weapon; 30 and 31 close it. */
     switch (self->state) {
     case 0:
         MenuModelUnitOpen(self, 2);
@@ -1869,6 +1945,10 @@ void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
                     short keptWeaponId = self->org->weaponId[hand];
                     signed char keptHand = self->org->hand[hand];
 
+                    /*
+                     * Change 1 builds the model for the new weapon, then restores the stored
+                     * weapon.
+                     */
                     if (MenuWork.agws.weaponChange == 1) {
                         self->org->weaponId[hand] = MenuWork.agws.weaponId;
                         self->org->hand[hand] = MenuWork.agws.weaponHandKind;
@@ -1901,6 +1981,10 @@ void MenuAgwsModelMain(MenuModelUnitAgwsView *self)
     }
 }
 
+/*
+ * Runs one frame of the equipment menu: the first frame carves the work
+ * buffers, then pad input drives the state machine and the sub-screens update.
+ */
 void MenuAgws(void) {
     int occupiedMount[3];
     unsigned char previousWeaponHand;
@@ -1933,6 +2017,7 @@ void MenuAgws(void) {
     u16 temp_16_3;
     u16 temp_17_4;
 
+    /* First frame: carve the work buffers and collect the party units. */
     if (MenuWork.agws.state == 0) {
         void *workCursor;
         unsigned char *blockBase;
@@ -2024,21 +2109,25 @@ void MenuAgws(void) {
         MenuWork.agws.transitionTicks = MenuWork.agws.transitionTicks + 0xFF;
     }
     MenuAgwsCameraMove();
-    switch (MenuWork.agws.state) {                       /* switch 1; irregular */
-    case AGWS_STATE_SELECT:                                      /* switch 1 */
+    switch (MenuWork.agws.state) {
+    /*
+     * Unit select: the d-pad moves between units, circle opens the command list, cross closes the
+     * menu.
+     */
+    case AGWS_STATE_SELECT:
         if (MenuWork.agws.transitionTicks == 0) {
             if (PadData.mappedRepeat & (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT)) {
-                switch (PadData.mappedRepeat) {     /* switch 2; irregular */
-                case PAD_UP:                        /* switch 2 */
+                switch (PadData.mappedRepeat) {
+                case PAD_UP:
                     MenuWork.agws.selectedAgws -= 2;
                     break;
-                case PAD_DOWN:                      /* switch 2 */
+                case PAD_DOWN:
                     MenuWork.agws.selectedAgws += 2;
                     break;
-                case PAD_LEFT:                      /* switch 2 */
+                case PAD_LEFT:
                     MenuWork.agws.selectedAgws--;
                     break;
-                case PAD_RIGHT:                     /* switch 2 */
+                case PAD_RIGHT:
                     MenuWork.agws.selectedAgws++;
                     break;
                 }
@@ -2072,6 +2161,10 @@ void MenuAgws(void) {
             }
         }
         break;
+    /*
+     * Command list: L1 and R1 switch units, circle opens the highlighted command, cross returns to
+     * unit select.
+     */
     case AGWS_STATE_COMMAND:
         if (MenuWork.agws.transitionTicks == 0) {
             if (PadData.half_28 & (PAD_L2 | PAD_R2))
@@ -2142,7 +2235,11 @@ void MenuAgws(void) {
         }
         MenuWork.agws.menuSelection = 1;
         break;
-    case AGWS_STATE_EQUIP:                                      /* switch 1 */
+    /*
+     * Equipment slots: the d-pad moves between hands and slots, circle opens a list or removes the
+     * part, cross returns to the command list.
+     */
+    case AGWS_STATE_EQUIP:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuWork.agws.weaponId = 0;
             MenuWork.agws.ammoId = 0;
@@ -2265,7 +2362,11 @@ void MenuAgws(void) {
             }
         }
         break;
-    case AGWS_STATE_WEAPON_MOUNT:                                      /* switch 1 */
+    /*
+     * Mount position: circle opens the weapon list for the chosen position, cross returns to
+     * equipment.
+     */
+    case AGWS_STATE_WEAPON_MOUNT:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
             int hand;
@@ -2278,6 +2379,7 @@ void MenuAgws(void) {
                 else
                     occupiedMount[hand] = OptMntToWpnPos(org->hand[hand]);
             }
+            /* Collect the mount positions that no other hand uses. */
             for (position = 1; position < 6; position++) {
                 for (hand = 0; hand < 3; hand++) {
                     if (occupiedMount[hand] == position)
@@ -2304,7 +2406,11 @@ void MenuAgws(void) {
             }
         }
         break;
-    case AGWS_STATE_WEAPON_LIST:                                      /* switch 1 */
+    /*
+     * Weapon list: the cursor previews each weapon on the selected hand, circle equips it, cross
+     * returns to the mount position.
+     */
+    case AGWS_STATE_WEAPON_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Wpn();
             MenuWork.agws.selectedWeapon = -1;
@@ -2390,6 +2496,9 @@ void MenuAgws(void) {
                 }
         }
         break;
+    /*
+     * Ammo list: the cursor previews each ammo type, circle equips it, cross returns to equipment.
+     */
     case AGWS_STATE_AMMO_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             AgwsUnitOrg *org = func_A191C0(MenuWork.agws.chrNo);
@@ -2451,6 +2560,10 @@ void MenuAgws(void) {
                 }
         }
         break;
+    /*
+     * Accessory list: the cursor previews each accessory, circle equips it, cross returns to
+     * equipment.
+     */
     case AGWS_STATE_ACCESSORY_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Acc();
@@ -2500,7 +2613,11 @@ void MenuAgws(void) {
                 }
         }
         break;
-    case AGWS_STATE_PILOT_LIST:                                      /* switch 1 */
+    /*
+     * Pilot list: circle assigns or removes the pilot for this unit, cross returns to the command
+     * list.
+     */
+    case AGWS_STATE_PILOT_LIST:
         if (MenuWork.agws.flags & 1 & 0xFF) {
             MenuAgwsListMake_Pilot();
         } else {
@@ -2559,12 +2676,13 @@ void MenuAgws(void) {
             }
         }
         break;
-    case AGWS_STATE_CLOSE:                                      /* switch 1 */
+    /* Close: start the closing transition, wait for it, then leave the menu. */
+    case AGWS_STATE_CLOSE:
         MenuWork.agws.state = (u8) AGWS_STATE_CLOSE_WAIT;
         MenuWork.agws.pendingState = (u8) AGWS_STATE_CLOSE_WAIT;
         MenuWork.agws.transitionTicks = (u8) AGWS_WAIT_LEAVE;
         /* fallthrough */
-    case AGWS_STATE_CLOSE_WAIT:                                      /* switch 1 */
+    case AGWS_STATE_CLOSE_WAIT:
         if (MenuWork.agws.transitionTicks != 0)
             break;
         MenuWork.agws.state = (u8) AGWS_STATE_EXIT;
@@ -2574,6 +2692,7 @@ void MenuAgws(void) {
         MenuModelAllBreak();
         break;
     }
+    /* Update the sub-screens for this frame. */
     AgwsPasMain();
     AgwsInfoMain();
     AgwsSelectMain();
@@ -2583,6 +2702,7 @@ void MenuAgws(void) {
     AgwsSwitchMain();
     AgwsFaceMain();
     AgwsNameMain();
+    /* Debug text overlay with the current menu values. */
     xglFontDebugPrintf(0, 0x38, agwsTitleText);
     xglFontDebugHex(0, 0x48, MenuWork.agws.state, 2);
     xglFontDebugHex(0, 0x60, MenuWork.agws.menuSelection, 2);

@@ -23,7 +23,7 @@
 /* Particles of each default essence this TU fills. */
 #define RG_ROBOT_EFFECT_DEFAULT_PARTICLES 32
 
-/* Same TU, not part of this allocation. */
+/* Helpers defined later in this file. */
 static void _InitRobEff(RgRobotEffect *effect);
 static void _ClearEffect(RgRobotEffectItem *item);
 static int _GetJetShootLocal(RgRobotEffect *generator, int index,
@@ -34,11 +34,10 @@ static int _GetDashShootLocal(RgRobotEffect *generator, int index,
 static int _InitDashDefault(void *buffer);
 
 /*
- * Partial view of RgParticleEffectEssence (measured: the default fillers copy
- * the texture name with aligned ld/sd doublewords, so the name needs a
- * doubleword-aligned member; adding one to the canonical record changes the
- * struct copies in rg_particle_effect.c). Same layout, textureWords is never
- * read on its own.
+ * Partial view of RgParticleEffectEssence. The default fillers copy the texture
+ * name with aligned ld/sd doublewords, so the name needs a doubleword-aligned
+ * member. Adding one to the canonical record would change the struct copies in
+ * rg_particle_effect.c. Same layout; textureWords is never read on its own.
  */
 typedef struct RgParticleEffectEssenceDefaultsView {
     union {
@@ -58,6 +57,7 @@ typedef struct RgParticleEffectEssenceDefaultsView {
     int repeat;
 } RgParticleEffectEssenceDefaultsView;
 
+/* Fills buffer with the default jet particle essence and returns 1. */
 static int _InitJetDefault(void *buffer)
 {
     RgParticleEffectEssenceDefaultsView *essence;
@@ -79,6 +79,7 @@ static int _InitJetDefault(void *buffer)
     return 1;
 }
 
+/* Fills buffer with the default dash particle essence and returns 1. */
 static int _InitDashDefault(void *buffer)
 {
     RgParticleEffectEssenceDefaultsView *essence;
@@ -110,6 +111,7 @@ static void _InitEffect(RgRobotEffectItem *item)
     item->stop_time = RG_ROBOT_EFFECT_TIME_NEVER;
 }
 
+/* Disposes the item's particles and resets its clear and stop times. */
 void _ClearEffect(RgRobotEffectItem *item)
 {
     RgParticleEffect *particle;
@@ -139,6 +141,7 @@ static void _SetShootLocalGenEffect(RgRobotEffectItem *item,
     item->shoot_func = func;
 }
 
+/* Creates a particle effect from essence and appends it to the item. */
 static void _AddEffect(RgRobotEffectItem *item, RgParticleEffectEssence *essence,
                        int count)
 {
@@ -155,6 +158,7 @@ static void _AddEffect(RgRobotEffectItem *item, RgParticleEffectEssence *essence
     item->particles[index] = particle;
 }
 
+/* Stops all particles of the item and schedules it to clear in 0.5 seconds. */
 static void _StopEffect(RgRobotEffectItem *item)
 {
     u32 i;
@@ -170,6 +174,7 @@ static void _SetStopTimeEffect(RgRobotEffectItem *item, float stop_time)
     item->stop_time = stop_time;
 }
 
+/* Refreshes the particles' shoot transforms, advances them by time, and clears or stops the item when its times run out. */
 static void _PassTimeEffect(RgRobotEffectItem *item, float time)
 {
     RgMatrix local;
@@ -223,6 +228,7 @@ static void _SetInertiaEffect(RgRobotEffectItem *item, int inertia)
     item->inertia = inertia;
 }
 
+/* Clears the actor and geometry links and resets both items; the jet item starts with inertia set. */
 void _InitRobEff(RgRobotEffect *effect) {
     RgRobotEffectItem *jet;
 
@@ -248,6 +254,7 @@ static void _DestructRobEff(RgRobotEffect *effect)
     _ClearEffect(&effect->dash);
 }
 
+/* Gets the geometry point's velocity, or zero when no geometry is set. */
 static void _GetGeomVel(RgRobotEffect *effect, RgVector velocity)
 {
     RgGeomPoint *geom;
@@ -260,6 +267,7 @@ static void _GetGeomVel(RgRobotEffect *effect, RgVector velocity)
     XrgClearVector(velocity);
 }
 
+/* Shoot-local callback for the jet emitters: writes the joint's local matrix, negates the vector at element 8 and takes the inertia from the geometry. */
 static int _GetJetShootLocal(RgRobotEffect *generator, int index, void *local,
                              RgVector inertia)
 {
@@ -277,6 +285,7 @@ static int _GetJetShootLocal(RgRobotEffect *generator, int index, void *local,
     return result;
 }
 
+/* Shoot-local callback for the dash emitter: writes the actor's local matrix with element 13 set to 0.2 and takes the inertia from the geometry. */
 static int _GetDashShootLocal(RgRobotEffect *generator, int index, void *local,
                               RgVector inertia)
 {
@@ -292,6 +301,7 @@ static int _GetDashShootLocal(RgRobotEffect *generator, int index, void *local,
     return 1;
 }
 
+/* Allocates a robot effect from the RG heap and initializes it. */
 RgRobotEffect *CreateRgRobotEffect(void)
 {
     RgRobotEffect *effect;
@@ -302,6 +312,7 @@ RgRobotEffect *CreateRgRobotEffect(void)
     return effect;
 }
 
+/* Destructs both items and frees the robot effect. */
 void DisposeRgRobotEffect(RgRobotEffect *effect)
 {
     if (effect == 0) {
@@ -355,11 +366,12 @@ void RgRobotEffectTermAll(RgRobotEffect *effect)
     RgRobotEffectTermJet(effect);
 }
 
+/* Restarts the jet effect with its particle data and stops it after stopTime. */
 void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime) {
     /* Raw particle-essence lookup buffer: opaque to this TU, forwarded to
      * _AddEffect / CreateRgParticleEffect (ov12/rg_particle_effect.c). */
     int shotData[0x28];
-    /* Default shot-speed table this TU fills when the jet has no configured
+    /* Default table this TU fills when the jet has no configured
      * particle data; entries are 0xB0 bytes (0x2C floats) apart and only the
      * first float of each is set here. Not otherwise read by this TU. */
     float shotDefaults[0x88];
@@ -397,6 +409,7 @@ void RgRobotEffectStartJet(RgRobotEffect *effect, float stopTime) {
     }
 }
 
+/* Stops the jet particles when the actor is set. */
 void RgRobotEffectTermJet(RgRobotEffect *effect)
 {
     if (effect == 0) {
@@ -407,6 +420,7 @@ void RgRobotEffectTermJet(RgRobotEffect *effect)
     }
 }
 
+/* Restarts the dash effect with its particle data and stops it after stopTime. */
 void RgRobotEffectStartDash(RgRobotEffect *effect, float stopTime) {
     /* Raw particle-essence lookup buffer, opaque to this TU; see
      * RgRobotEffectStartJet. */
@@ -441,6 +455,7 @@ void RgRobotEffectTermDash(RgRobotEffect *effect) {
     }
 }
 
+/* Advances the jet and dash effects by time when the actor is set. */
 void RgRobotEffectPassTime(RgRobotEffect *effect, float time) {
     if (effect == 0) {
         assert_prog("pRobEff != NIL", "../rg_robot_effect.euc.c", 441);
@@ -451,6 +466,7 @@ void RgRobotEffectPassTime(RgRobotEffect *effect, float time) {
     }
 }
 
+/* Draws the jet and dash effects when the actor is set. */
 void RgRobotEffectDisp(RgRobotEffect *effect) {
     if (effect == 0) {
         assert_prog("pRobEff != NIL", "../rg_robot_effect.euc.c", 453);

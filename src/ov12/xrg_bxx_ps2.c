@@ -17,6 +17,7 @@ const char bxxPs2Log2ErrorFormat[16] = "log2 error %d";
 const char bxxPs2SourcePath[24] = "../xrg_bxx_ps2.euc.c";
 
 
+/* Returns ceil(log2(bucket_count)), at least 1; reports an error for counts above 4096. */
 static int _Log2(u32 bucket_count)
 {
     if (bucket_count < 3U) {
@@ -68,6 +69,7 @@ const char bxxPs2ImpossibleText[8] = "muri";
 
 const char bxxPs2UnknownBppFormat[32] = "unknown BPP type %d";
 
+/* Builds the GS TEX0 value of a texture from its bit depth, its header sizes and its palette base. */
 long long XrgBxxPs2Tex0(RgBxxPic *texture)
 {
     long long tex0;

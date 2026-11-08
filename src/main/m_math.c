@@ -21,6 +21,7 @@ float MMathMakeRandom2PI(void)
     return (float)xglSRand() * 0.00019175344f;
 }
 
+/* Returns the signed angle from first to second in radians, taking the shorter way round. */
 float MMathCalcRotNear(float first, float second)
 {
     float difference = fmodf(second, MMATH_TWO_PI) - fmodf(first, MMATH_TWO_PI);
@@ -34,6 +35,7 @@ float MMathCalcRotNear(float first, float second)
     return difference;
 }
 
+/* Returns the signed angle from first to second in radians, adjusted so its magnitude is at least pi. */
 float MMathCalcRotFar(float first, float second)
 {
     float difference = fmodf(second, MMATH_TWO_PI) - fmodf(first, MMATH_TWO_PI);
@@ -48,15 +50,8 @@ float MMathCalcRotFar(float first, float second)
 }
 
 /*
- * MMathCalcHermite: four-component cubic Hermite/Catmull-Rom evaluation at
- * parameter t. The VU0 macro-mode block builds the four blend weights from t
- * (packed two-per-register across vf2/vf3's x/y lanes), then accumulates
- * point_start*h1 + point_end*h2 + tangent_start*h3 + tangent_end*h4 into vf1
- * and stores it; vf1.w is forced to VF00's w (1.0) by the trailing vmove.w.
- * The prototype was corrected from the stale `void` shared.h declared for it
- * (no caller anywhere reads the return value, so the change is source-visible
- * only) to the `float *` the original object's `daddu v0,a0,zero` lead-in
- * requires, matching every other pointer-returning function of this TU.
+ * Evaluates a cubic Hermite curve at parameter t from the two tangents and two
+ * endpoints, stores the result in destination and returns destination.
  *
  * The parameter goes to VU0 through the library's fixed scratch GPR: $10
  * here (t2), because $8 and $9 would be the fifth and sixth argument
@@ -317,6 +312,7 @@ float MMathCalcDistXZ(const Vector4 *first, const Vector4 *second)
     return result;
 }
 
+/* Stores the normalized vector from source to target in destination and returns it. */
 Vector4 *MMathCalcDirVector(Vector4 *destination, const Vector4 *source,
                             const Vector4 *target)
 {
@@ -331,11 +327,16 @@ Vector4 *MMathCalcDirVector(Vector4 *destination, const Vector4 *source,
     return MMathNormalizeVector2(destination, destination);
 }
 
+/* Calls srsAtan2 on the XZ offset from `from` to `to`; the angle is not returned. */
 void MMathCalcDir(const Vector4 *from, const Vector4 *to)
 {
     srsAtan2(to->x - from->x, to->z - from->z);
 }
 
+/*
+ * Writes the angles from source to target into out: x from the height difference
+ * and XZ length, y from the XZ offset. A null source or target uses McMathUnitVector.
+ */
 Vector4 *MMathCalcAngle(Vector4 *out, Vector4 *source, Vector4 *target)
 {
     Vector4 difference;
@@ -367,6 +368,7 @@ Vector4 *MMathCalcAngle(Vector4 *out, Vector4 *source, Vector4 *target)
     return out;
 }
 
+/* Like MMathCalcAngle, with the x and z offsets negated. */
 Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target)
 {
     Vector4 difference;
@@ -399,6 +401,7 @@ Vector4 *MMathCalcAngleCam(Vector4 *out, Vector4 *source, Vector4 *target)
     return out;
 }
 
+/* Stores base plus offset rotated about the Y axis by angle into destination. */
 Vector4 *MMathAddRotateVectorY(Vector4 *destination, float angle, const Vector4 *base, const Vector4 *offset)
 {
     __asm__ __volatile__(
@@ -467,6 +470,7 @@ Vector4 *MMathCalcOffsetXYZ(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
+/* Stores (first - second) * scale in destination. */
 Vector4 *MMathSubVectorMulS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
 {
     __asm__ __volatile__(
@@ -481,6 +485,7 @@ Vector4 *MMathSubVectorMulS(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
+/* Stores (first - second) / scale in destination. */
 Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first, const Vector4 *second, float scale)
 {
     __asm__ __volatile__(
@@ -497,6 +502,7 @@ Vector4 *MMathSubVectorDivS(Vector4 *destination, const Vector4 *first, const Ve
     return destination;
 }
 
+/* Stores the component-wise quotient first / second in destination; w is copied from first. */
 Vector4 *MMathDivVector(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -517,6 +523,7 @@ Vector4 *MMathDivVector(Vector4 *destination, const Vector4 *first, const Vector
     return destination;
 }
 
+/* Divides the xyz components of source by scale and stores them in destination. */
 Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scale)
 {
     __asm__ __volatile__(
@@ -531,6 +538,7 @@ Vector4 *MMathDivVectorS(Vector4 *destination, const Vector4 *source, float scal
     return destination;
 }
 
+/* Stores the component-wise quotient first / second in destination, including w. */
 Vector4 *MMathDivVector4(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -554,6 +562,7 @@ Vector4 *MMathDivVector4(Vector4 *destination, const Vector4 *first, const Vecto
     return destination;
 }
 
+/* Divides all four components of source by scale and stores them in destination. */
 Vector4 *MMathDivVectorS4(Vector4 *destination, const Vector4 *source, float scale)
 {
     __asm__ __volatile__(
@@ -568,6 +577,7 @@ Vector4 *MMathDivVectorS4(Vector4 *destination, const Vector4 *source, float sca
     return destination;
 }
 
+/* Returns 1 when the 128-bit contents of the two vectors are identical, 0 otherwise. */
 short MMathIsVectorEqual(const Vector4 *first, const Vector4 *second)
 {
     short equal;
@@ -586,6 +596,7 @@ short MMathIsVectorEqual(const Vector4 *first, const Vector4 *second)
     return equal;
 }
 
+/* Returns 1 when the 128-bit contents of the two vectors are identical, 0 otherwise. */
 short MMathIsVectorEqual4(const Vector4 *first, const Vector4 *second)
 {
     short equal;
@@ -604,6 +615,7 @@ short MMathIsVectorEqual4(const Vector4 *first, const Vector4 *second)
     return equal;
 }
 
+/* Returns the dot product of the xyz components of first and second. */
 float MMathVectorDotProduct(const Vector4 *first, const Vector4 *second)
 {
     float result;
@@ -620,6 +632,7 @@ float MMathVectorDotProduct(const Vector4 *first, const Vector4 *second)
     return result;
 }
 
+/* Stores the cross product of the xyz components in destination; w is set to zero. */
 Vector4 *MMathVectorCrossProduct(Vector4 *destination, const Vector4 *first, const Vector4 *second)
 {
     __asm__ __volatile__(
@@ -633,6 +646,7 @@ Vector4 *MMathVectorCrossProduct(Vector4 *destination, const Vector4 *first, con
     return destination;
 }
 
+/* Stores first * (1 - parameter) + second * parameter in the xyz components of destination. */
 Vector4 *MMathVectorInterpolation(Vector4 *destination, const Vector4 *first, const Vector4 *second, float parameter)
 {
     __asm__ __volatile__(
@@ -669,6 +683,10 @@ Vector4 *MMathSpecialVectorSub(Vector4 *destination, const Vector4 *first, const
     return destination;
 }
 
+/*
+ * Stores matrix multiplied by a rotation about the X axis by angle in out.
+ * A null matrix uses McMathUnitMatrix.
+ */
 Matrix4 *MMathRotateMatrixX(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
@@ -698,6 +716,10 @@ Matrix4 *MMathRotateMatrixX(Matrix4 *out, Matrix4 *matrix, float angle)
     return out;
 }
 
+/*
+ * Stores matrix multiplied by a rotation about the Y axis by angle in out.
+ * A null matrix uses McMathUnitMatrix.
+ */
 Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
@@ -727,6 +749,10 @@ Matrix4 *MMathRotateMatrixY(Matrix4 *out, Matrix4 *matrix, float angle)
     return out;
 }
 
+/*
+ * Stores matrix multiplied by a rotation about the Z axis by angle in out.
+ * A null matrix uses McMathUnitMatrix.
+ */
 Matrix4 *MMathRotateMatrixZ(Matrix4 *out, Matrix4 *matrix, float angle)
 {
     __asm__ __volatile__(
@@ -756,6 +782,10 @@ Matrix4 *MMathRotateMatrixZ(Matrix4 *out, Matrix4 *matrix, float angle)
     return out;
 }
 
+/*
+ * Stores matrix multiplied by rotations about the X and Y axes, by the x and y
+ * components of angles, in out.
+ */
 Matrix4 *MMathRotateMatrixXY(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
@@ -795,6 +825,10 @@ Matrix4 *MMathRotateMatrixXY(Matrix4 *out, const Matrix4 *matrix, const Vector4 
     return out;
 }
 
+/*
+ * Stores matrix multiplied by rotations about the Y and X axes, by the y and x
+ * components of angles, in out.
+ */
 Matrix4 *MMathRotateMatrixYX(Matrix4 *out, const Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
@@ -834,6 +868,7 @@ Matrix4 *MMathRotateMatrixYX(Matrix4 *out, const Matrix4 *matrix, const Vector4 
     return out;
 }
 
+/* Stores matrix multiplied by rotations about X, Y and Z, by the components of angles, in out. */
 Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
@@ -883,6 +918,7 @@ Matrix4 *MMathRotateMatrixXYZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angl
     return out;
 }
 
+/* Stores matrix multiplied by rotations about Y, X and Z, by the components of angles, in out. */
 Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angles)
 {
     __asm__ __volatile__(
@@ -932,6 +968,7 @@ Matrix4 *MMathRotateMatrixYXZ(Matrix4 *out, Matrix4 *matrix, const Vector4 *angl
     return out;
 }
 
+/* Stores matrix multiplied by vector in out. */
 Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector)
 {
     __asm__ __volatile__(
@@ -949,6 +986,7 @@ Vector4 *MMathApplyMatrix(Vector4 *out, Matrix4 *matrix, const Vector4 *vector)
     return out;
 }
 
+/* Stores left multiplied by right in out. */
 Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *left, Matrix4 *right)
 {
     __asm__ __volatile__(
@@ -984,6 +1022,7 @@ Matrix4 *MMathMulMatrix(Matrix4 *out, Matrix4 *left, Matrix4 *right)
     return out;
 }
 
+/* Multiplies each column of matrix by the matching component of scale, storing the result in out. */
 Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale)
 {
     __asm__ __volatile__(
@@ -1004,6 +1043,7 @@ Matrix4 *MMathScaleMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *scale)
     return out;
 }
 
+/* Multiplies every element of matrix by scale, storing the result in out. */
 Matrix4 *MMathScaleMatrixS(Matrix4 *out, const Matrix4 *matrix, float scale)
 {
     __asm__ __volatile__(
@@ -1025,6 +1065,7 @@ Matrix4 *MMathScaleMatrixS(Matrix4 *out, const Matrix4 *matrix, float scale)
     return out;
 }
 
+/* Stores matrix multiplied by the translation matrix for translation in out. */
 Matrix4 *MMathTranslateMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *translation)
 {
     __asm__ __volatile__(
@@ -1045,6 +1086,7 @@ Matrix4 *MMathTranslateMatrix(Matrix4 *out, Matrix4 *matrix, const Vector4 *tran
     return out;
 }
 
+/* Sets out to the identity rotated by the yaw (atan2 of x and z) and pitch (atan2 of y and XZ length) of direction. */
 Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
 {
     float directionX;
@@ -1061,6 +1103,7 @@ Matrix4 *MMathCalcMatrixVector(Matrix4 *out, const Vector4 *direction)
     return out;
 }
 
+/* Stores the negation of the third column of matrix in out. */
 Vector4 *MMathCalcVectorMatrix(Vector4 *out, const Matrix4 *matrix)
 {
     __asm__ __volatile__(
@@ -1071,6 +1114,7 @@ Vector4 *MMathCalcVectorMatrix(Vector4 *out, const Matrix4 *matrix)
     return out;
 }
 
+/* Writes the x and y angles of the direction stored in the third column of matrix, negated, into out. */
 Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
 {
     Vector4 direction;
@@ -1082,6 +1126,7 @@ Vector4 *MMathCalcAngleMatrix(Vector4 *out, const Matrix4 *matrix)
     return out;
 }
 
+/* Transforms point by matrix, divides by w and stores the screen coordinates in destination. */
 void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
 {
     __asm__ __volatile__(
@@ -1108,6 +1153,7 @@ void MMathRotTransPers(Vector4 *destination, const StudioCamera *camera, const M
         : : "r"(point), "r"(matrix), "r"(&camera->screenScale), "r"(&camera->screenOffset), "r"(destination) : "memory");
 }
 
+/* Like MMathRotTransPers, but clips the point; returns 0x8000 when the VU0 clip flags are set, 0 otherwise. */
 int MMathRotTransPersClip(Vector4 *destination, const StudioCamera *camera, const Matrix4 *matrix, const Vector4 *point)
 {
     int result;

@@ -7,6 +7,7 @@
 #include "rg_linkdata.h"
 
 
+/* Binds the view to pBuf, which holds the link-data image. Both pointers must be non-null. */
 void InitRgLinkData(RgLinkData *pAna, void *pBuf) {
     if (pAna == 0) {
         assert_prog(linkDataAssertLinkDataNotNil, linkDataSourcePath, 18);
@@ -17,10 +18,12 @@ void InitRgLinkData(RgLinkData *pAna, void *pBuf) {
     pAna->buf = pBuf;
 }
 
+/* Reads a little-endian 32-bit word. */
 static unsigned int _get_uint(const unsigned char *buf) {
     return buf[0] + (buf[1] << 8) + (buf[2] << 16) + (buf[3] << 24);
 }
 
+/* Returns 1 when name equals the tag at the start of the buffer, 0 otherwise. */
 int RgLinkDataMatchDataName(RgLinkData *pAna, const char *name) {
     char *dataName = pAna->buf;
 
@@ -56,6 +59,7 @@ unsigned int RgLinkDataNumOfData(RgLinkData *pAna) {
     return _get_uint(header->numOfData);
 }
 
+/* Returns the name of entry nIndex from the name table. */
 char *RgLinkDataGetName(RgLinkData *pAna, unsigned int nIndex) {
     RgLinkDataHeader *header;
     RgLinkDataName *nameTable;
@@ -71,6 +75,10 @@ char *RgLinkDataGetName(RgLinkData *pAna, unsigned int nIndex) {
     return nameTable[nIndex];
 }
 
+/*
+ * Returns the size of the named entry, or 0 when no entry has that name.
+ * The size is the distance from this entry's offset to the next offset.
+ */
 unsigned int RgLinkDataGetSize(RgLinkData *pAna, const char *name) {
     RgLinkDataHeader *header;
     unsigned char *table;
@@ -106,6 +114,7 @@ unsigned int RgLinkDataGetSize(RgLinkData *pAna, const char *name) {
     return 0;
 }
 
+/* Returns a pointer to the data of the named entry, or 0 when no entry has that name. */
 void *RgLinkDataGet(RgLinkData *pAna, const char *name) {
     RgLinkDataHeader *header;
     unsigned char *table;
@@ -138,6 +147,7 @@ void *RgLinkDataGet(RgLinkData *pAna, const char *name) {
     return 0;
 }
 
+/* Returns a pointer to the data of the first entry whose name ends with ext, or 0. */
 void *RgLinkDataFindExt(RgLinkData *pAna, const char *ext) {
     RgLinkDataHeader *header;
     unsigned char *table;
@@ -174,6 +184,7 @@ void *RgLinkDataFindExt(RgLinkData *pAna, const char *ext) {
     return 0;
 }
 
+/* Returns a pointer to the data of entry index. */
 void *RgLinkDataGetIndex(RgLinkData *pAna, int index) {
     RgLinkDataHeader *header;
     RgLinkDataOffset *offset;

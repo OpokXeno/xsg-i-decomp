@@ -19,7 +19,7 @@
 /* Frames xglMcMain is polled for after the memory cards settle. */
 #define LOGO_CARD_SETTLE_FRAMES 8
 
-/* ipuplay: the movie stream buffer, its size, and the buffer the frames are displayed from. */
+/* Movie stream buffer base and size, and the base of the buffer the movie frames are displayed from. */
 #define LOGO_MOVIE_STREAM_BASE 0x01000000
 #define LOGO_MOVIE_STREAM_SIZE 0x80000
 #define LOGO_MOVIE_DISPLAY_BASE 0x01100000
@@ -152,6 +152,7 @@ static int ipuplay(const char *path);
 /* Defined here: deviceCheckFontModeText, TestEnv_1_00A0F690, namcoLogoPath, msiLogoPath (data order is section order). */
 const char deviceCheckFontModeText[8] = "\x19\x03";
 
+/* Runs one memory card check frame, then prints the device check font mode text. Returns the card status. */
 static int device_check_sync(void)
 {
     int status;
@@ -165,6 +166,11 @@ static int device_check_sync(void)
 
 
 
+/*
+ * Checks the HDD mount and its save data, showing the matching message until the
+ * player responds. Returns 0 when the save data needs no message, and 1 when the mount
+ * failed or a message was shown.
+ */
 static int hdd_check(void)
 {
     int status;
@@ -180,6 +186,7 @@ static int hdd_check(void)
         return 1;
     }
 
+    /* Status -5: the app data is corrupt. The message stays until the player confirms. */
     for (;;)
     {
         if (status != -5)
@@ -196,6 +203,7 @@ static int hdd_check(void)
     }
     device_check_sync();
 
+    /* Status -3: the device is unformatted, so the format request is shown. */
     if (status == -3)
     {
         text_a = hddUnformattedText;
@@ -241,6 +249,7 @@ static int hdd_check(void)
         }
     }
 
+    /* Circle skips saving. Cross shows the use-for-save text until the player confirms. */
     for (;;)
     {
         xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, text_a);
@@ -277,6 +286,10 @@ static int hdd_check(void)
 
 
 
+/*
+ * Checks both memory card slots for a card with enough free space, showing the
+ * matching warning until the player responds. Returns the final device status.
+ */
 static int mc_check(void)
 {
     McSlotState screen_state[4];
@@ -300,6 +313,7 @@ static int mc_check(void)
     free_space[0] = 0;
     free_space[1] = 0;
 
+    /* Each pass re-reads the free space and slot status and repeats until no warning is left. */
     for (;;)
     {
         xglMcRequest(0, MC_REQUEST_FREE_SPACE, 0, &slot_status[0]);
@@ -377,6 +391,7 @@ static int mc_check(void)
             }
         }
 
+        /* Warning prompt: circle continues without saving, cross waits for a card to be inserted. */
         while (warning != 0)
         {
             xglFontPrint(LOGO_MESSAGE_X, LOGO_MESSAGE_Y, -1, warning);
@@ -426,6 +441,7 @@ static int mc_check(void)
 }
 
 
+/* Runs the HDD and memory card checks, then shows the default font mode text and the logo. */
 void LogoFirst(void)
 {
     xglRenderClearFrame();
@@ -454,6 +470,7 @@ static LogoTestEnvironment TestEnv_1_00A0F690 = {
     .vertex_1 = { 0x8FF8, 0, 0x8DF7, 0, 0x40000000, 0 },
 };
 
+/* Plays the IPU movie at path until it ends or START is pressed. Returns 1 when the player skipped it. */
 static int ipuplay(const char *path)
 {
     LogoMovieInfo movie;
@@ -505,6 +522,7 @@ static int ipuplay(const char *path)
 const char namcoLogoPath[] = "data\\namco.ipu";
 const char msiLogoPath[24] = "data\\logo_msi.ipu";
 
+/* Plays the Namco logo movie and, unless it was skipped, the MSI logo movie after it. */
 void Logo(void)
 {
     xglRenderClearFrame();
@@ -514,12 +532,9 @@ void Logo(void)
     if (ipuplay(namcoLogoPath) == 0)
     {
         /*
-         * The original calls ipuplay with jal and returns through the
-         * shared epilogue instead of a sibling jump. Under this TU's
-         * compiler the call stays out of tail position only inside a
-         * loop construct, which is the shape a do/while (0) statement
-         * gives it; the call alone as the block's last statement
-         * compiles to `j ipuplay`.
+         * The original calls ipuplay with jal and returns through the shared
+         * epilogue. The do/while (0) keeps the call out of tail position; as the
+         * block's last statement the call alone compiles to a jump.
          */
         do {
             ipuplay(msiLogoPath);

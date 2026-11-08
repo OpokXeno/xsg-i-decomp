@@ -10,10 +10,8 @@
 #include "main/xgl_studio.h"
 #include "main/xgl_thread.h"
 
-/* A pp_init particle (ppInit/ppNextStart/ppNextEnd read and write its first
- * 0x38 bytes) inside a 0x40-byte record: the original .bss places cpos, wpos
- * and wvec 0x40 apart (section 2**3), the same 0x40-byte extent colli_test
- * keeps for pos1/pos2, while hair_test's bare PpParticle cpos is 0x38. */
+/* A pp_init particle (ppInit, ppNextStart and ppNextEnd use its first 0x38 bytes)
+ * inside a 0x40-byte record: the original places cpos, wpos and wvec 0x40 bytes apart. */
 typedef struct WindParticle {
     PpParticle particle;
     unsigned char unmodeled_38[8];
@@ -92,9 +90,7 @@ static WindParticle cpos;
 
 static WindParticle wpos;
 
-/* LOCAL in the original .sbss (wtype 0x004DC610, cry 0x004DC61C, pAct
- * 0x004DC62C, shake 0x004DC630); the INCLUDE_ASM functions reach cry and pAct
- * as cry_004DC61C and pAct_004DC62C. */
+/* File-local data from the original .sbss section. */
 static float cry;
 
 static float crvx;
@@ -109,6 +105,7 @@ static float shake;
 
 static WindParticle wvec;
 
+/* Sets up the test scene: the camera, the particles, the test actor and the point wind. Returns 1. */
 static int InitTest(void)
 {
     DoublewordVector4 local;
@@ -177,6 +174,7 @@ static int InitTest(void)
     return 1;
 }
 
+/* Moves the camera from the pad: R1/R2 and the analog axes change the view angles, and the camera particle follows the sticks. */
 static void MoveCamera(void)
 {
     float lookX;
@@ -216,6 +214,7 @@ static void MoveCamera(void)
          (PadData[0].buttons.input.held & PAD_R2) != 0)) {
         crx = crvx = 0.0f;
     }
+    /* CROSS aims the camera at the point (0, 1, 0). */
     if ((PadData[0].buttons.input.held & PAD_CROSS) != 0) {
         lookX = -cpos.particle.position.x;
         lookZ = -cpos.particle.position.z;
@@ -224,6 +223,7 @@ static void MoveCamera(void)
         crx = atan2f(lookHeight, __builtin_sqrtf(lookX * lookX + lookZ * lookZ));
         crvx = crvy = 0.0f;
     }
+    /* The camera particle moves with the analog sticks, rotated by the yaw cry. */
     ppNextStart(&cpos.particle);
     if (PadData[0].buttons.input.held & PAD_L2) {
         cpos.particle.position.y -= 0.01f;
@@ -248,6 +248,7 @@ static void MoveCamera(void)
     pCamera->rotation.vector.z = 0.0f;
 }
 
+/* Moves the point wind wpos: L1/L2 change its height and the analog sticks move it, rotated by the camera yaw. */
 static void MoveWind(void)
 {
     float movementX;
@@ -285,6 +286,7 @@ static void MoveWind(void)
     ppNextEnd(&wpos.particle);
 }
 
+/* Moves the directional wind's position wvec the same way as MoveWind, with smaller steps. */
 static void MoveWind2(void)
 {
     float movementX;
@@ -322,6 +324,7 @@ static void MoveWind2(void)
     ppNextEnd(&wvec.particle);
 }
 
+/* Draws the test labels: the wind type, the wind power and the shake power. */
 static void PrintDisp(void)
 {
     const char *position_format;
@@ -344,6 +347,7 @@ static void PrintDisp(void)
                        fptodp(shake));
 }
 
+/* Runs the wind test until SELECT is held with START pressed, then resets the wind. */
 void WindTest(void)
 {
     const float minimum = 0.0f;
@@ -358,6 +362,7 @@ void WindTest(void)
         if ((PadData[0].buttons.packed & WIND_TEST_EXIT_PADS) != WIND_TEST_EXIT_PADS) {
             do {
                 WindTestDirectionalRecord directional_record;
+                /* SELECT switches between the point wind and the directional wind. */
                 if ((PadData[0].buttons.input.pressed & PAD_SELECT) != 0) {
                     if (wtype == WIND_TYPE_POINT) {
                         wtype = WIND_TYPE_DIRECTIONAL;
@@ -368,6 +373,7 @@ void WindTest(void)
 
                 EXM_StepShakeWind();
 
+                /* SQUARE moves the wind; without it the pad moves the camera. */
                 if ((PadData[0].buttons.input.held & PAD_SQUARE) != 0) {
                     if (wtype == WIND_TYPE_POINT) {
                         MoveWind();
@@ -378,6 +384,7 @@ void WindTest(void)
                     MoveCamera();
                 }
 
+                /* UP/DOWN set the wind power; LEFT/RIGHT set the shake power. */
                 if ((PadData[0].buttons.input.repeat & PAD_UP) != 0) {
                     wpos.particle.position.w += step;
                 } else if ((PadData[0].buttons.input.repeat & PAD_DOWN) != 0) {
@@ -396,6 +403,7 @@ void WindTest(void)
                     }
                 }
 
+                /* Apply the current wind: the point wind, or a directional record built from wvec. */
                 if (wtype == WIND_TYPE_POINT) {
                     EXM_SetPointWind(&wpos.particle.position);
                 } else {

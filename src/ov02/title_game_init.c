@@ -8,6 +8,7 @@
 #include "ov02/ov02.h"
 #include "ov02/title_game_init.h"
 
+/* Clears GameLoopState, then initializes the xgl flags and party data and loads the font and window textures. */
 void TitleGameInit(void)
 {
     memset(&GameLoopState, 0, GAME_LOOP_STATE_SIZE);

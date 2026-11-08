@@ -5,10 +5,8 @@
 #include "main/string_utf_get_hash.h"
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling xeno.util natives in
- * src/main/window.c and src/main/runtime.c show.
+ * The script VM's per-thread context. Every Java native receives
+ * (thread, arguments, result).
  */
 typedef struct JThread JThread;
 
@@ -31,21 +29,15 @@ typedef struct InputObjectCall {
 } InputObjectCall;
 
 /*
- * One controller's pad state, as far as this TU reads it: held/pressed keep
- * the names src/main/game.h's PadDataDebugLayout already established for
- * PadData's +0x28/+0x2a halfwords; +0x2c is read only here (getRepeat).
+ * One controller's pad state, as far as this file reads it: held and pressed
+ * are the halfwords at PadData +0x28 and +0x2a; +0x2c (repeat) is read only
+ * by Java_xeno_util_Input_getRepeat__.
  *
- * The 0x68-byte stride below every "id"-indexed read is the compiled
- * multiply this TU's getButton__/getEdge__/getRepeat__ share (id * 0x68,
- * strength-reduced to shifts and adds); config/symbols/main.txt gives
- * PadData a 0xd0-byte extent, exactly two entries of that stride.
+ * The 0x68-byte stride below is the multiply id * 0x68 that the getters
+ * share (strength-reduced by the compiler to shifts and adds).
  *
- * TU-local view: a per-controller array view of the
- * same PadData symbol src/main/db_light_write.h, src/main/game_over.h,
- * src/main/party.h (PadPrefix), src/main/game.h (PadDataDebugLayout),
- * src/main/set_path.c (PadDataEffectLayout), src/main/vibration.c
- * (VibrationPadData) and src/main/yajima_test.c (PadDataRawView) each model
- * as their own single-object local view.
+ * This is a per-controller array view of the PadData symbol, declared
+ * locally for this file only.
  */
 typedef struct InputPadEntry {
     unsigned char unmodeled_00[0x28];
@@ -70,10 +62,9 @@ const char inputIdFieldName[] = "id";
  * number in the class's "id" field and returns the new reference through
  * the call's result slot.
  *
- * That result slot keeps the plain word it is written as: the id-field
- * store (main 0x002f6ab4) stays ahead of the result store (main 0x002f6ab8)
- * only while both are accesses of one type, the same ordering
- * src/main/window.c relies on for UtilWindow.class_ref.
+ * The result slot keeps the plain word type it is written as: the id-field
+ * store stays ahead of the result store only while both are accesses of
+ * one type.
  */
 void Java_xeno_util_Input_create__I(JThread *thread, InputCreateCall *arguments,
                                     int *result)

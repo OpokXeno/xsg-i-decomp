@@ -63,11 +63,9 @@ typedef struct ActorEnemyDetectView {
 } ActorEnemyDetectView;
 
 /*
- * A TU-local view of main/xgl_sound.c's struct SoundWork (main:0x004a8140),
- * not yet reachable through a shared header. effect_banks starts at +0x20
- * and each entry's low halfword is its handle (main/xgl_sound.c's
- * SoundEffectBankEntry.handle), the same field xglSoundEffectStopDirect
- * reads (main:0x00226720).
+ * TU-local view of struct SoundWork from main/xgl_sound.c. effect_banks starts
+ * at +0x20, and each entry's low halfword is its handle (SoundEffectBankEntry.handle),
+ * the field xglSoundEffectStopDirect reads.
  */
 typedef struct SetMotionSoundWork
 {
@@ -146,7 +144,7 @@ typedef struct DiscoveryGameLoopState {
 /* Homing_Add's view of EnemyWorkEntry's homing graph: it stores the position
  * floats with the float alias set, so the homing_count load is scheduled
  * above the stores; every access through the canonical HomingPosition union
- * has alias set 0 and keeps that load below them. See the R09 rematch log. */
+ * has alias set 0 and keeps that load below them. */
 typedef struct EnemyHomingAddState {
     unsigned char unmodeled_00[0x30a0];
     float homing_positions[ENEMY_HOMING_MAX][4];
@@ -205,14 +203,6 @@ extern int Check_InsideFan(const Vector4 *origin, const Vector4 *target,
                            float max_degrees, float radius);
 
 extern int RES_GetEnemySeFoot(int sound_id);
-/*
- * Sound_FootStep and Enemy_ActionReady always pass 1 for `play`; when it is
- * not 1 the positional call below is skipped and the function has no other
- * effect. `ignore_se_type` is 0 at Enemy_ActionReady's one sound_index == 1
- * call and 1 everywhere else (main:0x002d3930, 0x002d396c, 0x002d3a84,
- * 0x002d06d8, 0x002d0710, 0x002d0744); when it is 0 and sound_index is 2 or
- * 4, a bank whose RES_GetEnemySeType is 1 is skipped entirely.
- */
 extern void EnemySound(struct Actor *actor, short sound_index, signed char play,
                        signed char ignore_se_type);
 
@@ -306,6 +296,11 @@ UnduTestStorage UnduTest = {0};
 #define TALK_FLAG_LOOK_AT_PLAYER 0x4 /* turn the head towards the player */
 #define TALK_FLAG_FREEZE 0x10        /* hand the enemy to the script */
 
+/*
+ * Starts motion on actor through ACT_setMotion2. Enemies get the 0x20 mode bit.
+ * With the custom blend flag, the mode also gets 0x10000000 and the enemy
+ * entry's blend weight is copied into the actor's blend work.
+ */
 void Set_Motion(struct Actor *actor, int motion, unsigned int mode)
 {
     struct Actor *motion_actor = actor;
@@ -337,6 +332,7 @@ void Set_Motion(struct Actor *actor, int motion, unsigned int mode)
     }
 }
 
+/* Plays a walk or run footstep sound when the animation frame crosses a FootStep threshold. */
 void Sound_FootStep(struct Actor *actor)
 {
     EnemyWorkEntry *enemy_entry = &enepc[ACTOR_NUMBER(actor)];
@@ -412,6 +408,12 @@ void Sound_FootStep(struct Actor *actor)
     }
 }
 
+/*
+ * Plays sound_index for actor from its enemy sound bank. Nothing plays when
+ * the actor is hidden, or when play is not 1. When ignore_se_type is 0 and the
+ * sound is a walk or run sound, the call returns early for banks whose
+ * RES_GetEnemySeType is 1.
+ */
 void EnemySound(struct Actor *actor, short sound_index, signed char play,
                  signed char ignore_se_type)
 {
@@ -439,15 +441,15 @@ void EnemySoundEnd(struct Actor *actor, short sound_offset)
     xglSoundEffectStopID(
         RES_GetEnemySeBank(*ACTOR_SOUND_EFFECT_ID(actor)) + (sound_offset & 0xffff),
         ACTOR_NUMBER(actor) + 1);
-    /* The original keeps a real call here (jal xglSoundEffectStopID at
-     * 0x002d0868) followed by its own register restores and jr ra
-     * (0x002d0870..0x002d087c), instead of folding the call into a sibling
-     * jump. This no-op loop keeps the call out of tail position and
-     * reproduces that real call plus epilogue. */
+    /* The original keeps a real call here, followed by its own register
+     * restores and return, instead of folding the call into a sibling jump.
+     * This no-op loop keeps the call out of tail position and reproduces that
+     * real call plus epilogue. */
     do {
     } while (0);
 }
 
+/* Stops the enemy sounds of every enemy actor, then the three damage sound effects. */
 void EnemySound_StopAll(signed char which)
 {
     short actor_index;
@@ -461,6 +463,10 @@ void EnemySound_StopAll(signed char which)
     xglSoundEffectStopDirect(SE_ID_DAMAGE_SEAL);
 }
 
+/*
+ * Stops channels 1-7 of the actor's enemy sound bank. which == 1 fades them
+ * out with SsdFadeoutEffect; any other value stops them directly.
+ */
 void EnemySound_Stop(struct Actor *actor, signed char which)
 {
     int bank;
@@ -496,6 +502,7 @@ short Get_DefaultMotion(struct Actor *actor, short motion_number)
     return motion_table[motion_number];
 }
 
+/* Applies the talk flags when talk starts: talk motion, look at the player, freeze. */
 void Before_Talk(struct Actor *actor)
 {
     ActorTalk *talk_actor = (ActorTalk *)actor;
@@ -518,6 +525,7 @@ void Before_Talk(struct Actor *actor)
     }
 }
 
+/* Undoes the talk flags when talk ends: restores the saved motion, releases look-at and freeze. */
 void After_Talk(struct Actor *actor)
 {
     ActorTalk *talk_actor = (ActorTalk *)actor;
@@ -537,6 +545,7 @@ void After_Talk(struct Actor *actor)
     } while (0);
 }
 
+/* Returns 1 if an active enemy with the encounter flag is chasing, tentacling or found. */
 int Check_EnemyFound(void)
 {
     short enemy_index;
@@ -554,6 +563,7 @@ int Check_EnemyFound(void)
     return 0;
 }
 
+/* Returns 1 if an active enemy is in its explosion or stiff action. */
 int Check_EnemyBurn(void)
 {
     short enemy_index;
@@ -571,6 +581,7 @@ int Check_EnemyBurn(void)
     return 0;
 }
 
+/* Returns 1 if an active enemy is in its electric damage action or has the electric stiff flag. */
 int Check_EnemyElec(void)
 {
     short enemy_index;
@@ -586,6 +597,10 @@ int Check_EnemyElec(void)
     return 0;
 }
 
+/*
+ * Runs Check_Discovery for each actor other than enemy that is within its
+ * hearing distance of sound_position. Does nothing while PAD_L3 is held.
+ */
 void Enemy_FindByEar(ActorEnemyDetectView *enemy, const Vector4 *sound_position)
 {
     short index;
@@ -608,6 +623,7 @@ void Enemy_FindByEar(ActorEnemyDetectView *enemy, const Vector4 *sound_position)
     }
 }
 
+/* Advances the active scripted move and turn of actor by one frame. */
 void Script_Action(struct Actor *actor)
 {
     EnemyWorkEntry *script = &enepc[ACTOR_NUMBER(actor)];
@@ -638,6 +654,7 @@ void Script_Action(struct Actor *actor)
     }
 }
 
+/* Moves actor 8 along the belt conveyor floor direction that UnduCheck finds under it. */
 void Move_BeltConveyer(struct Actor *actor)
 {
     unsigned long long flags;
@@ -661,6 +678,12 @@ void Move_BeltConveyer(struct Actor *actor)
     }
 }
 
+/*
+ * Makes enemy react to spotting the player: it faces the player and starts a
+ * tentacle or found action, chosen by pause_kind. Hidden enemies, enemies
+ * already in a found, damage, stiff, tentacle, init or escape action, and a
+ * flashing player are skipped.
+ */
 void Check_Discovery(struct Actor *enemy)
 {
     EnemyWorkEntry *state = &enepc[ACTOR_NUMBER(enemy)];
@@ -723,6 +746,12 @@ void Check_Discovery(struct Actor *enemy)
     }
 }
 
+/*
+ * Fills GameLoopState.encount for an encounter with enemy. With enable 0 the
+ * encounter side comes from the player-enemy bearing (and nothing happens
+ * unless the enemy has the encounter flag and no pause flags are set);
+ * otherwise the side is command. A monster set is picked at random.
+ */
 void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
 {
     short facing[2];
@@ -743,6 +772,7 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
         if (GameLoopState.pause_flags & 0x108000) {
             return;
         }
+        /* Bearing of the enemy from the player (facing[0]), then the reverse (facing[1]). */
         angle = Get_Angle_Relative(&GameLoopState.player->position,
                                    &enemy->head.position,
                                    GameLoopState.player->rotation.y);
@@ -786,6 +816,7 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     } else {
         GameLoopState.encount.encounter_side = command;
     }
+    /* Counts the monster sets in use, then picks one at random. */
     for (i = 0; i < ENCOUNTER_MONSTER_SET_COUNT; i++) {
         if (params->monster_set_numbers[i] != -1) {
             count++;
@@ -795,6 +826,7 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     GameLoopState.encount.monster_set_number = monster_set;
     entry_value = state->encounter_value;
     GameLoopState.encount.entry_value = (signed char)entry_value;
+    /* Trigger flags from the enemy's stiff state. */
     options = state->stiff_flag;
     GameLoopState.event_flags |= 1;
     GameLoopState.encount.event_flags = params->encounter_event_flags;
@@ -811,6 +843,11 @@ void Check_Encount(EncountActor *enemy, signed char enable, signed char command)
     }
 }
 
+/*
+ * Ends a battle with the encounter enemy. A victory deactivates the enemy and
+ * its linked actors; otherwise the enemy's battle_state becomes 16. Every
+ * chasing encounter enemy then gets a new spline and a threat action.
+ */
 void Enemy_After_Battle(int victory)
 {
     EnemyParams *params = &actor[GameLoopState.encount.enemy->number].hearing;
@@ -865,13 +902,11 @@ void Set_Spline_By_Route(struct Actor *actor, short route_offset)
     point = 0;
 
     if (state->route_point_count > 0) {
-        /* One walking pointer covers both arrays, as the original does: it
-         * addresses the spline point's z at 0(v1) and the route point's x
-         * 1026 floats further on, which is route_points minus
-         * spline_points. Only the three coordinates of each record are
-         * copied. Initialized inside the positive-count branch so
-         * ee-gcc2_96 -O2 -G8 emits addiu v1,a0,0x88 after blez, matching the
-         * original. */
+        /* One walking pointer covers both arrays: it addresses the spline
+         * point's z at 0(v1) and the route point's x 1026 floats further on,
+         * which is route_points minus spline_points. Only the three
+         * coordinates of each record are copied. The pointer is set up inside
+         * this branch, which keeps the original's instruction order. */
         point_data = &state->spline_coordinates[0][2];
         do {
             point_data[-2] = point_data[1026];
@@ -888,6 +923,7 @@ void Set_Spline_By_Route(struct Actor *actor, short route_offset)
                     ENEMY_SPLINE_UNITS_PER_POINT + 2;
 }
 
+/* Starts an enemy spline at actor's position, with four spline points. */
 void Set_Spline_By_Random(struct Actor *actor)
 {
     EnemyWorkEntry *state;
@@ -902,6 +938,10 @@ void Set_Spline_By_Random(struct Actor *actor)
     state->spline_parameter = 0;
 }
 
+/*
+ * Appends BackPos to the PlayHis ring unless the Check_Straight_ID walk from
+ * the last entry completes all its steps.
+ */
 void Set_PlayerHistory(struct Actor *actor)
 {
     float result[4];
@@ -918,6 +958,11 @@ void Set_PlayerHistory(struct Actor *actor)
     }
 }
 
+/*
+ * Starts a homing search for enemy: sets its sense block timer, then takes the
+ * nearest homing node it can see straight to and walks the node links back to
+ * node 0, adding spline points along that path.
+ */
 void Homing_Search(ActorEnemyDetectView *enemy)
 {
     EnemyWorkEntry *state = &enepc[enemy->slot_number];
@@ -939,6 +984,7 @@ void Homing_Search(ActorEnemyDetectView *enemy)
 
     state->sense_block_timer = ENEMY_SENSE_BLOCK_FRAMES;
     if (state->homing_count > 0) {
+        /* Orders the nodes by distance from the enemy, nearest first. */
         for (i = 0; i < state->homing_count; i++) {
             distances[i] = Get_Distance(&enemy->head.position.coordinates, &state->homing_positions[i].vector);
         }
@@ -983,6 +1029,7 @@ void Homing_Search(ActorEnemyDetectView *enemy)
                 order[path_length++] = parent;
             }
         }
+        /* Starts the spline at the enemy and adds points along the path. */
         heading = Get_Angle(&enemy->head.position.coordinates, &state->homing_positions[order[i]].vector);
         enemy->target_angle = heading;
         BSpline_Init(state->spline_coordinates[0], enemy->head.position.elements, heading);
@@ -1016,10 +1063,9 @@ void Homing_Search(ActorEnemyDetectView *enemy)
         angle = Get_Angle(&state->spline_points[state->spline_point_count - 2],
                           &state->spline_points[state->spline_point_count - 1]);
         for (i = 0; i < 2; i++) {
-            /* The original forms these two addresses as the byte offset
-             * index * 16 + field added to state (addiu then addu); the
-             * typed homing_positions[last].elements[0] forms tried (see the
-             * R09 rematch log) add state first. */
+            /* Addresses the position as a byte offset (0x30a0 + index * 16)
+             * added to state, as the original does; a typed
+             * homing_positions[last] access changes the address arithmetic. */
             short last = order[path_length - 1];
             int x_offset = 0x30a0 + last * 16;
             float *x_pointer = (float *)((char *)state + x_offset);
@@ -1037,6 +1083,10 @@ void Homing_Search(ActorEnemyDetectView *enemy)
     }
 }
 
+/*
+ * Adds the point (x, y, z) to the actor's homing graph. target_index is the
+ * node it links to, or -1 for none.
+ */
 void Homing_Add(int actor_index, float x, float y, float z, short target_index)
 {
     EnemyHomingAddState *state = (EnemyHomingAddState *)&enepc[actor[actor_index].slot_number];
@@ -1058,6 +1108,7 @@ void Homing_Add(int actor_index, float x, float y, float z, short target_index)
     state->homing_count++;
 }
 
+/* Rebuilds the neighbour links of the actor's homing graph from its stored target links. */
 void Refresh_Homing(struct Actor *actor)
 {
     EnemyWorkEntry *state;
@@ -1089,6 +1140,11 @@ void Refresh_Homing(struct Actor *actor)
     }
 }
 
+/*
+ * Debug editor for the homing graph of DebugActor. The pad selects, links,
+ * moves, adds and deletes nodes, and the graph is drawn with Debug_Mark.
+ * Does nothing while the player is DebugActor.
+ */
 void Disp_Homing(void)
 {
     ActorEnemyDetectView *debug_actor = &actor[DebugActor];
@@ -1125,6 +1181,7 @@ void Disp_Homing(void)
         if (((SetMotionPad *)&PadData)->analog_level == 255) {
             state->homing_positions[SelNum].vector = GameLoopState.player->position;
         }
+        /* Cross deletes the selected node and shifts the arrays down. */
         if ((PadData.half_2a & PAD_CROSS) && SelNum != -1) {
             for (i = SelNum; i < state->homing_count - 1; i++) {
                 for (k = 0; k < 4; k++) {
@@ -1157,6 +1214,7 @@ void Disp_Homing(void)
             }
             SelNum = -1;
         }
+        /* Circle inserts a node at the selected index and shifts the arrays up. */
         if ((PadData.half_2a & PAD_CIRCLE) && SelNum != -1) {
             for (d = state->homing_count; d > SelNum; d--) {
                 for (k = 0; k < 4; k++) {
@@ -1187,6 +1245,7 @@ void Disp_Homing(void)
                 }
             }
         }
+        /* Marks each node: selected, nearest, unlinked, or linked. */
         for (d = 0; d < state->homing_count; d++) {
             if (d == SelNum) {
                 Debug_Mark(&state->homing_positions[d].vector, (int)AdrsEnemyExclamation);
@@ -1198,6 +1257,7 @@ void Disp_Homing(void)
                 Debug_Mark(&state->homing_positions[d].vector, (int)AdrsEnemySphere);
             }
         }
+        /* Draws a marker between each pair of linked nodes. */
         for (d = 0; d < state->homing_count; d++) {
             for (k = 0; k < state->homing_neighbour_count[d]; k++) {
                 float point[3];
@@ -1222,6 +1282,10 @@ void Disp_Homing(void)
     }
 }
 
+/*
+ * Sets reference_actor's shadow offset toward the nearest other enemy that
+ * casts a shadow, within 5000 units. Leaves the offset unchanged when none is found.
+ */
 void Set_Shadow(struct Actor *reference_actor)
 {
     float nearest_y;
@@ -1254,6 +1318,10 @@ void Set_Shadow(struct Actor *reference_actor)
     }
 }
 
+/*
+ * Returns the index of the nearest active actor that is within 8 units of
+ * reference_actor and inside its front fan, or -1 if there is none.
+ */
 int Get_MostNear_Actor(struct Actor *reference_actor)
 {
     float nearest_distance = 5.0f;
@@ -1279,6 +1347,10 @@ int Get_MostNear_Actor(struct Actor *reference_actor)
     return nearest_index;
 }
 
+/*
+ * Updates viewer's look-at point from its look target while the look timer is
+ * 1 or 2. The target is the head position when the target has one.
+ */
 void Actor_LookAt(struct Actor *viewer)
 {
     EnemyWorkEntry *state = &enepc[ACTOR_NUMBER(viewer)];
@@ -1305,6 +1377,10 @@ void Actor_LookAt(struct Actor *viewer)
     }
 }
 
+/*
+ * Starts a look-at of target_position lasting duration. Returns 0 and changes
+ * nothing when the current look timer is longer than duration; otherwise 1.
+ */
 int Actor_LookAt_Set(struct Actor *actor, signed char duration,
                      const Vector4 *target_position)
 {
@@ -1325,6 +1401,10 @@ int Actor_LookAt_Set(struct Actor *actor, signed char duration,
     return 1;
 }
 
+/*
+ * Releases the look-at of actor: clears its look timer and target. Returns 0
+ * without releasing when the current look timer is longer than duration.
+ */
 int Actor_LookAt_Release(struct Actor *actor, signed char duration)
 {
     EnemyWorkEntry *state;
@@ -1344,6 +1424,7 @@ int Actor_LookAt_Release(struct Actor *actor, signed char duration)
     return 1;
 }
 
+/* Clears the look timer, look target and look-at point of actor. */
 void Actor_LookAt_Init(struct Actor *actor)
 {
     *ACTOR_LOOKAT_TIMER(actor) = 0;

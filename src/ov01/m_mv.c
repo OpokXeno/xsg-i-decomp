@@ -6,15 +6,6 @@
 #include "main/xgl_dma.h"
 #include "main/xgl_render.h"
 
-/*
- * .bss for this TU is C-owned (config/tu-build.json
- * data_ownership); these carry recovered names. The original
- * ELF's own local symbol table names the flag word mvFlags (config/symbols/
- * ov01.txt disambiguates the two same-named words at 0x00a43720/0x00a43724 as
- * mvFlags_00A43720/mvFlags_00A43724); the movie-parameter block and the movie
- * handle at 0x00a5b630/0x00a5b6d0 have no ledger entry and keep the splat
- * default.
- */
 static int mvFlags_00A43720 = 0;
 
 #define MV_FLAG_INITIALIZED 0x1
@@ -22,8 +13,10 @@ static int mvFlags_00A43720 = 0;
 #define MV_FLAG_SKIP_ENABLED 0x4
 #define MV_PLAYING_BIT 1
 
-/* MvPlayOptions.flags: MV_PLAY_FRAME_MOVIE_SIZE sizes the frame to the movie, MV_PLAY_FRAME_FULL uses
- * the full 512x448 frame at the origin. */
+/*
+ * MvPlayOptions.flags: MV_PLAY_FRAME_MOVIE_SIZE sizes the frame to the movie,
+ * MV_PLAY_FRAME_FULL uses the full 512x448 frame at the origin.
+ */
 #define MV_PLAY_FRAME_MOVIE_SIZE 0x1
 #define MV_PLAY_FRAME_FULL 0x2
 #define MV_FULL_FRAME_WIDTH 0x200
@@ -45,7 +38,7 @@ typedef struct MvParams {
 
 static MvParams mvParams;
 
-/* Interior label in mvParams at the movie-info structure. */
+/* The movie handle inside mvParams, at offset 0xa0. */
 #define mvMovieContext ((unsigned char *)&mvParams + 0xa0)
 
 typedef struct MvGifEnvironment {
@@ -72,7 +65,6 @@ typedef struct MvRenderControl {
 
 #define MV_RENDER_STATE ((MvRenderControl *) 0x004a90e0)
 
-/* Owned by this TU's carved .data (asm/data/ov01/m_mv.data.s). */
 static MvGifEnvironment mvEnv;
 
 #define MV_PAD_SKIP_HELD 0x100
@@ -83,7 +75,7 @@ static MvGifEnvironment mvEnv;
 
 void MMvStop(void);
 
-/* Defined in src/main/xgl_1.c. */
+/* xglMovieClose and xglMoviePlay are defined in src/main/xgl_1.c. */
 extern int xglMovieClose(void *movie);
 extern int xglMoviePlay(void *movie);
 extern void FlushCache(int mode);
@@ -106,6 +98,10 @@ int MMvInit(void)
     return 1;
 }
 
+/*
+ * Advances the movie by one frame while playing. A skip press stops it; otherwise
+ * the frame is decoded, the GIF environment is sent, and the movie is closed at its end.
+ */
 void MMvExec(void)
 {
     int finished;
@@ -134,6 +130,7 @@ void MMvExec(void)
     }
 }
 
+/* Plays a movie in the full 512x448 frame at the origin. */
 int MMvPlay(const char *filename)
 {
     MvPlayOptions options;
@@ -143,8 +140,10 @@ int MMvPlay(const char *filename)
     return MMvPlay2(&options);
 }
 
-/* Movie handle as xglMovieOpen and the decoder fill it; only the fields
- * MMvPlay2 reads or writes are modeled. */
+/*
+ * Movie handle as xglMovieOpen and the decoder fill it; only the fields
+ * MMvPlay2 reads or writes are modeled.
+ */
 typedef struct MvMovieHandle {
     unsigned char unmodeled_00[0x40];
     short width;                       /* +0x40 */
@@ -184,6 +183,11 @@ extern char *strncpy(char *dest, const char *src, unsigned int n);
 extern void xglMovieInfoInit(void *info);
 extern int xglMovieOpen(void *info, char *name);
 
+/*
+ * Starts a movie: copies the options and filename into the play-state block, opens
+ * the movie, checks its decode buffer size and sets the frame rectangle.
+ * Returns 1 when playback starts, 0 otherwise.
+ */
 int MMvPlay2(MvPlayOptions *options)
 {
     MvPlayState *st;
@@ -200,6 +204,7 @@ int MMvPlay2(MvPlayOptions *options)
         MOutputDebugStringWarn(mvMMvPlayNowPlayingWaitForTheText);
         return 0;
     }
+    /* Set up the play state, then open the movie into it. */
     st = (MvPlayState *)&mvParams;
     memset(st, 0, sizeof(MvPlayState));
     st->arena = arena;
@@ -224,6 +229,7 @@ int MMvPlay2(MvPlayOptions *options)
         xglMovieClose(mv);
         return 0;
     }
+    /* Size the GIF environment from the movie, then place the frame rectangle. */
     env = &mvEnv;
     h = mv->height;
     w = mv->width;
@@ -266,6 +272,10 @@ int MMvIsPlaying(void)
     return (mvFlags_00A43720 >> MV_PLAYING_BIT) & 1;
 }
 
+/*
+ * Returns the remaining movie time and stores the current and total times in the
+ * non-null outputs. All three are 0 when no movie is playing.
+ */
 int MMvGetTime(int *currentTime, int *totalTime)
 {
     short movieCurrentTime = 0;

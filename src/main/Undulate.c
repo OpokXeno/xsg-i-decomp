@@ -102,9 +102,7 @@ static __inline__ int unduSlopeBits(const float *value)
     return bits;
 }
 
-/*
- * TU-local declarations of main/tu273 (src/main/Undulate.c).
- */
+/* Types and declarations local to this file. */
 #ifndef SRC_MAIN_UNDULATE_H
 #define SRC_MAIN_UNDULATE_H
 
@@ -266,9 +264,8 @@ float UnduCheck(float *sample, void *output, UnduQuery *query);
 static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffset);
 
 /*
- * Types 1 and 2 are walked through volatile pointers: the original reads every
- * pointer field again after its null test, and rereads each list head and count
- * after the stores. The type 0 table is read once per field.
+ * Relocates a collision blob's offsets once. Types 1 and 2 use volatile pointers
+ * because the original rereads pointer fields and list counts after stores.
  */
 void UnduInit(union UnduColiBlob *data)
 {
@@ -329,6 +326,7 @@ void UnduInit(union UnduColiBlob *data)
     data->tables.type |= UNDU_COLI_RELOCATED;
 }
 
+/* Finds a header in a list by direct index or by identifier. Returns null when none matches. */
 static LayoutHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
                                           unsigned int count,
                                           unsigned int identifier)
@@ -350,6 +348,7 @@ static LayoutHeader *UnduDataGetHeaderSub(UnduDataHeader *headers,
     return 0;
 }
 
+/* Returns the collision header for a map index and unit index in the current blob, or null. */
 LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
 {
     UnduColiHead *headerIndex;
@@ -420,6 +419,7 @@ LayoutHeader *UnduDataGetHeader(int map_index, unsigned int unit_index)
     return 0;
 }
 
+/* Resets a query to its defaults: no attributes, the default cross-check counts and height limit, and the scratchpad. */
 void UnduParamInit(UnduQuery *query)
 {
     unsigned char crossCheckCount = UNDU_CROSS_CHECK_COUNT;
@@ -440,6 +440,10 @@ void UnduParamInit(UnduQuery *query)
     query->includedAttributes = 1;
 }
 
+/*
+ * Returns the height of the triangle at the hit point, or UNDU_NO_HEIGHT when the
+ * point is outside the triangle or outside its vertex height range.
+ */
 static float UnduCheckSub(UnduWork *work, int subOffset)
 {
     UnduTriangle *triangle = (UnduTriangle *)subOffset;
@@ -507,6 +511,11 @@ static float UnduCheckSub(UnduWork *work, int subOffset)
     return UNDU_NO_HEIGHT;
 }
 
+/*
+ * Compares a triangle's height with the current collision height under the query
+ * flags, and records it as the new best when it wins. Returns 0 for no match,
+ * 1 for a match, and 2 when it replaces the current best.
+ */
 static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height)
 {
     UnduTriangle *triangle = (UnduTriangle *)subOffset;
@@ -562,6 +571,7 @@ static int UnduCheckSubHeightCheck(UnduWork *work, int subOffset, float height)
     return status;
 }
 
+/* Tests every sub-primitive of the work's list and passes each hit height to UnduCheckSubHeightCheck. */
 static void UnduCheckSubCheckAll(UnduWork *work) {
     int subOffset;
     int entryOffset;
@@ -579,6 +589,7 @@ static void UnduCheckSubCheckAll(UnduWork *work) {
     }
 }
 
+/* Loads a triangle's wall attributes and returns 1 when they block the move under the query's mask and mode. */
 static int CheckWallAttr(UnduWork *work, const unsigned short *wallAttribute)
 {
     unsigned short attributeIndex;
@@ -626,6 +637,11 @@ static int CheckWallAttr(UnduWork *work, const unsigned short *wallAttribute)
     return 0;
 }
 
+/*
+ * Follows the move from the collision point across the triangle edges it crosses,
+ * stepping into neighbor triangles while their wall attributes allow it. The
+ * crossing is then resolved by the query mode and recorded in the work state.
+ */
 static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffset)
 {
     UnduTriangle *triangle = (UnduTriangle *)subOffset;
@@ -831,6 +847,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
             }
             mode = parameters->flags & UNDU_QUERY_MODE_MASK;
             status &= UNDU_EDGE_MASK;
+            /* Slide along the crossed edge, clip the move at it, or block it. */
             switch (mode) {
             case UNDU_QUERY_MODE_SLIDE:
                 moveDistance = 0.0f;
@@ -992,6 +1009,7 @@ static void UnduCheckSubCrossCheck(UnduWork *work, UnduQuery *query, int subOffs
     }
 }
 
+/* Copies the collision outcome into the query result and, when a move was given, into point. Returns the height. */
 static float UnduCheckResultCheck(UnduWork *work, UnduResult *result, float *point)
 {
     result->flags &= ~0x1000;
@@ -1025,6 +1043,10 @@ static float UnduCheckResultCheck(UnduWork *work, UnduResult *result, float *poi
     return work->collisionHeight;
 }
 
+/*
+ * Returns the collision height under sample. A move vector in output shifts the
+ * test point, and the move is then checked against the mesh. The result is kept in query.
+ */
 float UnduCheck(float *sample, void *output, UnduQuery *query)
 {
     UnduWork *work = query->prefix.parameters.scratchpad;
@@ -1072,6 +1094,7 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
         && (((int *)output)[0] == UNDU_NO_MOVE || ((int *)output)[1] == UNDU_NO_MOVE
             || ((int *)output)[2] == UNDU_NO_MOVE))
         work->output = 0;
+    /* Search every sub-primitive unless the previous triangle can be reused. */
     if (query->prefix.parameters.previousAttribute == 0
         || (*(long long *)&query->prefix.result.flags & 0x5000)
         || (GameLoopState.flags & 0x20)) {
@@ -1120,6 +1143,10 @@ float UnduCheck(float *sample, void *output, UnduQuery *query)
     return height;
 }
 
+/*
+ * Returns the terrain height at (x, z) for an undulation query. Without collision
+ * data it returns the query's last height. A null query uses the scratch query.
+ */
 float UnduGet2(void *queryAddress, float x, float z)
 {
     UnduQuery *query;

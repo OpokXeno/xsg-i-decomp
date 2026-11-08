@@ -79,8 +79,8 @@ const unsigned char detectingText[16] = "\xC7\xA7\xBC\xB1\xC3\xE6\xA1\xC4";
  * EN: Press START to force continuation */
 const char pressStartForceContinueText[40] = "\x19\x01\xA3\xD3\xA3\xD4\xA3\xC1\xA3\xD2\xA3\xD4\x19\x00\xA4\xC7\xB6\xAF\xC0\xA9\xC2\xB3\xB9\xD4";
 
-/* VIF DIRECT sends the five-qword GIF packet that clears and outlines the
- * backdrop while GameDiskChange waits for its replacement disc. */
+/* VIF DIRECT sends the five-quadword GIF packet that draws the backdrop sprite,
+ * which drawbg() sends while GameDiskChange waits for the disc. */
 static GameDiskChangeTestEnv TestEnv_0_00369EF0;
 
 static u8 mes00_1[55];
@@ -133,6 +133,7 @@ static void drawbg(void)
     sceVif1PkAddDataN(packet, &TestEnv_0_00369EF0, 0x18);
 }
 
+/* Replaces each fullwidth-digit placeholder in `str` with the digit for `disk_number`. */
 static void replace(u8 *str, int disk_number) {
     u8 *ch;
 
@@ -148,6 +149,10 @@ static void replace(u8 *str, int disk_number) {
     }
 }
 
+/*
+ * Waits until disc `disk_number` (1 to 3) is in the drive, showing the prompt meanwhile;
+ * START skips the wait.  Returns -1 for an invalid disc number, otherwise 0.
+ */
 int GameDiskChange(int disk_number)
 {
     int disk_check;
@@ -184,6 +189,7 @@ int GameDiskChange(int disk_number)
 
     /* From here on the requested disc is held as its bit in the drive's disc mask. */
     disk_number = 1 << (disk_number - 1);
+    /* Redraw the prompt each frame until the wanted disc is found or START is pressed. */
     while ((disk_check = xglCdDiskCheck()) <= 0 || !(disk_check & disk_number)) {
         if (disk_check == CD_CHECK_SHELL_OPEN) {
             retry = 1;

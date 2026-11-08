@@ -13,28 +13,27 @@
 #include "ssd/ssd_dma.h"
 
 /*
- * Card master file (CARDDATA, 0x00a007d0): CardFread loads it to 0x01000000.
- * Layout: u16 card count at +0 (lhu 0x00a00824), 12-character version tag at +4
- * (ori 0x00a0082c/0x00a0086c), CardDefinition table at +0x10 (ori 0x00a008a0).
+ * Card master file (card.dat): CardFread loads it to CARD_DATA_BUFFER.
+ * Layout: u16 card count at +0, 12-character version tag at +4, CardDefinition
+ * table at +0x10.
  */
 #define CARD_DATA_HEADER ((CardDataHeader *) CARD_DATA_BUFFER)
-#define CARD_DATA_TAG_OFFSET 4        /* ori 0x00a0082c / 0x00a0086c */
+#define CARD_DATA_TAG_OFFSET 4
 #define CARD_DATA_TAG ((u8 *) (CARD_DATA_BUFFER + CARD_DATA_TAG_OFFSET))
-#define CARD_DATA_TAG_LENGTH 12      /* slti 0x00a00848 / 0x00a00880 */
-#define CARD_DATA_HEADER_SIZE 0x10    /* ori 0x00a008a0: the definitions start after the header */
+#define CARD_DATA_TAG_LENGTH 12
+#define CARD_DATA_HEADER_SIZE 0x10    /* The definitions start after the header. */
 #define CARD_DATA_TABLE ((CardDefinition *) (CARD_DATA_BUFFER + CARD_DATA_HEADER_SIZE))
 typedef struct CardDataHeader {
     u16 count;                      /* +0x00: number of CardDefinition entries */
     u8 unmodeled_02[2];
 } CardDataHeader;
 
-/* "CardData1.10": the version tag the file must carry (.data 0x00a42040, 13 bytes). */
+/* "CardData1.10": the 13-byte version tag the file must carry. */
 static u8 IDdata[13];
 
 #define CARD_RESULT_WAIT_FRAMES 90        /* resultWait after a game ends before input is read */
 
-/* Buffers the sound loaders and the temporary layout files stream through. */
-/* Layout CardMainProc gives the deck screens' card list windows (cld0 on the left, cld1 and cldtmp on the right). */
+/* Card list windows of the deck screens: cld0 on the left, cld1 and cldtmp on the right. */
 #define CARD_LIST_BASE_COLOR 7
 #define CARD_LIST_CURSOR_COLOR 15
 #define CARD_LIST_TEXT_LENGTH 16
@@ -42,6 +41,7 @@ static u8 IDdata[13];
 #define CARD_LIST_LEFT_X 12
 #define CARD_LIST_RIGHT_X 312
 
+/* Buffers the sound loaders and the temporary layout files stream through. */
 #define CARD_SCRATCH_BUFFER ((void *) 0x01900000)   /* sound banks and sequences, battle music, the deck editor's type1_B.lex */
 #define CARD_JINGLE_BUFFER ((void *) 0x01C60000)     /* JINGLE1.SMD / JINGLE2.SMD */
 #define CARD_BACKGROUND_LEX ((void *) 0x01E40000)     /* <BGFileNameList entry>.lex */
@@ -49,27 +49,30 @@ static u8 IDdata[13];
 
 /* Slots of CardGameWork.models[] and the resource CardMainInit gives each (address of the model store). */
 enum CardModelSlot {
-    CARD_MODEL_TITLE = 0,        /* title\NewTitle.lex, 0x00a0197c */
-    CARD_MODEL_VIEWER = 1,       /* deckmake\viewer.lex, 0x00a01984 */
-    CARD_MODEL_DECKLIST = 2,     /* deckmake\decklist.lex, 0x00a01978 */
-    CARD_MODEL_DECKMAKE = 3,     /* deckmake\deckmake.lex, 0x00a01988 */
-    CARD_MODEL_MAT_FG = 4,       /* game\mat_fg.lex, 0x00a01990 */
-    CARD_MODEL_MAT_MOJI = 5,     /* game\mat_moji.lex, or mat_mojiJ.lex without CARD_SAVE_LARGE_CARDS, 0x00a019bc / 0x00a019dc */
-    CARD_MODEL_MAT_FG_2 = 6,     /* game\mat_fg.lex again, 0x00a01a00 */
-    CARD_MODEL_MAT_MOJI_2 = 7,   /* the same file as slot 5, 0x00a019b8 / 0x00a019d8 */
-    CARD_MODEL_BACKGROUND = 15   /* <BGFileNameList entry>.lex, 0x00a01a10 */
+    CARD_MODEL_TITLE = 0,        /* title\NewTitle.lex */
+    CARD_MODEL_VIEWER = 1,       /* deckmake\viewer.lex */
+    CARD_MODEL_DECKLIST = 2,     /* deckmake\decklist.lex */
+    CARD_MODEL_DECKMAKE = 3,     /* deckmake\deckmake.lex */
+    CARD_MODEL_MAT_FG = 4,       /* game\mat_fg.lex */
+    CARD_MODEL_MAT_MOJI = 5,     /* game\mat_moji.lex, or mat_mojiJ.lex without CARD_SAVE_LARGE_CARDS */
+    CARD_MODEL_MAT_FG_2 = 6,     /* game\mat_fg.lex again */
+    CARD_MODEL_MAT_MOJI_2 = 7,   /* the same file as slot 5 */
+    CARD_MODEL_BACKGROUND = 15   /* <BGFileNameList entry>.lex */
 };
 
-#define CARD_TITLE_MODEL_SLOT 14             /* the title logo model: matrix addiu 0x00a00960, stores 0x00a0095c..0x00a0096c */
-#define CARD_TITLE_MODEL_ADDR ((void *) 0x01DA0000)     /* lui 0x00a00954, stored 0x00a0095c */
-#define CARD_TITLE_TEXTURE_ADDR ((void *) 0x01DB5800)   /* lui/ori 0x00a00950/0x00a00958, stored 0x00a0096c */
-#define CARD_TITLE_MODEL_Y (-1.37f)          /* 0xBFAF5C29, lui/ori 0x00a00988/0x00a0098c */
-#define CARD_TITLE_MODEL_Z 0.1f              /* 0x3DCCCCCD, lui/ori 0x00a00994/0x00a00998 */
-#define CARD_TITLE_LEX_BASE ((void *) 0x01900000)       /* m_game.lex, m_card.lex, m_help.lex: lui 0x00a009b4, ori 0x00a009c8/0x00a009dc */
+/* The title logo model. */
+#define CARD_TITLE_MODEL_SLOT 14
+#define CARD_TITLE_MODEL_ADDR ((void *) 0x01DA0000)
+#define CARD_TITLE_TEXTURE_ADDR ((void *) 0x01DB5800)
+#define CARD_TITLE_MODEL_Y (-1.37f)
+#define CARD_TITLE_MODEL_Z 0.1f
+/* The title layout files: m_game.lex, m_card.lex and m_help.lex. */
+#define CARD_TITLE_LEX_BASE ((void *) 0x01900000)
 #define CARD_TITLE_LEX_SIZE 0x1000           /* distance between the three layout files */
-#define CARD_TITLE_XTX_GAME ((void *) 0x01A10050)       /* lui/ori 0x00a009e4/0x00a009f0 */
-#define CARD_TITLE_XTX_CARD ((void *) 0x01A200A0)       /* lui/ori 0x00a009f8/0x00a00a04 */
-#define CARD_TITLE_XTX_HELP ((void *) 0x01A300E0)       /* lui/ori 0x00a00a0c/0x00a00a20 */
+/* title\m_game.xtx, title\m_card.xtx and title\m_help.xtx. */
+#define CARD_TITLE_XTX_GAME ((void *) 0x01A10050)
+#define CARD_TITLE_XTX_CARD ((void *) 0x01A200A0)
+#define CARD_TITLE_XTX_HELP ((void *) 0x01A300E0)
 struct CardSoundPath {
     char name[34];
 };
@@ -101,6 +104,7 @@ extern char BGFileNameList[6][16];
 extern char cardLexExtension[];
 extern char cardXtxExtension[];
 
+/* Loads the battle 1 sound bank and sequence from the CD, then starts the normal sequence. */
 void CardPlaySound1(void)
 {
     struct CardSoundPath swdFile = cardBattle1SwdPath.path;
@@ -118,6 +122,7 @@ void CardPlaySound1(void)
     xglSoundSequenceNormal2(0, 127);
 }
 
+/* Loads the first jingle sequence from the CD, then starts the normal sequence. */
 void CardPlaySound3(void)
 {
     struct CardSoundPath smdFile = cardJingle1SmdPath.path;
@@ -128,6 +133,7 @@ void CardPlaySound3(void)
     xglSoundSequenceNormal2(0, 127);
 }
 
+/* Loads the battle 2 sound bank and sequence from the CD, then starts the normal sequence. */
 void CardPlaySound2(void)
 {
     struct CardSoundPath swdFile = cardBattle2SwdPath.path;
@@ -145,6 +151,7 @@ void CardPlaySound2(void)
     xglSoundSequenceNormal2(0, 127);
 }
 
+/* Loads the second jingle sequence from the CD, then starts the normal sequence. */
 void CardPlaySound4(void)
 {
     struct CardSoundPath smdFile = cardJingle2SmdPath.path;
@@ -156,15 +163,8 @@ void CardPlaySound4(void)
 }
 
 /*
- * CardDataLoad (0x00a007d0): loads card.dat and checks its 12-character version tag
- * (slti 12 at 0x00a00848 and 0x00a00880; IDdata is a 13-byte object, its NUL is not
- * compared).  The tag compare keeps the original's spelling, the one offset cast in
- * the claimed code: the readable alternatives all change the code.  Compiled in private
- * copies and compared with the original (whole-file gate): `*tag++ != IDdata[j]` gives
- * 5 diff ranges (0x00a00855, 0x00a0085C, 0x00a00860, 0x00a00866, 0x00a0086A);
- * `u8 *expectedId = IDdata` with `expectedId[j]` gives 2 ranges (0x00a00872 and
- * 0x00a0089A, one byte each, a7 against e5: register choice); `*expectedId++` gives 17
- * ranges (0x00a007F6 through 0x00a00896).
+ * Loads card.dat and checks its version tag against IDdata; the NUL of IDdata is
+ * not compared. Returns the definition table, or 0 when the file or tag is bad.
  */
 CardDefinition *CardDataLoad(u16 *cardCount)
 {
@@ -186,6 +186,8 @@ CardDefinition *CardDataLoad(u16 *cardCount)
     expectedId = (u32) IDdata;
     loadedId[i] = '\0';
 
+    /* The tag compare keeps the original's spelling, with the offset cast: the other
+     * spellings change the generated code. */
     tag = CARD_DATA_TAG;
     for (j = 0; j < CARD_DATA_TAG_LENGTH; j++) {
         if (*tag++ != *(u8 *) (j + expectedId)) {
@@ -199,20 +201,18 @@ CardDefinition *CardDataLoad(u16 *cardCount)
 
 extern char cardGraphicFileName[];
 
-/* CARDGRAP.BIN (cardGraphicFileName) is read right behind the card master file buffer: lui/ori 0x00a008bc/0x00a008d0. */
+/* CARDGRAP.BIN (cardGraphicFileName) is read right behind the card master file buffer. */
 #define CARD_GRAPHIC_BUFFER ((void *) 0x0100C000)
 
-/* The result is 1 when CardFread did not fail: nor 0x00a008d4 and srl 31 at 0x00a008dc take the sign bit of ~rc. */
+/* Returns 1 when CardFread of the graphic file did not fail (returned a non-negative value). */
 u32 CardGraphicLoad(CardDefinition *definitions, u16 cardCount) {
     return (u32) ~CardFread(CARD_GRAPHIC_BUFFER, cardGraphicFileName) >> 0x1F;
 }
 
 /*
- * CardTitleInit (0x00a008e8, 0x144 bytes): hides every card model, resets the
- * title logo model slot (matrix, position, model and texture addresses and the
- * rotation state bytes at +0x70F0) and loads the three title layout files and
- * their textures. Called from CardMainProc when the title screen is entered
- * (CardMainInit 0x00a01aac, CardMainProc 0x00a03cac).
+ * Hides every card model, resets the title logo model slot and loads the three
+ * title layout files and their textures. Called from CardMainProc when the
+ * title screen is entered.
  */
 void CardTitleInit(CardGameWork *work)
 {
@@ -248,6 +248,7 @@ void CardTitleInit(CardGameWork *work)
     CardFread(CARD_TITLE_XTX_HELP, "title\\m_help.xtx");
 }
 
+/* Loads the background's layout and texture files, chosen by the save's background index. */
 void CMIBGInit(CardGameWork *work)
 {
     char filename[32];
@@ -262,27 +263,23 @@ void CMIBGInit(CardGameWork *work)
 }
 
 /* Save data block of the card game inside SaveData (the 0x300 bytes before the thumbnail). */
-#define CARD_SAVE_OFFSET 0x15090     /* SaveData 0x004917B0 + this = 0x004A6840, built at 0x00a00ad4/0x00a00ae0 (lui/addiu) and stored at 0x00a00b00 */
-#define CARD_SAVE_INITIALIZED 0x01   /* CardSaveData.flags: the initial cards and decks were written; andi 0x00a00b08, ori 0x00a00b18 */
-#define CARD_DECK_EMPTY 0xFF         /* li 255 at 0x00a00c30, stored with sh into both deck arrays */
-#define CARD_BACKGROUND_COUNT 6      /* BGFileNameList entries, sltiu at 0x00a00c20 */
-#define CARD_CURSOR_KINDS 4          /* cursorLex / cursorXtx entries, count-down loop li 3 at 0x00a00cac, bgez at 0x00a00cf4 */
+#define CARD_SAVE_OFFSET 0x15090     /* Offset of the card save block in SaveData. */
+#define CARD_SAVE_INITIALIZED 0x01   /* CardSaveData.flags: the initial cards and decks were written. */
+#define CARD_DECK_EMPTY 0xFF         /* Value of an empty deck slot, stored into both deck arrays. */
+#define CARD_BACKGROUND_COUNT 6      /* BGFileNameList entries. */
+#define CARD_CURSOR_KINDS 4          /* cursorLex / cursorXtx entries. */
 
-/* Cursor kinds in cursorLex[] / cursorXtx[], named after the files CardMainInit stores (lex 0x00a00f58, 0x00a00f64,
- * 0x00a00f54; texture 0x00a00f50, 0x00a00f40, 0x00a00f48). Entry 3 stays 0. */
+/* Cursor kinds in cursorLex[] / cursorXtx[], named after the files CardMainInit stores. Entry 3 stays 0. */
 enum CardCursorKind {
     CARD_CURSOR_2D_11 = 0,       /* game\cur2D_11.lex frames, game\cur2D.xtx */
     CARD_CURSOR_2D_01 = 1,       /* game\cur2D_01.lex frames, the same texture */
     CARD_CURSOR_FRAME_YELLOW = 2 /* game\Cur_WakuY.lex, game\Cur_Waku.xtx */
 };
-#define CARD_LIGHT_COUNT 4           /* ambient light plus three parallel lights, slti at 0x00a01ba8 */
-#define CARD_FADE_LEVEL_FULL 0x80    /* li -128 at 0x00a01af8, stored with sb at 0x00a01b08..0x00a01b2c */
+#define CARD_LIGHT_COUNT 4           /* Ambient light plus three parallel lights. */
+#define CARD_FADE_LEVEL_FULL 0x80
 
-/* Where CardMainInit reads the resources it names again below. The other files are read
- * to fixed addresses too, in the order of their use: cursors, title windows, deck editor,
- * card faces, digits, help, battle windows, models and the playing mat. Files that sit at a
- * constant distance from each other are written as base + n * size; the destinations that
- * have no further role are plain addresses, each with the address of its jal CardFread. */
+/* Fixed load addresses of the resource files CardMainInit reads, in the order of their use.
+ * Files at a constant distance from each other are written as base + n * size. */
 #define CARD_CURSOR_LEX_FIRST ((void *) 0x01D00000)   /* game\cur2D_11.lex */
 #define CARD_CURSOR_LEX_SECOND ((void *) 0x01D02000)  /* game\cur2D_01.lex */
 #define CARD_FRAME_LEX_YELLOW ((void *) 0x01D08000)   /* game\Cur_WakuY.lex */
@@ -293,7 +290,7 @@ enum CardCursorKind {
 #define CARD_MENU_ITEM_LEX ((void *) 0x0170B600)      /* title\menu1.lex: the item plates of the START menu */
 #define CARD_MENU_OPTION_LEX ((void *) 0x0170D600)    /* title\menu2.lex: the option row plates */
 #define CARD_MENU_TEXTURE ((void *) 0x0170F600)       /* title\menu.bin: texture of both */
-#define CARD_TITLE_WINDOW_SIZE 0x2B00      /* distance between title\window1..8.lex and title\window.bin (CARD_TITLE_MODEL_ADDR, CARD_TITLE_TEXTURE_ADDR) */
+#define CARD_TITLE_WINDOW_SIZE 0x2B00      /* distance between title\window1..8.lex and title\window.bin */
 #define CARD_SMALL_LEX_BASE ((void *) 0x01C80000)     /* o0..o9, s0..s9, Ftype_*, Btype_*, Atype_*, L0..L9, R0..R9 and field.lex: 0x400 bytes each, in this order */
 #define CARD_SMALL_LEX_SIZE 0x400
 #define CARD_SMALL_LEX(n) (CARD_SMALL_LEX_BASE + (n) * CARD_SMALL_LEX_SIZE)
@@ -365,12 +362,10 @@ static Vector4 s_asDirection[4];
 extern void xglLightIntensityParallel(void *light, int index, void *intensity);
 
 /*
- * CardMainInit (0x00a00ad0, 0x110c bytes): one-time setup of the card game, called from
- * CardGameRoot with its function-static work area. Writes the initial cards and five
- * stored decks into the save data the first time, unpacks the owned-card counts, clears the
- * work area, loads the card data and every resource file, places the models and sets the
- * camera and lights. Returns 1, or 0 after printing an error when the card data or card
- * graphics cannot be loaded.
+ * One-time setup of the card game, called from CardGameRoot with its function-static
+ * work area: initializes the save data, loads the card data and resource files, places
+ * the models and sets the camera and lights. Returns 1, or 0 when the card data or
+ * card graphics cannot be loaded.
  */
 int CardMainInit(CardGameWork *work)
 {
@@ -383,6 +378,7 @@ int CardMainInit(CardGameWork *work)
     int lightNo;
 
     work->save = (CardSaveData *) (SaveData + CARD_SAVE_OFFSET);
+    /* The first run writes the initial cards and decks into the save data. */
     if (!(work->save->flags & CARD_SAVE_INITIALIZED)) {
         work->save->flags |= CARD_SAVE_INITIALIZED;
         work->save->flags |= CARD_SAVE_LARGE_CARDS;
@@ -456,6 +452,7 @@ int CardMainInit(CardGameWork *work)
         printf("Card Graphic Load ERROR!!!\n");
         return 0;
     }
+    /* Resource files, each read to its fixed address. */
     CardFread(CARD_CURSOR_LEX_FIRST, "game\\cur2D_11.lex");
     CardFread(CARD_CURSOR_LEX_FIRST + 1 * CARD_CURSOR_LEX_SIZE, "game\\cur2D_12.lex");
     CardFread(CARD_CURSOR_LEX_FIRST + 2 * CARD_CURSOR_LEX_SIZE, "game\\cur2D_13.lex");
@@ -470,15 +467,15 @@ int CardMainInit(CardGameWork *work)
     CardFread(CARD_CURSOR_LEX_SECOND + 5 * CARD_CURSOR_LEX_SIZE, "game\\cur2D_06.lex");
     CardFread(CARD_BLACK_LEX, "game\\black.lex");
     CardFread(CARD_FRAME_LEX_YELLOW, "game\\Cur_WakuY.lex");
-    CardFread(CARD_FRAME_LEX_GREEN, "game\\Cur_WakuG.lex");  /* 0x00a00e8c */
-    CardFread(CARD_FRAME_LEX_RED, "game\\Cur_WakuR.lex");  /* 0x00a00e9c */
-    CardFread(CARD_FRAME_LEX_WHITE, "game\\Cur_WakuW.lex");  /* 0x00a00eb0 */
-    CardFread(CARD_WAKU6_LEX, "game\\waku6.lex");  /* 0x00a00ec4 */
-    CardFread(CARD_PLAYER1_LEX, "game\\1p.lex");  /* 0x00a00ed8 */
-    CardFread(CARD_PLAYER2_LEX, "game\\2p.lex");  /* 0x00a00eec */
+    CardFread(CARD_FRAME_LEX_GREEN, "game\\Cur_WakuG.lex");
+    CardFread(CARD_FRAME_LEX_RED, "game\\Cur_WakuR.lex");
+    CardFread(CARD_FRAME_LEX_WHITE, "game\\Cur_WakuW.lex");
+    CardFread(CARD_WAKU6_LEX, "game\\waku6.lex");
+    CardFread(CARD_PLAYER1_LEX, "game\\1p.lex");
+    CardFread(CARD_PLAYER2_LEX, "game\\2p.lex");
     CardFread(CARD_CURSOR_XTX, "game\\cur2D.xtx");
     CardFread(CARD_FRAME_XTX, "game\\Cur_Waku.xtx");
-    CardFread(CARD_PLAYER_NUMBER_XTX, "game\\1p2p.xtx");  /* 0x00a00f1c */
+    CardFread(CARD_PLAYER_NUMBER_XTX, "game\\1p2p.xtx");
     work->cursorLex[CARD_CURSOR_2D_11] = CARD_CURSOR_LEX_FIRST;
     work->cursorLex[CARD_CURSOR_2D_01] = CARD_CURSOR_LEX_SECOND;
     work->cursorLex[CARD_CURSOR_FRAME_YELLOW] = CARD_FRAME_LEX_YELLOW;
@@ -494,15 +491,15 @@ int CardMainInit(CardGameWork *work)
     CardFread(CARD_TITLE_MODEL_ADDR + 6 * CARD_TITLE_WINDOW_SIZE, "title\\window7.lex");
     CardFread(CARD_TITLE_MODEL_ADDR + 7 * CARD_TITLE_WINDOW_SIZE, "title\\window8.lex");
     CardFread(CARD_TITLE_TEXTURE_ADDR, "title\\window.bin");
-    CardFread(CARD_COMP_LEX, "deckmake\\comp.lex");  /* 0x00a01014 */
-    CardFread(CARD_COMP_XTX, "deckmake\\comp.xtx");  /* 0x00a01028 */
-    CardFread(CARD_BASE_BIN, "NewCardBase.bin");  /* 0x00a01038 */
-    CardFread(CARD_NAME_LEX, "name.lex");  /* 0x00a0104c */
-    CardFread(CARD_CARDGRAP_LEX, "cardgrap.lex");  /* 0x00a01060 */
-    CardFread(CARD_NEWCARD_B_LEX, "NewCard_B.lex");  /* 0x00a01074 */
-    CardFread(CARD_NEWCARD_E_LEX, "NewCard_E.lex");  /* 0x00a01088 */
-    CardFread(CARD_NEWCARD_S_LEX, "NewCard_S.lex");  /* 0x00a0109c */
-    CardFread(CARD_KAGE_LEX, "card_kage.lex");  /* 0x00a010b0 */
+    CardFread(CARD_COMP_LEX, "deckmake\\comp.lex");
+    CardFread(CARD_COMP_XTX, "deckmake\\comp.xtx");
+    CardFread(CARD_BASE_BIN, "NewCardBase.bin");
+    CardFread(CARD_NAME_LEX, "name.lex");
+    CardFread(CARD_CARDGRAP_LEX, "cardgrap.lex");
+    CardFread(CARD_NEWCARD_B_LEX, "NewCard_B.lex");
+    CardFread(CARD_NEWCARD_E_LEX, "NewCard_E.lex");
+    CardFread(CARD_NEWCARD_S_LEX, "NewCard_S.lex");
+    CardFread(CARD_KAGE_LEX, "card_kage.lex");
     CardFread(CARD_MENU_ITEM_LEX, "title\\menu1.lex");
     CardFread(CARD_MENU_OPTION_LEX, "title\\menu2.lex");
     CardFread(CARD_MENU_TEXTURE, "title\\menu.bin");
@@ -510,9 +507,9 @@ int CardMainInit(CardGameWork *work)
     CardFread(CARD_LINE_LEX + 1 * CARD_LINE_LEX_SIZE, "line2.lex");
     CardFread(CARD_LINE_LEX + 2 * CARD_LINE_LEX_SIZE, "line3.lex");
     CardFread(CARD_LINE_LEX + 3 * CARD_LINE_LEX_SIZE, "line4.lex");
-    CardFread(CARD_LINE_XTX, "line.xtx");  /* 0x00a01150 */
-    CardFread(CARD_XG_URA_UP_LEX, "deckmake\\xg_ura_up.lex");  /* 0x00a01164 */
-    CardFread(CARD_XG_URA_UP_XTX, "deckmake\\xg_ura_up.xtx");  /* 0x00a01178 */
+    CardFread(CARD_LINE_XTX, "line.xtx");
+    CardFread(CARD_XG_URA_UP_LEX, "deckmake\\xg_ura_up.lex");
+    CardFread(CARD_XG_URA_UP_XTX, "deckmake\\xg_ura_up.xtx");
     CardFread(CARD_SMALL_LEX(0), "o0.lex");
     CardFread(CARD_SMALL_LEX(1), "o1.lex");
     CardFread(CARD_SMALL_LEX(2), "o2.lex");
@@ -575,21 +572,21 @@ int CardMainInit(CardGameWork *work)
     CardFread(CARD_SMALL_LEX(59), "R8.lex");
     CardFread(CARD_SMALL_LEX(60), "R9.lex");
     CardFread(CARD_SMALL_LEX(61), "game\\field.lex");
-    CardFread(CARD_MARK_C_LEX, "card_m_c.lex");  /* 0x00a01660 */
-    CardFread(CARD_MARK_U_LEX, "card_m_u.lex");  /* 0x00a01674 */
-    CardFread(CARD_MARK_R_LEX, "card_m_r.lex");  /* 0x00a01688 */
-    CardFread(CARD_MARK_P_LEX, "card_m_p.lex");  /* 0x00a0169c */
-    CardFread(CARD_INFO0_BIN, "CardInfo0.bin");  /* 0x00a016b0 */
-    CardFread(CARD_INFO1_BIN, "CardInfo1.bin");  /* 0x00a016c4 */
-    CardFread(CARD_INFO2_BIN, "CardInfo2.bin");  /* 0x00a016d8 */
-    CardFread(CARD_RARE_XTX, "card_Rare.xtx");  /* 0x00a016ec */
-    CardFread(CARD_HELP1_LEX, "help\\help1.lex");  /* 0x00a01700 */
-    CardFread(CARD_HELP2_LEX, "help\\help2.lex");  /* 0x00a01714 */
-    CardFread(CARD_HELP3_LEX, "help\\help3.lex");  /* 0x00a01728 */
-    CardFread(CARD_HELP_MENU1_LEX, "help\\Hmenu1.lex");  /* 0x00a0173c */
-    CardFread(CARD_HELP_MENU2_LEX, "help\\Hmenu2.lex");  /* 0x00a01750 */
-    CardFread(CARD_HELP1_XTX, "help\\help1.xtx");  /* 0x00a01760 */
-    CardFread(CARD_HELP2_XTX, "help\\help2.xtx");  /* 0x00a01774 */
+    CardFread(CARD_MARK_C_LEX, "card_m_c.lex");
+    CardFread(CARD_MARK_U_LEX, "card_m_u.lex");
+    CardFread(CARD_MARK_R_LEX, "card_m_r.lex");
+    CardFread(CARD_MARK_P_LEX, "card_m_p.lex");
+    CardFread(CARD_INFO0_BIN, "CardInfo0.bin");
+    CardFread(CARD_INFO1_BIN, "CardInfo1.bin");
+    CardFread(CARD_INFO2_BIN, "CardInfo2.bin");
+    CardFread(CARD_RARE_XTX, "card_Rare.xtx");
+    CardFread(CARD_HELP1_LEX, "help\\help1.lex");
+    CardFread(CARD_HELP2_LEX, "help\\help2.lex");
+    CardFread(CARD_HELP3_LEX, "help\\help3.lex");
+    CardFread(CARD_HELP_MENU1_LEX, "help\\Hmenu1.lex");
+    CardFread(CARD_HELP_MENU2_LEX, "help\\Hmenu2.lex");
+    CardFread(CARD_HELP1_XTX, "help\\help1.xtx");
+    CardFread(CARD_HELP2_XTX, "help\\help2.xtx");
     CardFread(CARD_BATTLE_WINDOW_LEX, cardBattleWin1LexName);
     CardFread(CARD_BATTLE_WINDOW_LEX + 1 * CARD_BATTLE_WINDOW_SIZE, cardBattleWin2LexName);
     CardFread(CARD_BATTLE_WINDOW_LEX + 2 * CARD_BATTLE_WINDOW_SIZE, cardBattleWin3LexName);
@@ -602,8 +599,8 @@ int CardMainInit(CardGameWork *work)
     CardFread(CARD_DECKMAKE_LEX, "deckmake\\deckmake.lex");
     CardFread(CARD_MAT_FG_LEX, "game\\mat_fg.lex");
     CardFread(CARD_MAT_MOJI_LEX, "game\\mat_moji.lex");
-    CardFread(CARD_MAT_INFO_LEX, "game\\mat_info.lex");  /* 0x00a01860 */
-    CardFread(CARD_MAT_HPATK_LEX, "game\\mat_hpatk.lex");  /* 0x00a01874 */
+    CardFread(CARD_MAT_INFO_LEX, "game\\mat_info.lex");
+    CardFread(CARD_MAT_HPATK_LEX, "game\\mat_hpatk.lex");
     strcpy(filename, BGFileNameList[work->save->background]);
     strcat(filename, cardLexExtension);
     CardFread(CARD_BACKGROUND_LEX, filename);
@@ -615,6 +612,7 @@ int CardMainInit(CardGameWork *work)
     strcpy(filename, BGFileNameList[work->save->background]);
     strcat(filename, cardXtxExtension);
     CardFread(CARD_BACKGROUND_XTX, filename);
+    /* Model and texture addresses for the model slots. */
     work->models[CARD_MODEL_TITLE].model = CARD_TITLE_LEX;
     work->models[CARD_MODEL_TITLE].texture = CARD_TITLE_XTX;
     work->models[CARD_MODEL_VIEWER].model = CARD_VIEWER_LEX;
@@ -671,6 +669,7 @@ int CardMainInit(CardGameWork *work)
             : "r" (cameraEye), "r" (eyePosition)
             : "$2", "memory");
     }
+    /* Fade levels and light intensities. */
     xglStudioGetLight(&light);
     work->fadeOutTimer = 0;
     work->modelFadeInTimer = 0;
@@ -699,6 +698,10 @@ int CardMainInit(CardGameWork *work)
 #define PRIZE_PROMO_CARD 2
 #define PRIZE_TUNED_CIRCUIT 3
 
+/*
+ * Clears the prize counts, then draws one card pack per round: pack 822 for an odd
+ * xglSRand() result, pack 821 otherwise. The result is forced to 821 when flag 301 is clear.
+ */
 void CardMainItemGetSub(int *prizes, int round)
 {
     prizes[PRIZE_CARD_PACK_821] = prizes[PRIZE_CARD_PACK_822] = prizes[PRIZE_PROMO_CARD] = prizes[PRIZE_TUNED_CIRCUIT] = 0;
@@ -723,23 +726,21 @@ void CardMainItemGetSub(int *prizes, int round)
     }
 }
 
-#define EVENT_ITEM_CARD_PACK_821 54      /* li 0x00a01ca0 */
-#define EVENT_ITEM_CARD_PACK_822 55      /* li 0x00a01ccc */
-#define ACCESSORY_TUNED_CIRCUIT 142      /* li 0x00a01d28 */
-#define PROMO_SELECT_SHION 1             /* prizes[PRIZE_PROMO_CARD]: 1 awards Swim Suit Shion, 2 Swim Suit MOMO (li 0x00a01cf0) */
+#define EVENT_ITEM_CARD_PACK_821 54
+#define EVENT_ITEM_CARD_PACK_822 55
+#define ACCESSORY_TUNED_CIRCUIT 142
+#define PROMO_SELECT_SHION 1             /* prizes[PRIZE_PROMO_CARD] value that awards Swim Suit Shion; others award Swim Suit MOMO. */
 
 
-/* Declared here: main/data.h declares dataEvtBoxInc void (measured: the loop counters of CardMainAddItemSub
- * are allocated differently when its result is not an int). */
+/* Declared here, not in main/data.h, which declares dataEvtBoxInc void: the loop counters of
+ * CardMainAddItemSub are allocated differently when its result is not an int. */
 extern int dataEvtBoxInc(int event);
 extern void dataAccBoxInc(int accessory);
 
 /*
- * Hands the player the prizes of a won game.  prizes[] is the list
- * CardMainItemGetSub filled in item13: the number of card packs #821 and #822,
- * the promotional card (1 selects card id 1, any other value card id 8) and
- * the Tuned Circuit accessory.  Afterwards the owned-card table is rebuilt
- * from the save data, which packs two bits per card id, four card ids a byte.
+ * Gives the player the prizes of a won game: the card packs, the promotional card
+ * (Swim Suit Shion when the prize is 1, otherwise Swim Suit MOMO) and the Tuned
+ * Circuit. Then rebuilds the owned-card table from the packed save data.
  */
 void CardMainAddItemSub(CardGameWork *work, int *prizes)
 {
@@ -774,24 +775,15 @@ void CardMainAddItemSub(CardGameWork *work, int *prizes)
 extern float atColor[4][4];
 extern float auColor[4][4];
 
-/*
- * START menu of the card game (NewCMPGameModeExit, 0x00a01da0).  CardGameProc
- * opens it with flowRequest 6 and passes the controller that pressed START.
- * It moves the cursor with up/down, confirms with Circle, cancels with Cross
- * and closes with START.
- *
- * Returns -1 when the menu is closed, 1 when the "End Phase" entry was chosen
- * and 0 otherwise.
- */
 #define EXIT_MENU_ITEM_COUNT 4
 #define EXIT_MENU_SUB_COUNT 4
 
 /* Pad bits of CardCommandInput.repeat. */
-#define EXIT_PAD_START 0x0800   /* andi 0x00a01e74 */
-#define EXIT_PAD_UP 0x1000      /* andi 0x00a01e44 */
-#define EXIT_PAD_DOWN 0x4000    /* andi 0x00a01e4c */
-#define EXIT_PAD_CIRCLE 0x0020  /* andi 0x00a01f08 */
-#define EXIT_PAD_CROSS 0x0040   /* andi 0x00a01f00 */
+#define EXIT_PAD_START 0x0800
+#define EXIT_PAD_UP 0x1000
+#define EXIT_PAD_DOWN 0x4000
+#define EXIT_PAD_CIRCLE 0x0020
+#define EXIT_PAD_CROSS 0x0040
 
 /* Items of the START menu (switch order of the original: 0, 2, 1, 3). */
 #define EXIT_ITEM_HELP 0
@@ -800,28 +792,32 @@ extern float auColor[4][4];
 #define EXIT_ITEM_GAME_OVER 3
 
 /* CardSaveData.flags bits toggled by the option rows. */
-#define CARD_SAVE_AUTO_P1 0x08     /* andi 0x00a02074 */
-#define CARD_SAVE_AUTO_P2 0x04     /* andi 0x00a02090 */
-#define CARD_SAVE_AUTO_SPIN 0x10   /* andi 0x00a020e0 */
+#define CARD_SAVE_AUTO_P1 0x08
+#define CARD_SAVE_AUTO_P2 0x04
+#define CARD_SAVE_AUTO_SPIN 0x10
 
 #define EXIT_MENU_FADE_ALPHA 0x80
 #define EXIT_MENU_TEXT_FIRST 70   /* CardPlayTMessList: guide text per item, then per option row at +5 */
-#define EXIT_MENU_TEXT_OPTION_OFFSET 5   /* the option row texts follow at +5: lw index x4 at 0x00a02938 / 0x00a02950 differ by 20 */
+#define EXIT_MENU_TEXT_OPTION_OFFSET 5   /* The option row texts follow at +5. */
 
-/* Return values: -1 closes the menu (li s8 0x00a01efc, 0x00a01f28), 1 ends the phase (li s8 0x00a01fc4). */
+/* Return values: -1 closes the menu, 1 ends the phase. */
 #define EXIT_RESULT_CLOSE (-1)
 #define EXIT_RESULT_END_PHASE 1
 
-/* exitMenuSub: -1 while the item list is active (bgez tests at 0x00a01e54, 0x00a01f10, 0x00a01f5c, 0x00a0291c; stored
- * with li 0x00a01f14 and sh 0x00a01f3c), otherwise the option row, switched on at 0x00a02018..0x00a02048. */
+/* exitMenuSub: -1 while the item list is active, otherwise the option row index. */
 #define EXIT_SUB_NONE (-1)
-#define EXIT_OPTION_AUTO_P1 0     /* beqz 0x00a0202c, first row, set by 0x00a01fe0 */
-#define EXIT_OPTION_AUTO_P2 1     /* beql 0x00a02018 */
-#define EXIT_OPTION_HIDE_TURN 2   /* beq 0x00a02040 */
-#define EXIT_OPTION_AUTO_SPIN 3   /* beq 0x00a02048 */
+#define EXIT_OPTION_AUTO_P1 0     /* First option row. */
+#define EXIT_OPTION_AUTO_P2 1
+#define EXIT_OPTION_HIDE_TURN 2
+#define EXIT_OPTION_AUTO_SPIN 3
 
 
 
+/*
+ * START menu of the card game. CardGameProc opens it with flowRequest 6 and passes
+ * the controller that pressed START. Up/down move the cursor, Circle confirms, Cross
+ * cancels and START closes. Returns -1 when the menu closes, 1 for End Phase, 0 otherwise.
+ */
 int NewCMPGameModeExit(int player, CardGameWork *work, int round)
 {
     float matrix[4][4];
@@ -1104,22 +1100,7 @@ int NewCMPGameModeExit(int player, CardGameWork *work, int round)
 }
 
 
-/*
- * Game-over display of a card game (CaedGameWinMode, 0x00a029f8).  CardGameProc
- * calls it once per frame while CardCommandControl.flowRequest is 3..5 with the
- * outcome (0, 1, 2 or 3; -1 and anything else select the default sequence) and
- * the round it passes on (CardMainProc's win12).  The function runs a
- * state machine on command.step: step 0 arms a 25 frame wait, step 1 refreshes
- * the field HP and jumps to the banner sequence of the outcome (steps 2..5,
- * 10..12, 20..22, 30..33, 40..43).  Every later step draws its banner models
- * and moves on when the shared timer, reloaded with 17, has counted down.
- * Steps 5, 12, 22 and 33 keep drawing for good; step 43 keeps cycling the timer.
- */
-/*
- * Outcomes CardGameProc passes (flowRequest 3..5 select the case through its jump table at 0x00a4f620, index
- * flowRequest - 1; flowRequest 3 is raised at 0x00a317d0 when CardPlayYamaCnt of the enemy side is 0, flowRequest 4
- * at 0x00a317f0 for the player side): jal 0x00a31bfc, 0x00a31c14, 0x00a31c3c, 0x00a31c54, 0x00a31c70.
- */
+/* flowRequest 3 is raised when CardPlayYamaCnt of the enemy side is 0; flowRequest 4 is raised for the player side. */
 
 #define CARD_WIN_STEP_BEGIN 0
 #define CARD_WIN_STEP_SELECT 1
@@ -1129,18 +1110,17 @@ int NewCMPGameModeExit(int player, CardGameWork *work, int round)
 #define CARD_WIN_STEP_OUTCOME_3 30
 #define CARD_WIN_STEP_OTHER 40
 
-#define CARD_WIN_BEGIN_DELAY 25     /* li 0x00a02a58, stored to the timer with sb at 0x00a02a64 */
-#define CARD_WIN_STEP_FRAMES 17     /* 0x00a02abc: frames each step of a sequence lasts */
-#define CARD_WIN_FINAL_ROUND 5      /* 0x00a02b00: outcome 0 plays CardPlaySound4 instead of 3 */
-#define CARD_WIN_ALPHA 72           /* 0x00a02c2c */
+#define CARD_WIN_BEGIN_DELAY 25     /* Frames of the initial wait. */
+#define CARD_WIN_STEP_FRAMES 17     /* Frames each step of a sequence lasts. */
+#define CARD_WIN_FINAL_ROUND 5      /* Round in which outcome 0 plays CardPlaySound4 instead of 3. */
+#define CARD_WIN_ALPHA 72
 
 /*
  * The banner models and their texture sit in one resource block at 0x01950000,
- * 0x510 bytes apart; CardGameInit reads the files there (jal 0x00a25868..0x00a25920).
- * Slot 9 is the texture (0x00a02c1c).  The sequences draw the first banner (victory7) and then
- * victory4 (step 4/5), victory2 (11/12) or victory3 (21/22), victory1, victory5, victory6
- * (31..33) or NewLost2, NewLost1 (40..43).  The lost banners alternate between two
- * textures that CardGameInit reads to 0x01960000 and 0x01963680 (jal 0x00a2592c, 0x00a25940).
+ * 0x510 bytes apart. The sequences draw the first banner (victory7) and then
+ * victory4 (steps 4 and 5), victory2 (11 and 12) or victory3 (21 and 22), victory1,
+ * victory5, victory6 (31 to 33) or NewLost2, NewLost1 (40 to 43). The lost banners
+ * alternate between two textures, at 0x01960000 and 0x01963680.
  */
 enum CardWinResource {
     CARD_WIN_VICTORY1,      /* game\victory1.lex, slots 0..6 are victory1..7 */
@@ -1159,16 +1139,16 @@ enum CardWinResource {
 #define CARD_WIN_RESOURCE_SIZE 0x510
 #define CARD_WIN_RESOURCE(slot) ((slot) * CARD_WIN_RESOURCE_SIZE + CARD_WIN_RESOURCE_BASE)
 #define CARD_WIN_TEXTURE ((void *) CARD_WIN_RESOURCE(CARD_WIN_VICTORY_BIN))
-#define CARD_WIN_LOST_XTX ((void *) 0x01960000)        /* game\NewLost1.xtx, then game\NewLost2.xtx 0x3680 bytes on */
-#define CARD_WIN_LOST_XTX_SIZE 0x3680       /* li 13952 at 0x00a03710 and 0x00a03834, multiplied by the lowest timer bit (andi/mult 0x00a03714/0x00a03718) */
+#define CARD_WIN_LOST_XTX ((void *) 0x01960000)        /* Texture game\NewLost1.xtx; game\NewLost2.xtx follows 0x3680 bytes later. */
+#define CARD_WIN_LOST_XTX_SIZE 0x3680       /* Distance between the two lost textures. */
 #define CARD_WIN_ALT_TEXTURE(flip) (((flip) & 1) * CARD_WIN_LOST_XTX_SIZE + CARD_WIN_LOST_XTX)
 
-#define CARD_WIN_ZOOM_RATE (4.0f / 9.0f)    /* 0x3EE38E39: scale gained per timer tick */
-#define CARD_WIN_SHRINK_RATE (1.0f / 18.0f) /* 0x3D638E39: step 42's second banner */
+#define CARD_WIN_ZOOM_RATE (4.0f / 9.0f)    /* Scale gained per timer tick. */
+#define CARD_WIN_SHRINK_RATE (1.0f / 18.0f) /* Shrink rate of step 42's second banner. */
 
 /*
  * The scale of a pulsing banner is read from the timer before xglMatrixUnit
- * (the multiply sits in that call's delay slot, 0x00a02be4); `grow` and `rest`
+ * (the multiply sits in that call's delay slot); `grow` and `rest`
  * are block-scoped so that they stay local pseudos and the 1.0 is kept in a
  * callee-saved register across the call.
  */
@@ -1188,12 +1168,21 @@ enum CardWinResource {
     nmlModelSetAlpha(CARD_WIN_ALPHA); \
     nmlModelEntry(model)
 
+/*
+ * Game-over display of a card game, called once per frame by CardGameProc with the
+ * outcome (0 to 3; others pick the default sequence) and the round. Runs the banner
+ * state machine on command.step; each step draws its banners and moves on when the
+ * shared timer has counted down.
+ */
 void CaedGameWinMode(int outcome, CardGameWork *work, int round)
 {
     static u8 timer;
     float place[4][4];
     float scale[4];
 
+    /* Step 0 arms the initial wait; step 1 refreshes the field HP and selects the
+     * banner sequence of the outcome. Steps 5, 12, 22 and 33 keep drawing for good;
+     * step 43 keeps cycling the timer. */
     switch (work->command.step) {
     case CARD_WIN_STEP_BEGIN:
         work->command.step++;
@@ -1501,7 +1490,7 @@ void CaedGameWinMode(int outcome, CardGameWork *work, int round)
         CARD_WIN_DRAW_ALT(CARD_WIN_RESOURCE(CARD_WIN_LOST1));
         xglMatrixUnit(place);
         scale[2] = scale[3] = 1.0f;
-        /* The original adds 0.0f after the multiply (add.s 0x00a038f0). */
+        /* The original adds 0.0f after the multiply. */
         scale[0] = scale[1] = timer * CARD_WIN_SHRINK_RATE + 0.0f;
         xglMatrixScale(place, place, scale);
         CARD_WIN_DRAW_ALT(CARD_WIN_RESOURCE(CARD_WIN_LOST2));
@@ -1620,6 +1609,10 @@ enum CardDeckBuildStep {
 #define CARD_FLAG_ALL_ENEMY_DECKS 0x186
 #define CARD_TOURNAMENT_ROUNDS 5   /* opponent plates (cld1.count), CardBattleWindow 0..4; win12 == 5 wins the cup */
 
+/*
+ * Per-frame update of the card game: reads the pads, animates the colors, runs the
+ * state machine of work->fase and draws the models. Returns 1.
+ */
 s32 CardMainProc(CardGameWork *work) {
     static CardListWindow cld0;
     static CardListWindow cld1;
@@ -1668,6 +1661,7 @@ s32 CardMainProc(CardGameWork *work) {
         xglFontDebugPrintf(0x54, 0, "Help");
         CardHelpProc(work);
     } else {
+        /* The help screen replaces the current one while it is open. */
         switch (work->fase) {
         case CARD_FASE_TITLE:
             CardFadeOut(work);
@@ -1809,6 +1803,7 @@ s32 CardMainProc(CardGameWork *work) {
                     }
                 }
 
+                /* Draws the four menu items, and the option list of the selected item. */
                 {
                     char menuColor[] = "\v\r\0\f\x10\x10\x10";
                     char cursorColor[] = "\f(((";
@@ -2028,6 +2023,7 @@ s32 CardMainProc(CardGameWork *work) {
                     CardDispTxtSub(0x18, 0x138, guide, 0x17);
                 }
                 xglFontPrint(0xD8, 0x90, CARD_TEXT_COLOR, cardMenuFooterEndCode);
+                /* Entering a new screen resets its fade and step counters. */
                 if (previousFase != work->fase) {
                     cld0.mode = 2;
                     ModeExit_4 = 0;
@@ -2108,6 +2104,7 @@ s32 CardMainProc(CardGameWork *work) {
             }
             break;
 
+        /* Versus: pick both decks, then play one battle. */
         case CARD_FASE_BATTLE_2P: {
             int previous;
             int result;
@@ -2279,6 +2276,7 @@ s32 CardMainProc(CardGameWork *work) {
                 break;
         }
 
+        /* Tournament: pick a deck, choose one of the drawn opponents, then play the rounds. */
         case CARD_FASE_TOURNAMENT: {
             int line;
             int pack;
@@ -2379,6 +2377,7 @@ s32 CardMainProc(CardGameWork *work) {
                     }
                     break;
                 case CARD_TOURNAMENT_STEP_DRAW_OPPONENTS:
+                    /* Fills lst11 with a random permutation of the enemy pool indices. */
                     count = CARD_ENEMY_POOL_ALL;
                     if (xglFlagsGet(CARD_FLAG_ALL_ENEMY_DECKS, 1) == 0)
                         count = xglFlagsGet(0x12D, 1) != 0 ? CARD_ENEMY_POOL_ADVANCED : CARD_ENEMY_POOL_FIRST;
@@ -3179,6 +3178,7 @@ s32 CardMainProc(CardGameWork *work) {
                 break;
         }
 
+        /* Tutorial: fade in, run the tutorial, then return to the title screen. */
         case CARD_FASE_TUTORIAL: {
             int running = 1;
 
@@ -3214,6 +3214,7 @@ s32 CardMainProc(CardGameWork *work) {
             break;
         }
 
+        /* Sound test menu: L1 and R1 change the volume. */
         case CARD_FASE_TEST_MENU: {
             int soundList[25] = {
                 0x20001, 0x20002, 0x20003, 0x20004, 0x20005, 0x20006, 0x20007,
@@ -3418,6 +3419,7 @@ s32 CardMainProc(CardGameWork *work) {
         }
     }
 
+    /* Help draws the background alone; otherwise every visible model is drawn with its light. */
     if (work->helpState) {
         float helpLight[4][4];
 
@@ -3475,6 +3477,7 @@ s32 CardMainProc(CardGameWork *work) {
         }
     }
 
+    /* Help closes with START or SELECT. SELECT opens it unless an exit prompt or the tutorial is active. */
     if (work->helpState) {
         u16 pressed;
 
@@ -3883,8 +3886,8 @@ static char CardPlayDMessTxt13[32] = "\013\031\003\r\000You have no cards to pla
 
 static char CardPlayDMessTxt14[40] = "\031\003\r\000\014\200@@Too many cards in your hand.";
 
-/* ---- end of TU (data definitions), appended last so no existing .data object offset moves ---- */
-/* Version tag CardDataLoad compares the card file against; the original object is 13 bytes at 0x00a42040. */
+/* Data definitions appended last so that no existing .data object offset moves. */
+/* Version tag CardDataLoad compares the card file against. */
 static u8 IDdata[13] = "CardData1.10";
 
 static char CardPlayPMessTxt01[24];

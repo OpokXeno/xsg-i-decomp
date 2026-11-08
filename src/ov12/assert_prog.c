@@ -10,6 +10,7 @@
 const char assertProgSeparatorText[56] = "------------------------------------------------\n";
 const char assertProgMessageFormat[32] = "NIS ASSERT (in %s at %d) : %s\n";
 
+/* Prints the assertion failure report (source file, line and expression) and exits with status 1. */
 void assert_prog(const char *expression, const char *source_file, int line)
 {
     XrgOut(assertProgSeparatorText);

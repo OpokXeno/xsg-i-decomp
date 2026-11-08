@@ -33,6 +33,8 @@ extern const char battleInitDumpPositionAndWeaponFormats[];
 
 static RgFileSysData *_CreateBg(struct RgGeomGroup *pGroup, char *pszBgName);
 
+/* Resets every player to an empty name with default positions and directions,
+ * and clears the background name, mode and enemy type. */
 void InitRgBattleInit(RgBattleInit *pInfo)
 {
     unsigned int playerIndex;
@@ -60,6 +62,8 @@ void InitRgBattleInit(RgBattleInit *pInfo)
     pInfo->enemyType = 0;
 }
 
+/* Copies the background name, and each player's name, position, direction
+ * and weapon names, from pSrc to pDst. */
 void RgBattleInitCopy(RgBattleInit *pDst,
                       RgBattleInit *pSrc)
 {
@@ -89,6 +93,8 @@ void RgBattleInitCopy(RgBattleInit *pDst,
     }
 }
 
+/* Creates a player for each non-empty entry, up to maxPlayers, and returns
+ * how many were created. */
 int RgBattleInitCreatePlayers(RgBattleInit *pInfo,
                               struct RgPlayer **ppPlayers, int maxPlayers)
 {
@@ -142,6 +148,7 @@ int RgBattleInitCreatePlayers(RgBattleInit *pInfo,
     return createdCount;
 }
 
+/* Builds the background named by the battle init into pGroup. */
 RgFileSysData *RgBattleInitCreateBg(RgBattleInit *pInfo, struct RgGeomGroup *pGroup)
 {
     if (pInfo == 0) {
@@ -150,6 +157,8 @@ RgFileSysData *RgBattleInitCreateBg(RgBattleInit *pInfo, struct RgGeomGroup *pGr
     return _CreateBg(pGroup, pInfo->bg);
 }
 
+/* Reads the background table from rg_bg.info and builds the named background
+ * into pGroup. Returns its load data, or 0 when the table cannot be opened. */
 static RgFileSysData *_CreateBg(struct RgGeomGroup *pGroup, char *pszBgName)
 {
     struct RgReadText *pReader;
@@ -173,6 +182,7 @@ static RgFileSysData *_CreateBg(struct RgGeomGroup *pGroup, char *pszBgName)
     return pLoadData;
 }
 
+/* Logs the battle init header, background, players and weapon names. */
 void RgBattleInitDump(RgBattleInit *pDst)
 {
     RgBattleInitPlayer *pPlayer;

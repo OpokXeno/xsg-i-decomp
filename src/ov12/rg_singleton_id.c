@@ -12,6 +12,7 @@ static RgSingletonManager s_inIDmgr;
 static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
                     void *instance, void (*destructor)(void *instance));
 
+/* Clears the instance and destructor tables and the registration count. */
 static void _Clear(RgSingletonManager *manager)
 {
     int index;
@@ -27,6 +28,7 @@ static void _Clear(RgSingletonManager *manager)
     }
 }
 
+/* Calls the destructors of the registered instances in reverse registration order, then clears the manager. */
 static void _Destruct(RgSingletonManager *manager)
 {
     int index;
@@ -49,6 +51,7 @@ static void _Destruct(RgSingletonManager *manager)
     _Clear(manager);
 }
 
+/* Registers instance and its destructor under singleton_id, appending it to the registration order. */
 static void _Entry(RgSingletonManager *manager, unsigned int singleton_id,
                    void *instance, void (*destructor)(void *instance))
 {

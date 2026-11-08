@@ -73,6 +73,11 @@ extern void sefDeleteEffectCf(SchedulerState *effect);
 #include "enemy_3.h"
 #include "main/enemy_3.h"
 
+/*
+ * Starts `action` for an actor whose enable flag is set: records it in the
+ * enemy's work area, then sets the action's motion and sound and, for some
+ * actions, creates or replaces its effects.
+ */
 void Enemy_ActionReady(Actor *actor, signed char action)
 {
     EnemyReadyWork *work;
@@ -119,6 +124,7 @@ void Enemy_ActionReady(Actor *actor, signed char action)
                 EnemySound(actor, ENEMY_SOUND_ACTION, 1, 1);
                 break;
 
+            /* Picks a random direction among those without a wall. */
             case ENEMY_ACTION_RANDOM_WALL_DIRECTION: {
                 signed char wall_directions[ENEMY_RANDOM_DIRECTION_COUNT];
                 short direction;
@@ -218,6 +224,7 @@ void Enemy_ActionReady(Actor *actor, signed char action)
                 break;
             }
 
+            /* Effect sequences A to C each create two effects in turn; work->effect keeps the second. */
             case ENEMY_ACTION_EFFECT_SEQUENCE_A: {
                 SchedulerState *prior_effect;
 

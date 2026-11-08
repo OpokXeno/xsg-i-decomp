@@ -117,6 +117,7 @@ const char titleCannotFindPicFormat[] = "cannot find %d pic";
  * alpha one unit short of it. */
 static XrgPaint2DRGBA s_aCol = {128, 128, 128, 127};
 
+/* Sets the red, green and blue blend components to brightness (0.0 to 1.0) in the GS 0-0x80 scale. */
 static void _disp_blight(float brightness)
 {
     float clamped_brightness;
@@ -178,6 +179,7 @@ static void _disp_add(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y)
     XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
+/* Draws a picture in additive blend with the blend colour scaled by brightness (0 to TITLE_BRIGHTNESS_MAX). */
 static void _disp_add_blight(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y,
                              int brightness)
 {
@@ -211,6 +213,10 @@ static void _disp_add_blight(XrgPaint2D *pPaint, RgBxxPic *pPic, int x, int y,
     XrgPaint2DDrawXYWH(pPaint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
 }
 
+/*
+ * Creates the paint object, loads the title's bxx files and looks up every picture.
+ * Reports an error when a picture is missing.
+ */
 static void _InitTitle(RgTitle *pTitle, int count)
 {
     unsigned int picture_index;
@@ -254,6 +260,7 @@ static void _InitTitle(RgTitle *pTitle, int count)
     }
 }
 
+/* Releases the paint object and the bxx files of a title. */
 static void _DestructTitle(RgTitle *pTitle)
 {
     if (pTitle == 0) {
@@ -293,6 +300,10 @@ const char titleUnknownCursorIdFormat[] = "unknown title cursor id %d";
 static float s_fRot_0 = 0.0f;
 static int s_nID_1 = 0;
 
+/*
+ * Returns the result (RG_TITLE_RESULT_*) of the chosen menu item once the menu is done,
+ * or RG_TITLE_RESULT_NONE while it is still running.
+ */
 int RgTitleGetResult(RgTitle *pTitle)
 {
     int cursor_id;
@@ -323,6 +334,10 @@ int RgTitleGetResult(RgTitle *pTitle)
     return RG_TITLE_RESULT_NONE;
 }
 
+/*
+ * Advances the title menu by delta seconds: pad input moves the cursor while the menu
+ * is selecting, then the decided and fade-out states run their timers.
+ */
 void RgTitlePassTime(RgTitle *pTitle, float delta)
 {
     if (pTitle == 0) {
@@ -372,6 +387,7 @@ void RgTitlePassTime(RgTitle *pTitle, float delta)
     }
 }
 
+/* Draws the title screen: background, glowing picture, and the menu items with their cursor highlight. */
 void RgTitleDisp(RgTitle *pTitle)
 {
     float rotation;
@@ -400,6 +416,7 @@ void RgTitleDisp(RgTitle *pTitle)
     }
 
     glow = (int)(sinf(s_fRot_0) * TITLE_GLOW_AMPLITUDE) + TITLE_GLOW_MIDPOINT;
+    /* Advance the rotation angle, wrapped into [-pi, pi]. */
     rotation = s_fRot_0 + TITLE_ROTATION_STEP;
     while (rotation > TITLE_PI) {
         rotation -= TITLE_TWO_PI;
@@ -413,11 +430,13 @@ void RgTitleDisp(RgTitle *pTitle)
     _disp_add_blight(pTitle->paint, pTitle->pictures[TITLE_PIC_RED_ECPT], 0, 0, glow);
     _disp_add(pTitle->paint, pTitle->pictures[TITLE_PIC_BLUE_E], 0, 0);
 
+    /* Blink the highlight while the menu item is decided or fading out. */
     if ((unsigned int)(pTitle->menu_state - TITLE_STATE_DECIDED) < 2) {
         s_nID_1++;
         highlight = s_nID_1 & 1;
     }
 
+    /* Draw the selected menu item in linear blend, then its highlight in additive blend. */
     switch ((unsigned int)pTitle->cursor_id) {
     case TITLE_CURSOR_ONE_PLAYER:
         _disp_linear(pTitle->paint, pTitle->pictures[TITLE_PIC_SEL_E1P], 0, TITLE_CURSOR_Y);

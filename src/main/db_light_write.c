@@ -13,7 +13,7 @@
 #include "main/xgl_prim_add.h"
 #include "quadword.h"
 
-/* Owner declarations used by these debug views; storage remains original scaffolding. */
+/* Layout views of game structures used by the debug functions below. */
 typedef struct {
     unsigned char unmodeled_00[0x50];
     unsigned int matrix_data_offset;
@@ -31,8 +31,8 @@ typedef struct {
     Vector4 stage_color;
 } MapGameLoopStateView;
 
-/* One controller of PadData (two 0x68-byte entries; the held/pressed/repeat
-   words are the ones src/main/input.c's getHeld/getPressed/getRepeat read). */
+/* One controller of PadData (two 0x68-byte entries). held, pressed and repeat
+   are the halfwords at +0x28, +0x2a and +0x2c that src/main/input.c reads. */
 typedef struct DbLightWritePad {
     unsigned char unmodeled_00[0x28];
     unsigned short held;
@@ -280,6 +280,10 @@ int cursorMode;
 
 static int lightIndex;
 
+/*
+ * Writes the light setup to descriptor as script lines: the ambient colour, the
+ * colour and direction of lights 1 to 3, and the stage colour.
+ */
 void DB_lightWrite(int descriptor)
 {
     char buffer[128];
@@ -324,6 +328,10 @@ void DB_lightWrite(int descriptor)
     }
 }
 
+/*
+ * Draws the unit rectangle vRect transformed by matrix, in the colour from the
+ * col table selected by color_index, as a GIF packet in the scratchpad.
+ */
 void drawRect2(Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -379,6 +387,7 @@ void drawRect2(Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, scratch, 9);
 }
 
+/* Draws the box vBox transformed by matrix, in the colour from the col table at color_index. */
 void drawBox2(Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -430,6 +439,10 @@ void drawBox2(Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, scratch, vertex_count * 2 + 1);
 }
 
+/*
+ * Draws a circle of the given radius around the origin of matrix, as a closed
+ * line loop of 16 segments in the colour selected by color_index.
+ */
 void drawCircle2(Matrix4 *matrix, float radius, int color_index)
 {
     int segment;
@@ -498,6 +511,7 @@ void drawCircle2(Matrix4 *matrix, float radius, int color_index)
     xglPrimAddGifTagDirect(0, scratch, 35);
 }
 
+/* Draws a line from the origin to vector, transformed by matrix, in the colour selected by color_index. */
 void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -548,6 +562,10 @@ void drawVector2(const Vector3 *vector, Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
+/*
+ * Draws the same line as drawVector2, with the view taken from camera slot 0 and
+ * the scratch area the caller supplies.
+ */
 void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
                   DebugLineScratch *scratch)
 {
@@ -599,6 +617,10 @@ void drawVector4S(const Vector3 *vector, Matrix4 *matrix, int color_index,
     xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
+/*
+ * Draws the ground grid vGridXZ, scaled by scale and transformed by matrix, in
+ * the cCursor[0] colour. Draws nothing when a corner is outside the visible range.
+ */
 void drawGrid(Matrix4 matrix, float scale)
 {
     Vector4 scale_vector;
@@ -661,6 +683,7 @@ void drawGrid(Matrix4 matrix, float scale)
     xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 11);
 }
 
+/* Returns the first active studio camera among the first eight, or 0 when none is active. */
 static StudioCamera *getCurrentCamera(void)
 {
     int camera_index;
@@ -677,6 +700,10 @@ static StudioCamera *getCurrentCamera(void)
     }
 }
 
+/*
+ * Draws the axis markers vCursor around matrix, scaled by scale, using the
+ * current camera. Draws nothing when the first point is outside the visible range.
+ */
 void drawAxis(Matrix4 matrix, float scale)
 {
     Vector4 scale_vector;
@@ -734,6 +761,10 @@ void drawAxis(Matrix4 matrix, float scale)
     xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 13);
 }
 
+/*
+ * Draws a circle around position, turned to face the camera, in the colour from
+ * color_index. The radius is the absolute x offset from 2048 of the transformed point (position->w, 0, 0).
+ */
 void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera_slot;
@@ -768,6 +799,7 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
     ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].z = position->z;
     ((DebugLineScratch *)SCRATCHPAD_BASE)->input[0].w = 1.0f;
     transformVector(((DebugLineScratch *)SCRATCHPAD_BASE)->output, ((DebugLineScratch *)SCRATCHPAD_BASE)->input, 1, &((DebugLineScratch *)SCRATCHPAD_BASE)->transform);
+    /* Build the camera rotation (translation cleared, transposed) and apply it to matrix. */
     QuadwordCopyMatrix(&rotation, (*camera)->cameraToWorldMatrix);
     rotation.elements[12] = 0.0f;
     rotation.elements[13] = 0.0f;
@@ -818,6 +850,7 @@ void drawCircle3(const Vector4 *position, Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, (const void *)SCRATCHPAD_BASE, 35);
 }
 
+/* Prints label at the screen position of position, when that position is inside the visible range. */
 void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
 {
     Vector4 *output;
@@ -851,6 +884,7 @@ void drawTags(const Vector3 *position, Matrix4 *matrix, const char *label)
                        (int)((output->y - 2048.0f + 224.0f) * 0.5f), label);
 }
 
+/* Draws a line from the origin to vector, transformed by matrix, with the active camera's view. */
 void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
 {
     StudioCamera *camera;
@@ -900,6 +934,7 @@ void drawVector4(const Vector3 *vector, Matrix4 *matrix, int color_index)
     xglPrimAddGifTagDirect(0, scratch, 5);
 }
 
+/* Returns the distance between the two positions when it is below radius, otherwise -1. */
 float ball2point(const Vector4 *cursor_position,
                  const Vector4 *actor_position, float radius)
 {
@@ -915,6 +950,7 @@ float ball2point(const Vector4 *cursor_position,
     return -1.0f;
 }
 
+/* Returns the first actor in use and not flagged 8 at or below startIndex, or 0. */
 void *prevActor(int startIndex)
 {
     int i;
@@ -927,6 +963,7 @@ void *prevActor(int startIndex)
     return 0;
 }
 
+/* Returns the first actor in use and not flagged 8 at or above startIndex, or 0. */
 Actor *nextActor(int startIndex)
 {
     Actor *entry;
@@ -941,6 +978,11 @@ Actor *nextActor(int startIndex)
     return 0;
 }
 
+/*
+ * Moves the cursor along the pad direction, taken in the camera's frame. R2
+ * cycles the stick submode (0 to 2). The cursor moves only when the stick is
+ * past 40 units.
+ */
 void updateCursorMode1(void)
 {
     const struct CursorPadKeyResult *keys = &keyData;
@@ -999,6 +1041,11 @@ void updateCursorMode1(void)
     }
 }
 
+/*
+ * Actor picking: R1 and R2 step the selection through actors, the cursor follows
+ * the selected actor, and the attached actor follows the cursor. Triangle
+ * attaches an actor within 0.5 units of the cursor, or releases the attached one.
+ */
 void updateCursorMode2(void)
 {
     DbLightWritePad *pad;
@@ -1016,6 +1063,7 @@ void updateCursorMode2(void)
     xglStudioGetCamera(&camera, 0);
     cursor_position = &cursor.position;
 
+    /* R1 selects the next actor and R2 the previous one, wrapping at the ends. */
     if (pad->pressed & PAD_R1) {
         state = &cursor;
         selected_actor = nextActor(state->actor_index);
@@ -1102,6 +1150,12 @@ void updateCursorMode2(void)
     }
 }
 
+/*
+ * Plane cursor mode: both sticks move the cursor in the camera's plane, and the
+ * camera or the tcamera translation follows depending on flag_04 and mode. Held
+ * buttons turn the camera or change the height, and while Cross is held the
+ * cursor snaps to the ground height from UnduGet when there is one.
+ */
 void updateCursorModePlane(void)
 {
     const struct CursorPadKeyResult *keys;
@@ -1128,8 +1182,7 @@ void updateCursorModePlane(void)
     stick.y = zero;
     xglVectorLength(&length, &stick);
     if (length > 40.0f) {
-        /* Copy the origin-relative camera-to-world transform through one scratch
-         * register; remove translation below to transform a movement direction. */
+        /* Copy the camera-to-world matrix and clear its translation, so it transforms a direction. */
         QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
@@ -1173,8 +1226,7 @@ void updateCursorModePlane(void)
     stick.z = 0.0f;
     xglVectorLength(&length, &stick);
     if (length > 40.0f) {
-        /* Copy the origin-relative camera-to-world transform through one scratch
-         * register; remove translation below to transform a movement direction. */
+        /* Copy the camera-to-world matrix and clear its translation, so it transforms a direction. */
         QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
@@ -1242,6 +1294,10 @@ void updateCursorModePlane(void)
     }
 }
 
+/*
+ * Cursor mode 0: moves the cursor and camera from both sticks, like
+ * updateCursorModePlane with the stick pairs swapped. Left and Right turn the camera.
+ */
 void updateCursorMode0(void)
 {
     const struct CursorPadKeyResult *keys;
@@ -1268,8 +1324,7 @@ void updateCursorMode0(void)
     stick.y = zero;
     xglVectorLength(&length, &stick);
     if (length > 40.0f) {
-        /* Copy the origin-relative camera-to-world transform through one scratch
-         * register; remove translation below to transform a movement direction. */
+        /* Copy the camera-to-world matrix and clear its translation, so it transforms a direction. */
         QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = zero;
         rotation.elements[13] = zero;
@@ -1313,8 +1368,7 @@ void updateCursorMode0(void)
     stick.z = 0.0f;
     xglVectorLength(&length, &stick);
     if (length > 40.0f) {
-        /* Copy the origin-relative camera-to-world transform through one scratch
-         * register; remove translation below to transform a movement direction. */
+        /* Copy the camera-to-world matrix and clear its translation, so it transforms a direction. */
         QuadwordCopyMatrix(&rotation, camera->cameraToWorldMatrix);
         rotation.elements[12] = 0.0f;
         rotation.elements[13] = 0.0f;
@@ -1388,6 +1442,10 @@ void updateCursorMode0(void)
     }
 }
 
+/*
+ * Sets up the camera for the current cursor mode: its view is locked to the
+ * cursor, and the tcamera translation is set for modes 1 to 3.
+ */
 void changeCameraMode(void)
 {
     StudioCamera *camera;
@@ -1461,6 +1519,11 @@ void changeCameraMode(void)
     }
 }
 
+/*
+ * Reads the pad for tool mode 0 to 3 and updates the cursor. Circle or Square
+ * with Up and Down cycles the cursor mode; otherwise Up and Down change the step.
+ * L3 zeroes the cursor, R3 resets the camera, and R1 and R2 cycle flag_04.
+ */
 void updateCursor(int mode)
 {
     struct CursorPadKeyResult *keys;
@@ -1601,6 +1664,10 @@ void drawCursor(void)
     drawAxis(matrix, 1.0f);
 }
 
+/*
+ * Resets the cameras (camera 0 active), points the tcamera view at the cursor and
+ * puts the cursor at the origin in mode 0.
+ */
 void initCursor(void)
 {
     int camera_index;
@@ -1638,6 +1705,7 @@ void initCursor(void)
     changeCameraMode();
 }
 
+/* Prints a 4x4 matrix as four text rows starting at (x, y), 8 pixels apart. */
 static void printM(int x, int y, const float *matrix)
 {
     char buffer[256];
@@ -1658,6 +1726,10 @@ static void printM(int x, int y, const float *matrix)
     } while (1);
 }
 
+/*
+ * Debug view of the map model's parts. Up and Down step the selected part index,
+ * which is shown with its matrix; the selected part's visibility toggles every 16 calls.
+ */
 void MAP_serach(void)
 {
     MapStageModelView *model;
@@ -1700,6 +1772,10 @@ void MAP_serach(void)
     }
 }
 
+/*
+ * Per-frame debug update. Triangle with Select toggles mode_004DC5A8; in mode 1
+ * the game update runs too. The cursor is then updated and drawn.
+ */
 void EvtTools(void)
 {
     if ((PadData[0].pressed & PAD_TRIANGLE) && (PadData[0].held & PAD_SELECT)) {
@@ -1719,6 +1795,11 @@ void EvtTools(void)
     drawCursor();
 }
 
+/*
+ * Loads the light table from the studio light: entries 0 to 2 from the colours of
+ * light 0, entry 3 from the ambient colour and entry 4 from the clear colour.
+ * Directions in lightDir come from light 0.
+ */
 void initLight3(void)
 {
     StudioLight *light;
@@ -1774,6 +1855,10 @@ void initLight3(void)
     } while (++i < 3);
 }
 
+/*
+ * Loads the same light table as initLight3, reading the colours and directions
+ * of lights 0 to 2 in turn.
+ */
 void initLight2(void)
 {
     StudioLight *light;
@@ -1836,6 +1921,10 @@ void initLight2(void)
     } while (++i < 3);
 }
 
+/*
+ * Normalises the three directions in lightDir, derives their z from the unit
+ * length, and sends the light colours and directions to the studio light.
+ */
 void initLight(void)
 {
     StudioLight *light;
@@ -1869,6 +1958,13 @@ void initLight(void)
     xglLightIntensityAmbient(light, &lightCol[3].vector);
 }
 
+/*
+ * Light editor for the debug view. Selects one of six lights or colour entries
+ * (lightIndex 0 to 5) and a colour channel, edits the colour, and aims the
+ * selected light's direction. The result goes to the studio light, the clear
+ * colour or the stage colour. The light table and direction widget are drawn
+ * every call.
+ */
 void updateLight(int mode)
 {
     const struct CursorPadKeyResult *keys = &keyData;
@@ -1904,6 +2000,7 @@ void updateLight(int mode)
         break;
     }
 
+    /* Without Circle or Square, the pad selects a light and edits its colour. */
     if ((keys->held & (PAD_CIRCLE | PAD_SQUARE)) == 0) {
         float limit;
 
@@ -1928,6 +2025,11 @@ void updateLight(int mode)
             lightColIndex = 3;
         if (lightColIndex >= 4)
             lightColIndex = 0;
+        /*
+         * Right and Left add or subtract 0.01 to the selected channel, clamped to
+         * 0 to limit. Channel 3 edits red, green and blue together. Component 3
+         * always holds their average.
+         */
         component = lightCol[lightIndex].components + lightColIndex;
         if (lightIndex == 5)
             limit = 10.0f;
@@ -1974,6 +2076,7 @@ void updateLight(int mode)
             lightCol[lightIndex].components[3] = total / 3.0f;
         }
     } else if (keys->held & PAD_CIRCLE) {
+        /* Circle: R1 toggles the panel offset, Up and Down change the light speed. */
         if (keys->pressed & PAD_R1)
             if (lightStateOffset != 0)
                 lightStateOffset = 0;
@@ -1986,6 +2089,7 @@ void updateLight(int mode)
         lightSpeed &= 3;
     }
 
+    /* keys->flags[2] and flags[3] turn the selected light direction; L3 flips its y sign. */
     source = &lightDir[lightIndex];
     if ((keys->pressed & PAD_L3) != 0)
         source->y = -source->y;
@@ -2015,6 +2119,7 @@ void updateLight(int mode)
         direction.y = -direction.y;
     xglVectorLength(&stickLength, &direction);
 
+    /* Draws the light direction through the camera matrix translated 5 units along z, with its rotation reset to identity. */
     xglStudioFlushActiveCamera();
     camera = xglStudioGetActiveCamera();
     translation.x = 0.0f;
@@ -2044,6 +2149,7 @@ void updateLight(int mode)
     stick.y = lightCol[lightIndex].components[1];
     stick.z = lightCol[lightIndex].components[2];
     stick.w = 1.0f;
+    /* Lights 0 to 2 and ambient go to the studio light; 4 and 5 are the clear and stage colours. */
     switch (lightIndex) {
     case 0:
     case 1:
@@ -2118,6 +2224,7 @@ void updateLight(int mode)
     direction.x = (float)lightStateOffset + 166.0f;
     direction.z = 0.0f;
     direction.w = 1.0f;
+    /* Draws the light table: a circle and direction arrow per light, and a bar per channel. */
     for (k = 0; k < 6; k++) {
         float scale;
 
@@ -2158,6 +2265,7 @@ void updateLight(int mode)
         direction.y -= 51.0f;
     }
 
+    /* Formats the light setup into dumpText; the text is not output here. */
     if (keys->pressed & PAD_SELECT) {
         MapGameLoopStateView *state;
 
@@ -2180,6 +2288,12 @@ void updateLight(int mode)
     }
 }
 
+/*
+ * Wind debug editor. Up and Down move the selection through the wind rows.
+ * Circle applies the mode on rows 0 to 2, rows 3 and 4 adjust the shake offsets,
+ * and the pad stick moves the wind's x and z. Triangle resets the wind and keeps
+ * its mode. The settings text is drawn every call.
+ */
 void updateWind(WindRecord *wind)
 {
     StudioCamera *camera;
@@ -2325,6 +2439,7 @@ void updateWind(WindRecord *wind)
     format6 = windWFormat;
     sprintf(line, format6, fptodp(wind->w));
     xglFontDebugPrintf(182, dispy_2 + 104, line);
+    /* Fills the marker for directional winds; this function does not draw it. */
     if (wind->mode == 1) {
         marker.from = camera->chasePosition;
         marker.color[0] = 255;
@@ -2341,6 +2456,7 @@ void updateWind(WindRecord *wind)
     } else {
         xglFontDebugPrintf(150, dispy_2 + csr_1 * 12 + 12, cursorMarkerText);
     }
+    /* Formats the wind command into text_wide; the text is not output here. */
     if (pad->pressed & PAD_SELECT) {
         wide_text = text_wide;
         format7 = windShakeCommandFormat;

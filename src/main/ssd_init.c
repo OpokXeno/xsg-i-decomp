@@ -38,16 +38,11 @@ void RssdSpuRead(RssdRequest *request);
 
 void *RssdSifRpcServer(unsigned int command, void *data, int size);
 
-/*
- * libkernel syscall stub (main:0x00200550).
- */
+/* libkernel syscall stub. */
 extern int iSignalSema(int sema_id);
 extern void SleepThread(void);
 
-/*
- * RssdInitIop is this TU's own IOP sound RPC client setup (its body is still
- * scaffold below); sceSifRpcLoop is the SCE SDK SIF RPC server loop.
- */
+/* RssdInitIop sets up the IOP sound RPC client; sceSifRpcLoop is the SCE SDK SIF RPC server loop. */
 extern void RssdInitIop(void);
 extern void sceSifRpcLoop(void *queue);
 
@@ -58,10 +53,7 @@ extern int DeleteSema(int sema_id);
 extern int DeleteThread(int thread_id);
 extern int TerminateThread(int thread_id);
 
-/*
- * This TU's own RPC completion handler (its body is still scaffold below);
- * sceSifRemoveRpc is the SCE SDK RPC server deregistration call.
- */
+/* RssdFuncCallCompleted polls the pending RPC call (defined below); sceSifRemoveRpc is the SCE SDK RPC server deregistration call. */
 extern int RssdFuncCallCompleted(int status);
 extern void *sceSifRemoveRpc(void *sd, void *qd);
 
@@ -74,10 +66,6 @@ extern int CreateThread(SsdThreadCreateInfo *thread);
 extern int StartThread(int thread_id, void *args);
 extern int WaitSema(int sema_id);
 
-/*
- * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
- * on the queue reserved at RssdWork.rpc_queue. It never returns.
- */
 extern void RSsdSifRpcThread(void);
 extern void RssdBackNextWaveThread(void);
 
@@ -95,6 +83,7 @@ static unsigned char MYthreadStack[RSSD_THREAD_STACK_BYTES];
 
 static unsigned char MYwaveTransThStack[RSSD_THREAD_STACK_BYTES];
 
+/* Initializes the IOP sound RPC state and starts its RPC and next-wave threads. Returns at once when already ready. */
 void SsdInit(int init_size)
 {
     SsdSemaCreateInfo sema;
@@ -132,6 +121,7 @@ void SsdInit(int init_size)
     sema.option = 0;
     RssdWork.busy_sema_id = CreateSema(&sema);
 
+    /* Start the RPC thread, then the next-wave thread. */
     RssdWork.rpc_thread_stack = MYthreadStack;
     thread.func = RSsdSifRpcThread;
     thread.stack = RssdWork.rpc_thread_stack;
@@ -153,10 +143,12 @@ void SsdInit(int init_size)
     RssdWork.next_wave_thread_id = CreateThread(&thread);
     StartThread(RssdWork.next_wave_thread_id, 0);
 
+    /* Wait for the first busy notification, then delete the semaphore. */
     WaitSema(RssdWork.busy_sema_id);
     DeleteSema(RssdWork.busy_sema_id);
 }
 
+/* Sends the quit command, removes the RPC server and stops both threads, then clears the driver flags. */
 void SsdQuit(void)
 {
     RssdRequest request;
@@ -173,12 +165,17 @@ void SsdQuit(void)
     RssdWork.flags = 0;
 }
 
+/*
+ * Initializes the IOP sound RPC client, then runs the SIF RPC receive loop
+ * on the queue reserved at RssdWork.rpc_queue. It never returns.
+ */
 void RSsdSifRpcThread(void)
 {
     RssdInitIop();
     sceSifRpcLoop(RssdWork.rpc_queue);
 }
 
+/* Binds the RPC client, registers the RPC server and sends the init command. Returns early when the bind fails. */
 void RssdInitIop(void)
 {
     RssdRequest request;
@@ -199,6 +196,7 @@ void RssdInitIop(void)
     RssdCallFunc(RSSD_CMD_INIT, &request, 0, 0);
 }
 
+/* SIF RPC server entry for commands from the IOP. Handles the busy, SPU read, next-wave, sample and stream-end commands and passes other commands to the server callback. */
 void *RssdSifRpcServer(unsigned int command, void *data, int size)
 {
     RssdRpcResponse *packet = data;
@@ -243,6 +241,7 @@ void *RssdSifRpcServer(unsigned int command, void *data, int size)
     return data;
 }
 
+/* Records the busy request's parameters and signals busy_sema_id. */
 void RssdBusy(RssdRequest *request)
 {
     int request_size;
@@ -258,6 +257,7 @@ void RssdBusy(RssdRequest *request)
     SignalSema(RssdWork.busy_sema_id);
 }
 
+/* Copies one block of SPU data from the request to the SPU write pointer; the last block clears the DMA flag. */
 void RssdSpuRead(RssdRequest *request)
 {
     int size;
@@ -278,6 +278,7 @@ void RssdBackgroundNextWave(const int *request)
         WakeupThread(RssdWork.next_wave_thread_id);
 }
 
+/* Thread loop that sends the remaining SPU wave data to the IOP in pieces of at most RSSD_TRANSFER_MAX bytes. */
 void RssdBackNextWaveThread(void)
 {
     RssdRequest request;
@@ -309,6 +310,7 @@ void RssdBackNextWaveThread(void)
     }
 }
 
+/* Sends one RPC command with optional data to the IOP. Returns the sceSifCallRpc result, or -1 when the packet is too large. */
 int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
 {
     RssdRpcResponse *packet;
@@ -351,6 +353,7 @@ int RssdCallFunc(int command, RssdRequest *request, void *data, int size)
     return result;
 }
 
+/* RPC completion callback: copies the reply, clears the pending flag, calls the completion callback and signals the call semaphore. */
 void RssdSifRpcCallback(void)
 {
     int status;
@@ -393,6 +396,7 @@ int RssdGetCallCompletedCode(void)
     return (RssdWork.flags >> RSSD_FLAG_CALL_PENDING_SHIFT) & 1;
 }
 
+/* Returns the status of the last call, negative while it is pending or after an error reply. Stores the reply value in *value when value is given. */
 int SsdGetResultValue(int *value)
 {
     int result;
@@ -410,6 +414,7 @@ int SsdGetResultValue(int *value)
     return result;
 }
 
+/* Like SsdGetResultValue, but copies the whole last reply into *out. */
 int SsdGetResultParam(RssdRpcResponse *out)
 {
     int flags;

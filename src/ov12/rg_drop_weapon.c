@@ -13,6 +13,7 @@ const char dropWeaponSourcePath[] = "../rg_drop_weapon.euc.c";
 static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor);
 static void _PassTime(RgChar *pChar, float deltaTime);
 
+/* Fades the dropped weapon actor by one step per tick. A drop without an actor is marked hidden, and a hidden drop is freed. */
 static void _PassTime(RgChar *pChar, float deltaTime)
 {
     RgDropWeapon *pDrop;
@@ -58,6 +59,7 @@ static void _PassTime(RgChar *pChar, float deltaTime)
     return;
 }
 
+/* Draws the actor of a drop weapon unless the drop is hidden. */
 static void _Disp(RgDropWeapon *pDrop)
 {
     XrgActor *actor;
@@ -93,6 +95,7 @@ static void _Destruct(RgChar *pChar)
     }
 }
 
+/* Installs the destruct, pass-time and display methods, and sets the actor, hidden flag and transparency. */
 static void _InitDrop(RgDropWeapon *pDrop, XrgActor *actor)
 {
     if (pDrop == 0) {

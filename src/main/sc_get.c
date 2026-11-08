@@ -40,7 +40,7 @@ enum ScriptCondition {
     SCRIPT_COND_LE = 5
 };
 
-/* Sixteen zero-filled script records, each one 0x450 bytes from the observed index stride. */
+/* Sixteen zero-filled script records (SCRIPT_COUNT). */
 ScriptRecord _scriptWork[];
 
 /* EUC-JP: "clear effect outside the valid range %d %d". */
@@ -59,21 +59,10 @@ static const char effectStackOverflowFormat[];
 static const char badExpressionFormat[];
 static const char simajiriMoviePath[];
 
-/*
- * sefDestroyScriptScheduler2 (main:0x002e5320, defined in main/tu211/sef.c)
- * takes the same script_index/task_index pair scDeleteTask below does; its
- * own accepted definition (src/main/sef.c) documents the match.
- */
 extern void sefDestroyScriptScheduler2(int script_index, int task_index);
 
 static void scDeleteTask(int script_index, int task_index);
 
-/*
- * scDestroyScript2 forwards both parameters unchanged to
- * sefDestroyScriptScheduler2, then, when the target script's data table (the
- * same +0x400 pointer scGetTableAdrIdx and its siblings below read) is
- * loaded, also deletes the one task scDeleteTask selects.
- */
 extern void scDestroyScript(int script_index);
 
 /* scExecScript is defined below in this file; declare it so its caller does
@@ -82,44 +71,22 @@ static void scExecScript(void);
 
 static int scDispatchScript(ScriptTask *task);
 
-/*
- * sefExecScheduler runs the effect scheduler's tick; it is defined in
- * main/tu211 (src/main/sef.c), still INCLUDE_ASM there. scExecEffect calls
- * scExecScript, then genuinely tail-calls (`j`, not `jal`) into it.
- */
+/* Runs the effect scheduler's tick (defined in sef.c). scExecEffect calls scExecScript, then tail-calls (`j`, not `jal`) into it. */
 extern void sefExecScheduler(void);
 
 extern int tracePrint();
 
 extern int scGetCmdScript(ScriptTask *task);
 
-/*
- * scGetReg resolves a script-register selector the same way scGetRegAdr
- * below does (bit 0x8000 set means "read the register that selector names,
- * then use its value as the real selector"; an out-of-range selector reports
- * the error through tracePrint and reads as 0), but keeps its own copy of the
- * address computation and bound check instead of calling scGetRegAdr.
- */
 extern int scGetReg(int reg);
 extern int scGetAdrScript(ScriptTask *task);
 static int scCreateTask(int script_index, int task_index, int address, ScriptTaskParameters *data);
 static void scDeleteTaskAll(int event, int task_index);
 
-/*
- * scGetNumScript decodes the current script command's next numeric operand.
- * Every opcode handler is called with the running ScriptTask in $a0 (as
- * scONGOScript and scPAUSEScript use it), and the handlers below hand that
- * task on to scGetNumScript: the R*Script handlers save $a0 across
- * scGetCmdScript and reload it before the call (daddu a0,s0 at 0x002eae90),
- * and scABORTScript, whose first call it is, leaves $a0 untouched
- * (0x002eabc4..0x002eabc8). scGetNumScript's own body does not read it.
- */
 extern int scGetNumScript(ScriptTask *task);
 
 extern unsigned int strlen(const char *s);
 
-/* Preserve the earlier external reference above while owning its bytes here. */
-/* Keep the active script scalars after scRDUMPScript's small-data format. */
 /* Same indirect-selector and bound-check logic as scGetReg above, writing
  * `value` into the resolved register instead of reading it. */
 extern void scSetReg(int reg, int value);
@@ -127,18 +94,14 @@ extern void scSetReg(int reg, int value);
 extern int scGetAdrImmScript(ScriptTask *task);
 
 /*
- * sefCreateScheduler (main:0x002e5900) and sefCreateBattleActorTbl
- * (main:0x002e63f0) are still assembly in main/tu211/sef.c. sefCreateScheduler
- * is called here with the task's own two 16-byte spans at +0x20/+0x30 (the
- * same +0x30 span scCreateTask's own comment above documents) and the current
- * script's data table pointer; -1 is the same "auto-assign" sentinel
- * scOBJEVEScript's scCreateTask call above uses for its task-index argument.
+ * Creates a scheduler entry for an effect started by a script task. It receives
+ * the task's parameters and initial position, the script's data table, and -1,
+ * which selects an automatic task index.
  */
 extern int sefCreateScheduler(int address, void *taskField0x30, void *taskField0x20, int table, int taskIndex);
 
 extern void sefCreateBattleActorTbl(short effect_no);
 
-/* scFreezeCamera (still assembly in this TU) takes the task's effect_no. */
 static void scFreezeCamera(int effect_no);
 
 static int scERRORScript(ScriptTask *task);
@@ -237,6 +200,7 @@ int _nowScript;
 
 int _nowEvent;
 
+/* Clears every script record and task slot, and stores each slot's task and script numbers. */
 void scInitScript(void)
 {
     int script;
@@ -264,6 +228,11 @@ static int scFindScriptData(int eftNo)
     return sefSearchMapperIndex(eftNo);
 }
 
+/*
+ * Starts a script for an effect. A running script with the same effect number is
+ * reused first, otherwise a free script record is taken. Returns the task index
+ * with the script number in bits 8 and up, or a negative value on failure.
+ */
 int scCreateScript(ScriptTaskParameters *info)
 {
     int effectNo;
@@ -305,6 +274,7 @@ int scCreateScript(ScriptTaskParameters *info)
     return -1;
 }
 
+/* Removes the script's scheduler entry; when the script has data, clears the record and its tasks. */
 void scDestroyScript(int script_index)
 {
     int task;
@@ -328,6 +298,11 @@ void scDestroyScript(int script_index)
     }
 }
 
+/*
+ * Destroys one task of a script. An out-of-range script index is reported and
+ * ignored. Otherwise both indexes go to the scheduler, and the task is deleted
+ * when the script has data.
+ */
 void scDestroyScript2(int script_index, int task_index)
 {
     /* tracePrint's other callers in this TU (below) declare it with fewer
@@ -416,13 +391,7 @@ static int scCreateTask(int script_index, int task_index, int address, ScriptTas
     return task_index;
 }
 
-/*
- * Invalidate one task slot and decrement its owning script's active count.
- * The original storage declarations are unavailable; the slot's recovered
- * members are in sc_get.h, and the script header at +0x440 of each script
- * record keeps its measured offsets, because only its active-task counter has
- * an evidenced role here.
- */
+/* Clears one task slot and decrements its script's active-task count when the slot was active. */
 static void scDeleteTask(int script_index, int task_index)
 {
     ScriptTask *task;
@@ -460,6 +429,11 @@ static void scDeleteTaskAll(int selected_script, int unused_task_index)
     }
 }
 
+/*
+ * Reads a script register. A selector with bit 0x8000 set names another register,
+ * whose value is used as the selector. An out-of-range selector is reported
+ * through tracePrint and reads as 0.
+ */
 int scGetReg(int reg)
 {
     int *address;
@@ -516,6 +490,7 @@ int scGetCmdScript(ScriptTask *task)
     return *command;
 }
 
+/* Decodes the current command's next numeric operand: a literal, or the value of the register it names. */
 int scGetNumScript(ScriptTask *task)
 {
     int value;
@@ -1067,6 +1042,7 @@ static int scFADEONScript(ScriptTask *task)
     return 1;
 }
 
+/* For a camera effect number in range, runs the camera setup once for each of modes 0 and 1. */
 static void scFreezeCamera(int effect_no)
 {
     int i;
@@ -1083,6 +1059,7 @@ static void scFreezeCamera(int effect_no)
     }
 }
 
+/* Starts the ambient sound of the task's effect, using the fade variant while the task is fading. Only task 0 plays it. */
 static void scSetAmbient(ScriptTask *task)
 {
     short effectNo;
@@ -1238,6 +1215,7 @@ static int scMISSILE3Script(ScriptTask *task)
     return 1;
 }
 
+/* Advances one task: resumes it while it waits, otherwise parses its script, then moves its missile if it has one. */
 static int scDispatchScript(ScriptTask *task)
 {
     unsigned short flags = task->flags;
@@ -1305,6 +1283,10 @@ static inline int scOffsetOrNone(int offset)
     return result;
 }
 
+/*
+ * Returns the script table of an effect and writes the offset of its entry to
+ * *offset. Returns NULL when the effect has no entry.
+ */
 short *scAnalyzeScriptCf(int effectNo, int *offset)
 {
     short *table;
@@ -1355,6 +1337,7 @@ ScriptTask *scGetTaskAdr(int script_index, int task_index)
     return &_scriptWork[script_index].tasks[task_index];
 }
 
+/* Returns the address of a register of the current script, or NULL when the number is out of range. */
 void *scGetRegAdr(unsigned int reg)
 {
     if (reg >= SCRIPT_REGISTER_COUNT) {

@@ -3,51 +3,38 @@
 #include "main/jni.h"
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in the TU
- * map (src/main/runtime.c, src/main/window.c) show.
+ * The script VM's per-thread context (see src/main/chr.h). Every Java native
+ * receives (thread, arguments, result), the same convention as the natives in
+ * src/main/runtime.c and src/main/window.c.
  */
 typedef struct JThread JThread;
 
 typedef struct MenuStringData MenuStringData;
 
-/* Most query strings Menu.addQuery(String[], int) forwards to the menu. */
+/* Maximum number of query strings Menu.addQuery(String[], int) forwards to the menu. */
 #define MENU_QUERY_MAX 32
 
 /* MenuNative.flags: the menu must refresh its cursor (set by Menu.setCursor). */
 #define MENU_NATIVE_FLAG_REFRESH 0x200
 
 /*
- * A java.lang.String argument, as the natives below read it: +0x00 (the
- * class word every object reference begins with) is untouched by this TU,
- * and +0x04 holds the interned string record the String was loaded from
- * (the same shape src/main/runtime.c's StringRef and src/main/window.c's
- * StringRef read for their own String arguments; named separately here
- * because those TUs already own that tag, config/header-canon.json).
+ * A java.lang.String argument: the class word at +0x00 is not read by this TU,
+ * and +0x04 holds the interned string record the String was loaded from.
  */
 typedef struct MenuStringRef {
     void *unmodeled_00;
     MenuStringData *value;    /* +0x04 */
 } MenuStringRef;
 
-/*
- * The interned constant-string record MenuStringRef.value points to, modeled
- * here only for the bytes pointer the natives below read at +0x08 (the
- * same offset src/main/runtime.c's InternedString.bytes and
- * src/main/window.c's StringStorage.bytes read).
- */
+/* The interned string record that MenuStringRef.value points to; only the bytes pointer at +0x08 is modeled. */
 struct MenuStringData {
     unsigned char unmodeled_00[8];
     char *bytes;              /* +0x08 */
 };
 
 /*
- * A java.lang.String[] argument, as addQuery(String[], int) reads it: the
- * class word at +0x00, the element count at +0x04 and the element pointer
- * array at +0x08 (the same shape src/main/window.c's JavaStringArray reads
- * for its own String[] argument; named separately here because that TU
- * already owns that tag).
+ * A java.lang.String[] argument as addQuery(String[], int) reads it: the element
+ * count at +0x04 and the element pointer array at +0x08.
  */
 typedef struct MenuStringArray {
     unsigned int : 32;        /* +0x00 */
@@ -57,7 +44,7 @@ typedef struct MenuStringArray {
 
 /*
  * The native menu record this TU's natives operate on (the same object as
- * TMenu in src/main/twsys_init.c), as far as this TU touches it: the
+ * TMenu described in src/main/twsys_init.c), as far as this TU touches it: the
  * refresh-request flags word at +0x10 setCursor__I ors 0x200 into, the
  * current selection index at +0x54 (read as a signed byte) and the
  * requested cursor value setCursor__I stores at +0x68.
@@ -118,6 +105,7 @@ void Java_xeno_util_Menu_addQuery__Ljava_lang_String_(JThread *thread,
     TMENU_addQuery(arguments->menu, arguments->string->value->bytes);
 }
 
+/* Passes up to MENU_QUERY_MAX query strings from the String[] to the menu. */
 void Java_xeno_util_Menu_addQuery__aLjava_lang_String_I(JThread *thread,
                                                          MenuStringArrayCall *arguments,
                                                          unsigned int *result)
@@ -147,10 +135,7 @@ void Java_xeno_util_Menu_addItem__Ljava_lang_String_(JThread *thread,
     TMENU_addItem(arguments->menu, arguments->string->value->bytes);
 }
 
-/* Menu.create writes the dispatch table at +0x00 from its JavaClass
- * classPointer field. setLocation converts the integer arguments at
- * +0x04/+0x08 and writes floats at +0x20/+0x24; getSelected reads signed
- * bytes at +0x54/+0x55, using the latter as the negative-status override. */
+/* Creates a native menu, stores its class reference at +0x00 and returns it. */
 void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
                                   MenuArgumentSlot *result)
 {
@@ -163,6 +148,7 @@ void Java_xeno_util_Menu_create__(JThread *thread, void *arguments,
     result[0].ref = menu;
 }
 
+/* Returns the state byte when it is negative, otherwise the selected index. */
 void Java_xeno_util_Menu_getSelected__(JThread *thread,
                                        MenuArgumentSlot *arguments,
                                        MenuArgumentSlot *result)
@@ -176,6 +162,7 @@ void Java_xeno_util_Menu_getSelected__(JThread *thread,
         result[0].i = menu->selected;
 }
 
+/* Stores the two integer location arguments as the menu's x and y floats. */
 void Java_xeno_util_Menu_setLocation__II(JThread *thread,
                                          MenuArgumentSlot *arguments,
                                          MenuArgumentSlot *result)
@@ -187,10 +174,12 @@ void Java_xeno_util_Menu_setLocation__II(JThread *thread,
     menu->y = (float)arguments[2].i;
 }
 
+/* Empty native. */
 void Java_xeno_util_Menu_setVisible__Z(void)
 {
 }
 
+/* Stores the requested cursor and flags a refresh when it differs from the current selection. */
 void Java_xeno_util_Menu_setCursor__I(JThread *thread, MenuCursorCall *arguments,
                                       unsigned int *result)
 {

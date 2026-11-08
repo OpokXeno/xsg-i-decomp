@@ -50,7 +50,7 @@ extern const char weaponDbShieldTypeKeyword[];
 extern const char weaponDbEnergyTypeKeyword[];
 extern const char weaponDbUnarmedTypeKeyword[];
 extern const char weaponDbUnknownKeywordFormat[];
-/* Declared here: strings and tables of the scaffold-owned data window (ov12:0x00a538c8..0x00a53c1c). */
+/* Declared here: the strings and tables of this TU's read-only data window. */
 extern const char weaponDbContinueKeyword[];  /* "cont" */
 extern const char weaponDbEndMarkerKeyword[];  /* "." */
 extern const char weaponDbNotLockKeyword[];  /* "notlock" */
@@ -124,9 +124,9 @@ static void _EntryTemporaries(RgSimpleDB *database) {
 
 /*
  * Copies at most nSize bytes from pszSrc into pszDest, then always writes a
- * NUL at pszDest[nSize - 1] (memcpy, main:0x0032eccc, followed by a single
- * sb $0,-1(dest)): the destination is terminated even when the source is
- * not, unlike a plain memcpy.
+ * NUL at pszDest[nSize - 1] (a memcpy followed by a single sb $0,-1(dest)):
+ * the destination is terminated even when the source is not, unlike a plain
+ * memcpy.
  */
 static void _copy_str_n(char *pszDest, const char *pszSrc, u32 nSize)
 {
@@ -139,6 +139,7 @@ static void _WrapperDestruct(void *database)
     DisposeRgSimpleDB(database);
 }
 
+/* Returns the weapon database singleton, creating and registering it on first use. */
 RgSimpleDB *InstanceOfRgWeaponDB(void)
 {
     RgSimpleDB *database = RgSingletonIDGet(2);
@@ -178,6 +179,7 @@ void RgWeaponDBClear(RgSimpleDB *pDB)
     _EntryTemporaries(pDB);
 }
 
+/* Returns the essence stored under pszName, or 0 when the name is empty or unknown. */
 void *RgWeaponDBGetEssence(RgSimpleDB *pDB, const char *pszName)
 {
     int nDataID;
@@ -208,6 +210,7 @@ void *RgWeaponDBGetIndex(RgSimpleDB *pDB, int nDataID)
     return RgSimpleDBGet(pDB, nDataID);
 }
 
+/* Reads a left, right or back equip type. An unknown name raises an error and gives -1. */
 static int _ReadEquipType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -229,6 +232,10 @@ static int _ReadEquipType(RgReadText *pReader)
     return result;
 }
 
+/*
+ * Maps an equip mark character: 'o' gives 1, 'm' gives 2 and 'x' gives 0. Any other
+ * character raises an error and gives 0.
+ */
 static int _IsOnChar(char marker)
 {
     if (marker == 'o') {
@@ -244,6 +251,10 @@ static int _IsOnChar(char marker)
     return 0;
 }
 
+/*
+ * Reads a 10-character equip mark string in the form ???-??-??? into a bit mask and
+ * returns the index of its 'm' mark, or -1 when there is none.
+ */
 static int _ReadEquipBitMask(RgReadText *pReader, unsigned int *pMask)
 {
     char szToken[0x80];
@@ -287,6 +298,7 @@ static int _ReadEquipBitMask(RgReadText *pReader, unsigned int *pMask)
     return equipmentType;
 }
 
+/* Sets the three motion IDs of every character in motionTable. */
 static void _SetAllCharMotion(int motionTable[][RG_EQUIP_TYPE_NUM], int motion0, int motion1,
                                int motion2)
 {
@@ -307,6 +319,10 @@ static inline int _Clamp(int value, int low, int high)
     return high < value ? high : value;
 }
 
+/*
+ * Applies a keyword shared by all weapon kinds to pWeapon, reading its arguments from
+ * pReader. Returns 1 when the keyword was handled and 0 otherwise.
+ */
 static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
 {
     RgWeaponEssence *pWeapon;
@@ -322,6 +338,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
     int level;
     pWeapon = (RgWeaponEssence *)pEss;
 
+    /* A cont block sets flags and targets until its end marker. */
     if (strcasecmp(pszToken, weaponDbContinueKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         while (strcasecmp(szToken, weaponDbEndMarkerKeyword) != 0) {
@@ -365,6 +382,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Capacity keywords: a number, or the infinite marker. */
     if (strcasecmp(pszToken, weaponDbNumKeyword) == 0 || strcasecmp(pszToken, weaponDbEnergyKeyword) == 0 ||
         strcasecmp(pszToken, weaponDbHardnessKeyword) == 0) {
         RgReadTextGetString(pReader, szName);
@@ -397,6 +415,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Motion keywords: mot fills the shot table, selfmot the start table and basemot the end table. */
     if (strcasecmp(pszToken, weaponDbMotionKeyword) == 0) {
         int motion0;
         int motion1;
@@ -553,6 +572,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Model keywords: the file name is appended to the robot model directory. */
     if (strcasecmp(pszToken, weaponDbModelKeyword) == 0) {
         RgReadTextGetString(pReader, szToken);
         for (i = 0; i < 3; i++) {
@@ -649,6 +669,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Voice keywords set a sound ID and a volume clamped to the maximum. */
     if (strcasecmp(pszToken, weaponDbVoiceHitSoundKeyword) == 0) {
         pWeapon->robotHitSound = RgReadTextGetInt(pReader);
         volume = (int)(RgReadTextGetFloat(pReader) * RG_WEAPON_VOLUME_SCALE);
@@ -681,6 +702,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Arm keywords set the event level, or mark the default weapon. */
     if (strcasecmp(pszToken, weaponDbFirstWeaponArmKeyword) == 0) {
         pWeapon->eventLevel = 0;
         return 1;
@@ -701,6 +723,7 @@ static int _ReadCommon(void *pEss, RgReadText *pReader, char *pszToken)
         return 1;
     }
 
+    /* Each shot-point character '1' to '8' appends one entry to the shot point table. */
     if (strcasecmp(pszToken, weaponDbShotPointKeyword) == 0) {
         unsigned char *pChar;
         unsigned int nextChar;
@@ -744,6 +767,10 @@ const char weaponDbAssertReaderNotNil[] = "pReader != NIL";
 
 const char weaponDbBusyKeyword[] = "busy";
 
+/*
+ * Allocates a shot-type essence and reads its keywords, including busy time, until the
+ * input ends or an unknown keyword is reached.
+ */
 static RgWeaponShotEssence *_ReadShotType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -779,6 +806,10 @@ const char weaponDbDamageKeyword[] = "damage";
 
 const char weaponDbHitEffectKeyword[] = "hiteff";
 
+/*
+ * Allocates an attack-type essence and reads its keywords, including damage and hit
+ * effect, until the input ends or an unknown keyword is reached.
+ */
 static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -810,6 +841,10 @@ static RgWeaponAttackEssence *_ReadAttackType(RgReadText *pReader)
     return pEss;
 }
 
+/*
+ * Allocates an unarmed-type essence and reads its keywords, including damage and hit
+ * effect, until the input ends or an unknown keyword is reached.
+ */
 static RgWeaponUnArmedEssence *_ReadUnArmedType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -841,6 +876,10 @@ static RgWeaponUnArmedEssence *_ReadUnArmedType(RgReadText *pReader)
     return pEss;
 }
 
+/*
+ * Allocates a shield-type essence and reads its keywords until the input ends or an
+ * unknown keyword is reached.
+ */
 static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -866,6 +905,10 @@ static RgWeaponShieldEssence *_ReadShieldType(RgReadText *pReader)
     return pEss;
 }
 
+/*
+ * Allocates an energy-type essence and reads its keywords, including shot energy and
+ * temperature limits, until the input ends or an unknown keyword is reached.
+ */
 static RgWeaponEnergyEssence *_ReadEnergyType(RgReadText *pReader)
 {
     char szToken[0x80];
@@ -921,6 +964,10 @@ const char weaponDbUnarmedTypeKeyword[] = "sudetype";
 
 const char weaponDbUnknownKeywordFormat[32] = "%s : unknown keyword : %s";
 
+/*
+ * Reads the weapon data file pszDataBase and adds one essence per typed entry to pDB
+ * under its name. An unknown keyword raises an error.
+ */
 void RgWeaponDBRead(RgSimpleDB *pDB, const char *pszDataBase)
 {
     char szToken[0x100];

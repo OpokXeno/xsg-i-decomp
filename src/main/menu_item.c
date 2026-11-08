@@ -172,7 +172,7 @@ enum MenuItemMode {
 #define MENU_SEGMENT_ROW_RARE_ITEM 0x4
 #define MENU_SEGMENT_ROW_COMPLETE 0x7
 
-/* Segment tile size and the top of the pulse animations (alpha). */
+/* Segment tile size and the maximum alpha of the pulse animation. */
 #define MENU_SEGMENT_TILE_WIDTH 72
 #define MENU_SEGMENT_TILE_HEIGHT 58
 #define MENU_SEGMENT_PULSE_MAX 120
@@ -309,7 +309,7 @@ typedef struct MenuItemWorkData {
     signed char agwsCount;
     u8 unmodeled_65[0x70 - 0x65];
     signed char selectedParty;
-    u8 unmodeled_71; /* +0x65 */
+    u8 unmodeled_71; /* +0x71 */
     signed char sortSelection; /* +0x72 */
     u8 unmodeled_73;
     u8 segmentSelection; /* +0x74 */
@@ -627,7 +627,6 @@ extern const char sortText[8];
 extern const char rareItemTagText[16];
 extern const char locationTagText[16];
 
-/* Original storage of this TU without a C reader; typed from its original bytes. */
 extern const char sortHeaderText[24];
 
 extern const char MenuItemInfoLabelsText[];
@@ -679,12 +678,13 @@ static short MenuItemAgws[8];
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 static char msg00_1_0036D698[10];
 
+/* Returns the MENU_ITEM_USE_* result for item itemId. */
 int MenuItemUseCheck(s16 itemId)
 {
     MenuItemUseData *item;
     u16 attributes;
     int result;
-    /* A special item is unavailable when both game-loop bits are clear. */
+    /* A special item is unavailable when neither game-loop bit is set. */
     int specialUnavailable = MENU_ITEM_USE_BLOCKED_SPECIAL;
 
     if (itemId == 0) {
@@ -707,6 +707,10 @@ int MenuItemUseCheck(s16 itemId)
     return result;
 }
 
+/*
+ * Per-frame update of the tab strip window: builds it on the first run, slides it in
+ * or out for the current menu mode, and slides each tab message to its target.
+ */
 void MenuItemPasMain(void)
 {
     static const char *msg00[MENU_ITEM_PAS_MESSAGE_COUNT] = {
@@ -760,6 +764,7 @@ void MenuItemPasMain(void)
     for (i = 0; i < MENU_ITEM_PAS_MESSAGE_COUNT; i++)
         tabTarget[i] = 288;
 
+    /* The current list or segment tab slides in; the other tabs stay out of view. */
     switch (MenuWork.mode) {
     case MENU_ITEM_MODE_PICK:
     case MENU_ITEM_MODE_SORT:
@@ -791,6 +796,10 @@ void MenuItemPasMain(void)
     endPrintExtFunc(pas->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET,0);
 }
 
+/*
+ * Updates the help-text window. Circle toggles the help text on list rows; the text
+ * and the window's target position follow the menu mode.
+ */
 void MenuItemInfoMain(void)
 {
     MenuItemInfoWork *info = MenuItemInfo;
@@ -845,6 +854,7 @@ void MenuItemInfoMain(void)
         info->help = 0;
     }
 
+    /* Pick the text for the current mode; segment mode only moves the window. */
     switch (MenuWork.mode) {
     case MENU_ITEM_MODE_LIST:
     case MENU_ITEM_MODE_TARGET:
@@ -890,6 +900,10 @@ void MenuItemInfoMain(void)
     WindowDXMain(&info->window);
 }
 
+/*
+ * Updates the separator lines around the tab strip: initializes them on the first run,
+ * then slides them toward the current tab and fades them in or out.
+ */
 void MenuItemLineMain(void)
 {
     MenuItemLineWork *line = MenuItemLine;
@@ -940,6 +954,7 @@ void MenuItemLineMain(void)
         slide.centerLength = 40;
     }
 
+    /* The lines fade in for the list-style modes and fade out for the others. */
     switch (menu->mode) {
     case MENU_ITEM_MODE_LIST:
     case MENU_ITEM_MODE_TARGET:
@@ -969,6 +984,10 @@ void MenuItemLineMain(void)
     }
 }
 
+/*
+ * Updates the party status windows: builds them on the first run, then moves them to
+ * their target positions for the current mode and places the selection cursor.
+ */
 void MenuItemStatusMain(void)
 {
     MenuItemPartyStatusWork *status = MenuItemStatus;
@@ -1047,6 +1066,7 @@ void MenuItemStatusMain(void)
         targetX[i] = MENU_ITEM_SLIDE_X_HIDDEN;
         targetY[i] = MENU_ITEM_STATUS_TOP_Y + (i - status->scrollStart) * MENU_ITEM_STATUS_ROW_PITCH;
     }
+    /* Rows slide in for the item list and the target choice; a single target also scrolls them. */
     switch (MenuWork.mode) {
     case MENU_ITEM_MODE_LIST:
         if (MenuWork.flags & MENU_ITEM_FLAG_MODE_ENTERED) {
@@ -1123,6 +1143,7 @@ void MenuItemStatusMain(void)
         }
         WindowDXMain(&status->windows[i]);
     }
+    /* One cursor on the selected member; scroll arrows show while the list scrolls. */
     if (MenuWork.selectionMode == MENU_ITEM_USE_SINGLE) {
         status->cursors[0].x = status->windows[MenuWork.selectedParty].x + 3;
         status->cursors[0].y = status->windows[MenuWork.selectedParty].y + status->windows[MenuWork.selectedParty].height / 2 - 4;
@@ -1154,6 +1175,10 @@ void MenuItemStatusMain(void)
     endPrintExtFunc(status->style, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_RESET, 0);
 }
 
+/*
+ * Updates the AGWS status rows: builds them on the first run, slides them in for the
+ * item list and target modes, and fills each row's name and HP display.
+ */
 void MenuItemStatusAgwsMain(void)
 {
     MenuItemAgwsStatusWork *status = MenuItemStatusAgws;
@@ -1215,6 +1240,7 @@ void MenuItemStatusAgwsMain(void)
             }
         }
     }
+    /* Each row's name, HP label and HP number follow its window. */
     i = 0;
     while (i < MenuWork.agwsCount) {
         MenuItemHpParameters *parameters = func_00A11108(MenuItemAgws[i], attack, defense);
@@ -1244,6 +1270,10 @@ void MenuItemStatusAgwsMain(void)
     }
 }
 
+/*
+ * Rebuilds the item list rows (tab 0) from a fresh item sort. Unusable and restricted
+ * items are flagged, and the list window is set up for one column.
+ */
 void MenuItemListMake00(void)
 {
     MenuListEntry *rows = MenuListGet(0);
@@ -1289,6 +1319,7 @@ void MenuItemListMake00(void)
     WindowSPSetSelect(&MenuItemList->window, MenuKeepSelect);
 }
 
+/* Refreshes the item list rows and window without changing the sort; flags as MenuItemListMake00. */
 void MenuItemListMake00_1(void)
 {
     MenuListEntry *rows = MenuListGet(0);
@@ -1330,6 +1361,10 @@ void MenuItemListMake00_1(void)
     WindowSPSetSelect(&MenuItemList->window, MenuKeepSelect);
 }
 
+/*
+ * Builds the equipment list for category 0 to 5 (weapon, accessory or bullet, for
+ * characters or for AGWS) in two columns.
+ */
 void MenuItemListMake01(int category)
 {
     MenuItemListWork *work;
@@ -1369,6 +1404,7 @@ void MenuItemListMake01(int category)
     WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[category * MENU_ITEM_KEEP_SELECT_SIZE + 10]);
 }
 
+/* Builds the event item list in two columns. */
 void MenuItemListMake02(void)
 {
     struct MenuItemListWork *list;
@@ -1391,6 +1427,10 @@ void MenuItemListMake02(void)
     WindowSPSetSelect(&MenuItemList->window, &MenuKeepSelect[MENU_ITEM_KEEP_SELECT_SIZE]);
 }
 
+/*
+ * Updates the item list window: rebuilds its rows when the tab changes or a sort is
+ * requested, and slides it to the position for the current mode.
+ */
 void MenuItemListMain(void)
 {
     MenuItemListWork *list = MenuItemList;
@@ -1422,6 +1462,7 @@ void MenuItemListMain(void)
     if (MenuWork.mode == MENU_ITEM_MODE_CLOSE)
         list->motion = MENU_ITEM_LIST_MOTION_HIDDEN;
 
+    /* Rebuild the rows on a tab change, idle at the position for the tab and mode, then follow target or sort. */
     switch (list->motion) {
     case MENU_ITEM_LIST_MOTION_START:
         list->motion = MENU_ITEM_LIST_MOTION_REBUILD;
@@ -1502,6 +1543,10 @@ void MenuItemListMain(void)
     }
 }
 
+/*
+ * Updates the sort-selection window: builds it on the first run, slides it in while the
+ * sort mode is active, and places its sprite on the current tab's sort choice.
+ */
 void MenuItemSelectMain(void)
 {
     MenuItemSelectWork *select = MenuItemSelect;
@@ -1579,7 +1624,7 @@ void MenuItemSelectMain(void)
         WindowDXMain(&select->window[0]);
         select->sprite.x = (unsigned short)*currentX + 144;
 
-        /* Eight tabs share the ability, normal and six category sort choices. */
+        /* One sort choice per tab: items, event items, then six equipment categories. */
         tab = menu->listTab;
         sortMode = menu->sortChoices[tab];
         select->sprite.y = (unsigned short)select->window[0].y + ((signed char)sortMode / 2) * 24 + 2;
@@ -1587,6 +1632,10 @@ void MenuItemSelectMain(void)
     }
 }
 
+/*
+ * Updates the header icons: two scroll arrows and one icon per tab, each with a slide
+ * animation; the tab icons also bounce.
+ */
 void MenuItemIconMain(void)
 {
     MenuItemIconWork *icon = MenuItemIcon;
@@ -1634,6 +1683,7 @@ void MenuItemIconMain(void)
         return;
     }
 
+    /* Slide the icons away for the close and done modes, and back for the others. */
     switch (MenuWork.mode) {
     case MENU_ITEM_MODE_CLOSE:
         icon->pulseDirection = 0;
@@ -1687,6 +1737,7 @@ void MenuItemIconMain(void)
             icon->sprites[i].red = icon->sprites[i].green = icon->sprites[i].blue = -128;
         }
     }
+    /* The selected tab's icon bounces up while the icons are shown; the others bounce back down. */
     tabBounceIterator = tabBounce;
     for (i = MENU_ITEM_ICON_ARROWS; i < MENU_ITEM_ICON_COUNT; i++) {
         int tab = i - MENU_ITEM_ICON_ARROWS;
@@ -1714,6 +1765,10 @@ void MenuItemIconMain(void)
     }
 }
 
+/*
+ * Updates the sort hint message. It slides in while the list is shown, and its text
+ * color follows the selection direction.
+ */
 void MenuItemExMain(void)
 {
     MenuItemExWork *ex = MenuItemEx;
@@ -1759,6 +1814,10 @@ void MenuItemExMain(void)
     }
 }
 
+/*
+ * Returns the robo-part bits for part (1 to 9). The value is larger when the part's
+ * event flag is set.
+ */
 int subRoboPartsCheck(int part)
 {
     /* Reading the result back through its address keeps it in memory until
@@ -1806,12 +1865,17 @@ int subRoboPartsCheck(int part)
     return *resultAddress;
 }
 
+/*
+ * Updates the segment (robo parts) map: initializes its rows and sprites on the first
+ * run, slides it in and out, moves the selection in browse state, and draws it.
+ */
 void MenuItemSegmentMain(void)
 {
     MenuItemSegmentWork *segment = MenuItemSegment;
     int i;
     MenuItemSegmentAlignedWork *aligned = (MenuItemSegmentAlignedWork *)segment;
 
+    /* State machine: init, slide in, browse the segments, slide out. */
     switch (segment->state) {
     case MENU_ITEM_STATE_INIT: {
         segment->x = -512;
@@ -2057,6 +2121,7 @@ void MenuItemSegmentMain(void)
     if (segment->rows[0].pulse == MENU_SEGMENT_PULSE_MAX || segment->rows[0].pulse == 0) {
         segment->rows[0].pulseDirection = -segment->rows[0].pulseDirection;
     }
+    /* Draw each segment tile with its marks, complete glow and emphasis highlight. */
     for (i = 0; i < MENU_SEGMENT_COUNT; i++) {
         segment->rows[i].sprites[0].x = segment->x + (i % MENU_SEGMENT_COLUMNS) * MENU_SEGMENT_TILE_WIDTH;
         segment->rows[i].sprites[0].y = segment->y + (i / MENU_SEGMENT_COLUMNS) * MENU_SEGMENT_TILE_HEIGHT;
@@ -2188,6 +2253,7 @@ void MenuItemSegmentMain(void)
             {{29, 13, -35}, {136, 152, 152}}
         };
 
+        /* Owned robo parts: each draws its sprite, selection mark, triangle and label. */
         for (i = 0; i < 6; i++) {
             if ((aligned->ownedParts >> i) & 1) {
                 aligned->mapSprites[i + 1].x = aligned->mapSprites[0].x + partX[i];
@@ -2256,6 +2322,10 @@ void MenuItemSegmentMain(void)
     }
 }
 
+/*
+ * Runs one frame of the item menu. The first call carves the widget work areas from
+ * the shared buffer. Returns the picked item in pick mode, otherwise 0.
+ */
 int MenuItem(void)
 {
     MenuItemWorkData *menu;
@@ -2267,6 +2337,7 @@ int MenuItem(void)
     if (MenuWork.mode == MENU_ITEM_MODE_INIT) {
         MenuItemArena *arena = MainMenuWorkEnd;
         void *cursor = MainMenuWorkEnd;
+        /* Each widget is carved in turn, with the padding the original layout has after it. */
         void *allocation;
         MenuItemPasWork *pas;
         MenuItemInfoWork *info;
@@ -2379,6 +2450,7 @@ int MenuItem(void)
         MenuWork.busy--;
     }
 
+    /* Input for the current mode. */
     switch (MenuWork.mode) {
     case MENU_ITEM_MODE_PICK:
         return menu->selectedItem;
@@ -2665,6 +2737,7 @@ int MenuItem(void)
         break;
     }
 
+    /* Update every widget for this frame. */
     MenuItemPasMain();
     MenuItemInfoMain();
     MenuItemStatusMain();
@@ -2709,8 +2782,7 @@ const char fhpText[8] = "\001FHP";
 
 const char sortText[8] = "Sort";
 
-/* JP: 仮
- * EN: Temporary */
+/* Text: Temporary */
 const char temporaryText[8] = "\262\276";
 
 const char debugItemLabel[8] = "item";
@@ -2757,8 +2829,7 @@ const char MenuDigit8Text[8] = "8";
 
 const char MenuDigit9Text[8] = "9";
 
-/* Genuine conversion: the colour bytes of this .rodata text are rewritten at
- * run time (MenuItemExMain), as through the original's char string literal. */
+/* MenuItemExMain writes the color bytes of this text at run time. */
 static char * msg00_4_0036D6B8[] = { (char *)sortHeaderText };
 
 const MenuItemInfoLabels infoLabels = { { MenuItemInfoLabelsText + 16, MenuItemInfoLabelsText + 40, MenuItemInfoLabelsText + 56 }, MenuItemInfoLabelsText + 80, MenuItemCancelText };
@@ -2769,8 +2840,7 @@ const char itemSavePointOnlyText[48] = "This item can only be used at save point
 
 const MenuItemSpriteIds iconSpriteTable = { { 0x0112, 0x0110, 0x0322, 0x0323, 0x0324, 0x0325, 0x0328, 0x0326, 0x0327, 0x0329 } };
 
-/* JP: ：Sort
- * EN: : Sort */
+/* Text: a control-code prefix, then Sort */
 const char sortHeaderText[24] = "\014\200\200\200\036\002\241\247Sort";
 
 MenuItemInfoHelpLabels infoHelpTable[1] = { { itemCannotBeUsedHereText, itemSavePointOnlyText } };

@@ -21,6 +21,7 @@ static void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime);
 static void _RgCharMgrCallDisp(RgCharMgr *manager);
 static void _DestructCharMgr(RgCharMgr *manager);
 
+/* Returns the index of pChar in characters, or -1 when it is absent. */
 static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar)
 {
     unsigned int index;
@@ -33,6 +34,7 @@ static int _FindPtr(RgChar *characters[], unsigned int count, RgChar *pChar)
     return -1;
 }
 
+/* Appends pChar to the table of count entries and returns the new count. */
 static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
                               RgChar *pChar)
 {
@@ -51,6 +53,7 @@ static unsigned int _EntryPtr(RgCharMgr *manager, unsigned int count,
     return count + 1;
 }
 
+/* Removes pChar from the table by shifting the later entries down; returns the new count. */
 static unsigned int _DeletePtr(RgCharMgr *manager, unsigned int count,
                                RgChar *pChar)
 {
@@ -79,6 +82,7 @@ RgChar *RgCharMgrEntry(RgCharMgr *manager, RgChar *pChar)
     return pChar;
 }
 
+/* Removes a character from the manager and frees it. */
 void RgCharMgrFree(RgCharMgr *manager, RgChar *pChar)
 {
     unsigned int count;
@@ -92,6 +96,7 @@ void RgCharMgrFree(RgCharMgr *manager, RgChar *pChar)
     RgCharFree(pChar);
 }
 
+/* Returns the first character of the given type, or null. */
 RgChar *RgCharMgrSearch(RgCharMgr *manager, int type)
 {
     unsigned int index;
@@ -109,6 +114,7 @@ RgChar *RgCharMgrSearch(RgCharMgr *manager, int type)
     return 0;
 }
 
+/* Returns 1 when count more characters would reach RG_CHAR_MAX, else 0. */
 int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
 {
     if (manager == 0) {
@@ -120,6 +126,7 @@ int RgCharMgrIsFullOfBuffer(RgCharMgr *manager, int count)
     return 1;
 }
 
+/* Frees every character whose type is RG_CHAR_TYPE_DELETED. */
 void RgCharMgrGC(RgCharMgr *manager)
 {
     RgChar *deleted_chars[RG_CHAR_MAX];
@@ -141,6 +148,7 @@ void RgCharMgrGC(RgCharMgr *manager)
     }
 }
 
+/* Runs each character's control, working from a copy of the list. */
 void _RgCharMgrCallControl(RgCharMgr *manager)
 {
     RgChar *chars[RG_CHAR_MAX];
@@ -159,6 +167,7 @@ void _RgCharMgrCallControl(RgCharMgr *manager)
     }
 }
 
+/* Draws each character, working from a copy of the list. */
 void _RgCharMgrCallDisp(RgCharMgr *manager)
 {
     RgChar *chars[RG_CHAR_MAX];
@@ -177,6 +186,7 @@ void _RgCharMgrCallDisp(RgCharMgr *manager)
     }
 }
 
+/* Advances each character's time, working from a copy of the list. */
 void _RgCharMgrCallPassTime(RgCharMgr *manager, float deltaTime)
 {
     RgChar *chars[RG_CHAR_MAX];
@@ -210,6 +220,7 @@ void RgCharMgrDisp(RgCharMgr *manager)
     _RgCharMgrCallDisp(manager);
 }
 
+/* Frees all characters, then resets the manager to empty. */
 static void _DestructCharMgr(RgCharMgr *manager)
 {
     RgChar *characters[RG_CHAR_MAX];
@@ -244,6 +255,7 @@ void InitRgCharMgr(RgCharMgr *manager)
     manager->count = 0;
 }
 
+/* Returns the singleton character manager, creating it on first use. */
 RgCharMgr *InstanceOfRgCharMgr(void)
 {
     RgCharMgr *manager;
@@ -257,6 +269,7 @@ RgCharMgr *InstanceOfRgCharMgr(void)
     return manager;
 }
 
+/* Empties the singleton character manager and returns it. */
 RgCharMgr *InstanceOfRgCharMgrClear(void)
 {
     RgCharMgr *manager = InstanceOfRgCharMgr();
@@ -265,6 +278,7 @@ RgCharMgr *InstanceOfRgCharMgrClear(void)
     return manager;
 }
 
+/* Logs the character count, then the type and method pointers of each character. */
 void RgCharMgrDump(RgCharMgr *manager)
 {
     unsigned int index;

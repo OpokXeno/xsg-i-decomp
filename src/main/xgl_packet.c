@@ -49,6 +49,7 @@ static XglPacket *pCurrentPacket;
 
 static XglPacket *pSendPacket;
 
+/* For each texture transfer entry of `set`, appends a load-image packet and a reference to its data. */
 void xglPacketTextureTrans(XglTextureTransSet *set)
 {
     XglLoadImage image;
@@ -84,6 +85,7 @@ void xglPacketTextureTrans(XglTextureTransSet *set)
     }
 }
 
+/* Appends a direct block to the current packet that sets TEX0_1 from the display buffer, then the setup block. */
 void xglPacketInterpolate(void)
 {
     XglPacket *packet = pCurrentPacket;
@@ -106,6 +108,7 @@ XglPacket *xglPacketGetCurrent(void)
     return pCurrentPacket;
 }
 
+/* Initializes the two packet buffers and makes buffer 0 the current packet. */
 void xglPacketInit(void)
 {
     sceVif1PkInit(&asPacketSource[0], XGL_PACKET_BUFFER_0);
@@ -119,6 +122,7 @@ void xglPacketInit(void)
     pSendPacket = 0;
 }
 
+/* Ends the current packet, makes it the pending send packet, and switches the current packet to the other buffer. */
 void xglPacketMove(void)
 {
     u8 **cursor;
@@ -139,6 +143,7 @@ void xglPacketMove(void)
     sceVif1PkReset(pCurrentPacket);
 }
 
+/* Starts a VIF1 DMA chain for the pending send packet, if there is one. */
 void xglPacketSend(void)
 {
     if (pSendPacket != 0) {

@@ -48,7 +48,7 @@ typedef struct McRequestState {
     unsigned char unmodeled_18[8];
 } McRequestState;
 
-/* State and its 0x60-byte full-path buffer share the original workspace. */
+/* The state and its 0x60-byte full-path buffer are stored together. */
 typedef struct McRequestStorage {
     McRequestState state;
     char fullPath[0x60];
@@ -139,7 +139,7 @@ static int create_sub2(int result);
 void FlushCache(int mode);
 int sceMcDelete(int port, int slot, const char *path);
 
-/* The request routines zero and use this complete memory-card save workspace. */
+/* The complete save-data image, MC_SAVE_DATA_SIZE bytes, shared with the game's save code. */
 unsigned char SaveData[MC_SAVE_DATA_SIZE] = { 0 };
 
 static char base_0_00491770[18];
@@ -166,6 +166,11 @@ static McRequestEntry queue[MC_QUEUE_SIZE];
 
 static McRequestEntry savedMcRequest;
 
+/*
+ * Queues a memory-card request for card in the next free slot and copies its
+ * arguments there; result receives the outcome. Paths are copied up to
+ * MC_PATH_MAX bytes.
+ */
 int xglMcRequest(int card, int operation, const McRequestArguments *arguments,
                  int *result)
 {
@@ -234,6 +239,7 @@ int xglMcGetState(void)
     return mw.state.status.combined;
 }
 
+/* Clears the request queue and the request phase, and resets the map name. */
 void xglMcReset(void)
 {
     queue_top = 0;
@@ -243,7 +249,7 @@ void xglMcReset(void)
 }
 
 /*
- * Converts one EUC-JIS double-byte character to Shift-JIS in place: hi and
+ * Converts one EUC-JP double-byte character to Shift-JIS in place: hi and
  * lo hold the character's lead and trail byte, EUC-encoded on entry and
  * Shift-JIS on return. Called from xglMcSetMapName while building a memory
  * card map name.
@@ -286,6 +292,11 @@ static void xglMcEUC2SJIS(u8 *hi, u8 *lo)
     *lo = sjis_lo;
 }
 
+/*
+ * Fills mapNameBuffer with the Shift-JIS map name made from the two EUC-JP names:
+ * the primary name, a 0x8145 separator when the secondary name also fits, the
+ * secondary name, then zero characters up to MC_MAP_NAME_CHARS + 1 entries.
+ */
 void xglMcSetMapName(const unsigned char *primary_euc_name,
                      const unsigned char *secondary_euc_name)
 {
@@ -299,6 +310,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
     destination = mapNameBuffer;
     character_count = 0;
 
+    /* Primary name, converted up to the character limit. */
     if (primary != 0)
     {
         lead = primary[0];
@@ -331,6 +343,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
         }
     }
 
+    /* Secondary name, converted into the room left. */
     if ((secondary_euc_name != 0) && (character_count < MC_MAP_NAME_CHARS))
     {
         lead = secondary_euc_name[0];
@@ -354,6 +367,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
         }
     }
 
+    /* Zero-fill the rest of the buffer. */
     while (character_count < MC_MAP_NAME_CHARS + 1)
     {
         destination[0] = 0;
@@ -363,6 +377,7 @@ void xglMcSetMapName(const unsigned char *primary_euc_name,
     }
 }
 
+/* Writes the slot number (slot + 1) as two digit codes starting at 'O', at buffer[227] and buffer[229]. */
 void xglMcWriteMapName(char *buffer, int slot)
 {
     int value = slot + 1;
@@ -373,6 +388,12 @@ void xglMcWriteMapName(char *buffer, int slot)
     buffer[227] = value % 10 + 'O';
 }
 
+/*
+ * Builds the path in mw.fullPath from the base name and card (two digits, or '*'
+ * when card is negative). selector 0 repeats the prefix, 1 appends /icon.sys,
+ * 2 appends /xenosaga.ico, -1 ends the path, and any other value appends '/'
+ * and the string at that address. Returns mw.fullPath.
+ */
 char *xglMcSetFullPath(int card, int selector)
 {
     char *dest;
@@ -447,10 +468,12 @@ char *xglMcSetFullPath(int card, int selector)
     return mw.fullPath;
 }
 
+/* Starts a queued request: issues the first memory-card call for it and sets the phase its completion is handled in. */
 static void execute(McRequestEntry *request)
 {
     int command = request->operation;
 
+    /* Each case issues one card call and sets the phase its completion uses. */
     switch (command)
     {
     case MC_REQUEST_FREE_SPACE:
@@ -529,6 +552,11 @@ static void execute(McRequestEntry *request)
     }
 }
 
+/*
+ * Steps the save-file creation: delete the old file, write the icon and system
+ * files, then the save data with its checksum, and close it. Returns 1 when the
+ * sequence is finished, -1 on error and 0 while steps remain.
+ */
 static int create_sub2(int result)
 {
     int slot = ((McWorkspaceView *)&mw)->request.slot;
@@ -548,6 +576,7 @@ static int create_sub2(int result)
             sceMcOpen(((McWorkspaceView *)&mw)->request.card, 0, (char *)&mw + 32, MC_OPEN_WRITE_CREATE);
         }
     } else {
+        /* Subphases: 0 to 2 write the icon file, 3 closes it, 4 opens the save data, 5 writes the payload, 6 closes it. */
         if (result < 0)
             goto store_error;
         save = (McSaveHeader *)((McWorkspaceView *)&mw)->request.buffer;
@@ -597,6 +626,11 @@ store_error:
     return -1;
 }
 
+/*
+ * Advances the memory-card state machine once per call: completes the current
+ * phase from the sync result, then starts the next queued request or polls the
+ * next card. Returns the card status.
+ */
 int xglMcMain(void)
 {
     XglClock clock;
@@ -631,6 +665,7 @@ int xglMcMain(void)
         result = 0;
         command = 0;
     }
+    /* Each phase handles the completion of the call it started. */
     switch (mw.state.phase) {
     case MC_PHASE_POLL_INFO:
         if (queue_end == queue_top) {
@@ -650,6 +685,7 @@ int xglMcMain(void)
             }
         }
         mw.state.phase = MC_PHASE_IDLE;
+    /* Idle; also reached after a finished info poll. Start a queued request or poll the next card. */
     case MC_PHASE_IDLE:
         if (queue_end != queue_top) {
             request = &queue[queue_top];
@@ -672,6 +708,7 @@ int xglMcMain(void)
         sceMcClose(result);
         return MC_STATUS_BUSY_BOTH;
     case MC_PHASE_DIRECTORY:
+        /* Clear the slot table, then mark each listed save's slot and record the latest save. */
         stored_result = result;
         *((McWorkspaceView *)&mw)->request.result = stored_result;
         slots = (unsigned char *)((McWorkspaceView *)&mw)->request.buffer;
@@ -747,6 +784,10 @@ int xglMcMain(void)
     return mcMainStatus[0];
 }
 
+/*
+ * Loads size bytes of the file at path into buffer, waiting for each card call.
+ * Returns the bytes read, or a negative error.
+ */
 int xglMcEasyLoad(const char *path, void *buffer, int size)
 {
     int card_type;
@@ -791,6 +832,7 @@ int xglMcEasyLoad(const char *path, void *buffer, int size)
     return read_result;
 }
 
+/* Writes size bytes from buffer to a file at path, waiting for each card call. Returns 0, or -1 on failure. */
 int xglMcEasySave(const char *path, const void *buffer, int size)
 {
     int card_type;
@@ -825,6 +867,7 @@ int xglMcEasySave(const char *path, const void *buffer, int size)
     return result >= 0 ? 0 : -1;
 }
 
+/* Initializes the memory-card library and resets the request queue. */
 void xglMcInitial(void)
 {
     sceMcInit();

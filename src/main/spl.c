@@ -7,13 +7,17 @@
 #define SPL_KEY_KIND_MASK 0x0f
 #define SPL_KEY_KIND_WEIGHTED 8       /* samples already carry their weights */
 #define SPL_KEY_SCHEME_MASK 0xf0
-#define SPL_KEY_SCHEME_LENGTH 0x00    /* cumulative chord length */
-#define SPL_KEY_SCHEME_LENGTH2 0x20   /* cumulative length, setWeightLen2 */
+#define SPL_KEY_SCHEME_LENGTH 0x00    /* cumulative sum of point vector lengths, setWeightLen */
+#define SPL_KEY_SCHEME_LENGTH2 0x20   /* cumulative chord length between points, setWeightLen2 */
 #define SPL_KEY_SCHEME_INDEX 0x30     /* sample index */
 #define SPL_KEY_SCHEME_TIME 0x40      /* last_key frame time */
 
 float minCardinalInterval = 9.9999999747524271e-07f;
 
+/*
+ * Stores the samples and prepares the spline for weight_mode: 1 builds the cardinal
+ * coefficients, 2 weights the points by accumulated length, 3 does both.
+ */
 void SPL_init(SplineState *spline, unsigned int weight_mode,
               const float *samples, unsigned int sample_count,
               unsigned int component_count)
@@ -41,6 +45,7 @@ void SPL_init(SplineState *spline, unsigned int weight_mode,
     }
 }
 
+/* Sets each point's weight to the sum of the chord lengths between consecutive points before it. */
 static void setWeightLen2(SplinePoint *points, int count)
 {
     int index = 4;
@@ -67,6 +72,7 @@ static void setWeightLen2(SplinePoint *points, int count)
     }
 }
 
+/* Sets each point's weight to the sum of the vector lengths of the points before it. */
 static void setWeightLen(SplinePoint *points, int count)
 {
     int index = 0;
@@ -93,6 +99,7 @@ static void setWeightLen(SplinePoint *points, int count)
     }
 }
 
+/* Gives the points weights from 0 up to duration in equal steps. */
 static void setWeightTime(SplinePoint *points, int count, float duration)
 {
     int index = 0;
@@ -108,6 +115,7 @@ static void setWeightTime(SplinePoint *points, int count, float duration)
     }
 }
 
+/* Gives the points their index as weight: 0, 1, 2, ... */
 static void setWeightIndex(SplinePoint *points, int count)
 {
     int index = 0;
@@ -122,6 +130,10 @@ static void setWeightIndex(SplinePoint *points, int count)
     }
 }
 
+/*
+ * Sets up a spline over samples: weights the points by the scheme in first_key unless they
+ * already carry weights, then prepares the coefficients for interpolation_mode.
+ */
 void SPL_init2(SplineState *spline, int interpolation_mode, float *samples,
                int sample_count, unsigned int component_count)
 {
@@ -160,6 +172,7 @@ void SPL_init2(SplineState *spline, int interpolation_mode, float *samples,
     }
 }
 
+/* Builds the cardinal spline terms (linear, quadratic, cubic) of every component from the samples. */
 static void SPL_cardinalInit(SplineState *spline)
 {
     struct SplineWorkspace *workspace = (struct SplineWorkspace *)SCRATCHPAD_BASE;
@@ -184,6 +197,7 @@ static void SPL_cardinalInit(SplineState *spline)
         float *last_curvature = &workspace->second_derivative[last];
 
         {
+            /* Build the interval and slope tables, then forward-eliminate the system. */
             segment = 0;
             if (segment < last) {
                 unsigned int stride = spline->component_count + 1;
@@ -219,6 +233,7 @@ static void SPL_cardinalInit(SplineState *spline)
             }
         }
 
+        /* Back-substitute for the second derivatives. */
         workspace->second_derivative[0] = 0.0f;
         *last_curvature = 0.0f;
         for (segment = penultimate; segment > 0; --segment) {
@@ -228,6 +243,7 @@ static void SPL_cardinalInit(SplineState *spline)
                 workspace->diagonal[segment];
         }
 
+        /* Derive the quadratic, linear and cubic terms of each segment for this component. */
         segment = 0;
         if (segment <= final_interval) {
             float (*curvatures)[32] = &workspace->second_derivative;
@@ -262,6 +278,7 @@ static void SPL_cardinalInit(SplineState *spline)
     } while (component < components);
 }
 
+/* Returns the value of component index (0-based) at frame. Returns 0 for weight modes other than 0 and 1. */
 float SPL_getValue(void *spline, int index, float frame)
 {
     SplineState *state = spline;
@@ -283,6 +300,7 @@ float SPL_getValue(void *spline, int index, float frame)
     if (samples[sample_offset] <= frame)
         return samples[sample_offset + index];
     row_base = samples;
+    /* Mode 0 searches forward for the bracketing samples; mode 1 walks back from the last sample. */
     selection = (short)state->weight_mode;
     switch (selection) {
     case 0: {
@@ -344,6 +362,7 @@ float SPL_getValue(void *spline, int index, float frame)
     }
 }
 
+/* Writes the x, y and z spline values at frame into destination, after easing frame by first_key. */
 void SPL_getValueXYZ(float *destination, void *state, float frame)
 {
     const SplineState *spline = state;
@@ -374,6 +393,7 @@ void SPL_getValueXYZ(float *destination, void *state, float frame)
     cubic = &spline->coefficients[SPL_CUBIC_TERM];
     sample_count = spline->sample_count;
 
+    /* Ease frame with the curve selected by first_key (modes 0 to 3). */
     easing_mode = spline->first_key;
     switch (easing_mode) {
     case 0:
@@ -414,6 +434,7 @@ void SPL_getValueXYZ(float *destination, void *state, float frame)
         return;
     }
 
+    /* Modes 0 and 2 interpolate linearly between samples; modes 1 and 3 use the cubic terms. */
     weight_mode = (short)spline->weight_mode;
     switch (weight_mode) {
     case 0:

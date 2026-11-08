@@ -11,9 +11,7 @@
 
 #define SPRITE_UV(u, v, width, height) { (u), (v), (width), (height) }
 
-/* EE scratchpad RAM base (src/ov01/gr_gp_init.c's grPacketSend and
- * src/ov01/m_gs.c's MGsGPTerm build the same VIF1 direct-mode packet at the
- * same address). */
+/* EE scratchpad RAM base, used for VIF1 direct-mode packets. */
 #define END_PRINT_SCRATCHPAD ((void *)SCRATCHPAD_BASE)
 
 /* Size of the screen the print routines clip to. */
@@ -322,8 +320,6 @@ extern void sceVif1PkCnt(XglPacket *packet, int count);
 extern void sceVif1PkOpenDirectHLCode(XglPacket *packet, int mode);
 extern void sceVif1PkCloseDirectHLCode(XglPacket *packet);
 
-/* PrintCircleCore (this TU, still asm) draws into the scratchpad buffer this
- * function points it at. */
 static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *circle);
 
 extern void endSpriteSet(PrintSpriteInfo *sprite, int flags);
@@ -742,8 +738,7 @@ static UvClutEntry uv_clut[26] = {
     { umn3_uv, 0x000FDB00 },
 };
 
-/* 511 callback entries plus the adjacent terminal/overflow entry. The
- * scaffold's printFuncTableEnd label is the interior address PrintFunc[511]. */
+/* 511 callback entries plus one terminal entry. */
 #define PRINT_FUNC_MAX 511
 static PrintFuncEntry PrintFunc[PRINT_FUNC_MAX + 1];
 
@@ -783,6 +778,7 @@ void endPrintInit(void)
     eMessageSpriteReset();
 }
 
+/* Sends each window texture of the directory at WindowTexAddrGet(0) to packet: a GS state block, then the data. */
 void endPrintWinTexLoad(XglPacket *packet)
 {
     int i;
@@ -806,6 +802,7 @@ void endPrintWinTexLoad(XglPacket *packet)
     }
 }
 
+/* Runs every queued print callback, then resets the queue and the message sprites. */
 static void PrintFlush(FontDrawCursor *context)
 {
     PrintFuncEntry *cursor;
@@ -827,6 +824,7 @@ static void PrintFlush(FontDrawCursor *context)
     eMessageSpriteReset();
 }
 
+/* Appends a deferred print callback and its parameter to the queue; resets the queue when it overflows. */
 void endPrintExtFuncPack(void (*func)(FontDrawCursor *context, int param), int param)
 {
     PrintFuncEntry *entry;
@@ -843,6 +841,7 @@ void endPrintExtFuncPack(void (*func)(FontDrawCursor *context, int param), int p
     entry->func = NULL;
 }
 
+/* Emits the GS state packet (texture, alpha, clamp and test) for a print; bit 0 of flag selects the CLUT texture. */
 static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag)
 {
     u64 *command;
@@ -880,6 +879,7 @@ static void endPrintInfoSet(FontDrawCursor *context, int clut, int flag)
     xglPrimAddGifTagDirect(context->packet, command, count + 1);
 }
 
+/* Fills the size, color and/or cell fields of a sprite, as selected by flags. */
 void endSpriteSet(PrintSpriteInfo *sprite, int flags)
 {
     unsigned int entry;
@@ -899,6 +899,7 @@ void endSpriteSet(PrintSpriteInfo *sprite, int flags)
     }
 }
 
+/* Emits one textured sprite's GIF packet from its uv cell, position, size and depth. */
 static void subPrintSprite(FontDrawCursor *context, PrintSpriteInfo *sprite)
 {
     int *words;
@@ -954,6 +955,10 @@ static void PrintSprite00(FontDrawCursor *context, PrintSpriteInfo *sprite)
     subPrintSprite(context, sprite);
 }
 
+/*
+ * Emits a textured quad from four vertices. In origin-and-size mode the far
+ * corners are derived first; both modes then convert positions to GS coordinates.
+ */
 static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
 {
     int cornerU[4];
@@ -996,6 +1001,7 @@ static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
         }
         break;
     }
+    /* Texture corners in tristrip order: (u, v), (u, v + h), (u + w, v), (u + w, v + h). */
     cornerU[0] = table[entry].u * 16;
     cornerU[1] = cornerU[0];
     cornerU[3] = (table[entry].u + table[entry].width) * 16;
@@ -1030,6 +1036,7 @@ static void PrintSprite01(FontDrawCursor *context, PrintSpriteQuad *sprite)
     xglPrimAddGifTagDirect(context->packet, context->work.qwords, 13);
 }
 
+/* Draws one point primitive at the point's position, with its color and depth. */
 static void PrintPoint(FontDrawCursor *context, PrintPointInfo *point)
 {
     int *words;
@@ -1057,6 +1064,7 @@ static void PrintPoint(FontDrawCursor *context, PrintPointInfo *point)
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 3);
 }
 
+/* Emits a line strip starting at line and ending at the first point whose depth is 0. */
 static void subPrintLine(FontDrawCursor *context, PrintPointInfo *line)
 {
     int *words;
@@ -1105,6 +1113,7 @@ static void PrintLine(FontDrawCursor *context, int lineAddress)
     subPrintLine(context, (PrintPointInfo *)lineAddress);
 }
 
+/* Emits a line strip through the points from line while their terminator is nonzero. */
 static void PrintLine2(FontDrawCursor *context, PrintLinePoint *line)
 {
     int *words;
@@ -1147,6 +1156,7 @@ static void PrintLine2(FontDrawCursor *context, PrintLinePoint *line)
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, qwords);
 }
 
+/* Sends a tristrip ribbon through the scratchpad packet; the points run until the first with depth 0. */
 void endPrintDirectRibbon(PrintPointInfo *ribbon)
 {
     XglPacket *packet;
@@ -1202,6 +1212,7 @@ void endPrintDirectRibbon(PrintPointInfo *ribbon)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/* Emits a tristrip ribbon GIF packet from ribbon through the first point whose depth is 0. */
 static void subPrintRibbon(FontDrawCursor *context, PrintPointInfo *ribbon)
 {
     int *words;
@@ -1249,6 +1260,10 @@ static void PrintRibbon(FontDrawCursor *context, int ribbonAddress)
     subPrintRibbon(context, (PrintPointInfo *)ribbonAddress);
 }
 
+/*
+ * Draws a text tag one character sprite at a time. A leading TAG_TEXT_RIGHT_ALIGN
+ * byte right-aligns the string.
+ */
 static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
 {
     PrintSpriteInfo sprite;
@@ -1265,6 +1280,7 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
     text = tag->text;
     x = tag->x;
     endPrintInfoSet(context, CLUT_TAG_NUM, 1);
+    /* Measure a right-aligned tag first; the draw pass starts shift pixels to the left. */
     if (*text == TAG_TEXT_RIGHT_ALIGN) {
         start = text + 1;
         measure = start;
@@ -1309,6 +1325,7 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
     sprite.color[2] = tag->color[2];
     sprite.color[3] = tag->color[3];
     baseHeight = sprite.height;
+    /* Draws the characters up to the first digit; a digit is drawn as its column and ends the call. */
     while ((character = *text) != 0) {
         if ((unsigned char)(character - 'A') < 26) {
             sprite.uv = *text - 'A' + TAG_UV_UPPER_A;
@@ -1354,6 +1371,7 @@ static void PrintTagFont(FontDrawCursor *context, PrintTagFontInfo *tag)
     }
 }
 
+/* Sets the GS scissor to rect clipped to the print screen; draws nothing when rect starts past the right or bottom edge. */
 static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
 {
     u64 *scratch;
@@ -1399,6 +1417,7 @@ static void ScissorSet(FontDrawCursor *context, PrintRect *rect)
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
+/* Restores the scissor to the render state's full size. */
 static void ScissorReset(FontDrawCursor *context)
 {
     u64 *scratch;
@@ -1412,6 +1431,10 @@ static void ScissorReset(FontDrawCursor *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 2);
 }
 
+/*
+ * Draws a number with the digit sprites, or a leading minus sign for negative
+ * values. flags pick the digit style (low nibble) and right alignment (bit 4).
+ */
 static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
 {
     PrintSpriteInfo sprite;
@@ -1473,6 +1496,10 @@ static void PrintNumber(FontDrawCursor *context, PrintNumberInfo *number)
     }
 }
 
+/*
+ * Draws a window frame: tiled interior strips when the frame is tall enough,
+ * then the eight border pieces.
+ */
 static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
 {
     short left[8];
@@ -1512,6 +1539,7 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
     words[2] = frame->color[1];
     words[3] = frame->color[3];
     words += 4;
+    /* Interior fill: strips of up to WINDOW_TILE_SIZE rows from win_uv[WINDOW_INTERIOR_UV]. */
     if (windowHeight >= WINDOW_BORDER_BOTH_SIDES + 1) {
         int remaining = windowHeight - WINDOW_BORDER_BOTH_SIDES;
         int strips;
@@ -1560,6 +1588,7 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
         }
         count = strips * 4 + 3;
     }
+    /* Border: eight pieces from win_uv[0..7], placed by the left/top/width/height tables. */
     frameX = frame->x;
     frameY = frame->y;
     frameWidth = frame->width;
@@ -1614,6 +1643,7 @@ static void PrintWindow(FontDrawCursor *context, PrintFrameInfo *frame)
     xglPrimAddGifTagDirect(context->packet, command, count + i * 4 + 1);
 }
 
+/* Draws the eight border pieces of a PrintUnsignedFrameInfo window frame. */
 static void PrintFrame(FontDrawCursor *context, int param)
 {
     const PrintUnsignedFrameInfo *frame;
@@ -1704,6 +1734,7 @@ static void PrintFrame(FontDrawCursor *context, int param)
     xglPrimAddGifTagDirect(context->packet, command, i * 4 + 3);
 }
 
+/* Sends the thumbnail image reference and draws its quad at the thumbnail's position and depth. */
 static void PrintThumbnail(FontDrawCursor *context, PrintThumbnailInfo *thumbnail)
 {
     int *words;
@@ -1723,6 +1754,10 @@ static void PrintThumbnail(FontDrawCursor *context, PrintThumbnailInfo *thumbnai
     sceVif1PkAddDirectDataN(context->packet, ThumDrawEnv_2, 12);
 }
 
+/*
+ * Writes the GIF packet for a circle (a trifan of pointCount rim points) into
+ * buffer and sends it on packet.
+ */
 static void PrintCircleCore(XglPacket *packet, void *buffer, PrintCircleInfo *circle)
 {
     u64 *header;
@@ -1802,6 +1837,7 @@ static void FontTexReload(FontDrawCursor *context)
     xglFontReloadTexture(context, 2);
 }
 
+/* Flushes the texture cache, then sends each window texture of *window to the packet. */
 static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
 {
     u64 *scratch;
@@ -1835,6 +1871,7 @@ static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
     sceVif1PkOpenDirectHLCode(context->packet, 0);
 }
 
+/* Sets the back-buffer frame and Z state from the render state's draw_back_value. */
 static void DrawBackSet(FontDrawCursor *context)
 {
     u64 *scratch;
@@ -1854,6 +1891,7 @@ static void DrawBackSet(FontDrawCursor *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
 
+/* Restores the back-buffer frame and Z state from the render state's draw_back_reset_value. */
 static void DrawBackReset(FontDrawCursor *context)
 {
     u64 *scratch;
@@ -1873,6 +1911,7 @@ static void DrawBackReset(FontDrawCursor *context)
     sceVif1PkAddDirectDataN(context->packet, scratch, 4);
 }
 
+/* Draws a full-screen sprite over the 512x448 print area with the color-only test. */
 static void ScreenClear(FontDrawCursor *context)
 {
     u64 *scratch;
@@ -1896,6 +1935,7 @@ static void ScreenClear(FontDrawCursor *context)
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
 }
 
+/* Writes the Z buffer over rect without touching color. */
 static void ZScissor(FontDrawCursor *context, PrintRect *rect)
 {
     u64 *scratch;
@@ -1919,6 +1959,7 @@ static void ZScissor(FontDrawCursor *context, PrintRect *rect)
     sceVif1PkAddDirectDataN(context->packet, context->work.qwords, 5);
 }
 
+/* Draws a back-buffer quad as a textured tristrip; each vertex takes its UV pair from quad->uv in a fixed order. */
 static void PrintBackSprite(FontDrawCursor *context, PrintBackQuad *quad)
 {
     u64 *scratch;
@@ -1975,6 +2016,7 @@ static void PrintBackSprite(FontDrawCursor *context, PrintBackQuad *quad)
     sceVif1PkAddDirectDataN(context->packet, scratch, 13);
 }
 
+/* Draws a textured back-buffer sprite from its position, size and uv origin. */
 static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprite)
 {
     u64 *scratch;
@@ -2029,6 +2071,10 @@ static void PrintBackSprite2(FontDrawCursor *context, PrintBackSpriteInfo *sprit
 /* Glow ribbons drawn around an ether line, each half as opaque as the last. */
 #define ETHER_LINE_GLOW_STEPS 8
 
+/*
+ * Draws an ether line from two endpoints: a line strip, then the glow ribbons
+ * around it.
+ */
 static void PrintEtherLine(FontDrawCursor *context, int param)
 {
     const EtherLineEndpoint *endpoints;
@@ -2075,6 +2121,7 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
     ribbon[2].color[1] = ribbon[3].color[1] = endpoints[1].color[1];
     ribbon[2].color[2] = ribbon[3].color[2] = endpoints[1].color[2];
     ribbon[2].color[3] = ribbon[3].color[3] = endpoints[1].color[3];
+    /* Level endpoints grow the glow up and down; sloped ones grow it on both axes. */
     if (endpoints[0].y == endpoints[1].y) {
         for (i = 0; i < ETHER_LINE_GLOW_STEPS; i++) {
             unsigned int startAlpha;
@@ -2118,6 +2165,10 @@ static void PrintEtherLine(FontDrawCursor *context, int param)
     }
 }
 
+/*
+ * Dispatches a print command: standard commands are queued through func_tbl_4,
+ * extended commands run through xglFontPrintExtFunc.
+ */
 void endPrintExtFunc(int order, int command, void *param)
 {
     if (command < END_PRINT_CMD_EXT_BASE)
@@ -2135,6 +2186,7 @@ extended_command:
     } while (0);
 }
 
+/* Sends the frame-copy template to packet, with element 4 set from tagLow and tagHigh. */
 void endPrintDirectFrameCopy(XglPacket *packet, int tagLow, int tagHigh)
 {
     /* This 12-qword VIF/GIF template is retained across calls; element 4 is
@@ -2162,6 +2214,7 @@ void endPrintDirectFrameCopy(XglPacket *packet, int tagLow, int tagHigh)
     }
 }
 
+/* Sends a line strip through the scratchpad packet; the points run until the first with z 0. */
 void endPrintDirectLine(PrintLinePoint *line)
 {
     XglPacket *packet;
@@ -2217,6 +2270,7 @@ void endPrintDirectLine(PrintLinePoint *line)
     sceVif1PkCloseDirectHLCode(packet);
 }
 
+/* Sets up the context for a full-screen (512x448) decode and runs xglJpegDecode. */
 void endDecodeJpeg(EndDecodeJpegContext *context) {
     int source;
     int destination;
@@ -2237,6 +2291,7 @@ void endDecodeJpeg(EndDecodeJpegContext *context) {
 /* A decoded 512x448 image is sent in two halves of this many quadwords. */
 #define JPEG_HALF_QWORDS 28672
 
+/* Sends a JPEG image as two halves, each with its own GS position block. */
 void endPrintJpeg(PrintJpegInfo *jpeg)
 {
     XglPacket *packet;

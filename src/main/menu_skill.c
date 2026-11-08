@@ -49,6 +49,11 @@ unsigned int SkillCharSkillLvGet(int character_id)
     return skill_levels->level_by_character[character_id - 1];
 }
 
+/*
+ * Spends point_delta skill points of a character toward its next skill level.
+ * Reaching the threshold plays the decide sound and raises the level. Returns 1
+ * when the level is already at its maximum, otherwise 0.
+ */
 int SkillCharPointPlus(int character_id, int point_delta)
 {
     int character_index = (unsigned short)character_id;
@@ -96,6 +101,10 @@ int SkillCharPointPlus(int character_id, int point_delta)
     return 0;
 }
 
+/*
+ * Runs the skill message window: opens it on the first call, then slides it and
+ * its message lines in or out for the current menu state.
+ */
 void MenuSkillPasMain(void)
 {
     SkillPasWork *work = MenuSkillPas;
@@ -136,6 +145,7 @@ void MenuSkillPasMain(void)
         return;
     }
 
+    /* Choose the slide target of the window and each message line from the menu state. */
     windowTarget = -16;
     for (i = 0; i < SKILL_PAS_MESSAGE_COUNT; i++)
         target[i] = 288;
@@ -176,6 +186,10 @@ void MenuSkillPasMain(void)
     }
 }
 
+/*
+ * Runs the help line of the skill menu: opens its window on the first call, then
+ * selects the help text for the current menu state and slides the window.
+ */
 void MenuSkillInfoMain(void)
 {
     MenuSkillInfoWork **workSlot = &MenuSkillInfo;
@@ -238,6 +252,7 @@ void MenuSkillInfoMain(void)
     } else if (PadData.repeat != 0) {
         work->reasonShown = 0;
     }
+    /* Help text for the current menu state. */
     switch (MenuWork.state) {
     case SKILL_CHARACTER:
         eMessageCpy(work->message, characterHelp[0]);
@@ -298,6 +313,7 @@ void MenuSkillInfoMain(void)
     WindowDXMain(&work->window);
 }
 
+/* Runs the party status panels of the skill menu and moves them for the current menu state. */
 void MenuSkillStatusMain(void)
 {
     MenuSkillStatusWork *status = MenuSkillStatus;
@@ -356,6 +372,7 @@ void MenuSkillStatusMain(void)
             targetHeight[i] = 82;
             targetOffset[i] = 0;
         }
+        /* Per-state cursor and panel placement. */
         switch (MenuWork.state) {
         case SKILL_CHARACTER:
             if (MenuWork.flags & MENU_FLAG_ENTER) {
@@ -452,6 +469,10 @@ const char skillExtractSetCancelText[19] = "Extract\nSet\nCancel";
 
 const char skillExtractQuestionText[16] = " Extract skill\?";
 
+/*
+ * Runs the command panel and the item-list panel of the skill menu. Each panel
+ * slides in or out for the current menu state.
+ */
 void MenuSkillMenuMain(void)
 {
     MenuSkillMenuWork *self = MenuSkillMenu;
@@ -516,6 +537,11 @@ void MenuSkillMenuMain(void)
 /* Text: {color #808080}\x1E\x00: Set Search */
 const char skillSetSearchText[19] = "\014\200\200\200\036\000: Set Search";
 
+/*
+ * Runs the two skill ribbons, their tags and numbers, and the message line of the
+ * skill menu. The message is drawn dim when no row is selected or the character
+ * has no skills set.
+ */
 void MenuSkillExMain(void)
 {
     MenuSkillExWork *work = MenuSkillEx;
@@ -552,6 +578,7 @@ void MenuSkillExMain(void)
     default:
         return;
     }
+    /* Ribbon and message slide targets for the current menu state. */
     ribbonTarget[1] = -272;
     ribbonTarget[0] = -272;
     messageTarget = SKILL_OFFSCREEN_RIGHT;
@@ -588,7 +615,7 @@ void MenuSkillExMain(void)
         }
         eNumberMain(&work->number[i]);
     }
-    /* The original patches the colour escape bytes of this string, which lives in read-only data. */
+    /* Writes the colour escape bytes of this message string in place, although it is read-only data. */
     messageColor = (char *)msg00_3_0036DD78[2] + 1;
     unit = func_A191C0(MenuWork.characterNo);
     if (MenuWork.list_select < 0 || unit->setSkill[0] + unit->setSkill[1] + unit->setSkill[2] == 0) {
@@ -604,6 +631,10 @@ void MenuSkillExMain(void)
     eMessageMain(&work->message);
 }
 
+/*
+ * Runs the L1 and R1 arrow sprites of the skill command menu. They slide in while
+ * the command state is active, and pressing L1 or R1 kicks the matching arrow.
+ */
 void MenuSkillL1R1Main(void)
 {
     MenuSkillL1R1Work *self = MenuSkillL1R1;
@@ -638,6 +669,7 @@ void MenuSkillL1R1Main(void)
         return;
     }
 
+    /* Slide targets for the two arrows; pressing L1 or R1 adds a kick to the matching offset. */
     {
         short target[2];
         int menuState = MenuWork.state;
@@ -679,6 +711,10 @@ const char skillNumberedListText[15] = " 1\241\246\n 2\241\246\n 3\241\246";
 
 const char skillSetListText[11] = "Set Skills";
 
+/*
+ * Runs the set-skill list window, which slides in for the command and equip
+ * states and lists the character's three set skills.
+ */
 void MenuSkillSetListMain(void)
 {
     MenuSkillSetListWork *self = MenuSkillSetList;
@@ -732,6 +768,10 @@ void MenuSkillSetListMain(void)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const SkillCategoryIconIds skillCategoryIconTable = { .id = { 265, 266, 772, 773, 774 } };
 
+/*
+ * Runs the category icons of the skill menu. The icons are lit in the learn
+ * state, where left and right move the edge deltas of the arrows.
+ */
 void MenuSkillCategoryMain(void)
 {
     MenuSkillCategoryWork *work = MenuSkillCategory;
@@ -770,6 +810,7 @@ void MenuSkillCategoryMain(void)
     }
 
     {
+        /* Dim every icon first; the learn state lights them again below. */
         for (icon_index = 0; icon_index < SKILL_CATEGORY_ARROW_COUNT; icon_index++) {
             SkillCategoryIcon *icon = &work->icons[icon_index];
 
@@ -878,6 +919,11 @@ void MenuSkillCategoryMain(void)
 /* Text: List{x 656}S.Lv{x 519}S.Pts */
 const char skillListHeaderText[18] = "List\003\220S.Lv\003\007S.Pts";
 
+/*
+ * Fills the learn list for the current tab. A row gets flag 1 (drawn dim) when it
+ * has no prerequisite, is already extracted, or the character's skill level or
+ * skill points are too low.
+ */
 static int MenuSkillListChange00(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -921,6 +967,7 @@ static int MenuSkillListChange00(void)
     return WindowSPSelect(window, 0);
 }
 
+/* Fills the equip list with the character's skills and marks the ones already equipped. */
 static int MenuSkillListChange01(void)
 {
     int *sortRow = MenuSortAddrGet(0);
@@ -951,6 +998,10 @@ static int MenuSkillListChange01(void)
     return WindowSPSelect(window, 0);
 }
 
+/*
+ * Runs the skill list window. It slides in for the learn and equip states, and
+ * draws the level numbers (learn) or the equipped markers (equip) of its rows.
+ */
 void MenuSkillListMain(void)
 {
     MenuSkillListWork *work = MenuSkillList;
@@ -1019,6 +1070,7 @@ void MenuSkillListMain(void)
     case SKILL_LIST_OUT:
     case SKILL_LIST_EQUIP_IN:
         target = SKILL_OFFSCREEN_RIGHT;
+        /* Slide the list window in or out. */
         switch (work->state) {
         case SKILL_LIST_LEARN_IN:
             target = 220;
@@ -1048,6 +1100,7 @@ void MenuSkillListMain(void)
     if (work->visible == 0)
         return;
     WindowSPMain(&work->window);
+    /* Learn rows show their level number (bright when learnable); equip rows show a marker when equipped. */
     if (work->displayMode != SKILL_LIST_DISPLAY_NONE) {
         equippedCount = 0;
         if (work->window.item_count > 0) {
@@ -1105,8 +1158,10 @@ const char skillSetText[4] = "Set";
 
 const char skillDataPath[30] = "data\\endou\\skill\\skilldat.bin";
 
+/* Runs the skill menu for one frame: the character, command, learn, confirm, extract and equip states. */
 void MenuSkill(void)
 {
+    /* Menu entry (state 0): load the skill data, lay out the sub-menu work areas and build the party list. */
     if (MenuWork.state == 0) {
         void *heap;
         PartyAttackPosition *slot;
@@ -1165,6 +1220,7 @@ void MenuSkill(void)
         }
     }
 
+    /* Apply a requested state change and set the enter flag for that frame. */
     if (MenuWork.state != MenuWork.next_state) {
         MenuWork.state = MenuWork.next_state;
         MenuWork.flags |= MENU_FLAG_ENTER;
@@ -1289,7 +1345,7 @@ void MenuSkill(void)
         }
         break;
 
-    /* The accessory list: Circle extracts the skill of the accessory. */
+    /* The accessory list: Circle asks for confirmation before the skill is extracted. */
     case SKILL_LEARN:
         if (MenuWork.flags & MENU_FLAG_ENTER) {
             MenuWork.list_accessory = 0;
@@ -1462,6 +1518,7 @@ void MenuSkill(void)
         break;
     }
 
+    /* Run the sub-menus; each one draws its own part of the screen. */
     MenuWork.flags |= MENU_FLAG_DRAW;
     MenuSkillStatusMain();
     MenuSkillPasMain();

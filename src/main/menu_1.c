@@ -18,12 +18,12 @@
 #define MENU_SCENARIO_MWS_GATE 10
 #define MENU_SCENARIO_ZIGGY_NAMED 108
 
-/* The MWS key event item and Shion's MWS weapon (weapon range index 2). */
+/* The MWS key event item and Shion's MWS weapon id. */
 #define MENU_EVENT_ITEM_SHION_MWS 10
 #define MENU_WEAPON_SHION_MWS 0x45
 
-/* SaveData: option byte read by MenuCursorKeepCheck (menu_system sets it) and
- * the five shop discount levels, one per price rate class. */
+/* SaveData offsets: the cursor-keep option byte (read by MenuCursorKeepCheck)
+ * and the five shop discount levels, one per price rate class. */
 #define SAVE_MENU_CURSOR_KEEP 0x44
 #define SAVE_MENU_DISCOUNT_LEVELS 0x102DC
 
@@ -35,26 +35,25 @@
 #define SAVEMAP_ENTRY_COUNT 0x25
 #define SAVEMAP_NAME_SIZE 0x21
 
-/* MenuNumberTextGet output: at most ten digits plus the terminator and fill. */
+/* Size of the MenuNumberTextGet output: at most ten digits plus the terminator. */
 #define MENU_NUMBER_TEXT_SIZE 0x18
 #define MENU_NUMBER_MAX_DIGITS 10
 
-/* Face tables: the first 12 characters have both sizes, AGWS faces start at
- * MENU_CHAR_AGWS_FIRST; the small table has 16 character entries. */
+/* Face table sizes: the large and AGWS tables hold 12 entries, the small
+ * character table 16. */
 #define MENU_FACE_CHAR_COUNT 12
 #define MENU_FACE_SMALL_COUNT 16
 #define MENU_FACE_KOSMOS_SMALL 0x401
 #define MENU_FACE_KOSMOS_LARGE 0xC01
 
-/* Name tables. */
 #define MENU_CHAR_NAME_COUNT 30
 #define MENU_TAG_COUNT 9
 #define MENU_PARA_COUNT 8
 
-/* Equipment slots per character record. */
 /* WeaponStatus.flags: the weapon is a gun that consumes bullets. */
 #define WEAPON_FLAG_NEEDS_BULLETS 0x100
 
+/* Equipment slots per character record. */
 #define MENU_WEAPON_SLOT_COUNT 3
 #define MENU_ACCESSORY_SLOT_COUNT 3
 #define MENU_SKILL_SLOT_COUNT 3
@@ -69,7 +68,7 @@
  * (bits 0-3 are 0x20-0x23, bits 4-7 are 0x18-0x1B).
  */
 #define MENU_MOUNT_BIT_COUNT 8
-/* Equip-mask (mountMask) bits; the bit pairs 0/1 and 4/5 are alternatives. */
+/* Equip-mask (mountMask) bits, with the pair masks for bits 0/1 and 4/5. */
 enum MenuMountMask {
     MENU_MOUNT_MASK_BIT0 = 0x1,
     MENU_MOUNT_MASK_BIT1 = 0x2,
@@ -164,9 +163,8 @@ typedef struct MenuNumberDigits {
 typedef struct WeaponStatus WeaponStatus;
 
 /*
- * dataWpnGet (ov01/data_unit_org_get.c, still asm) returns weapon weaponId's
- * status record (it rejects ids <= 0); MenuBulletCheck only reads the flag
- * halfword at +0x6, whose bit 0x100 marks a weapon that needs bullets.
+ * Weapon status record returned by dataWpnGet. MenuBulletCheck reads only the
+ * flags halfword at +0x6, whose bit 0x100 marks a weapon that needs bullets.
  */
 struct WeaponStatus {
     unsigned char unmodeled_00[6];
@@ -179,8 +177,8 @@ struct WeaponStatus {
 typedef struct BulletData BulletData;
 
 /*
- * dataAttGet (same TU, still asm) indexes the bullet/attachment table by
- * ammoId; only the owning weapon id short at +0xC is read here.
+ * Bullet/attachment record returned by dataAttGet, indexed by ammoId. Only the
+ * owning weapon id at +0xC is read here.
  */
 struct BulletData {
     unsigned char unmodeled_00[0xC];
@@ -188,13 +186,8 @@ struct BulletData {
 };
 
 /*
- * dataUnitOrgGet's own 0x180-byte per-character record (ov01 VA 0x00a191c0,
- * cross-overlay call under the scaffold label func_A191C0, matching
- * src/main/window_tex_load.c and src/main/menu_para_pt_rate_get.c; not in
- * this image). The three equipped-weapon id halfwords at +0x5E immediately
- * precede the accessory id halfwords src/main/menu_para_pt_rate_get.c models
- * at +0x64 as CharParaData's accessory[3]; only that weapon array is read
- * here.
+ * Per-character record returned by dataUnitOrgGet. Only the equipment and
+ * skill fields read in this file are modeled.
  */
 typedef struct {
     unsigned char unmodeled_00[0x54];
@@ -208,13 +201,6 @@ typedef struct {
     short etherId[MENU_ETHER_SLOT_COUNT]; /* +0x8e */
     short skillId[MENU_SKILL_SLOT_COUNT]; /* +0xa6 */
 } UnitOrgWeapons;
-
-/*
- * dataWpnGet's own record (ov01 VA 0x00a1a3d8). MenuBulletCheck above models
- * its +0x6 flags halfword as WeaponStatus, already accepted and unable to
- * grow, so this call site keeps its own scaffold label func_A1A3D8 (matching
- * src/main/menu_shop.c) for the battle weapon price record it returns.
- */
 
 struct MenuScenarioRange {
     int scenario;
@@ -334,12 +320,11 @@ extern const char menuAgwsName[9];
 extern const char mtnMeqpName[9];
 extern const char gunoMotionName[9];
 
-/* OptMntToPosEquip2 maps the mount code through this asm sibling first. */
 int OptMntToPosEquip(int mountCode);
 
 int xglFlagsGet(int bitOffset, int bitCount);
 
-/* MenuLoadFile is defined in src/main/window_tex_load.c. */
+/* MenuLoadFile is declared in window_tex_load.h. */
 extern void MenuLoadFile(const char *name, void *buffer);
 
 extern WeaponStatus *dataWpnGet(int weaponId);
@@ -431,7 +416,8 @@ static unsigned short opt_mnt_tbl[8] = {
     0x20, 0x21, 0x22, 0x23, 0x18, 0x19, 0x1A, 0x1B
 };
 
-/* Partial callback type: parameter signedness belongs to each accepted comparator. */
+/* Sort comparators. The type has no parameter list because the entries take
+ * both int * and unsigned int * arguments. */
 static void (*f_11[6])()  = { MenuSortSubType00, MenuSortSubType01, MenuSortSubType02, MenuSortSubType03, MenuSortSubType04, MenuSortSubType05 };
 
 static char msg_12[9] = "No data.";
@@ -444,18 +430,16 @@ static const char * f_ukn_name_16[] = { ukunSName, ukunBName };
 
 static const char * f_char_mot_17[3] = { mtnMeqpName, uknGName, menuAgwsName };
 
-/* The monster number digits are rewritten in place through this pointer
- * (case 4 of the motion-name builder), so the view is writable. */
 static char *f_mons_mot_18[] = { (char *)gunoMotionName };
 
 unsigned char ParaDataChangeTbl[] = {
     6, 7, 0, 1, 2, 3, 4, 5
 };
 
-/* MenuNumberTextGet's same-TU assembly writes and returns this buffer. */
+/* Text buffer returned by MenuNumberTextGet. */
 static char msg_2_00532A78[MENU_NUMBER_TEXT_SIZE];
 
-/* MenuFileNameGet builds names into this same-TU filename buffer. */
+/* Buffer that MenuFileNameGet builds file names in. */
 static char fname_13[MENU_FILE_NAME_SIZE];
 
 static int sort[MENU_LIST_COUNT][MENU_LIST_CAPACITY];
@@ -483,6 +467,10 @@ int MenuEquipStealMaskCheck(void)
     return xglFlagsGet(MENU_FLAG_EQUIP_STEAL_MASK, 1) != 0;
 }
 
+/*
+ * Returns the scenario number of the first set event flag found while walking
+ * the range table, or the last scanned scenario when none is set.
+ */
 int MenuScenarioNoGet(void)
 {
     struct MenuScenarioRangeSet ranges = scenarioRangeTable[0].rangeSet;
@@ -512,6 +500,7 @@ int MenuCursorKeepCheck(void)
     return SaveData[SAVE_MENU_CURSOR_KEEP] == 0;
 }
 
+/* Returns the mapex info text of a segment; segments 0 and 1 share the first string, each higher one skips one more NUL-terminated string. */
 char *MenuSegmentInfoTextGet(int segment)
 {
     unsigned char *text = map_ex_text;
@@ -524,6 +513,7 @@ char *MenuSegmentInfoTextGet(int segment)
     return (char *)text;
 }
 
+/* Returns the map name of a segment, found the same way in the mapex map-name block. */
 char *MenuSegmentMapNameGet(int segment)
 {
     unsigned char *text = map_ex_text + MAPEX_MAP_NAME_OFFSET;
@@ -537,6 +527,7 @@ char *MenuSegmentMapNameGet(int segment)
     return (char *)text;
 }
 
+/* Returns the item name of a segment, found the same way in the mapex item-name block. */
 char *MenuSegmentItemNameGet(int segment)
 {
     unsigned char *text = map_ex_text + MAPEX_ITEM_NAME_OFFSET;
@@ -550,6 +541,10 @@ char *MenuSegmentItemNameGet(int segment)
     return (char *)text;
 }
 
+/*
+ * Loads mapex.bin into a 16-byte-aligned buffer at `work`. Mode 0 reads it
+ * from the CD, any other mode uses MenuLoadFile. Returns the end of the buffer.
+ */
 unsigned char *MenuMapExTextLoad(unsigned char *work, int mode)
 {
     unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
@@ -564,6 +559,7 @@ unsigned char *MenuMapExTextLoad(unsigned char *work, int mode)
     return next;
 }
 
+/* Returns the name of the save-map entry for mapId, or the first entry's name when none matches. */
 const unsigned char *MenuSaveMapNameGet(int mapId)
 {
     SaveMapNameEntry *entry = save_map_text;
@@ -581,6 +577,10 @@ const unsigned char *MenuSaveMapNameGet(int mapId)
     return first->names[0];
 }
 
+/*
+ * Loads savemap.bin into a 16-byte-aligned buffer at `work`. Mode 0 reads it
+ * from the CD, any other mode uses MenuLoadFile. Returns the end of the buffer.
+ */
 void *MenuSaveMapTextLoad(void *work, int mode)
 {
     unsigned char *aligned = (unsigned char *)(((u32)work + 0xF) & ~0xF);
@@ -595,6 +595,10 @@ void *MenuSaveMapTextLoad(void *work, int mode)
     return next;
 }
 
+/*
+ * Returns 1 when the character has full HP, or when every party member does
+ * for a negative charId. Returns 0 for MENU_CHAR_NONE.
+ */
 int MenuCharHpCheck(int charId)
 {
     int attack[4];
@@ -628,6 +632,10 @@ int MenuCharHpCheck(int charId)
     return 0;
 }
 
+/*
+ * Returns 1 when the character has full EP, or when every party member does
+ * for a negative charId. Returns 0 for MENU_CHAR_NONE.
+ */
 int MenuCharEpCheck(int charId)
 {
     int attack[4];
@@ -660,6 +668,10 @@ int MenuCharEpCheck(int charId)
     return 0;
 }
 
+/*
+ * Maps the VX-20000 and VX-9000 AGWS ids to their main characters and other
+ * AGWS ids to Shion. Other ids are returned unchanged.
+ */
 int MenuMaryIdChange(int characterId)
 {
     if (characterId == MENU_CHAR_VX_20000) {
@@ -690,6 +702,11 @@ int MenuMainAgwsCheck(int charId)
     return 1;
 }
 
+/*
+ * Formats number as text in a shared buffer and returns it. digitsBeforeUnits
+ * is the digit count (negative for the natural width, at most ten digits);
+ * leadingZeroes == 1 pads the start with zero digits.
+ */
 char *MenuNumberTextGet(long long number, int digitsBeforeUnits, int leadingZeroes)
 {
     MenuNumberDigits digits = numberDigitTexts;
@@ -841,6 +858,11 @@ const char *MenuTagTextGet(int index)
     return tag_name_3[index];
 }
 
+/*
+ * Returns the face EPID of a character for the large (smallPortrait == 0) or
+ * small portrait. KOS-MOS has fixed ids; Chaos to Shion and the AGWS ids use
+ * the face tables.
+ */
 unsigned short MenuFaceEpidGet(int charId, int smallPortrait)
 {
     unsigned short largeFaces[MENU_FACE_CHAR_COUNT];
@@ -898,16 +920,13 @@ const char vx20000Name[9] = "VX-20000";
 
 const char vx10000Name[9] = "VX-10000";
 
-/* JP: カタリナ
- * EN: Catalina */
+/* "Catalina" in katakana (EUC-JP). */
 const char catalinaText[9] = "\245\253\245\277\245\352\245\312";
 
-/* JP: キャシリア
- * EN: Cassiria */
+/* "Cassiria" in katakana (EUC-JP). */
 const char cassiriaText[11] = "\245\255\245\343\245\267\245\352\245\242";
 
-/* JP: ーーーーー
- * EN: ----- */
+/* Five long-vowel marks (EUC-JP), a blank name. */
 const char blankNameText[11] = "\241\274\241\274\241\274\241\274\241\274";
 
 const char ziggurat8Name[11] = "Ziggurat 8";
@@ -922,6 +941,7 @@ const char *MenuParaNameGet2(int index)
     return para_name2_5[index];
 }
 
+/* Returns the name of a character id. Ziggy shows the Ziggurat 8 name before scenario MENU_SCENARIO_ZIGGY_NAMED. */
 const char *MenuCharNameGet(unsigned int charId)
 {
     const char *name = char_name_6[charId];
@@ -934,6 +954,7 @@ const char *MenuCharNameGet(unsigned int charId)
     return name;
 }
 
+/* Returns the text entry for an encoded index: the category is in the high bits, the item id in the low bits. */
 MenuTextEntry *MenuTextGet(int index)
 {
     unsigned int encodedIndex = (unsigned int)index;
@@ -1015,6 +1036,7 @@ MenuTextEntry *MenuTextGet(int index)
     return result;
 }
 
+/* Returns the box flag of an encoded index, or 0 for characters. */
 int MenuBoxChk(int index)
 {
     unsigned int category = (unsigned int)index >> MENU_ENTRY_CATEGORY_SHIFT;
@@ -1044,6 +1066,10 @@ int MenuBoxChk(int index)
     return result;
 }
 
+/*
+ * Increments the box count of an encoded index, or takes the AGWS on for AGWS
+ * entries. Returns -1 for character entries, otherwise 0.
+ */
 int MenuBoxInc(unsigned int index)
 {
     unsigned int category = index >> MENU_ENTRY_CATEGORY_SHIFT;
@@ -1076,6 +1102,7 @@ int MenuBoxInc(unsigned int index)
     return result;
 }
 
+/* Decrements the box count of an encoded index. Returns -1 for character entries, otherwise 0. */
 int MenuBoxDec(unsigned int index)
 {
     unsigned int category = index >> MENU_ENTRY_CATEGORY_SHIFT;
@@ -1105,6 +1132,10 @@ int MenuBoxDec(unsigned int index)
     return result;
 }
 
+/*
+ * Returns the price of an encoded entry with its category rate applied. Mode 0
+ * uses the save's discount levels; mode 1 uses full rates and halves the price.
+ */
 int MenuBoxMoneyGet(int index, int priceMode)
 {
     float rate[MENU_PRICE_RATE_COUNT];
@@ -1132,6 +1163,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
             rate[rateIndex] = 1.0f;
         }
     }
+    /* Base price of the entry, scaled by the rate of its category. */
     if ((unsigned int)(category - 1) < 12U) {
     switch (category) {
     case MENU_CATEGORY_ITEM:
@@ -1197,6 +1229,7 @@ int MenuBoxMoneyGet(int index, int priceMode)
 /* Defined here, not with the data above: in the original object it follows data that the functions above emit into the same section. */
 const int boxPriceTable[MENU_EVENT_ITEM_SHOP_COUNT] = { 400, 100, 100 };
 
+/* Returns the 1-based slot that holds skillId for the character, or 0 when none does. */
 int MenuSkillEquipCheck(short charId, short skillId)
 {
     UnitOrgWeapons *unitWeapons = func_A191C0(charId);
@@ -1210,6 +1243,7 @@ int MenuSkillEquipCheck(short charId, short skillId)
     return 0;
 }
 
+/* Sets skillId in the given slot, or in the first empty slot when slot is negative. */
 void MenuSkillEquip(short charId, short skillId, int slot)
 {
     UnitOrgWeapons *unitWeapons = func_A191C0(charId);
@@ -1265,6 +1299,7 @@ int MenuRWeaponCheck2(int weaponId)
     return weaponId;
 }
 
+/* Returns the mount code of the lowest set bit of the position mask, or 0. */
 unsigned char PosEquipToOptMnt(int posEquip)
 {
     int bit;
@@ -1277,6 +1312,10 @@ unsigned char PosEquipToOptMnt(int posEquip)
     return 0;
 }
 
+/*
+ * Returns the position bit (1 << index in opt_mnt_tbl) for a mount code, 1 for
+ * the first entry, or 0 when the code is not in the table.
+ */
 int OptMntToPosEquip(int mountCode)
 {
     int position = 0;
@@ -1299,6 +1338,7 @@ advance_position:
     return equipmentPosition;
 }
 
+/* OptMntToPosEquip with the single-bit results of the paired positions widened to their pair masks. */
 int OptMntToPosEquip2(int mountCode)
 {
     int posEquip = OptMntToPosEquip(mountCode & 0xFF);
@@ -1319,6 +1359,7 @@ int OptMntToPosEquip2(int mountCode)
     return posEquip;
 }
 
+/* Returns the weapon position number (1-6) of a mount code, or 0 for other codes. */
 int OptMntToWpnPos(int mountCode)
 {
     int weaponPos = 0;
@@ -1348,6 +1389,10 @@ int OptMntToWpnPos(int mountCode)
     return weaponPos;
 }
 
+/*
+ * Returns the mount code for a mount id (1-6). Ids 1 and 2 pick one code of
+ * each pair from the weapon's mount mask.
+ */
 int WpnPosToOptMnt(int mountId, int weaponId)
 {
     BattleWeaponPriceRecord *weapon = 0;
@@ -1418,6 +1463,7 @@ static int wpnInfoGet(int weaponType)
     return (weaponType < MENU_CHAR_AGWS_FIRST) ? MENU_EQUIP_CLASS_CHARACTER : MENU_EQUIP_CLASS_AGWS;
 }
 
+/* Returns 1 when the character can equip the weapon, by its class and character masks. */
 int MenuWeaponEquipCheck(int charId, int weaponId)
 {
     unsigned short characterMask;
@@ -1440,6 +1486,11 @@ int MenuWeaponEquipCheck(int charId, int weaponId)
     return (weapon->characterEquipMask & characterMask) != 0;
 }
 
+/*
+ * Returns the mount code the weapon would take at weaponPosition, or 0 when the
+ * weight limit, its mount masks or the positions taken by the character's other
+ * weapons block it. The weapon in replacementSlot is not counted.
+ */
 int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int replacementSlot)
 {
     UnitOrgWeapons *character;
@@ -1472,6 +1523,7 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     if (charId == MENU_CHAR_AG_05) {
         capacity = MENU_EQUIP_WEIGHT_LIMIT_AG_05;
     }
+    /* Total the weight of the other equipped weapons, then check the new one fits. */
     weight = 0;
     for (equipmentIndex = 0; equipmentIndex < MENU_WEAPON_SLOT_COUNT; equipmentIndex++) {
         if (character->weapon[equipmentIndex] != 0 && equipmentIndex != replacementSlot) {
@@ -1481,6 +1533,7 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     if (capacity < weight + func_A1A3D8(weaponId)->equipWeight) {
         return 0;
     }
+    /* Collect the positions taken by the other weapons and the positions their mount pairs block. */
     requestedPosition = OptMntToPosEquip(WpnPosToOptMnt(weaponPosition, weaponId) & 0xff);
     OptMntToPosEquip2(WpnPosToOptMnt(weaponPosition, weaponId) & 0xff);
     for (equipmentIndex = 0; equipmentIndex < MENU_WEAPON_SLOT_COUNT; equipmentIndex++) {
@@ -1534,6 +1587,7 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
             }
         }
     }
+    /* Blocks each mount bit of the new weapon whose alternative mount bits are already occupied. */
     weapon = func_A1A3D8(weaponId);
     mountMask = weapon->mountMask;
     for (bitIndex = 0; bitIndex < 2; bitIndex++) {
@@ -1577,6 +1631,11 @@ int MenuWeaponEquipPosCheck(int charId, int weaponId, int weaponPosition, int re
     return result;
 }
 
+/*
+ * Returns 1 when the accessory can go in slotIndex (any slot when it is
+ * negative). Returns 0 when the character cannot use it or it conflicts with
+ * the accessories already equipped.
+ */
 int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
 {
     unsigned short characterMask;
@@ -1645,6 +1704,10 @@ int MenuAccessoryEquipCheck(int charId, int accessoryId, int slotIndex)
     return 1;
 }
 
+/*
+ * Returns 0 when the weapon takes no bullets or ammoId is 0. Returns 1 for
+ * ammoId -1, otherwise ammoId when that ammunition belongs to the weapon.
+ */
 int MenuBulletCheck(int weaponId, int ammoId)
 {
     if (weaponId == 0) {
@@ -1662,6 +1725,10 @@ int MenuBulletCheck(int weaponId, int ammoId)
     return (dataAttGet(ammoId)->weaponId ^ weaponId) == 0 ? ammoId : 0;
 }
 
+/*
+ * Returns whether the weapon's bullets apply to charNo: never for Chaos and
+ * Momo, func_A197E8(MENU_CHAR_SHION, 0x3E) for Shion, and the weapon-only check for the others.
+ */
 int MenuBulletCheck2(int weaponId, int charNo)
 {
     switch (charNo) {
@@ -1691,6 +1758,7 @@ int MenuEngineEquipCheck(int charId, int engineId)
     return (dataEngGet(engineId)->equipMask & chrEquipGet(charId)) != 0;
 }
 
+/* Returns the character id whose AGWS id is agwsId, searching ids below MENU_CHAR_BIC_13, or 0. */
 int MenuAgwsPilotCheck(int agwsId)
 {
     int charId = 1;
@@ -1704,6 +1772,7 @@ int MenuAgwsPilotCheck(int agwsId)
     return 0;
 }
 
+/* Returns the summed wagl value of the character's equipped weapons, or 0 when chrNo is 0. */
 int MenuAgwsWaglGet(int chrNo)
 {
     UnitOrgWeapons *org;
@@ -1727,6 +1796,7 @@ int MenuAgwsWaglGet(int chrNo)
     return result;
 }
 
+/* Comparator: puts the entry with the greater sort name first. */
 static void MenuSortSubType05(int *first, int *second)
 {
     const unsigned char *firstName = MenuTextGet(*first)->sortName;
@@ -1750,6 +1820,7 @@ static void MenuSortSubType05(int *first, int *second)
     }
 }
 
+/* Comparator: puts the entry with the smaller sort name first. */
 static void MenuSortSubType04(int *first, int *second)
 {
     const unsigned char *firstName = MenuTextGet(*first)->sortName;
@@ -1772,6 +1843,7 @@ static void MenuSortSubType04(int *first, int *second)
     }
 }
 
+/* Comparator: orders two entries by box count, ascending. */
 static void MenuSortSubType03(int *first, int *second)
 {
     int firstCount = MenuBoxChk(*first);
@@ -1783,6 +1855,7 @@ static void MenuSortSubType03(int *first, int *second)
     }
 }
 
+/* Comparator: orders two entries by box count, descending. */
 static void MenuSortSubType02(int *first, int *second)
 {
     int firstCount = MenuBoxChk(*first);
@@ -1794,6 +1867,7 @@ static void MenuSortSubType02(int *first, int *second)
     }
 }
 
+/* Comparator: orders two values descending. */
 static void MenuSortSubType01(unsigned int *first, unsigned int *second)
 {
     unsigned int firstValue = *first;
@@ -1805,6 +1879,7 @@ static void MenuSortSubType01(unsigned int *first, unsigned int *second)
     }
 }
 
+/* Comparator: orders two values ascending. */
 static void MenuSortSubType00(unsigned int *first, unsigned int *second)
 {
     unsigned int firstValue = *first;
@@ -1816,6 +1891,7 @@ static void MenuSortSubType00(unsigned int *first, unsigned int *second)
     }
 }
 
+/* Sorts a buffer's entries in place with the comparator selected by sortMode. */
 void MenuSortChange(int bufferIndex, int sortMode)
 {
     int *entries = sort[bufferIndex];
@@ -1841,6 +1917,7 @@ void MenuSortChange(int bufferIndex, int sortMode)
     }
 }
 
+/* Returns the number of entries in a sort buffer. */
 int MenuSortCheck(int listIndex)
 {
     int *row = sort[listIndex];
@@ -1858,6 +1935,10 @@ int MenuSortCheck(int listIndex)
     return count;
 }
 
+/*
+ * Fills sort buffer bufferIndex with the encoded ids of the categories in
+ * categoryMask, narrowed by filter, and ends the list with 0.
+ */
 void MenuSortSet(int bufferIndex, int categoryMask, int filter)
 {
     struct MenuWeaponRangePair {
@@ -1888,6 +1969,7 @@ void MenuSortSet(int bufferIndex, int categoryMask, int filter)
     int currentEtherId;
 
     memset(entry, 0, sizeof(sort[bufferIndex]));
+    /* Items: the shop lists every item id, the inventory only the held ones. */
     if (categoryMask & MENU_SORT_ITEM) {
         if (filter == MENU_SORT_FILTER_SHOP) {
             for (id = 1; id < MENU_ITEM_ID_END; id++) {
@@ -1921,6 +2003,7 @@ inventory_bound:
             }
         }
     }
+    /* Weapons: the id range of the filter, then the mount check when a position is given. */
     if ((categoryMask & MENU_SORT_WEAPON) && MenuEquipStealMaskCheck() == 0) {
         __builtin_memcpy(weaponRanges, (const struct MenuWeaponRangePair[9]) {
             { 1, 11 }, { 12, 23 }, { 69, 69 }, { 0, 0 }, { 41, 45 },
@@ -1971,6 +2054,7 @@ inventory_bound:
             }
         }
     }
+    /* Bullets: the id range of one character's bullets, the AGWS ones, or both. */
     if (categoryMask & MENU_SORT_BULLET) {
         id = 0;
         last = 0;
@@ -1991,6 +2075,7 @@ inventory_bound:
             }
         }
     }
+    /* Accessories: by category, optionally only those with an associated id. */
     if ((categoryMask & MENU_SORT_ACCESSORY) && MenuEquipStealMaskCheck() == 0) {
         accessoryCategory = filter;
         requiresAssociatedId = 0;
@@ -2063,6 +2148,7 @@ inventory_bound:
             } while (id < partyCount);
         }
     }
+    /* Skills and ethers of the selected character. */
     if (categoryMask & MENU_SORT_SKILL) {
         selectedCharId = filter;
         for (id = 1; id < MENU_SKILL_ID_END; id++) {
@@ -2118,6 +2204,7 @@ int MenuSortGet(int listIndex, int entryIndex)
     return sort[listIndex][entryIndex];
 }
 
+/* Encodes a 16-bit id with a category in the high bits. */
 int MenuIdChange(short id, int highPart)
 {
     return id + (highPart << MENU_ENTRY_CATEGORY_SHIFT);
@@ -2137,6 +2224,7 @@ void subListMake01(MenuListEntry *entry, int index)
     entry->flag = 0;
 }
 
+/* Builds the display list of a sort buffer and ends it with a "No data." row. */
 MenuListEntry *MenuListMake(int listIndex, int mode)
 {
     MenuListEntry *list = mw_list[listIndex];
@@ -2183,6 +2271,7 @@ const char mtnMeqpName[9] = "mtn_meqp";
 
 const char gunoMotionName[9] = "guno_000";
 
+/* Builds the file name for a resource kind and model or motion id in a shared buffer, and returns it. */
 char *MenuFileNameGet(int id, unsigned int resourceKind)
 {
     short modelId = id;

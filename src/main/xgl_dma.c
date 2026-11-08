@@ -64,10 +64,7 @@ typedef struct XglDmacControl {
 /* D8_SADR is quadword aligned within the 16 KiB scratchpad. */
 #define DMA_SADR_MASK 0x3ff0U
 
-/*
- * The DMA channel table and the MFIFO state are provided by the scaffold data
- * for this TU.  Only the register slots touched by these routines are named.
- */
+/* One EE DMA channel register block; only the slots these routines touch are named. */
 typedef struct XglDmaChannel {
     /* EE DMAC MMIO registers: CHCR +0x00, MADR +0x10, QWC +0x20, TADR +0x30.
      * The hardware updates CHCR while the polling loops wait for completion. */
@@ -115,6 +112,7 @@ static struct MfifoDrainStorage mfifo_drain;
 /* Declared here, not at the top: moving it up changes the original code. */
 #define mfifo_drain mfifo_drain.channel
 
+/* Starts a normal transfer of `count` quadwords at `address` on a direct channel. Scratchpad addresses get the SPR flag. */
 void xglDmaDirectNormal(u32 channel, u32 address, u32 count)
 {
     XglDmaChannel *dma;
@@ -133,6 +131,7 @@ void xglDmaDirectNormal(u32 channel, u32 address, u32 count)
     dma->control = DMA_CHCR_STR | DMA_CHCR_TTE | DMA_CHCR_DIR;
 }
 
+/* Starts a source-chain transfer on a direct channel, beginning at the DMA tag at `address`. */
 void xglDmaDirectSrcChain(u32 channel, u32 address)
 {
     XglDmaChannel *dma;
@@ -157,6 +156,7 @@ void xglDmaBufferReset(XglDmaBuffer *buffer, u32 *address)
     buffer->current = address;
 }
 
+/* Appends a CNT tag and `count` quadwords copied from `source`; returns the new write position. */
 u32 *xglDmaBufferCnt(XglDmaBuffer *buffer, const u32 *source, u32 count)
 {
     u32 *current = buffer->current;
@@ -173,6 +173,7 @@ u32 *xglDmaBufferCnt(XglDmaBuffer *buffer, const u32 *source, u32 count)
     return current;
 }
 
+/* Appends a REF tag for `count` quadwords at `address`; returns the new write position. */
 u32 *xglDmaBufferRef(XglDmaBuffer *buffer, u32 address, u32 count)
 {
     u32 *current = buffer->current;
@@ -186,6 +187,7 @@ u32 *xglDmaBufferRef(XglDmaBuffer *buffer, u32 address, u32 count)
     return current;
 }
 
+/* Appends a CALL tag to `address`; returns the new write position. */
 u32 *xglDmaBufferCall(XglDmaBuffer *buffer, u32 address)
 {
     u32 *current = buffer->current;
@@ -199,6 +201,7 @@ u32 *xglDmaBufferCall(XglDmaBuffer *buffer, u32 address)
     return current;
 }
 
+/* Ends the buffer with an END tag, flushes the cache, starts a source-chain transfer on `channel`, and rewinds the buffer. */
 void xglDmaBufferRequest(XglDmaBuffer *buffer, u32 channel)
 {
     u32 *current = buffer->current;
@@ -210,6 +213,7 @@ void xglDmaBufferRequest(XglDmaBuffer *buffer, u32 channel)
     buffer->current = buffer->start;
 }
 
+/* Sets up the MFIFO ring at `address` for `channel`, with the GIF as the ring's drain. */
 void xglDmaMFIFOSetup(u32 address, u32 size, int channel)
 {
     XglDmaChannel *drain;
@@ -233,6 +237,7 @@ void xglDmaMFIFOSetup(u32 address, u32 size, int channel)
     drain->control = DMA_CHCR_STR | DMA_CHCR_MOD_CHAIN;
 }
 
+/* Waits until the MFIFO ring has room for `count` quadwords, starts the transfer from `spr_address`, and returns the room. */
 u32 xglDmaMFIFOKick(u32 spr_address, u32 count)
 {
     u32 ring_size = *DMAC_RBSR + MFIFO_QUADWORD;
@@ -254,6 +259,7 @@ u32 xglDmaMFIFOKick(u32 spr_address, u32 count)
     return room;
 }
 
+/* Stops the MFIFO drain and waits until the transfer and the drain channel are idle. */
 void xglDmaMFIFOLeave(void)
 {
     XglDmaChannel *drain;

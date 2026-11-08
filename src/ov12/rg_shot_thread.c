@@ -13,6 +13,10 @@ const char shotThreadUnknownStatusFormat[] = "unknown shot thread status %d";
 
 
 
+/*
+ * Attaches weapon to the thread and creates its shot motion controller, unless the
+ * arm type is the back arm. Without a weapon or parent actor the thread is disabled.
+ */
 static void _SetShotThread(RgShotThread *thread, RgWeapon *weapon,
                            int armType, XrgActor *parentActor)
 {
@@ -48,6 +52,7 @@ static void _SetShotThread(RgShotThread *thread, RgWeapon *weapon,
     thread->motionId = RG_SHOT_THREAD_NO_MOTION;
 }
 
+/* Clears a shot thread to the disabled state with no weapon or motion. */
 static void _InitShotThread(RgShotThread *thread)
 {
     if (thread == 0) {
@@ -61,6 +66,7 @@ static void _InitShotThread(RgShotThread *thread)
     thread->active = 0;
 }
 
+/* Allocates a shot thread and clears it. */
 RgShotThread *CreateRgShotThread(void)
 {
     RgShotThread *thread;
@@ -70,6 +76,7 @@ RgShotThread *CreateRgShotThread(void)
     return thread;
 }
 
+/* Detaches the weapon and frees the thread. */
 void DisposeRgShotThread(RgShotThread *thread)
 {
     if (thread == 0) {
@@ -87,12 +94,14 @@ int RgShotThreadGetStatus(RgShotThread *thread)
     return thread->status;
 }
 
+/* Attaches weapon to the thread for the given arm type and parent actor. */
 void RgShotThreadInit(RgShotThread *thread, RgWeapon *weapon, int armType,
                       XrgActor *parentActor)
 {
     _SetShotThread(thread, weapon, armType, parentActor);
 }
 
+/* Stops the motion and any attached shot and returns an enabled thread to idle. */
 void RgShotThreadSleep(RgShotThread *thread)
 {
     if (thread == 0) {
@@ -122,6 +131,10 @@ void RgShotThreadMotOff(RgShotThread *thread)
     }
 }
 
+/*
+ * Starts the motion described by info on an enabled thread and marks it active.
+ * The motion restarts only when its id changes or the thread is idle.
+ */
 void RgShotThreadStart(RgShotThread *thread, RgShotMotStartInfo *info)
 {
     int motion;
@@ -146,6 +159,7 @@ void RgShotThreadStart(RgShotThread *thread, RgShotMotStartInfo *info)
     }
 }
 
+/* Advances the thread's state machine (setup, shoot, stop) and its motion controller by deltaTime. */
 void RgShotThreadPassTime(RgShotThread *thread, float deltaTime)
 {
     int status;
@@ -163,6 +177,7 @@ void RgShotThreadPassTime(RgShotThread *thread, float deltaTime)
         thread->active = 0;
     }
 
+    /* Runs the state machine until a pass leaves the state unchanged. */
     status = thread->status;
     do {
         thread->status = status;
@@ -206,6 +221,7 @@ void RgShotThreadPassTime(RgShotThread *thread, float deltaTime)
         }
     } while (status != thread->status);
 
+    /* Advances the motion controller once the state machine has settled. */
     if (thread->motionId != RG_SHOT_THREAD_NO_MOTION && thread->motCont != 0) {
         RgShotMotContPassTime(thread->motCont, deltaTime);
     }

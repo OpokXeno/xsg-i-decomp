@@ -14,11 +14,9 @@
 extern const char robotSpecAssertSpecNotNil[]; /* "pSpec != NIL" */
 extern const char robotSpecSourcePath[]; /* "../rg_robot_spec.euc.c" */
 /*
- * Scaffold-owned rodata: the assert expression on the auto-homing index
- * ("nID < sizeof(pSpec->m_aAutoHoming) / ..."), the four flag keywords
- * "see-target", "lock-on", "shot", "in-scrn" and the unknown-keyword
- * message. The double pi the value is scaled by (0x00a51f28) is this
- * function's own literal, carved to the C object.
+ * Strings used by the auto-homing reader and its asserts: the auto-homing index
+ * assert expression ("nID < sizeof(pSpec->m_aAutoHoming) / ..."), the four flag
+ * keywords "see-target", "lock-on", "shot", "in-scrn" and the unknown-keyword message.
  */
 extern const char robotSpecAssertAutoHomingIdInRange[];
 extern const char robotSpecAutoHomingSeeTargetKeyword[];
@@ -74,7 +72,7 @@ static int s_nAnaAutoHomingID = 0;
 
 /*
  * Default spec: no character, the built-in tuning values and the
- * "UNARMED" sude (an 8-byte literal at 0x00a51e90, carved to the C object).
+ * "UNARMED" sude.
  */
 void InitRgRobotSpec(RgRobotSpec *pSpec)
 {
@@ -147,6 +145,11 @@ static void _AnaAutoHoming(RgRobotSpec *pSpec, char *pszString, int index)
     }
 }
 
+/*
+ * Reads a robot spec from the text reader through the parameter table, derives
+ * rotateForce and turnRate from the roll and rotation values, and sets the dash mode
+ * from its keyword.
+ */
 void RgRobotSpecReadFromText(RgRobotSpec *pSpec, struct RgReadText *pReader)
 {
     float rotSpdMax;
@@ -205,6 +208,7 @@ void RgRobotSpecReadFromText(RgRobotSpec *pSpec, struct RgReadText *pReader)
     pSpec->rotateForce = vec[0] * 6.2831855f * vec[1] / vec[2];
     pSpec->turnRate = 6.2831855f / rotSpdMax;
 
+    /* An unknown dash-mode keyword leaves the type unchanged. */
     if (strcasecmp(szMode, robotSpecDashModeNormalKeyword) == 0) {
         pSpec->type = RG_DASH_MODE_NORMAL;
     } else if (strcasecmp(szMode, robotSpecDashModeVrKeyword) == 0) {
@@ -218,6 +222,7 @@ void RgRobotSpecReadFromText(RgRobotSpec *pSpec, struct RgReadText *pReader)
     }
 }
 
+/* Logs the tuning values of a robot spec, one XrgLog line per value. */
 void RgRobotSpecDump(RgRobotSpec *pSpec)
 {
     if (pSpec == 0) {

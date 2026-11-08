@@ -1,10 +1,8 @@
 #include "common.h"
 
 /*
- * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
- * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
- * carry RssdWork's type yet (config/header-canon.json, RssdWorkFlags), so that
- * header is included directly.
+ * RssdWork, RssdRequest and RssdCallFunc are declared in src/main/ssd_init.h. The generated
+ * include/main/ssd_init.h cannot carry RssdWork's type yet, so that header is included directly.
  */
 #include "ssd_init.h"
 
@@ -34,6 +32,7 @@ void SsdSetSPDIFMode(int mode)
     RssdCallFunc(RSSD_CMD_SET_SPDIF_MODE, &request, 0, 0);
 }
 
+/* The first argument is unused. */
 void SsdSetSpuVolume(int unused, int volume)
 {
     RssdRequest request;
@@ -43,6 +42,7 @@ void SsdSetSpuVolume(int unused, int volume)
     RssdCallFunc(RSSD_CMD_SET_SPU_VOLUME, &request, 0, 0);
 }
 
+/* The first argument is unused. */
 void SsdSetCDVolume(int unused, int volume)
 {
     RssdRequest request;
@@ -53,15 +53,10 @@ void SsdSetCDVolume(int unused, int volume)
 }
 
 /*
- * These four words are forwarded to RSSD command 0x14 verbatim. On the IOP
- * side (game/extracted-iso/IOP/SSD.IRX SsdSetReverbParameter, 0x00001c58,
- * same name and arity), the low byte of the first word selects an effect
- * type and its high bits select an effect-attribute table entry (0x1ca0/
- * 0x1ca4, stored at the entry's +0x3 by 0x1d24); the second word is stored
- * as a halfword at the entry's +0xa (0x1d30); the third and fourth are
- * stored as bytes at the entry's +0x8/+0x9 (0x1d28/0x1d2c). Beyond
- * "effect-attribute record fields", their numeric meaning is not evidenced
- * by either side.
+ * Forwards the four words unchanged to RSSD command 0x14. On the IOP side, SsdSetReverbParameter
+ * reads the low byte of the first word as an effect type and its high bits as an effect-attribute
+ * entry; the second word is stored as a halfword at that entry's +0xa, the third and fourth as
+ * bytes at +0x8 and +0x9. Their numeric meaning is not established.
  */
 void SsdSetReverbParameter(int effectSelector, int effectAttr1, int effectAttr2, int effectAttr3)
 {

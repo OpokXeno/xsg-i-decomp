@@ -9,6 +9,10 @@ static const char * tbl_0_00367A50[7] = { cfCameraSwitchLabel, modelNumberTagLab
 
 static const char * tbl_1_00367A70[10] = { changeMapLabel, changeLeaderLabel, runBattleLabel, snapLabel, modelFolderLabel, mapFolderLabel, sceneFolderLabel, runCfLabel, runEventLabel, scanlineInterpolationLabel };
 
+/*
+ * Debug resource page: Cross dumps the resources, and the page shows the
+ * work-area end and the in-use id of the first 16 actors.
+ */
 static void PauseMenuPage0(void)
 {
     int y;
@@ -62,6 +66,11 @@ const char cfCameraSwitchLabel[19] = "\243\303\243\306\245\253\245\341\245\351\3
  * EN: == Debug flags == */
 const char debugFlagsHeaderLabel[27] = "\241\341\241\341\241\241\245\307\245\320\245\303\245\260\245\325\245\351\245\260\241\241\241\341\241\341";
 
+/*
+ * Debug flag page. The first call sets each actor's and map unit's bit in the
+ * saved masks to 1 when the unit is not hidden. Up and Down move the cursor,
+ * and Left, Right or Circle toggles the highlighted flag.
+ */
 static void PauseMenuPage2(void)
 {
     int i;
@@ -98,6 +107,7 @@ static void PauseMenuPage2(void)
         }
     }
 
+    /* Move the cursor, wrapping at both ends. */
     if (PadData.half_2c & PAD_UP) {
         GameLoopState.debugCursor--;
     }
@@ -111,6 +121,7 @@ static void PauseMenuPage2(void)
         GameLoopState.debugCursor = 0;
     }
 
+    /* Apply the change to the highlighted row. */
     switch (GameLoopState.debugCursor) {
     case DEBUG_FLAG_ROW_CF_CAMERA_SWITCH:
         if (PadData.half_2c & (PAD_LEFT | PAD_RIGHT | PAD_CIRCLE)) {
@@ -161,6 +172,7 @@ static void PauseMenuPage2(void)
             GameLoopState.target.modelNumberCheck ^= MODEL_CHECK_KIND_FLIP;
         }
         GameLoopState.target.modelNumberCheck += step;
+        /* Circle hides every actor and map unit, then shows only the target. */
         if (PadData.half_28 & PAD_CIRCLE) {
             int slot;
             unsigned int kind;
@@ -182,6 +194,7 @@ static void PauseMenuPage2(void)
                 break;
             }
         }
+        /* The second Circle input restores each unit's visibility from the saved masks. */
         if (PadData.half_2e & PAD_CIRCLE) {
             int slot;
             unsigned int *saved;
@@ -221,6 +234,7 @@ static void PauseMenuPage2(void)
         break;
     }
 
+    /* Draw the header, then one row per flag with the cursor on the selected row. */
     xglFontDebugPrintf(8, 52, debugFlagsHeaderLabel);
     y = 64;
     for (i = 0; i < DEBUG_FLAG_COUNT; i++) {
@@ -346,6 +360,11 @@ char debugPathFormat[3] = "%s";
 
 char scriptJumpIdFormat[4] = "%4d";
 
+/*
+ * Debug menu page of actions and folders. Up and Down move the cursor, Left and
+ * Right change the highlighted value (Cross multiplies the step), and Circle runs
+ * the highlighted action. Each row shows its current value.
+ */
 static void PauseMenuPage3(void)
 {
     int i;
@@ -446,6 +465,7 @@ static void PauseMenuPage3(void)
         }
     }
 
+    /* Circle runs the action of the highlighted row. */
     if (PadData.half_2a & PAD_CIRCLE) {
         switch (GameLoopState.debugCursor) {
         case DEBUG_ROW_CHANGE_MAP: {
@@ -490,6 +510,7 @@ static void PauseMenuPage3(void)
     }
 
     xglFontDebugPrintf(8, 52, debugMenuHeaderLabel);
+    /* Memory line: remain is the size of the last allocated resource, used the sum of the entries before it. */
     last = GAME_RESOURCE_COUNT - 1;
     while (GameResource[last].address == 0 && last != 0) {
         last--;
@@ -544,6 +565,7 @@ static void PauseMenuPage3(void)
                 char fileName[7] = "cf0000";
                 int scriptId = GameLoopState.scriptId;
 
+                /* Two-letter prefix (cf below SCRIPT_ID_EVENT_BASE, ev above), then four decimal digits. */
                 if (scriptId <= SCRIPT_ID_EVENT_BASE - 1) {
                     fileName[0] = 'c';
                     fileName[1] = 'f';
@@ -593,6 +615,7 @@ char noText[5] = "\244\312\244\267";
 
 int DebugMenuResourceSizeAdd = 0;
 
+/* Per-frame entry point of the debug menu: L1 and R1 change the page, then the current page runs. */
 void GameDebugMenu(void)
 {
     int pageStep;

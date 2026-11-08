@@ -2,7 +2,6 @@
 #include "main/maptbl.h"
 #include "maptbl.h"
 
-/* MapFileNameGet indexes group.names by map ID and reads group.count. */
 extern const char MapFileNameMcVok12b[];
 
 extern const char MapFileNameMcVok14b[];
@@ -424,9 +423,7 @@ static char *maptbl0100[32] = {
     (char *)MapFileNameMcEls06h
 };
 
-/* Original group 02 has count zero and a genuine zero-size LOCAL OBJECT.
- * Its empty table shares the following group03 table address; no storage
- * or new DATA credit is assigned to this declaration. */
+/* Group 02 is empty: its table has no entries. */
 static char *maptbl0200[0] = {};
 
 static char *maptbl0300[1] = {
@@ -731,6 +728,7 @@ static char *maptbl1800[22] = {
     (char *)MapModelUdo22Name
 };
 
+/* Name tables per map group. Map id = group * MAP_GROUP_SIZE + index; the last entry is the terminator. */
 MapNameGroup maptbl[MAP_GROUP_COUNT] = {
     {maptbl0000, 58},
     {maptbl0100, 32},
@@ -754,10 +752,8 @@ MapNameGroup maptbl[MAP_GROUP_COUNT] = {
     {0, 0}
 };
 
-/* The retail initialized camera table contains 33 zeroed records. */
-/* Existing Java camera setters establish 33 records of 160 bytes.
- * Both zero-initialized objects are genuine retail .data OBJECTs, not BSS. */
+/* 33 camera definitions, zeroed. The initializer keeps this in .data, not .bss. */
 CfCameraDefinition CfCameraDefine[33] = {{0}};
 
-/* GameCameraStateSave/Restore copies the whole studio camera 0 here. */
+/* Copy of studio camera 0, saved by GameCameraStateSave and restored by GameCameraStateRestore. */
 StudioCamera save_cam = {0};

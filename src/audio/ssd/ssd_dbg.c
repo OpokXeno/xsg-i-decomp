@@ -50,6 +50,10 @@ void SsdMidiDevSetHWEffect(int device_id, int hardware_effect);
 void SsdDebAddEffect(const void *data, int size, int effect_id, short parameter);
 char *NextTextPtr(char *text);
 
+/*
+ * Returns the free SPU memory. When verbose, also prints a report of every SPU
+ * memory block and the free sizes.
+ */
 int SsdCheckSpuMemory(int verbose)
 {
     int spu_free;
@@ -69,6 +73,7 @@ int SsdCheckSpuMemory(int verbose)
         CpuDisableIntr();
         wave_type = SSD_SPU_BLOCK_WAVE;
         line_end = '\n';
+        /* One line per SPU block, following the block links from the first block. */
         do {
             sprintf(text, "  Block %02d : Adrs=0x%06x-0x%06x   Size=0x%06x  %s", ordinal, block->address,
                     block->address + block->size, block->size,
@@ -99,6 +104,7 @@ int SsdCheckSpuMemory(int verbose)
     return spu_free;
 }
 
+/* Creates the debug MIDI device and resets its parameters and channels. */
 void SsdDebOpenDevice(void)
 {
     SsdMidiDevice *device = SsdNewMidiDevice(1, 0, 0);
@@ -108,6 +114,7 @@ void SsdDebOpenDevice(void)
     SsdResetChannelAll(device, 0);
 }
 
+/* Disposes the debug MIDI device. */
 void SsdDebCloseDevice(void)
 {
     SsdDisposeMidiDevice(SsdDebWork.device);
@@ -115,6 +122,7 @@ void SsdDebCloseDevice(void)
     SsdDebWork.channel = 0;
 }
 
+/* Keys on count voices, one per patch entry, all tagged with user_id. */
 void SsdDebWaveKeyon(SsdWavePatch *patch, unsigned int count, int user_id)
 {
     SsdWaveBank *bank = SsdGetWSPtrBank(patch->bank_id);
@@ -135,6 +143,7 @@ void SsdDebWaveKeyon(SsdWavePatch *patch, unsigned int count, int user_id)
     }
 }
 
+/* Copies a wave patch's sample addresses, pitch, envelope and velocity into voice. */
 void SsdDebSetWaveToVoiceControl(SsdChannel *channel, SsdVoice *voice,
                                SsdWavePatch *patch, SsdWaveBank *bank)
 {
@@ -156,6 +165,7 @@ void SsdDebSetWaveToVoiceControl(SsdChannel *channel, SsdVoice *voice,
     voice->flags = SSD_VOICE_FLAG_ALL;
 }
 
+/* Keys off the debug channel's voices tagged with user_id. */
 void SsdDebWaveKeyoff(int user_id)
 {
     SsdChannel *channel = SsdDebWork.channel;
@@ -175,6 +185,7 @@ void SsdMidiDevSetMidiEvent(void)
 {
 }
 
+/* Sets the hardware effect mask on the debug channel and on each of its voices. */
 void SsdMidiDevSetHWEffect(int device_id, int hardware_effect)
 {
     SsdChannel *channel = SsdDebWork.channel;
@@ -187,6 +198,7 @@ void SsdMidiDevSetHWEffect(int device_id, int hardware_effect)
     }
 }
 
+/* Replaces the stored effect with a copy of data and plays it. */
 void SsdDebAddEffect(const void *data, int size, int effect_id, short parameter)
 {
     if (SsdDebWork.effect_data) {
@@ -201,6 +213,7 @@ void SsdDebAddEffect(const void *data, int size, int effect_id, short parameter)
     SsdDebPlayEffect();
 }
 
+/* Plays the stored effect as a normal sequence effect in the selected bank. */
 void SsdDebPlayEffect(void)
 {
     SsdEffectPlayParam parameters[1];
@@ -227,6 +240,7 @@ void SsdDebPlayEffect(void)
     }
 }
 
+/* Returns a pointer to the terminating NUL of text. */
 char *NextTextPtr(char *text)
 {
     while (*text++) {

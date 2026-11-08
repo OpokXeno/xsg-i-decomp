@@ -87,6 +87,10 @@ extern void GameCFSoundMenuReload(void);
 extern const UmnLightTable objectLightTable;
 extern int UmnEventTextMakeWork;
 
+/*
+ * Task callback for a UMN object task: runs its worker while the task is initializing
+ * or running, and removes the task once it has ended. The mode UMN_MODE_NONE ends it.
+ */
 int tskUmnObjectTaskMain(XglTaskPrefix *base) {
     UmnObjectTask *task = (UmnObjectTask *)base;
     UmnObjectTaskWorker worker = task->worker;
@@ -108,6 +112,7 @@ int tskUmnObjectTaskMain(XglTaskPrefix *base) {
     }
 }
 
+/* Adds an object task with the given worker and data to the UMN scheduler. */
 void UmnObjectTaskCreate(UmnObjectTaskWorker worker, void *data) {
     XglTaskScheduler *scheduler = umn_task;
     UmnObjectTask *task = (UmnObjectTask *)xglTaskEntryNext(
@@ -122,6 +127,7 @@ void UmnObjectTaskCreate(UmnObjectTaskWorker worker, void *data) {
         task->zeroedOnCreate[i] = 0;
 }
 
+/* Clears the section state rows, then sets the top-level mode and resets the tab state. */
 void UmnChangeTopLevel(int level) {
     UmnWorkQuadword zero = 0;
     int index = 0;
@@ -150,6 +156,11 @@ static void UmnFirstLoad(void) {
     xglCdReadFile(umnTexturePath, (void *)UmnTexAddr, 0, 1);
 }
 
+/*
+ * Initializes the UMN subsystems in order: the sound bank and sequence, the cube and
+ * texture buffers, the two task schedulers, then the interface, cube, battle-win,
+ * mail and history modules.
+ */
 static void UmnInit(void) {
     int buffer;
     int base;
@@ -195,6 +206,10 @@ static void UmnInit(void) {
     UmnWorkEnd = next + UMN_EVENT_TEXT_BUFFER_SIZE;
 }
 
+/*
+ * Top-level UMN loop: runs the current mode each frame until the mode is cleared, then
+ * tears the menu models down.
+ */
 void UmnMain(void) {
     XglPacket *packet;
 
@@ -218,6 +233,7 @@ void UmnMain(void) {
     UmnChangeTopLevel(UMN_MODE_TOP_MENU);
     UmnFirstLoad();
 
+    /* Per frame: run the current mode, then update the UI, the tasks and the menu model. */
     for (;;) {
         GameSnapShotCheck();
         switch (UmnWork.mode) {
@@ -256,6 +272,7 @@ void UmnMain(void) {
         break;
     }
 
+    /* Tear down: copy the last frame, run the remaining tasks and break every menu model. */
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);
     xglTaskExecute(task_xmx);
@@ -265,6 +282,11 @@ void UmnMain(void) {
     GameCFSoundMenuReload();
 }
 
+/*
+ * Runs the UMN mail screen for menuId as its own entry: sets up lights and memory, waits
+ * for the menu model to become active, runs the mail loop while the mode stays on mail,
+ * then restores the game state.
+ */
 void UmnMain2(int menuId) {
     XglPacket *packet;
     StudioLight *light;
@@ -276,12 +298,14 @@ void UmnMain2(int menuId) {
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.height << 5, sRender.height2 << 5);
 
+    /* Save the game state and enter UMN. */
     GameLoopState.flags |= GAME_FLAG_UMN;
     MenuCfTaikiPush();
     MenuGameDataPush();
     GameCFSoundMenuPurge(0);
     MenuLoadInit();
     xglStudioChange(0);
+    /* Set the studio lights from objectLightTable. */
     light = xglStudioGetLight2();
     lights = objectLightTable;
     xglLightIntensityAmbient(light, &lights.ambient.quadword);
@@ -309,6 +333,7 @@ void UmnMain2(int menuId) {
     WindowTexLoad(0, 1);
     WindowTexLoad(0, 2);
 
+    /* Wait for the menu model to become active, updating the UI each frame. */
     while (!(UmnModelUkn != 0 && UmnModelUkn->active != 0)) {
         UmnInterface2Main();
         MenuModelMain();
@@ -329,6 +354,7 @@ void UmnMain2(int menuId) {
         } while (UmnWork.mode == UMN_MODE_MAIL);
     }
 
+    /* Leave UMN: restore the game state and reload its resources. */
     MenuLoadCancel();
     packet = xglPacketGetCurrent();
     endPrintDirectFrameCopy(packet, sRender.width << 5, sRender.height << 5);

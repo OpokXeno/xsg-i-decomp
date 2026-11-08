@@ -47,6 +47,7 @@ static RgVector ainLightCol_1[XRG_DEFAULT_LIGHT_COUNT] = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 };
 
+/* Writes the normalized directions and the colors of the default lights, then calculates the light set matrix. */
 static void _SetDefaultLight(void) {
     StudioLight *lightSet;
     float *directionDst;
@@ -79,6 +80,7 @@ static void _SetDefaultLight(void) {
     xglLightCalcMatrix(lightSet);
 }
 
+/* Initializes the code and data heaps and the default render state, logging each stage. */
 void XrgSystemInit(void) {
     const char *source_file = xrg_system_init_source_file;
 
@@ -102,6 +104,7 @@ void XrgSystemInit(void) {
 static const char sysInitDisposeHeapDumpLabel[16] = "system dispose";
 static const char sysInitDisposeHeapDumpLabel2[24] = "system dispose 2";
 
+/* Disposes the singletons, dumps and clears both heaps, then calls ACT_init. */
 void XrgSystemDispose(void) {
     RgSingletonDispose();
     RgHeapDump_sub(InstanceOfRgHeap(), sysInitDisposeHeapDumpLabel, xrg_system_init_source_file, 0x85);

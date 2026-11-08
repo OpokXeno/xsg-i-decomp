@@ -37,6 +37,10 @@ void SsdSpuDmaRead(unsigned int spu_address, void *memory, unsigned int size,
 {
     SsdDmaStartTransfer(&SsdWork, spu_address, memory, size, callback, argument, SSD_DMA_OP_READ);
 }
+/*
+ * Queues a transfer of size bytes between memory and the SPU. The transfer starts
+ * at once when the queue was empty; otherwise it is appended to the queue.
+ */
 void SsdDmaStartTransfer(SsdGlobalWork *work, unsigned int spu_address,
                          void *memory, unsigned int size,
                          SsdDmaCallback callback, void *argument, int operation)
@@ -72,10 +76,11 @@ void SsdDmaStartTransfer(SsdGlobalWork *work, unsigned int spu_address,
     if (!(flags & (SSD_FLAG_IN_TRANSFER_INTR | SSD_FLAG_IN_IRQ_INTR)))
         CpuEnableIntr();
 }
+/* Returns the operation of the queued transfer, or 0 when the queue is empty. Bit 0 of wait makes it poll until DMA is not busy. */
 int SsdSpuDmaCompleted(int wait)
 {
     if (wait & 1) {
-        /* The DMA completion interrupt clears bit 1 while this thread polls. */
+        /* The transfer interrupt clears SSD_FLAG_DMA_BUSY (bit 1), which ends this poll. */
         volatile unsigned short *status = (volatile unsigned short *)&SsdWork.flags;
         while (*status & SSD_FLAG_DMA_BUSY)
             ;
@@ -85,6 +90,7 @@ int SsdSpuDmaCompleted(int wait)
     }
     return 0;
 }
+/* Returns the first DMA buffer that is not in use, or 0 when all are in use. */
 SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdGlobalWork *work)
 {
     SsdDmaBuffer *buffer = work->dma_buffers;
@@ -95,6 +101,7 @@ SsdDmaBuffer *SsdGetDmaQueueBuffer(SsdGlobalWork *work)
     }
     return 0;
 }
+/* Interrupt handler for a finished wave transfer: runs its callback and starts the next queued transfer. */
 int SsdWaveTransferInterruptProcess(int channel, void *argument)
 {
     SsdGlobalWork *work = argument;
@@ -114,6 +121,7 @@ int SsdWaveTransferInterruptProcess(int channel, void *argument)
     work->flags &= ~SSD_FLAG_IN_TRANSFER_INTR;
     return 0;
 }
+/* Interrupt handler for the PCM stream: calls the PCM callback with the channel. */
 int SsdStreamInterruptProcess(int channel, void *argument)
 {
     SsdGlobalWork *work = argument;
@@ -124,6 +132,7 @@ int SsdStreamInterruptProcess(int channel, void *argument)
     work->flags &= ~SSD_FLAG_IN_TRANSFER_INTR;
     return 0;
 }
+/* Starts the transfer of the head of the DMA queue. */
 void SsdDmaStartBuffer(SsdGlobalWork *work)
 {
     SsdDmaBuffer *buffer = work->dma_queue;
@@ -139,6 +148,7 @@ void SsdDmaStartBuffer(SsdGlobalWork *work)
         break;
     }
 }
+/* Interrupt handler for the IRQ: calls the IRQ callback with the channel minus one. */
 int SsdIrqInterruptProcess(int channel, void *argument)
 {
     SsdGlobalWork *work = argument;
@@ -150,6 +160,7 @@ int SsdIrqInterruptProcess(int channel, void *argument)
     work->flags &= ~SSD_FLAG_IN_IRQ_INTR;
     return 0;
 }
+/* Clears every DMA buffer, empties the queue and clears the busy flag. */
 void SsdResetDmaManager(void)
 {
     SsdDmaBuffer *buffer = SsdWork.dma_buffers;

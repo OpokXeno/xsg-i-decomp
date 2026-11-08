@@ -2,6 +2,11 @@
 #include "get_method_signature_class.h"
 #include "main/get_method_signature_class.h"
 
+/*
+ * Resolves the method reference at constant-pool `index` of `owner`, searching its
+ * class and then the superclasses.  Returns 0 when the entry is not a method
+ * reference or cannot be resolved.
+ */
 JavaMethod *getMethodSignatureClass(int index, JavaClass *owner)
 {
     ConstantPoolEntry *constant_pool;
@@ -37,6 +42,7 @@ JavaMethod *getMethodSignatureClass(int index, JavaClass *owner)
     return method;
 }
 
+/* Resolves the field reference at `index` of `owner` into `ref`; returns 1 on success, 0 otherwise. */
 int getField(int index, JavaClass *owner, int is_static,
              VMResolvedFieldRef *ref)
 {
@@ -70,6 +76,10 @@ int getField(int index, JavaClass *owner, int is_static,
     return 1;
 }
 
+/*
+ * Returns the class named by the class constant at `index` of `owner`, loading it
+ * on first use and caching it in the constant pool.  Returns 0 on failure.
+ */
 JavaClass *getClass(int index, JavaClass *owner)
 {
     ConstantPoolEntry *constant_pool;
@@ -103,6 +113,7 @@ JavaClass *getClass(int index, JavaClass *owner)
     return class_obj;
 }
 
+/* Returns the field named `name` of the class; a nonzero `flags` (low byte) searches the static fields. */
 JavaField *lookupClassField(void *class_object, void *name, int flags)
 {
     JavaClass *class_link;
@@ -134,6 +145,7 @@ JavaField *lookupClassField(void *class_object, void *name, int flags)
     return 0;
 }
 
+/* Returns the method of `class_obj` itself with the given name and descriptor, or 0 when it has none. */
 JavaMethod *findMethodLocal(JavaClass *class_obj, SceneString *name,
                             SceneString *type)
 {

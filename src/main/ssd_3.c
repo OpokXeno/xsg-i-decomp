@@ -32,10 +32,8 @@ enum {
 };
 
 /*
- * channel is cached at RssdStrWork.pcm_channel right after the call (see
- * src/main/ssd_3.h); volume forwards to the sound server as the stream's
- * initial output level, the same role SsdSetPcmStreamVolume's own second
- * argument plays later.
+ * Initialises a PCM stream on `channel` with `volume`. The channel is kept in
+ * RssdStrWork.pcm_channel.
  */
 void SsdInitPcmStream(int channel, int volume)
 {
@@ -105,10 +103,8 @@ void SsdSetPcmStreamVolume(int channel, int volume)
 }
 
 /*
- * channel is cached at RssdStrWork.vag_channel right after the call. See
- * SsdInitVagStreamMono below for the mono counterpart, which additionally
- * takes a pan value; a stereo stream already spans both output channels and
- * needs no explicit pan.
+ * Initialises a stereo VAG stream on `channel` with `volume`. The channel is
+ * kept in RssdStrWork.vag_channel. The mono variant also takes a pan.
  */
 void SsdInitVagStreamStereo(int channel, int volume)
 {
@@ -222,14 +218,7 @@ int SsdGetVagStreamStatusAll(void)
     return 0;
 }
 
-/*
- * duration follows this TU's own RSSD_CMD_SET_SEQ_* fade convention
- * (src/main/ssd_2.c: SsdSetSeqMasterVolume/Tempo/Note/Panpot and the
- * SsdSetSeqNoteFader/VolumeFader/PanpotFader family all pair a value with a
- * transition length). SsdSetVagStreamVolume below has its own accepted
- * prototype (src/main/game_over.h) confirming its third argument is `pan`
- * instead; this function's third argument has no further reader in this TU.
- */
+/* Sets the pitch of a VAG stream. `duration` is the third command argument. */
 void SsdSetVagStreamPitch(int channel, int pitch, int duration)
 {
     RssdRequest request;
@@ -241,7 +230,6 @@ void SsdSetVagStreamPitch(int channel, int pitch, int duration)
     RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_PITCH, &request, 0, 0);
 }
 
-/* channel, volume, pan: matches the accepted prototype in src/main/game_over.h. */
 void SsdSetVagStreamVolume(int channel, int volume, int pan)
 {
     RssdRequest request;
@@ -253,7 +241,6 @@ void SsdSetVagStreamVolume(int channel, int volume, int pan)
     RssdCallFunc(RSSD_CMD_SET_VAG_STREAM_VOLUME, &request, 0, 0);
 }
 
-/* duration: see SsdSetVagStreamPitch above for the fade-pair convention this follows. */
 void SsdSetVagStreamPanpot(int channel, int panpot, int duration)
 {
     RssdRequest request;

@@ -14,8 +14,6 @@
 #include "ov12/rg_disp.h"
 #include "ov12/rg_font.h"
 
-/* Declared here: functions of other translation units. */
-
 #define RG_DISP_WPN2P_PAINT_PRIO 4
 
 static void _InitDisp(RgDispWpn2P *pDisp);
@@ -85,6 +83,7 @@ static void _UpdateWep(WepInfo *pWep, RgStatus *pRobot)
     }
 }
 
+/* Draws one weapon slot's text row: the weapon name (or UNARMED) and its remaining count. */
 static void _DispWep(WepInfo *pWep, XrgPaint2D *paint, RgBxxPic *weaponPic,
                      RgFont *bulletFont, int x)
 {
@@ -120,6 +119,7 @@ static void _DispWep(WepInfo *pWep, XrgPaint2D *paint, RgBxxPic *weaponPic,
     }
 }
 
+/* Creates the paint layer and gauge of one robot info block and clears its slots. */
 static void _InitRobInfo(RobInfo *pInfo)
 {
     unsigned int i;
@@ -153,6 +153,11 @@ static void _DestructRobInfo(RobInfo *pInfo)
     }
 }
 
+/*
+ * Binds a robot (or null) to one side's info block. The weapon slots, gauge and
+ * board textures are set up only for a non-null robot; side picks the draw ID
+ * and the X position.
+ */
 static void _SetRobInfo(RobInfo *pInfo, RgStatus *pRobot, int side)
 {
     unsigned int i;
@@ -210,6 +215,7 @@ static void _PassTimeRobInfo(RobInfo *pInfo, float deltaTime)
     RgGaugePassTime(pInfo->gauge, deltaTime);
 }
 
+/* Draws one side's weapon rows, dash gauge and board pictures, then flushes the paint. */
 static void _DispRobInfo(RobInfo *pInfo, RgBxxPic *weaponPic, RgFont *bulletFont)
 {
     unsigned int i;
@@ -249,6 +255,7 @@ static void _DispRobInfo(RobInfo *pInfo, RgBxxPic *weaponPic, RgFont *bulletFont
     }
 }
 
+/* Initializes both robot info blocks, the bullet font and the weapon picture. */
 static void _InitDisp(RgDispWpn2P *pDisp)
 {
     RgBattleCommonDataEnv *env;

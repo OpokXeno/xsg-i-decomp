@@ -46,16 +46,16 @@ extern int dataFileLoadNB(const char *filename, void *destination);
 /* The same bit value on CalcUnitParam.flags means AGWS, not enemy. */
 #define SND_SE_UNIT_FLAG_AGWS 0x40u
 
-/* Unprototyped on purpose: sndSeStop calls it with no arguments (jal with no
- * argument setup, ov01:0x00a2db90) while sndSePlay passes (unit, id); the
- * definition below takes (BattleUnit *unit, int id). */
+/* Unprototyped on purpose: sndSeStop calls it with no arguments, while
+ * sndSePlay passes (unit, id) and the definition below takes (BattleUnit *unit, int id). */
 extern int sndBankGet();
 
-/* ov01:0x00a2d1f8. The base of loaded sound-effect bank metadata: one record
- * shaped like sndSeRegDat's element (ov01:0x00a42d18, size 0x68). */
+/* Loaded sound-effect bank metadata: sndSeDat is one record shaped like a
+ * sndSeRegDat element (0x68 bytes). */
 extern SndSeRegDat sndSeDat;
 extern SndSeRegDat sndSeRegDat[SND_SE_REG_COUNT];
 
+/* Clears the sound-effect bank records and sets their load addresses. */
 void sndInit(void)
 {
     int i;
@@ -121,8 +121,8 @@ extern int rnd(int maximum);
 
 /* The caller selects btst/bted records; every live record starts with the
  * unconditional condition 1, so at least one candidate is always written.
- * dataSndStEdNameGet passes its type argument as a third word (daddu $6 before
- * jal dataSndStEdNum, ov01:0x00a2cf40); this body never reads it. */
+ * dataSndStEdNameGet passes its type argument as a third word; this body never
+ * reads it. */
 int dataSndStEdNum(SndStEdData *data, BattleUnit *unit, int type)
 {
     int candidate[8];
@@ -164,15 +164,11 @@ typedef struct {
 } SndMonsEnt;
 
 /*
- * Evaluates one condition code of a station-edit record for unit; the return
- * value is nonzero when the condition holds. Code 0 never holds and code 1
- * always does. Codes 2, 3 and 7 test the unit (unitIdChk, calcIdol2Chk) and
- * codes 4 and 5 test its status or the ether learn table (calcStatGet,
- * dataEtherLearnGet), with an early hold where the first test already passes.
- * Code 6 needs scenario number 10 or more and a monster-set entry whose init
- * record has flag 0x2000; code 8 tests flag 0x80 on the unit table of side 0;
- * codes 9 (ids 0x97..0xBA), 10 (0xA2), 11 (0xAA) and 12 (0xAC) scan the
- * monster set for their ids.
+ * Evaluates one station-edit condition code for unit; nonzero means it holds.
+ * Codes 2 and 3 test side-0 unit ids, 4 and 5 the stat or ether learn table,
+ * 7 calcIdol2Chk(unit). Code 6 needs unitIdChk(0, 2), scenario 10 or later and
+ * a monster-set entry with init flag 0x2000. Code 8 tests flag 0x80 on side-0
+ * units; codes 9 to 12 scan the monster set for their ids.
  */
 int dataSndStEdNumSub(BattleUnit *unit, int condition)
 {
@@ -227,6 +223,7 @@ int dataSndStEdNumSub(BattleUnit *unit, int condition)
     case SND_STED_COND_ALWAYS:
         ret = 1;
         break;
+    /* Holds when any non-null unit of side 0 has flag 0x80 in its work flags. */
     case SND_STED_COND_UNIT_TBL_FLAG:
         n = unitTblGet(0, &tbl);
         i = 0;
@@ -244,6 +241,7 @@ int dataSndStEdNumSub(BattleUnit *unit, int condition)
             return ret;
         }
         break;
+    /* Monster-set scans: each returns whether the set holds a matching id. */
     case SND_STED_COND_MONS_RANGE:
         for (i = 0; m[i].id != 0; i++) {
             if ((unsigned short)m[i].id - SND_CHARA_ID_ENEMY_FIRST < SND_MONS_ID_RANGE_LEN) ret = 1;
@@ -277,9 +275,9 @@ extern char *strcat(char *destination, const char *source);
 
 /*
  * Builds the station-edit sound name for unit from the btst table (type 0x18)
- * or the bted table (any other type). Each record whose unitId is the unit's
- * charaId copies its name into name and appends a digit: '0' plus the running
- * sum of the values dataSndStEdNum picks for the matching records so far.
+ * or the bted table (other types). Each record whose unitId is the unit's
+ * charaId copies its name and appends one digit: '0' plus the sum of the
+ * dataSndStEdNum picks so far.
  */
 char *dataSndStEdNameGet(char *name, BattleUnit *unit, int type)
 {
@@ -330,16 +328,11 @@ static const char *plAgwsMidSeName[3];
 static const char *enemyMidSeName[3];
 
 /*
- * Writes the sound-effect name of seType for unit into name (emptied first)
- * and lowercases it. A player-side unit (not enemy, not AGWS, charaId outside
- * the boss range 0xBB..0xC2) takes the station-edit names for seType 0x18 and
- * 0x19 and otherwise its base name plus plChaMidSeName[seType]. An AGWS unit
- * takes its base name plus plAgwsMidSeName[seType] below 3, else the effect of
- * weaponId[seType - 3] when that is nonzero. Any other unit takes its base name
- * plus enemyMidSeName[seType] below 3, else the effect of
- * normalTechniqueId[seType - 3] when that is nonzero. The base name is
- * sndUnitSeBaseName[charaId] and a null base writes nothing in the table forms; types
- * from 0x1A up name the effect seType - 0x1A directly.
+ * Writes the sound-effect name for seType of unit into name, lowercased. Types
+ * below 0x1A are the unit's base name plus a mid name (station-edit names for
+ * 0x18 and 0x19 on player units); types 3 and up on units name the effect of
+ * the matching weapon or technique. Types 0x1A and up name the effect
+ * seType - 0x1A directly.
  */
 char *dataSndSeNameGet(char *name, BattleUnit *unit, int seType)
 {
@@ -400,9 +393,9 @@ char *dataSndSeNameGet(char *name, BattleUnit *unit, int seType)
 }
 
 /*
- * Declared unprototyped in this TU: dataSndSeLoad2 (ov01:0x00a2d654/
- * 0x00a2d658) and dataSndSeLoad evaluate and pass the owning unit's charaId
- * here even though the body below ignores every argument.
+ * Returns the shared sound-effect registration sndSeDat. Declared unprototyped
+ * in this TU: dataSndSeLoad2 and dataSndSeLoad evaluate and pass the owning
+ * unit's charaId here even though the body below ignores every argument.
  */
 SndSeRegDat *sndSeAdrGet()
 {
@@ -422,11 +415,9 @@ SndSeRegDat *sndSeRegAdrChk(int id)
 }
 
 /*
- * ov01:0x00a2d248. Reuses an existing sound registration if one already
- * matches id; otherwise, for a character id below 0xBB, claims the first
- * free slot in the id's half of sndSeRegDat (0..2 below 0x21, 3..5
- * otherwise) and returns its address, or 0 if none is free or id is 0xBB or
- * above.
+ * Returns the registration for id. If none matches and id is below 0xBB, it
+ * claims the first free slot in the id's half of sndSeRegDat (0..2 below 0x21,
+ * 3..5 otherwise). Returns 0 when no slot is free or id is 0xBB or above.
  */
 SndSeRegDat *sndSeRegAdrGet(int id)
 {
@@ -458,6 +449,7 @@ SndSeRegDat *sndSeRegAdrGet(int id)
     return 0;
 }
 
+/* Clears the registration for id and resets its bank types. Returns 1 when found. */
 int sndSeRegRemove(int id)
 {
     int i;
@@ -476,10 +468,9 @@ int sndSeRegRemove(int id)
 }
 
 /*
- * ov01:0x00a2d388. Reports whether the sound-effect index seType has a
- * registered bank for this unit: a player-side unit outside the boss charaId
- * range (0xBB..0xC2) registers 1..4 and 23, a boss or enemy unit in the
- * 0x97..0xBA charaId range registers 1 and 2, and every other enemy
+ * Reports whether seType has a registered bank for unit. A player-side unit
+ * outside the boss charaId range (0xBB..0xC2) registers 1..4 and 23, a unit in
+ * the 0x97..0xBA charaId range registers 1 and 2, and every other enemy
  * registers 1..5.
  */
 int sndSeRegChk(BattleUnit *unit, int seType)
@@ -518,7 +509,7 @@ static char *sndMuNameExt2 = ".SWD";
 static char *muName[3] = { "BATTLE1", "BATTLE2", "BATTLE3" };
 static char *mu2Name[3] = { "JINGLE1", "JINGLE2", 0 };
 
-/* Readable C spellings for literal data used by the functions below. */
+/* Format strings printed by the functions below. */
 #define SND_SE_LOAD_SUB_ERROR_FORMAT "** dataSndSeLoadSub: err -> (%d) %d\n"
 #define SND_SE_LOAD_SUB_SIZE_FORMAT "** SND read Size = %d\n"
 #define SND_SE_REG_LOAD_SKIP_FORMAT "** dataSndSeRegLoad: skip %d\n"
@@ -538,6 +529,10 @@ typedef struct {
 
 #define SND_SE_LOAD_SKIP_FORMAT "** dataSndSeLoad: skip %d %d\n"
 
+/*
+ * Loads the sound-effect file of seType for unit into work->dest and stores its
+ * size rounded up to whole sectors. Returns 0 when the unit has no file name.
+ */
 int dataSndSeLoadSub(BattleUnit *unit, int seType, SndSeLoadWork *work)
 {
     char name[16];
@@ -597,9 +592,8 @@ int dataSndSeLoad(BattleUnit *unit, int seType)
 }
 
 /*
- * ov01:0x00a2d648. Derives the two tagged-block pointers of the current
- * unit's base sound-effect bank from its loaded file header, unless either
- * is already set.
+ * Derives the sed and swd block pointers of the unit's base sound-effect bank
+ * from its loaded file header, unless either is already set.
  */
 void dataSndSeLoad2(BattleUnit *unit)
 {
@@ -607,10 +601,9 @@ void dataSndSeLoad2(BattleUnit *unit)
     SndSeRegBank *bank;
     SndSeBankHeader *header;
 
-    /* sndSeAdrGet ignores its argument (ov01:0x00a42d18 is a fixed global),
-     * but the caller still evaluates and passes the owning unit's charaId
-     * here (ov01:0x00a2d654/0x00a2d658), matching every other lookup in this
-     * TU that keys off calcUPGet(unit)->charaId. */
+    /* sndSeAdrGet ignores its argument, but the caller still passes the owning
+     * unit's charaId here, matching every other lookup in this TU that keys off
+     * calcUPGet(unit)->charaId. */
     record = sndSeAdrGet(calcUPGet(unit)->charaId);
     bank = &record->bank[0];
     if (bank->sed != 0) {
@@ -625,8 +618,8 @@ void dataSndSeLoad2(BattleUnit *unit)
 }
 
 /*
- * ov01:0x00a2d6a0. Claims a unit sound registration, loads its base bank,
- * then loads three AGWS-specific banks when applicable.
+ * Claims a sound registration for unit, loads its base bank, then loads the
+ * three AGWS-specific banks when the unit is AGWS.
  */
 int dataSndSeRegLoad(BattleUnit *unit)
 {
@@ -666,14 +659,10 @@ int dataSndSeRegLoad(BattleUnit *unit)
 }
 
 /*
- * ov01:0x00a2d7b0. Once the unit's base sound-effect bank file is loaded,
- * resolves every bank's "sed"/"swd" block address from the file's offset
- * table (bank i gets index i + 1), then, for an AGWS unit, relocates the
- * three bank files dataSndSeRegLoad loaded after it from their own headers.
- * The offset table is read as 8-byte records from the file start: record 0
- * is the count, so bank i's offsets are the record after record i. The
- * cursor starts at the file start, not at SndSeBankHeader.offset: the loop
- * head's `lw $2,8($7)` addresses from it.
+ * Resolves each bank's sed/swd addresses from the base file's 8-byte offset
+ * records, read from the file start (record 0 is the count; bank i uses the
+ * record after record i). An AGWS unit also resolves the three bank files
+ * loaded after it, from their own headers.
  */
 void dataSndSeRegLoad2(BattleUnit *unit)
 {
@@ -727,14 +716,10 @@ extern int SsdCheckSpuMemory(int verbose);
 #define SND_SE_TRANS_BANK_ERROR_FORMAT "** sndSeTrans: err -> (%d) %d\n"
 
 /*
- * Sends the loaded sound-effect bank for seId of unit to the SPU. A
- * registered unit (sndSeRegChk) uses the entry sndConvRegNo(seId) of its
- * registration; any other sound uses the first entry of the shared record at
- * sndSeDat. An entry with no loaded file (seType 0) reports and returns 0, as
- * does a damage sound (seId 2) whose bank dmgBankOffs already marks, one
- * whose "sed" block lacks the tag 0x73646573 or is larger than 0x10000 bytes,
- * and one whose "swd" block lacks the tag 0x6D647773. Otherwise both blocks
- * are sent and the result is 1.
+ * Sends the sound-effect bank for seId of unit to the SPU, taken from the unit's
+ * registration (sndSeRegChk) or the shared sndSeDat entry. Returns 0 when no
+ * file is loaded, the damage bank is already marked, or a "sed" or "swd" block
+ * has a bad tag or an oversized "sed"; otherwise sends both and returns 1.
  */
 int sndSeTrans(BattleUnit *unit, int seId)
 {
@@ -789,8 +774,8 @@ int sndSeTrans(BattleUnit *unit, int seId)
 
 extern void xglSoundEffectNormalID(int sound_id, int variant);
 
-/* ov01:0x00a2da80. Plays system sound identifiers below 0x26 on variant 0
- * and reports whether the identifier was valid. */
+/* Plays a system sound identifier below SND_SYS_SE_COUNT on variant 0 and
+ * reports whether the identifier was valid. */
 int sndSysSePlay(int soundId)
 {
     if (soundId >= SND_SYS_SE_COUNT) {
@@ -801,14 +786,9 @@ int sndSysSePlay(int soundId)
 }
 
 /*
- * ov01:0x00a2dab0. Starts sound-effect id on the unit's bank. sndBankGet
- * resolves that bank from the unit the sound belongs to, which reaches
- * sndSePlay as the word sndSeTransPlay stores in the deferred task
- * (lw a0,28(s0) ov01:0x00a2e128) and is handed straight on (no argument setup
- * at the jal, ov01:0x00a2dac8). A damage sound
- * (id 2) plays once per bank: the first one marks the bank in dmgBankOffs and
- * every later one is dropped, and it does not advance the control id the other
- * sounds count with.
+ * Starts sound-effect id on the unit's bank (sndBankGet). A damage sound (id 2)
+ * plays once per bank: the first one marks the bank in dmgBankOffs and later
+ * ones on that bank are dropped. Only the other sounds advance ctrlId.
  */
 int sndSePlay(BattleUnit *unit, int id, int no)
 {
@@ -847,8 +827,8 @@ int sndSeStop(int unused, int pack)
 }
 
 /*
- * ov01:0x00a2dbc8. Searches a sentinel-terminated sound conversion pair
- * table and returns its mapped register number, or minus one.
+ * Searches the sentinel-terminated conversion pair table for id and returns its
+ * mapped register number, or -1.
  */
 int sndConvRegNo(int id)
 {
@@ -865,13 +845,11 @@ int sndConvRegNo(int id)
 }
 
 /*
- * ov01:0x00a2dca0. Picks the sound-effect bank a sound id plays from. Ids
- * 5..22 of a player-side unit (no actor enemy flag, no CalcUnitParam AGWS flag)
- * use bank 2 unless the unit is a boss (charaId 0xBB..0xC2); ids 24, 25 and
- * 26 up use bank 2, ids 3..7 of an enemy actor too; id 1 uses bank 3, every
- * other id but 2 bank 1. The damage sound (id 2) gets one of the banks 4..6:
- * the one dmgBankOffs already keys to this charaId, else the first free one,
- * claimed here; bank 4 when none is free.
+ * Picks the sound-effect bank a sound id plays from. Ids 5..22 of a player-side
+ * unit (not enemy, not AGWS, not a boss) use bank 2, as do ids 24 and up and
+ * ids 3..7 of an enemy; id 1 uses bank 3 and the other ids except 2 use bank 1.
+ * The damage sound (id 2) takes one of banks 4..6: the one dmgBankOffs holds for
+ * its charaId, else the first free one (claimed here), else bank 4.
  */
 int sndBankGet(BattleUnit *unit, int id)
 {
@@ -932,7 +910,7 @@ extern int dataBakpBaseGet(int charaId);
 #define SND_SPID_MODE_FIXED 9
 
 /*
- * ov01:0x00a2de30. Resolves the sound-effect index a battle command plays:
+ * Resolves the sound-effect index a battle command plays:
  * a technique (mode 1) by its category, the technique's or the item's own
  * recorded index (modes 2 and 3) and a fixed one for mode 9; every other mode
  * has none.
@@ -976,10 +954,10 @@ int sndConvSpid(BattleUnit *unit, int mode, int tecId, int itmId)
     return spid;
 }
 
-/* ov01:0x00a2df80. Picks the sound-effect normal-hit-reaction index for a
- * non-enemy unit outside the boss charaId range (0xBB..0xC2), returning
- * 0x21 when that index selects one of the two heavier reaction categories
- * (3 or 5); every other case passes seType through unchanged (result 1). */
+/*
+ * Returns SND_SE_REACT_HEAVY (0x21) for mode 1 on a non-enemy unit outside the
+ * boss charaId range (0xBB..0xC2) when its normal index is 3 or 5; otherwise 1.
+ */
 int sndConvSe(BattleUnit *unit, int mode, int seType)
 {
     int idx;
@@ -1000,8 +978,8 @@ int sndConvSe(BattleUnit *unit, int mode, int seType)
     return result;
 }
 
-/* ov01:0x00a2e050. Returns hit sound 0x22 for normal indices three or five
- * under mode one; otherwise returns two. */
+/* Returns hit sound 0x22 for normal indices three or five under mode one;
+ * otherwise returns two. */
 int sndConvHitSe(BattleUnit *unit, int mode, int seType)
 {
     int idx;
@@ -1021,6 +999,8 @@ int sndConvHitSe(BattleUnit *unit, int mode, int seType)
 extern void *objEntryPure();
 void sndSeTransPlayObj(SndSePlayTask *task);
 
+/* Sends the bank for seId and, if that succeeds, queues a task that plays it
+ * with pan once the SPU DMA has completed. */
 void sndSeTransPlay(BattleUnit *unit, int seId, int pan)
 {
     SndSePlayTask *task;
@@ -1043,10 +1023,10 @@ void sndSeTransPlayObj(SndSePlayTask *task)
 }
 
 /*
- * ov01:0x00a2e160. Loads the three sound files of music set mode into
- * sndMuDat: the normal sequence, the alternate one the set may not have, and
- * the wave table, each laid out right behind the previous one and its size
- * rounded up to a 2048-byte CD sector. Returns whether the set exists.
+ * Loads the sound files of music set mode into sndMuDat: the normal sequence,
+ * the alternate one the set may not have, and the wave table, each laid out
+ * right behind the previous one and its size rounded up to a 2048-byte CD
+ * sector. Returns whether the set exists.
  */
 int dataSndMuLoad(int mode)
 {
@@ -1077,6 +1057,7 @@ int dataSndMuLoad(int mode)
     mu->smdSize = smdSectorSize;
     mu->smdAlt = (unsigned char *)mu->smdNormal + smdSectorSize;
 
+    /* The alternate sequence exists only for sets with a mu2Name entry. */
     if (mu2Name[mode] != 0) {
         strcpy(fileName, sndMuNameBase);
         strcat(fileName, mu2Name[mode]);
@@ -1095,6 +1076,7 @@ int dataSndMuLoad(int mode)
     }
     mu->swd = (unsigned char *)mu->smdAlt + mu->smdAltSize;
 
+    /* Wave table, placed after the sequence(s). */
     strcpy(fileName, sndMuNameBase);
     strcat(fileName, muName[mode]);
     strcat(fileName, sndMuNameExt2);
@@ -1122,6 +1104,8 @@ int dmgBankOffs[SND_DMG_BANK_COUNT] = { 0 };
 int dmgBankStat[SND_DMG_BANK_COUNT] = { 0 };
 
 
+/* Sends the normal sequence and wave table for mode 0, else the alternate
+ * sequence. Returns 1. */
 int sndMuTrans(int mode)
 {
     if (mode == 0) {
@@ -1152,6 +1136,7 @@ void sndMuFadeIn(void)
 
 void sndMuTransPlayObj(ObjectTask *task);
 
+/* Sends music set mode and queues sndMuPlay once the SPU DMA has completed. */
 void sndMuTransPlay(int mode)
 {
     if (sndMuTrans(mode) != 0) {

@@ -3,6 +3,10 @@
 #include "transform_vector.h"
 #include "main/transform_vector.h"
 
+/*
+ * Transforms count vectors into destination by params->world times *params->local,
+ * divides each result by its w, then applies screenScale and screenOffset.
+ */
 void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
                      TransformParams *params)
 {
@@ -27,6 +31,9 @@ void transformVector(Vector4 *destination, const Vector4 *vectors, int count,
     }
 }
 
+/*
+ * Same as transformVector, but divides only x, y and w by w; z is not divided.
+ */
 void transformVector2(Vector4 *destination, const Vector4 *vectors, int count,
                       TransformParams *params)
 {

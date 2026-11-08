@@ -109,11 +109,7 @@ typedef struct XrgRawJntData {
     int jointMap[RAW_JNT_TOP_INDEX + 1];
 } XrgRawJntData;
 
-/* Other translation units. */
-
-/* ACT_* animation module (main), config/symbols/main.txt. */
-
-/* Scaffold-owned data: the joint table, the actor-data table and its strings. */
+/* The actor-data table and the strings used with it. */
 static XenoDatEntry s_aDatTbl_1[25];
 extern const char actorInvalidCharIdFormat[]; /* "invalid actor char ID = %d" */
 extern const char actorAlreadyDisposedFormat[]; /* "already disposed XrgActor %p" */
@@ -203,8 +199,10 @@ int XrgActorJntIDtoAccID(int jntID)
     return _ActJntToAccID_sub(jntID, actorSourcePath, 71);
 }
 
-/* Returns the joint's accessory entry (accessories[jntID]) or the default. */
-
+/*
+ * Returns ACT_jointGetAccessories(pXenoAct, jntID); asserts that pXenoAct is
+ * not null.
+ */
 int _AccIDToJoint(Actor *pXenoAct, int jntID)
 {
     if (pXenoAct == 0) {
@@ -241,8 +239,9 @@ XenoDatEntry *_GetXenoDatEntry(int charID)
 
 /*
  * Copies the manipulator's joint matrix into matrix, translation column
- * dropped. A manipulator whose actor has no parent also multiplies it by the element-0
- * matrix (translation dropped too).
+ * dropped. A manipulator whose actor has no parent also multiplies it by the
+ * element-0 matrix (translation dropped too). With no actor, matrix is the
+ * identity.
  */
 void _SkeManiGet(SkeMani *mani, RgMatrix matrix)
 {
@@ -308,6 +307,11 @@ void _SkeManiSet(SkeMani *mani, RgMatrix matrix)
     }
 }
 
+/*
+ * Binds pMani to element elmID of pXenoAct and returns 1. An element id at or
+ * above the joint's element count is warned about and replaced by 1; ids of 0
+ * or below return 0. A null pXenoAct clears the binding and returns 1.
+ */
 int _InitSkeMani(SkeMani *pMani, Actor *pXenoAct, int elmID,
                  const char *sourceFile, int line)
 {
@@ -365,6 +369,11 @@ SkeMani *_CreateSkeMani_sub(Actor *pXenoAct, int elmID, const char *sourceFile,
 
 const char actorAssertEntryNotNil[16] = "pEntry != NIL";
 
+/*
+ * Allocates a SkeMani record bound through pXenoAct's accessory jntID (see
+ * _AccIDToJoint); with no actor the record is left unbound. The record is freed
+ * and NULL returned when the binding fails.
+ */
 SkeMani *_CreateAccMani_sub(Actor *pXenoAct, int jntID, const char *sourceFile, int line)
 {
     SkeMani *pMani;
@@ -387,6 +396,7 @@ SkeMani *_CreateAccMani_sub(Actor *pXenoAct, int jntID, const char *sourceFile, 
     return pMani;
 }
 
+/* Releases the actor's resource files, ACT instance, effectors and children. */
 void _DisposeUseXenoActor(XrgActor *pActor)
 {
     unsigned int i;
@@ -454,6 +464,11 @@ static void _store_matrix(RgMatrix dst, const RgMatrix src)
 }
 
 
+/*
+ * Advances the actor's motion by dt (or by fixed 1/30 s frames in coma stepping),
+ * places a root actor from its local matrix, re-poses the paka-paka joints
+ * against the parent actor and runs the effectors.
+ */
 void _PassTime(XrgActor *pActor, float dt)
 {
     RgMatrix locals[XRG_ACTOR_MAX_JOINT_ELEMENTS];
@@ -490,6 +505,7 @@ void _PassTime(XrgActor *pActor, float dt)
     } else {
         pParentAct = pParent->pXenoAct;
     }
+    /* Coma stepping: play one fixed frame each time 1/30 s has accumulated, else hold. */
     if (pActor->motionComaStep != 0) {
         step = pActor->motionComaStepAccum + dt;
         pActor->motionComaStepAccum = step;
@@ -503,6 +519,7 @@ void _PassTime(XrgActor *pActor, float dt)
         pXenoAct->animation.slot.speed = dt;
     }
     ACT_updateMotion(pXenoAct);
+    /* Paka-paka joints: re-pose the own joints relative to the parent's joint matrices. */
     if (pActor->pakaPaka != 0 && pParentAct != 0) {
         nKataJnt_2 = pActor->pakaBaseJnt;
         pJntData = pXenoAct->move;
@@ -540,6 +557,7 @@ void _PassTime(XrgActor *pActor, float dt)
             }
         }
     }
+    /* Run each live effector; an empty slot is reported. */
     for (i = 0; i < XRG_ACTOR_EFFECT_BANKS; i++) {
         for (j = 0; j < pActor->effectorCount[i]; j++) {
             if (pActor->effector[i][j] != 0) {
@@ -554,6 +572,10 @@ void _PassTime(XrgActor *pActor, float dt)
 
 RgFog *s_pUseFog = 0;
 
+/*
+ * Applies the fog from s_pUseFog to the model draw when debug flag 2 is set.
+ * Child actors also get the child render level.
+ */
 void _ActorDrawFunction(Actor *pXenoAct)
 {
     RgFog *pFog;
@@ -598,6 +620,11 @@ void _SetMotionToXenoActorWithRgMotID(XrgActor *pActor, int rgMotID, int playbac
     ACT_setMotion2(pActor->pXenoAct, rgMotID, playbackParam, playbackParam);
 }
 
+/*
+ * Starts motion on the actor's ACT instance with its pending smooth and loop
+ * flags, which it then clears. Coma stepping is armed for VX02 motion 63 and
+ * for AG04.
+ */
 void _SetMotUseXenoActor(XrgActor *pActor, int motion)
 {
     Actor *pXenoAct;
@@ -630,6 +657,7 @@ void _SetMotUseXenoActor(XrgActor *pActor, int motion)
 }
 
 
+/* Attaches pChild's ACT instance to pParent's joint eJntID through its accessory id. */
 void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
     if (pParent == 0 || pChild == 0) {
@@ -652,6 +680,7 @@ void _AttachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild, int eJntID)
 }
 
 
+/* Detaches pChild's ACT instance from pParent's and clears pParent's human hand. */
 void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild)
 {
     if (pParent == 0 || pChild == 0) {
@@ -667,6 +696,7 @@ void _DetachChildUseXenoActor(XrgActor *pParent, XrgActor *pChild)
     ACT_setHumanHand(pParent->pXenoAct, 0);
 }
 
+/* Returns 1 when no motion is set (motionID -1) or the current slot has ended, else 0. */
 int _IsEndOfMotUseXenoActor(XrgActor *pActor)
 {
     Actor *pXenoAct = pActor->pXenoAct;
@@ -680,6 +710,7 @@ int _IsEndOfMotUseXenoActor(XrgActor *pActor)
     return 1;
 }
 
+/* Does nothing. */
 void _DumpHead(RgFileSysData *pFile) {
 
 }
@@ -692,6 +723,10 @@ const char actorLexExtension[5] = ".lex";
 
 const char actorJointExtension[5] = ".jnt";
 
+/*
+ * Reads the model's .xtx, .lex and .jnt files. The .lex file (duplicated) gives
+ * the model resource, the .xtx the matrix resource and the .jnt the joint data.
+ */
 void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName)
 {
     Actor *pXenoAct;
@@ -734,6 +769,10 @@ void _LoadXenoActorMdl(XrgActor *pActor, const char *pszMdlName)
 }
 
 
+/*
+ * Gives pActor its own copies of pSrcActor's resource files (each re-read or
+ * duplicated by name) and points its ACT instance at them.
+ */
 void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
 {
     RgFileSysData *pDupFile;
@@ -786,9 +825,9 @@ void _DupLoadXenoActor(XrgActor *pActor, XrgActor *pSrcActor)
 
 
 /*
- * Resets every field of a freshly allocated actor: its charID and parent
- * links, a new children vector, the effector counts, the resource file
- * slots, the identity local matrix, and the motion and light flags.
+ * Resets a freshly allocated actor: its charID and parent links, a new children
+ * vector, the effector counts, the resource file slots, the identity local
+ * matrix and the motion and play fields.
  */
 void _InitXenoActor(XrgActor *pActor)
 {
@@ -819,6 +858,7 @@ void _InitXenoActor(XrgActor *pActor)
     } while (0);
 }
 
+/* Starts the battle-common weapon motion in the weapon slot when one is available. */
 void _SetBattleCommonWepMotion(XrgActor *pActor)
 {
     void *weaponMotion;
@@ -839,6 +879,10 @@ void _SetBattleCommonWepMotion(XrgActor *pActor)
 }
 
 
+/*
+ * Sets up the ACT instance after its model is loaded: default light, draw
+ * callback, shadow and light-cost flags, and the actor's own motion bank.
+ */
 void _InitAfterLoadXenoActor(XrgActor *pActor)
 {
     Actor *pXenoAct;
@@ -907,6 +951,11 @@ void XrgActorSetPlayMotionComaStep(XrgActor *pActor, int step)
 const char actorAssertEntryModelNameNotNil[28] = "pEntry->m_pszMdlName != NIL";
 
 
+/*
+ * Loads pActor from essence pEss: creates the ACT model for its character entry,
+ * loads the model files and optional resource file, then sets its light (the
+ * global light when the essence has none).
+ */
 void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
 {
     XenoDatEntry *pEntry;
@@ -954,6 +1003,7 @@ void _LoadXenoActor(XrgActor *pActor, XrgActorEssence *pEss)
     pActor->pakaBaseMatrixSet = 0;
 }
 
+/* Makes pDup a copy of pActor's character: its own ACT instance with duplicated resources. */
 void _DupXenoActor(XrgActor *pDup, XrgActor *pActor)
 {
     XenoDatEntry *pEntry;
@@ -989,6 +1039,10 @@ XrgActor *CreateXrgActor(XrgActorEssence *pEss)
     return pActor;
 }
 
+/*
+ * Duplicates pActor. A child actor (attachID set) is attached again to
+ * pNewParent at its attach joint.
+ */
 XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent)
 {
     XrgActor *pDup;
@@ -1007,6 +1061,7 @@ XrgActor *DuplicateXrgActor(XrgActor *pActor, XrgActor *pNewParent)
     return pDup;
 }
 
+/* Disposes pActor's resources and frees its heap block; reports an already disposed actor. */
 void DisposeXrgActor(XrgActor *pActor)
 {
     if (RgHeapIsInvalidMemory(InstanceOfRgHeap(), pActor) != 0) {
@@ -1027,6 +1082,10 @@ void XrgActorSetLocal(XrgActor *pActor, const RgMatrix matrix)
     XrgCopyMatrix(pActor->local, matrix);
 }
 
+/*
+ * Copies the ambient colour and the three light colours and directions of light
+ * into the ACT instance. A null light resets it to the defaults.
+ */
 void XrgActorSetLight(XrgActor *pActor, RgLight *light)
 {
     Actor *pXenoAct;
@@ -1049,6 +1108,7 @@ void XrgActorSetLight(XrgActor *pActor, RgLight *light)
     }
 }
 
+/* Starts motion; -1 leaves the current motion unchanged. */
 void XrgActorSetMotion(XrgActor *pActor, int motion)
 {
     if (pActor == 0) {
@@ -1075,6 +1135,7 @@ void XrgActorSetLoopPlay(XrgActor *pActor, int loopPlay)
     pActor->loopPlay = loopPlay;
 }
 
+/* Copies the source actor's motion bank into pActor; does nothing when the source has none. */
 void XrgActorDeriveMotion(XrgActor *pActor, XrgActor *pSrcActor)
 {
     if (pActor == 0) {
@@ -1182,6 +1243,10 @@ void XrgActorGetLocal(XrgActor *pActor, RgMatrix matrix)
     XrgCopyMatrix(matrix, pActor->local);
 }
 
+/*
+ * Copies the matrix of joint jntID into matrix and returns 1. Returns 0 when the
+ * joint is outside 0..19 or the skeleton has no such element.
+ */
 int XrgActorGetJointLocal(XrgActor *pActor, int jntID, RgMatrix matrix)
 {
     Actor *pXenoAct;
@@ -1227,6 +1292,7 @@ int XrgActorGetAttachedJoint(XrgActor *pActor)
 }
 
 
+/* Adds pChild to pParent's children and attaches it at joint eJntID; a null child does nothing. */
 void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
 {
     if (pParent == 0) {
@@ -1244,6 +1310,10 @@ void XrgActorAttachChild(XrgActor *pParent, XrgActor *pChild, int eJntID)
 }
 
 
+/*
+ * Looks up the paka-paka base joint of pActor under its parent. When one exists,
+ * enables paka-paka for pActor and logs the setup.
+ */
 void XrgActorCheckPakaPaka(XrgActor *pActor)
 {
     XrgActor *pParent;
@@ -1258,7 +1328,7 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
         baseJnt = _GetPakaPakaBaseJnt(pParent->charID, pActor->attachID);
         pActor->pakaBaseJnt = baseJnt;
         if (baseJnt >= 0) {
-            /* Read before the pakaPaka store, as at ov12:0x00a4783c. */
+            /* Read before the pakaPaka store, as the original does. */
             charID = pParent->charID;
             pActor->pakaPaka = 1;
             /* do/while (0) keeps the original's jal: no sibling call. */
@@ -1272,6 +1342,7 @@ void XrgActorCheckPakaPaka(XrgActor *pActor)
 }
 
 
+/* Removes pChild from pParent's children and clears its parent link. */
 void XrgActorDettachChild(XrgActor *pParent, XrgActor *pChild)
 {
     if (pParent == 0) {
@@ -1319,6 +1390,11 @@ const char actorDebugTimeFormat[] = "time = %f start %f end %f\n";
 const char actorDebugFlagsFormat[] = "flags = %x(end %x) next %x\n";
 
 
+/*
+ * Writes the model's .xtx, .lex and .jnt file names into pFileName at a 64-byte
+ * stride, then the optional file name when the entry has one. Returns the number
+ * of names, or 0 when the actor is unknown.
+ */
 int XrgActorEssenceGetFileName(XrgActorEssence *pEss, char *pFileName)
 {
     XenoDatEntry *pEntry;
@@ -1372,6 +1448,7 @@ XrgRawJntData s_aRawJntData[RAW_JNT_DATA_COUNT] = {
     {5, 1, {125, 126, 127, 128, 129, 130, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 126, 126}}
 };
 
+/* Returns the raw joint record for actor id and joint jntID, or 0. */
 XrgRawJntData *_FindRawJntData(int id, int jntID)
 {
     unsigned int i;
@@ -1387,6 +1464,10 @@ XrgRawJntData *_FindRawJntData(int id, int jntID)
 }
 
 
+/*
+ * Returns the paka-paka base joint for attach ids 4 and 5 of VX01 and VX02
+ * (logging the VX02 cases), or -1.
+ */
 int _GetPakaPakaBaseJnt(int charID, int attachID)
 {
     switch (charID) {
@@ -1412,6 +1493,11 @@ int _GetPakaPakaBaseJnt(int charID, int attachID)
     return -1;
 }
 
+/*
+ * Creates a constraint effector on pActor for effect eEffID from its raw joint
+ * record. The weapon pWep supplies the top (its accessory joint) and its element
+ * joints as manipulators. Returns 0 when the actor has no record for eEffID.
+ */
 MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned int eEffID, XrgActor *pWep)
 {
     MatrixConstraint *pCon;
@@ -1465,6 +1551,11 @@ MatrixEffector *XrgActorCreateEffConstraint(XrgActor *pActor, unsigned int eEffI
     return &pCon->effector;
 }
 
+/*
+ * Creates a combine effector on pActor for effect eEffID that pairs its joints
+ * with pSrcActor's, and the weapon pWpn's element joints with pSubWpn's. Returns
+ * 0 when the actor has no record for eEffID.
+ */
 MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActor, XrgActor *pWpn, XrgActor *pSubWpn, unsigned int eEffID)
 {
     MatrixCombine *pCon;
@@ -1498,6 +1589,7 @@ MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActo
         return 0;
     }
     pCon = CreateRgMatEffCombine();
+    /* Each record joint, paired with the same joint of the source actor. */
     for (i = 0; pRaw->jointMap[i] >= 0; i++) {
         jointID = pRaw->jointMap[i];
         jointMani = _CreateSkeMani_sub(pXenoAct, jointID, actorSourcePath, 1553);
@@ -1508,6 +1600,7 @@ MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActo
     pRoot = _CreateSkeMani_sub(pXenoAct, i, actorSourcePath, 1560);
     pJoint = _CreateSkeMani_sub(pSrcXeno, i, actorSourcePath, 1560);
     RgMatEffCombineSetRoot(pCon, pRoot, pJoint);
+    /* The weapon's element joints, paired with the sub-weapon's joints. */
     if (pWpn != 0) {
         if (pSubWpn != 0) {
             pWpnXeno = pWpn->pXenoAct;
@@ -1539,6 +1632,10 @@ MatrixEffector *XrgActorCreateEffArmCombine(XrgActor *pActor, XrgActor *pSrcActo
 
 const char actorEffectOverflowFormat[18] = "eff over (%d)->%d";
 
+/*
+ * Disposes pEffector when it is one of pActor's effectors, then compacts the
+ * remaining effectors of each bank.
+ */
 void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *pEffector)
 {
     MatrixEffector *kept[XRG_ACTOR_EFFECT_BANKS][XRG_ACTOR_EFFECT_LIMIT];
@@ -1581,6 +1678,7 @@ void XrgActorDisposeEffector(XrgActor *pActor, MatrixEffector *pEffector)
     }
 }
 
+/* Logs the actor's ACT instance and its motion slot. */
 void XrgActorDebugDisp(XrgActor *pActor)
 {
     Actor *pXenoAct;

@@ -30,6 +30,7 @@ const char objCmdPopBuffOverText[32] = "** objCmdPop: buff over\n";
 const char objFifoPushErrorText[24] = "** fifoPush error\n";
 const char objFifoPopErrorText[24] = "** fifoPop error\n";
 
+/* Clears every task slot, then initializes the task scheduler and the work pool. */
 void objInit(void) {
     int index;
     unsigned char *slot;
@@ -51,6 +52,7 @@ void objExecSub(XglTaskScheduler *manager) {
     xglTaskExecute(manager);
 }
 
+/* Runs the exec callback of each active task. The next task is read from next_to_visit after each callback. */
 void objExec2(void) {
     XglTaskScheduler *manager;
     ObjectTaskNode *task;
@@ -85,6 +87,7 @@ ObjectTask *objEntry2(ObjectSchedulerCallback schedulerCallback, ObjectTaskCallb
     return task;
 }
 
+/* Allocates a task at the tail of manager, or at the head when reverse is set, and gives it a work slot. Returns 0 on failure. */
 ObjectTask *objEntrySub(XglTaskScheduler *manager, ObjectSchedulerCallback schedulerCallback, int reverse)
 {
     XglTaskPrefix *entry;
@@ -122,6 +125,7 @@ ObjectTask *objEntry2Rev(ObjectSchedulerCallback schedulerCallback, ObjectTaskCa
     return task;
 }
 
+/* Frees the task's work slot and removes the task from its scheduler. */
 void objRemove(ObjectTask *task)
 {
     if (task == 0) {
@@ -134,6 +138,7 @@ void objRemove(ObjectTask *task)
     xglTaskRemove(&task->task);
 }
 
+/* Allocates a task in the default scheduler without a work slot. Returns 0 on failure. */
 ObjectTask *objEntryPure(ObjectSchedulerCallback callback)
 {
     XglTaskScheduler *scheduler;
@@ -175,6 +180,7 @@ void objWorkInit(void)
     }
 }
 
+/* Returns the first free work slot and marks it in use, or 0 when all are in use. */
 ObjectWork *objWorkGet(void)
 {
     ObjectWork *slot;
@@ -194,6 +200,7 @@ ObjectWork *objWorkGet(void)
     return 0;
 }
 
+/* Marks a work slot as free. Prints an error when work is outside the pool. */
 void objWorkFree(ObjectWork *work) {
     if (work < objWork || &objWork[OBJ_WORK_COUNT] < work) {
         printf(objWorkFreeErrorText, work);
@@ -202,6 +209,7 @@ void objWorkFree(ObjectWork *work) {
     work->used = 0;
 }
 
+/* Resets the task's transform to unit scale and zero translation, then clears its command queue. */
 void objStdInit(ObjectTask *task)
 {
     ObjectWork *work;
@@ -235,6 +243,7 @@ int objStdMove(ObjectTask *task)
     transform = &work->transform;
     arrived = 0;
 
+    /* One block per axis: advance velocity and position, then snap onto the target when it has arrived. */
     {
         float velocity;
         float position;
@@ -345,6 +354,7 @@ void objHatoVec(ObjectTask *task, int steps)
     }
 }
 
+/* Empties the task's command queue. */
 void objCmdClear(ObjectTask *task) {
     ObjectCommandQueue *queue;
 
@@ -371,6 +381,7 @@ ObjectCommandEntry *objCmdTailGet(ObjectTask *task) {
     return &queue->entries[queue->readIndex];
 }
 
+/* Returns the entry at the read index and advances it. Returns 0 with an error when the queue is full. */
 ObjectCommandEntry *objCmdPush(ObjectTask *task) {
     ObjectCommandQueue *queue;
     int index;
@@ -388,6 +399,7 @@ ObjectCommandEntry *objCmdPush(ObjectTask *task) {
 
 #define OBJ_DEBUG_PRINT(args) do { printf args; } while (0)
 
+/* Steps the read index back and returns the entry it passes. Returns 0 with an error at the bottom of the queue. */
 ObjectCommandEntry *objCmdPop(ObjectTask *task) {
     ObjectCommandQueue *queue;
     int index;
@@ -403,6 +415,7 @@ ObjectCommandEntry *objCmdPop(ObjectTask *task) {
     return &queue->entries[index];
 }
 
+/* Advances the write index and returns 1. Clears the queue and returns 0 when the write index reaches the read index. */
 int objCmdNext(ObjectTask *task)
 {
     ObjectCommandQueue *queue;
@@ -420,6 +433,7 @@ int objCmdNext(ObjectTask *task)
     return 1;
 }
 
+/* Empties a FIFO that holds capacity entries, with indices starting at base 0. */
 void fifoInit(Fifo *fifo, int capacity) {
     fifo->base = 0;
     fifo->maxIndex = capacity - 1;
@@ -428,6 +442,7 @@ void fifoInit(Fifo *fifo, int capacity) {
     fifo->count = 0;
 }
 
+/* Adds one entry at the write index and returns the new write index. Returns -1 when the FIFO is full. */
 int fifoPush(Fifo *fifo) {
     int count;
     int capacity;
@@ -448,6 +463,7 @@ int fifoPush(Fifo *fifo) {
     return fifo->writeIndex;
 }
 
+/* Removes one entry at the read index and returns the new read index. Returns -1 when the FIFO is empty. */
 int fifoPop(Fifo *fifo) {
     int count;
     int newCount;

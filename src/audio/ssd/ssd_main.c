@@ -34,6 +34,7 @@ void SsdNormalTrackGate(SsdSequence *sequence);
 void SsdNormalTrackSequence(SsdSequence *sequence);
 void SsdEffectTrackSequence(SsdSequence *sequence);
 
+/* Sequencer interrupt handler: runs the sequence, MIDI, LFO and voice processing and the registered processes, and records the ticks used. */
 void SsdSeqInterruptProcess(SsdGlobalWork *work)
 {
     unsigned int start;
@@ -69,6 +70,7 @@ void SsdSeqInterruptProcess(SsdGlobalWork *work)
     }
 }
 
+/* Advances the master and CD fades and applies the output volumes that changed. */
 void SsdCommonControl(SsdGlobalWork *work)
 {
     if (work->master_fade.remaining != 0) {
@@ -91,6 +93,7 @@ void SsdCommonControl(SsdGlobalWork *work)
     }
 }
 
+/* Advances each active sequence: applies its master ramps, then runs its track passes for each elapsed clock tick. */
 void SsdMainSequenceProcess(SsdGlobalWork *work)
 {
     SsdSequence *sequence = work->sequences;
@@ -120,6 +123,7 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
             clock = sequence->clock - sequence->clock_step;
             sequence->clock = clock;
             sequence->play_time += tempo;
+            /* Run one track pass per elapsed clock tick. */
             if (clock < 0) {
                 do {
                     sequence->clock += 65536;
@@ -158,6 +162,7 @@ void SsdMainSequenceProcess(SsdGlobalWork *work)
     }
 }
 
+/* Decodes and clears the queued MIDI events of the first queue. */
 void SsdMidiTrackSequence(void)
 {
     int count = SsdMidi.queues[0].count;
@@ -171,6 +176,7 @@ void SsdMidiTrackSequence(void)
     }
 }
 
+/* Advances the pitch, volume, pan and fade-out ramps of each active track and updates its channel. */
 void SsdNormalTrackEffect(SsdSequence *sequence)
 {
     int remaining = sequence->track_count;
@@ -239,6 +245,7 @@ void SsdNormalTrackEffect(SsdSequence *sequence)
     }
 }
 
+/* Counts down the duration of each sounding voice and keys it off when the count reaches zero. */
 void SsdNormalTrackGate(SsdSequence *track)
 {
     SsdMidiDevice *device = track->device;
@@ -262,6 +269,7 @@ void SsdNormalTrackGate(SsdSequence *track)
     }
 }
 
+/* Reads the stream of each active track: notes are keyed on, other opcodes go through SsdSeqFuncTrap. */
 void SsdNormalTrackSequence(SsdSequence *sequence)
 {
     int remaining = sequence->track_count;
@@ -318,6 +326,7 @@ void SsdNormalTrackSequence(SsdSequence *sequence)
     }
 }
 
+/* Plays an effect sequence: reads each track's notes, following jumps and loops, and keys them on. */
 void SsdEffectTrackSequence(SsdSequence *sequence)
 {
     SsdTrack *part = sequence->tracks;
@@ -414,6 +423,7 @@ void SsdEffectTrackSequence(SsdSequence *sequence)
                 ++part;
                 continue;
             }
+            /* Key on the note that was read, with the gate ratio applied to its duration. */
             if (note.trigger != 0) {
                 SsdChannel *channel = part->channel;
                 duration = note.duration;
@@ -457,6 +467,7 @@ void SsdVoiceEvent(void)
     }
 }
 
+/* Applies the pending events of each voice of a device: volume, pitch, key on and key off. */
 void SsdDeviceVoiceEvent(SsdMidiDevice *device)
 {
     int left;
@@ -523,6 +534,7 @@ void SsdDeviceVoiceEvent(SsdMidiDevice *device)
                     voice->right_volume = right & 0x7fff;
                     voice->flags |= SSD_VOICE_FLAG_VOLUME;
                 }
+                /* The pitch is the note plus transpose, LFO and master note offsets. */
                 if (events & SSD_VOICE_EVENT_PITCH) {
                     int note = voice->note + channel->transpose + voice->lfo.pitch;
                     note += (channel->pitch_offset + device->master_note) >> 16;
@@ -548,6 +560,7 @@ void SsdDeviceVoiceEvent(SsdMidiDevice *device)
     }
 }
 
+/* Reads the ENVX value of every SPU voice into its record. */
 void SsdGetEnvx(void)
 {
     SsdVoice *record = SsdWork.voices;

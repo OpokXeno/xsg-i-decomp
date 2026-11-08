@@ -27,7 +27,7 @@ extern double fptodp(float value);
 #define RG_MOTION_DEFAULT_END 0.2f
 
 
-/* Scaffold-owned data (splat names): the text file name and the keywords. */
+/* Text file name, keywords and assertion texts of the motion info loader, defined at the end of this file. */
 extern const char motionInfoDbFileName[];
 extern const char motionInfoDbActionToken[];
 extern const char motionInfoDbAssertStartTimeBeforeEndTime[];
@@ -71,6 +71,7 @@ const char motionInfoDbDumpMotionFlagFormat[24] = "   mot flag = %x\n";
 
 const char motionInfoDbDumpActionEntryFormat[48] = "    [action %d (%f,%f) shift-mot %d wep %d]\n";
 
+/* Resets info to an entry for motionNo with no actions, no character and no next entry. */
 static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
 {
     if (info == 0) {
@@ -82,6 +83,7 @@ static void _InitRgMotionShotInfo(RgMotionShotInfo *info, int motionNo)
     info->charId = -1;
 }
 
+/* Appends an action to info and returns it, with no shift motion. */
 static RgMotionAction *_AddActionRgMotion(RgMotionShotInfo *info, int actionNo,
                                           float startTime, float endTime)
 {
@@ -103,6 +105,7 @@ static void _TableInit(RgMotionInfoDB *db)
     db->entryCount = 0;
 }
 
+/* Sorts the table by motion number with an exchange sort. */
 static void _TableSort(RgMotionInfoDB *db)
 {
     unsigned int count;
@@ -124,6 +127,7 @@ static void _TableSort(RgMotionInfoDB *db)
     }
 }
 
+/* Binary search of the sorted table for motionNo; returns the first entry with that number, or 0. */
 RgMotionShotInfo *_TableGet(RgMotionInfoDB *db, int motionNo)
 {
     unsigned int count;
@@ -155,6 +159,7 @@ RgMotionShotInfo *_TableGet(RgMotionInfoDB *db, int motionNo)
     return 0;
 }
 
+/* Returns the entry for motionNo and charId, falling back to the default (charId -1) entry, then to the first entry for motionNo. */
 RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
                                      int charId)
 {
@@ -174,6 +179,7 @@ RgMotionShotInfo *_TableGetMatchChar(RgMotionInfoDB *db, int motionNo,
     return info != 0 ? info : defaultInfo;
 }
 
+/* Appends entry to the table; asserts when the table is full. */
 static void _TableEntry(RgMotionInfoDB *db, RgMotionShotInfo *entry)
 {
     if ((unsigned int)db->entryCount >= RG_MOTINFO_ENTRY_MAX) {
@@ -182,6 +188,7 @@ static void _TableEntry(RgMotionInfoDB *db, RgMotionShotInfo *entry)
     db->table[db->entryCount++] = entry;
 }
 
+/* Frees every entry of the table, including the entries chained behind each one. */
 static void _TableFree(RgMotionInfoDB *db)
 {
     u32 i;
@@ -199,6 +206,7 @@ static void _TableFree(RgMotionInfoDB *db)
     db->entryCount = 0;
 }
 
+/* Empties the table and sets the default shot info to the default action. */
 static void _InitDB(RgMotionInfoDB *db) {
     RgMotionShotInfo *info;
 
@@ -212,6 +220,7 @@ static void _InitDB(RgMotionInfoDB *db) {
                         RG_MOTION_DEFAULT_END);
 }
 
+/* Frees the table entries of db. */
 static void _DestructDB(RgMotionInfoDB *db)
 {
     if (db == 0) {
@@ -220,11 +229,13 @@ static void _DestructDB(RgMotionInfoDB *db)
     _TableFree(db);
 }
 
+/* Singleton destructor: destructs db and frees it. */
 static void _WrapperDestruct(void *db) {
     _DestructDB(db);
     RgHeapFree(InstanceOfRgHeap(), db, motionInfoDbSourcePath, 215);
 }
 
+/* Returns the motion info database singleton, creating and registering it on first use. */
 RgMotionInfoDB *InstanceOfRgMotionInfoDB(void)
 {
     RgMotionInfoDB *db;
@@ -238,6 +249,7 @@ RgMotionInfoDB *InstanceOfRgMotionInfoDB(void)
     return db;
 }
 
+/* Reads the motion info text file into db. A second entry for an existing motion number is chained behind the first. */
 void RgMotionInfoDBLoad(RgMotionInfoDB *db)
 {
     RgReadText *reader;
@@ -252,12 +264,14 @@ void RgMotionInfoDBLoad(RgMotionInfoDB *db)
     }
     reader = CreateRgReadText(motionInfoDbFileName);
     if (reader != 0) {
+        /* One motion entry per iteration: its name, then its attribute tokens. */
         while (RgReadTextIsEOF(reader) == 0) {
             RgReadTextGetString(reader, szToken);
             motionNo = RgActorMotIDGetFromName(szToken);
             info = RgHeapAlloc(InstanceOfRgHeap(), sizeof(RgMotionShotInfo), motionInfoDbSourcePath, 258);
             _InitRgMotionShotInfo(info, motionNo);
 
+            /* Attribute tokens of this entry; an unknown token is left for the next entry. */
             while (RgReadTextIsEOF(reader) == 0) {
                 RgReadTextGetString(reader, szToken);
                 if (strcasecmp(szToken, motionInfoDbActionToken) == 0) {
@@ -349,6 +363,7 @@ void RgMotionInfoDBLoad(RgMotionInfoDB *db)
     }
 }
 
+/* Checks db; the motion info table is released by its singleton destructor. */
 void RgMotionInfoDBDispose(RgMotionInfoDB *db)
 {
     if (db == 0) {
@@ -356,6 +371,7 @@ void RgMotionInfoDBDispose(RgMotionInfoDB *db)
     }
 }
 
+/* Returns the entry for motionNo and charId, or the default shot info when none matches. */
 RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
                                     int charId)
 {
@@ -371,6 +387,7 @@ RgMotionShotInfo *RgMotionInfoDBGet(RgMotionInfoDB *db, int motionNo,
     return info;
 }
 
+/* Returns 1 when no table entry matches motionNo and charId. */
 int RgMotionInfoDBIsDefaultData(RgMotionInfoDB *db, int motionNo, int charId)
 {
     if (db == 0) {
@@ -379,6 +396,7 @@ int RgMotionInfoDBIsDefaultData(RgMotionInfoDB *db, int motionNo, int charId)
     return _TableGetMatchChar(db, motionNo, charId) == 0;
 }
 
+/* Returns the first action of actionNo whose time range contains time, or 0. RG_MOTION_ANY_TIME matches any action of actionNo. */
 RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
                                              int actionNo, float time)
 {
@@ -402,6 +420,7 @@ RgMotionAction *RgMotionInfoGetActionInTime(RgMotionShotInfo *info,
     return 0;
 }
 
+/* Returns 0 when an action of actionNo starts before time, 1 otherwise. */
 int RgMotionInfoIsBefore(RgMotionShotInfo *info, int actionNo, float time)
 {
     RgMotionAction *action;
@@ -419,6 +438,7 @@ int RgMotionInfoIsBefore(RgMotionShotInfo *info, int actionNo, float time)
     return 1;
 }
 
+/* Returns 0 when an action of actionNo ends after time, 1 otherwise. */
 int RgMotionInfoIsAfter(RgMotionShotInfo *info, int actionNo, float time)
 {
     RgMotionAction *action;
@@ -436,6 +456,7 @@ int RgMotionInfoIsAfter(RgMotionShotInfo *info, int actionNo, float time)
     return 1;
 }
 
+/* Writes the table, with its chained entries and their actions, to the log. */
 void RgMotionInfoDBDump(RgMotionInfoDB *db)
 {
     unsigned int tableIndex;

@@ -76,6 +76,7 @@ void CCU061ExecSub(CardPlaySide *side, CardCursorPosition *position)
     }
 }
 
+/* Moves the stacked cards of a disposal slot back into the owner's hand. */
 void CCU062ExecSub(CardPlaySide *owner, CardCursorPosition *position)
 {
     if (position != 0) {
@@ -93,7 +94,7 @@ void CCU062ExecSub(CardPlaySide *owner, CardCursorPosition *position)
     }
 }
 
-/* Raises the state of every battle card of one attribute: Human (063), Mech (064), Gnosis (065). */
+/* Adds 1 power to each battle card with the Human attribute. */
 void CCU063ExecSub(CardGameWork *work, CardPlaySide *owner) {
     int i;
 
@@ -111,6 +112,7 @@ void CCU063ExecCPUSub(CardGameWork *work, CardPlaySide *owner) {
     CCU063ExecSub(work, owner);
 }
 
+/* Adds 1 power to each battle card with the Mech attribute. */
 void CCU064ExecSub(CardGameWork *work, CardPlaySide *owner) {
     int i;
 
@@ -128,6 +130,7 @@ void CCU064ExecCPUSub(CardGameWork *work, CardPlaySide *owner) {
     CCU064ExecSub(work, owner);
 }
 
+/* Adds 2 power to each battle card with the Gnosis attribute. */
 void CCU065ExecSub(CardGameWork *work, CardPlaySide *owner) {
     int i;
 
@@ -145,9 +148,9 @@ void CCU065ExecCPUSub(CardGameWork *work, CardPlaySide *owner) {
     CCU065ExecSub(work, owner);
 }
 
-/* Stim DX's test: whether a slot's base card, or the weapon stacked on it,
- * attacks by penetration or homing (Proto Dora, AG-05, VX-7000, VX-20000,
- * Lizardman, Hydra; Cannon, Aird), which the doubled ATK does not affect. */
+/* Stim DX's check: returns 1 when the base card is Proto Dora, AG-05, VX-7000,
+ * VX-20000, Lizardman or Hydra, or the second layer is Cannon or Aird;
+ * otherwise 0. */
 s32 CCC107ChkSub(CardLayerStack *stack) {
     s32 matched = 0;
     u16 cardId = stack->layers[0].cardId;
@@ -170,6 +173,7 @@ void CCC02ExecSub(u8 *flags) {
     *flags &= ~CARD_STACK_FLAG_FROZEN;
 }
 
+/* Restores the card's life to its operation duration and shows the amount gained. */
 void CCC03ExecSub(int side, CardGameWork *work, CardHand *hand, CardLayerStack *card)
 {
     float *position = card->position;
@@ -182,6 +186,7 @@ void CCC03ExecSub(int side, CardGameWork *work, CardHand *hand, CardLayerStack *
     CardSetEffect(side, work, CARD_EFFECT_NUMBER, amount, CARD_SE_REGEN, position, card);
 }
 
+/* Adds 3 life to each battle card except Gnosis cards, capped at its operation duration. */
 void CCC04ExecSub(int side, CardGameWork *work, CardPlaySide *owner)
 {
     int i;
@@ -208,6 +213,7 @@ void CCC04ExecSub(int side, CardGameWork *work, CardPlaySide *owner)
     }
 }
 
+/* Runs CardPlayRecavery once for each card on the owner's board, then shows the count. */
 void CCC06ExecSub(int side, CardGameWork *work, CardPlaySide *owner)
 {
     int cardCount = 0;
@@ -234,6 +240,7 @@ void CCC06ExecSub(int side, CardGameWork *work, CardPlaySide *owner)
     CardSetEffect(side, work, CARD_EFFECT_NUMBER, cardCount, CARD_SE_REGEN, 0, 0);
 }
 
+/* Moves the battle card at position into the first empty disposal slot. */
 void CCC07ExecSub(CardGameWork *work, CardPlaySide *owner, CardCursorPosition *position)
 {
     int destinationIndex;
@@ -247,6 +254,7 @@ void CCC07ExecSub(CardGameWork *work, CardPlaySide *owner, CardCursorPosition *p
                         &owner->battle[position->index].battle);
 }
 
+/* Deals 2 damage to the battle card at position, down to 0 life, and shows the damage. */
 void CCC10ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   CardCursorPosition *position)
 {
@@ -261,6 +269,7 @@ void CCC10ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   &owner->battle[position->index].battle);
 }
 
+/* Increments the boost count of the battle card at position, shows the regen, then calls CardCursorPassive. */
 void CCC26ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   CardCursorPosition *position) {
     owner->battle[position->index].battle.layers[0].boostCount++;
@@ -274,6 +283,7 @@ void CCC30ExecSub(int side, CardGameWork *work, CardLayerStack *card)
     CardSetEffect(side, work, CARD_EFFECT_SWIRL, 0, CARD_SE_REGEN, card->position, 0);
 }
 
+/* Reduces the card's life by 1, down to 0, and shows the damage. */
 void CCC31ExecSub(int side, CardGameWork *work, CardLayerStack *card)
 {
     float *position = card->position;
@@ -286,6 +296,7 @@ void CCC31ExecSub(int side, CardGameWork *work, CardLayerStack *card)
     CardSetEffect(side, work, CARD_EFFECT_DAMAGE_NUMBER, -1, CARD_SE_HIT, position, card);
 }
 
+/* Deals 2 damage to the disposal card at position, down to 0 life, then calls CardCursorPassive. */
 void CCC38ExecSub(int side, CardGameWork *work, CardPlaySide *owner,
                   CardCursorPosition *position) {
     owner->disposal[position->index].battle.layers[0].life -= 2;
@@ -313,7 +324,7 @@ enum CardCommandConditionResult {
 };
 
 /*
- * Checks whether the play condition of the event cards (card ids 82..119) is
+ * Checks whether the play condition of the command cards (card ids 82..117) is
  * met for a side. Invitation, Article 4-13, Stim DX and Invoke first require
  * the side's event phase; cards without a case are always playable.
  *
@@ -480,8 +491,8 @@ s32 CardPlayCommandCondition(u16 side, u16 cardId, CardGameWork *work) {
 
     case CARD_ID_DRAGON_SKULL:
         for (i = 0; i < CARD_BOARD_SLOTS; i++) {
-            /* The disposal flag is read at 0x00a13b84 (lbu v0,1788(a1)) from the same base
-             * register as the battle[i] slot, i.e. as the slot four entries past
+            /* The disposal flag is read from the same base register as the battle[i]
+             * slot (lbu v0,1788(a1)), i.e. as the slot four entries past
              * battle[i]; that is disposal[i] because CardPlaySide stores disposal[4]
              * right after battle[4]. Writing it as
              * other->disposal[i].battle.flags shrinks the function by 16 bytes and
@@ -666,6 +677,7 @@ s32 CardPlayCommandCondition(u16 side, u16 cardId, CardGameWork *work) {
         goto done;
     }
 
+    /* Stim DX: the event phase, then one own battle card that CCC107ChkSub does not match. */
     case CARD_ID_STIM_DX:
         if (side == 0) {
             if (work->command.phase != CARD_COND_PHASE_SIDE0) {
@@ -742,6 +754,7 @@ done:
     return result;
 }
 
+/* Returns the first free command queue slot of the side, or 0 when the queue is full. */
 s16 *CPCSearchCommWk(u16 side, CardGameWork *work) {
     int i;
 
@@ -764,8 +777,9 @@ s16 *CPCSearchCommWk(u16 side, CardGameWork *work) {
 }
 
 /*
- * Copies a battle or disposal slot's header bytes and, for each of its forty
- * layers, the state, life and card id. The parameters are untyped: Confusion
+ * Copies a battle or disposal slot's header fields (flags, moveFrames, power,
+ * powerLimit) and, for each of its forty layers, life, powerPlus and card id.
+ * The parameters are untyped: Confusion
  * passes the start of its slot-sized CardBoardSlot temporaries, and typing
  * them CardLayerStack * moves them by CardBoardSlot's 12-byte header
  * (measured: stack frame and every temporary address change).
@@ -799,6 +813,11 @@ static inline int CardLowByteAiFlag(u8 flags, u8 mask) {
     return flags & mask;
 }
 
+/*
+ * Runs one frame of the card command for a side: its cursor and sound steps,
+ * the effects it queues, and the damage or movement it applies. Sets complete
+ * when the command has finished. Returns the complete flag.
+ */
 s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
                          s16 operand, s16 target) {
     s16 *queued;
@@ -1303,6 +1322,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         break;
     }
+    /* Invitation: adds the power-plus of the hand-attack battle cards to cnt_8, then recovers once per count. */
     case CARD_COMMAND_INVITATION: {
         int i;
         switch (CardCommandStep(work)) {
@@ -1341,6 +1361,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         break;
     }
+    /* Mary and Shelley: draws CARD_MARY_AND_SHELLEY_DRAWS cards, one per tick, counting cnt_9 down. */
     case CARD_COMMAND_MARY_AND_SHELLEY:
         switch (CardCommandStep(work)) {
         case 0:
@@ -1390,6 +1411,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
             break;
         }
         break;
+    /* Investigation: the player picks one of the top deck cards, which goes to hand before the deck is shuffled. */
     case CARD_COMMAND_INVESTIGATION:
         switch (CardCommandStep(work)) {
         case 0:
@@ -1491,6 +1513,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         break;
     }
+    /* Premonition: the player picks an enemy end-flagged disposal card or operation to remove. */
     case CARD_COMMAND_PREMONITION: {
         int i;
         int disposalTargetZone;
@@ -1897,6 +1920,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         xglSoundEffectNormalID(CARD_SE_HIT, 0);
         break;
     }
+    /* Notice: the player picks an enemy card that has a stacked layer; the layers above the base go to junk. */
     case CARD_COMMAND_NOTICE: {
         int disposalTargetZone;
         int battleTargetZone;
@@ -2205,6 +2229,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         ownSide->junk[junkIndex] = -1;
         break;
     }
+    /* War Casualty: the player picks a card to discard, then lp_22 counts recovery ticks down. */
     case CARD_COMMAND_WAR_CASUALTY: {
         int disposeZone;
         int battleZone;
@@ -2404,6 +2429,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         complete = 1;
         break;
     }
+    /* Destiny: the player picks an own Human battle card, then a Human junk card replaces it. */
     case CARD_COMMAND_DESTINY: {
         int battleZone;
         battleZone = CARD_ZONE_SIDE0_BATTLE;
@@ -2519,6 +2545,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         complete = 1;
         break;
+    /* Territory Shift: the opposing player picks a card from the target side's hand to discard. */
     case CARD_COMMAND_TERRITORY_SHIFT: {
         int count = CardPlayHandCnt(&otherSide->hand);
         int step = CardCommandStep(work);
@@ -2916,6 +2943,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         complete = 1;
         break;
+    /* Gaignun: returns every Realian battle card on both sides to its owner's hand. */
     case CARD_COMMAND_GAIGNUN: {
         int i;
         switch (CardCommandStep(work)) {
@@ -2992,6 +3020,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         complete = 1;
         break;
     }
+    /* Cherenkov: puts the junk card at target back into the enemy battle slot at operand, with 1 life. */
     case CARD_COMMAND_CHERENKOV:
         switch (CardCommandStep(work)) {
         case 0:
@@ -3021,6 +3050,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         complete = 1;
         break;
+    /* VX-9000: the opposing player picks an own disposal card, which CCU038ExecSub zeroes. */
     case CARD_COMMAND_VX_9000: {
         int ownDisposalZone;
         if ((opponentSide == 0 && CardLowByteAiFlag(flags, CGP_FLAG_SIDE0_AUTO)) ||
@@ -3084,6 +3114,7 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
         }
         break;
     }
+    /* Lv 1 Shion: after the confirm, the player picks Lv 10 Shion from the deck; it goes to hand and the deck is shuffled. */
     case CARD_COMMAND_LV_1_SHION:
         switch (CardCommandStep(work)) {
         case 0:
@@ -3337,6 +3368,10 @@ s32 CardPlayCommandPlay(u16 side, u16 command, CardGameWork *work,
     return complete;
 }
 
+/*
+ * Runs the first queued command of the side whose phase equals phase, and
+ * clears its queue entry once the command completes.
+ */
 void CardPlayCommandBattleExecute(s16 side, s16 phase, CardGameWork *work) {
     s16 *entry;
     int checked;
@@ -3363,6 +3398,7 @@ void CardPlayCommandBattleExecute(s16 side, s16 phase, CardGameWork *work) {
     } while (checked < CARD_QUEUE_SLOTS);
 }
 
+/* Runs the first queued command in either side's queue whose phase equals phase. Returns 1. */
 int CardPlayCommandExecute(s16 phase, CardGameWork *work) {
     int i;
     s16 *own;
@@ -3414,6 +3450,7 @@ int CardPlayCommandExecute(s16 phase, CardGameWork *work) {
     return 1;
 }
 
+/* Counts the entries of a command queue whose phase equals phase. */
 int CardPlayCommandCheck(s16 phase, s16 *queue) {
     int i;
     int count = 0;

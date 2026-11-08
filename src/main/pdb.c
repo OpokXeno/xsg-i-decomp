@@ -12,6 +12,11 @@ unsigned int strlen(const char *string);
 char *strncpy(char *destination, const char *source, unsigned int count);
 int strncmp(const char *left, const char *right, unsigned int count);
 
+/*
+ * Returns the group table of the PDB at class_id (a header address) and its group count, or no
+ * groups when the magic does not match. The first call rebases the name and data offsets into
+ * pointers and marks the header relocated.
+ */
 void PDB_getEntry(int class_id, void **groups, int *group_count)
 {
     PDBHeader *header;
@@ -52,6 +57,10 @@ void PDB_getEntry(int class_id, void **groups, int *group_count)
     }
 }
 
+/*
+ * Finds the file at path in the PDB at class_id. A path without a slash is looked up in the "."
+ * directory. Returns the file's entry, or 0 when it is not found.
+ */
 PDBEntryRecord *PDB_findFile(int class_id, char *path)
 {
     char directory[256];
@@ -66,6 +75,7 @@ PDBEntryRecord *PDB_findFile(int class_id, char *path)
     int group_count;
     int group_index;
 
+    /* Split the path at its last slash into a directory and a filename. */
     path_length = strlen(path);
     slash = getStrIndex(path, path_length, '/');
     if (slash != 0) {
@@ -87,6 +97,7 @@ PDBEntryRecord *PDB_findFile(int class_id, char *path)
     *directory_end = '\0';
     filename_buffer[filename_length] = '\0';
 
+    /* Match the directory against each group's name, then the filename against that group's entries. */
     PDB_getEntry(class_id, (void **)&group, &group_count);
     if (group_index < group_count) {
         do {
@@ -114,6 +125,7 @@ PDBEntryRecord *PDB_findFile(int class_id, char *path)
     return 0;
 }
 
+/* Returns a pointer to the last occurrence of character in the first length bytes of string, or 0. */
 static char *getStrIndex(const char *string, int length, int character)
 {
     while (--length >= 0) {

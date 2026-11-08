@@ -61,7 +61,7 @@
 #define EX_ANIM_FLAG_NO_GROUND 0x400000
 #define EX_ANIM_FLAG_HOLD_PREVIOUS 0x80000 /* copy the previous joint instead of simulating */
 
-#define EX_START_JOINT_DEFAULT 74 /* default first joint of the hair buffer */
+#define EX_START_JOINT_DEFAULT 74 /* startjnt value unless a joint name overrides it */
 
 #define EXM_SET_JOINT_POSITION(joint, pos)    do {         (joint)->elements[12] = (pos)[0];         (joint)->elements[13] = (pos)[1];         (joint)->elements[14] = (pos)[2];     } while (0)
 
@@ -286,6 +286,7 @@ static inline Matrix *CopyExMatrixObject(Matrix *destination, const Matrix *sour
     return destination;
 }
 
+/* Applies the rotation part of matrix to a direction vector. */
 static inline Vector4 *TransformExDirection(const Matrix *matrix,
                                         const Vector4 *source,
                                         Vector4 *destination)
@@ -304,6 +305,10 @@ static inline Matrix *ExMotionMatrices(ExMotionJointWork *work)
     return (Matrix *)work->matrix_buffer;
 }
 
+/*
+ * Turns the joint's matrix to point along direction. The direction is first
+ * transformed in place by the joint's current matrix.
+ */
 static inline void OrientExMotionJoint(ExMotionJointWork *work, int index,
                                       Vector4 *direction)
 {
@@ -329,6 +334,10 @@ static inline void OrientExMotionJoint(ExMotionJointWork *work, int index,
     MATRIX_rotZ4s(ExMotionMatrices(work)[matrixIndex].rows, yawAngle);
 }
 
+/*
+ * Returns the last character of a joint name before its terminator or first
+ * non-ASCII byte, or 0 when there is none.
+ */
 static signed char GetLastWord(signed char *text)
 {
     int index;
@@ -348,6 +357,10 @@ static signed char GetLastWord(signed char *text)
     return 0;
 }
 
+/*
+ * Sets the collision palette, skirt sizes and per-joint hair types for the
+ * hair joint named by work->hair_joint_name. A null name leaves no palette.
+ */
 void EXM_PresetHair(ExMotionJointWork *work)
 {
     int lastLetter = GetLastWord(work->hair_joint_name);
@@ -361,6 +374,7 @@ void EXM_PresetHair(ExMotionJointWork *work)
     if (name == 0) {
         return;
     }
+    /* The first letters pick the case; the last letter of the name often picks the variant. */
     switch (name[0]) {
     case 'A':
         switch (name[1]) {
@@ -1081,6 +1095,10 @@ void EXM_PresetHair(ExMotionJointWork *work)
     }
 }
 
+/*
+ * Returns the hairpara index for an AUTO joint, or 0 when the hair type code
+ * matches nothing. Sets *flags and *palette from the joint name and type code.
+ */
 static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *work)
 {
     u32 result;
@@ -1092,6 +1110,7 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
     *flags = 0;
     if (jointName != 0) {
         kind = jointName[0];
+        /* The first letter of the joint name selects the palette; hair_type_code selects the type. */
         switch (kind) {
         case 'P':
             {
@@ -1251,6 +1270,10 @@ static u32 GetHairTypeSelection(u32 *flags, void **palette, ExMotionJointWork *w
     return result;
 }
 
+/*
+ * Pushes the point out of the primitives in request->primitives. Returns the
+ * number of primitives that pushed it; request->correction gets the averaged push.
+ */
 static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3],
                                const Matrix4 jointMatrix, ExCollisionRequest *request)
 {
@@ -1278,6 +1301,7 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
                          sizeof(startMatrix.elements));
         MATRIX_translate4s(startMatrix.elements, primitive->start.x,
                            primitive->start.y, primitive->start.z);
+        /* Sphere kinds share one check; capsules first project the point onto their axis. */
         switch (primitive->kind) {
         case EX_COLLISION_SPHERE_FLAG2:
             if (!(request->flags & EX_HAIR_FLAG_KIND5)) {
@@ -1466,6 +1490,10 @@ static int EXM_CheckExCollision(ExMotionJointWork *work, const float position[3]
     return count;
 }
 
+/*
+ * Moves one skirt point out of the skirt section selected by rootBorn, using
+ * that section's joints from work->matrix_buffer. flags are the hair type flags.
+ */
 static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
                                    float referencePosition[4], u32 flags)
 {
@@ -1482,6 +1510,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
     float (*secondEnd)[4];
     u32 profileFlags;
 
+    /* Profile angle and responses from the EX_SKIRT_FLAG_ANGLE_* combination. */
     {
         const float defaultResponse = 0.2f;
         float horizontalResponse = defaultResponse;
@@ -1546,6 +1575,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             }
             joints = work->matrix_buffer;
             originRow = &joints[EX_JOINT_HIP].elements[3];
+            /* Section endpoints for this rootBorn. */
             switch (rootBorn) {
             case 0:
                 firstStart = &joints[16].elements[3];
@@ -1640,6 +1670,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             (*secondEnd)[0] -= motionMatrices[EX_JOINT_ROOT].elements[3][0];
             (*secondEnd)[2] -= motionMatrices[EX_JOINT_ROOT].elements[3][2];
         }
+        /* Normalizes a local copy of the position; the result is not used. */
         {
             Vector4 normalizedPosition;
             normalizedPosition.x = position[0];
@@ -1774,6 +1805,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
             }
         }
     }
+    /* HEM_LIFT_A: raises the height to the hem endpoints for sections 0 and 6. */
     if (flags & EX_SKIRT_FLAG_HEM_LIFT_A) {
         if (rootBorn == 0) {
             float (*endpoint)[4] = 0;
@@ -1926,6 +1958,7 @@ static void CheckSkirtCollisionSub(ExMotionJointWork *work, float position[4],
     }
 }
 
+/* Runs CheckSkirtCollisionSub for each skirt section the flags select. */
 static void EXM_CheckSkirtCollision(ExMotionJointWork *work, float *position, float *matrix, u32 flags)
 {
     if (flags & EX_HAIR_FLAG_SKIRT_SPLIT_A) {
@@ -1955,6 +1988,10 @@ static void EXM_CheckSkirtCollision(ExMotionJointWork *work, float *position, fl
     }
 }
 
+/*
+ * Moves position halfway toward the point width away from joint_position, along
+ * the joint-to-position direction.
+ */
 static void AdjustJrCoatWidth(float width, Vector4 *position, const Vector4 *joint_position)
 {
     Vector4 difference;
@@ -1982,6 +2019,11 @@ static void AdjustJrCoatWidth(float width, Vector4 *position, const Vector4 *joi
     position->z = adjusted_z;
 }
 
+/*
+ * Processes one hair motion channel. BEGIN sets the chain's base matrix, JOINT
+ * queues one joint's transform, and SOLVE simulates the queued joints and
+ * orients them. Returns the next channel.
+ */
 ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *channel)
 {
     Matrix matrix;
@@ -2054,6 +2096,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             break;
         }
         parameters = &hairpara[kind];
+        /* Sway from the hip's movement, when the owner has moved hair enabled. */
         if (owner != 0 && (owner->moved_hair_mode & 1) && owner->moved_hair_sway.w > 0.0f) {
             CopyExMatrix(matrix.elements, ExMotionMatrices(work)[EX_JOINT_HIP].elements);
             MATRIX_translate4s(ExMatrixRows(&matrix), 0.0f, 1.0f, 0.0f);
@@ -2202,6 +2245,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             jointCount = work->matrix_index;
             index++;
         }
+        /* EX_HAIR_FLAG_ALT_SHAPES bends the chain: the bend angle comes from joints 39 and 48. */
         if (flags & 1) {
             CopyExMatrix(matrix.elements, ExMotionMatrices(work)[39].elements);
             MATRIX_translate4s(ExMatrixRows(&matrix), 0.0f, 0.0f, 1.0f);
@@ -2220,6 +2264,7 @@ ExMotionChannel *EXM_CalcExMotion(ExMotionJointWork *work, ExMotionChannel *chan
             jointCount = work->matrix_index;
         }
         response /= (float)jointCount;
+        /* Orient each joint toward the next one, adding the bend when flag 1 is set. */
         index = 1;
         if (index < jointCount) {
             do {

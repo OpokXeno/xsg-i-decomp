@@ -12,6 +12,7 @@
 const char dispModelAssertNotNil[] = "pDispModel != NIL";
 const char dispModelSourcePath[] = "../rg_dispmodel.euc.c";
 
+/* Sets the default methods, mode, transparency and blight, and resets the local matrix to identity. */
 void InitRgDispModel(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {
@@ -26,6 +27,7 @@ void InitRgDispModel(RgDispModel *pDispModel)
     XrgUnitMatrix(pDispModel->local);
 }
 
+/* Runs the destruct method if one is set, then frees the model from the RG heap. */
 void DisposeRgDispModel(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {
@@ -38,6 +40,7 @@ void DisposeRgDispModel(RgDispModel *pDispModel)
     RgHeapFree(InstanceOfRgHeap(), pDispModel, dispModelSourcePath, 33);
 }
 
+/* Calls the display method unless the model has the hidden mode bit set. */
 void RgDispModelDisplay(RgDispModel *pDispModel)
 {
     if (pDispModel == 0) {

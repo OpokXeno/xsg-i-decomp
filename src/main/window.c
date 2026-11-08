@@ -4,36 +4,27 @@
 #include "main/runtime.h"
 #include "main/twsys_init.h"
 
-/* Window.create(kind): which text-window layout TWIN_create2 sets up. */
+/* Window.create(int) kind: which layout initialiser (TWIN_initCF or TWIN_initScene) prepares the window. */
 #define WINDOW_KIND_CF 0
 #define WINDOW_KIND_SCENE 1
 #define WINDOW_BUFFER_SIZE 0x40 /* command string built for MSG_print2 */
 
 /*
- * The script VM's per-thread context, recovered as `JThread` in
- * src/main/chr.h (main's chr TU). Every Java native receives
- * (thread, arguments, result) as the sibling natives elsewhere in this
- * TU map (and in main/tu238, src/main/runtime.c) show.
+ * The script VM's per-thread context (`JThread`, see include/main/jni.h).
+ * Every Java native receives (thread, arguments, result).
  */
 typedef struct JThread JThread;
 
 /*
- * The toolkit text-window record TWIN_create2 returns, as far as this TU's
- * natives touch it. +0x32 is what signal__I stores its requested value
- * into; src/main/twsys_init.c's TComponent models the same offset of the
- * same record as closeState, cleared with the component's flags when its
- * slot is (re)claimed. +0x186/+0x187 are the bytes setSize__II overwrites
- * from its two arguments; src/main/twsys_init.c's TWindow models the same
- * two offsets as layout_offset (TWIN_create2's own per-kind default) and
- * line_count (the bound TWIN_update2/TWIN_popCF/TWIN_popScene loop up to).
+ * The toolkit text-window record that TWIN_create2 returns, as far as the
+ * natives here use it: closeState (+0x32) is what signal sets, and
+ * layout_offset and line_count (+0x186/+0x187) are what setSize sets.
  */
 /*
- * +0x10 flags and +0x20/+0x24 x/y, as getSignal__/setLocation__II and
- * src/main/twsys_init.c's TW_setPos (still assembler) touch them:
- * TW_setPos tests bit 0x40 of the same offset TComponent models as flags
- * before it repositions the window, and writes its own computed position
- * into the same two offsets; setLocation__II clears that bit and overwrites
- * both floats with its own arguments instead.
+ * +0x10 flags and +0x20/+0x24 x/y, as setLocation and TW_setPos use them:
+ * setLocation clears the follow-owner bit (0x40) and writes x and y, while
+ * TW_setPos tests that bit before it repositions the window and writes its
+ * own computed position into the same two offsets.
  */
 
 /* The call block of every Window native taking no Java arguments beyond the
@@ -89,10 +80,9 @@ typedef struct WindowStringCall {
 } WindowStringCall;
 
 /*
- * A java.lang.String[] argument, as print__aLjava_lang_String_I reads it:
- * the object header word every VM array reference begins with (unread
- * here), the element count and the element pointer array (the same shape
- * src/main/camera.h's JavaFloatArray reads for a float[] argument).
+ * A java.lang.String[] argument, as print__aLjava_lang_String_I reads it: the
+ * object header word (unread here), the element count and the element pointer
+ * array.
  */
 typedef struct JavaStringArray {
     unsigned int : 32;      /* +0x00 */
@@ -123,6 +113,7 @@ const char windowWaitCommandFormat[] = "/[wait(%d)]";
 
 const char windowCloseWaitKeyCommand[] = "/[waitkey(0);close()]";
 
+/* Returns the window's close state and clears it. */
 void Java_xeno_util_Window_getSignal__(JThread *thread, WindowCall *arguments,
                                        int *result)
 {
@@ -182,6 +173,7 @@ void Java_xeno_util_Window_wait__I(JThread *thread, WindowIntCall *arguments,
     MSG_print2(window, buffer, -1);
 }
 
+/* Creates a text window, initialises its layout for `kind`, and returns it. */
 void Java_xeno_util_Window_create__I(JThread *thread, WindowCreateCall *arguments,
                                      TComponent **result)
 {
@@ -215,6 +207,7 @@ void Java_xeno_util_Window_setSize__II(JThread *thread, WindowSizeCall *argument
     TWIN_init2(window);
 }
 
+/* Moves the window to the integer position (x, y) and clears its follow-owner flag. */
 void Java_xeno_util_Window_setLocation__II(JThread *thread, WindowLocationCall *arguments,
                                            void *result)
 {
@@ -249,6 +242,7 @@ void Java_xeno_util_Window_print__Ljava_lang_String_(JThread *thread,
     }
 }
 
+/* Prints each string of the array to the window, in order. */
 void Java_xeno_util_Window_print__aLjava_lang_String_I(JThread *thread,
                                                         WindowStringArrayCall *arguments,
                                                         void *result)
@@ -278,6 +272,7 @@ void Java_xeno_util_Window_print__aLjava_lang_String_I(JThread *thread,
     }
 }
 
+/* Empty native: does nothing. */
 void Java_xeno_util_Window_setName__Ljava_lang_String_(JThread *thread, void *arguments,
                                                         unsigned int *result)
 {

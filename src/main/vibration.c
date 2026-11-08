@@ -21,6 +21,7 @@ typedef struct VibrationPadData {
 extern VibrationGameLoopState GameLoopState;
 extern VibrationPadData PadData;
 
+/* Stops both motors: clears the strong and weak durations and their outputs. */
 void Vibration_Stop(void) {
     GameLoopState.strong_duration = 0;
     PadData.weak_active = 0;
@@ -28,10 +29,12 @@ void Vibration_Stop(void) {
     PadData.strong_output = 0;
 }
 
+/* Sets how long the weak motor runs, counted down by VibrationEngine. */
 void Vibration_Set_Weak(int duration) {
     GameLoopState.weak_duration = duration;
 }
 
+/* Starts the strong motor: its output falls from start to end over duration VibrationEngine calls. */
 void Vibration_Set_Strong(int start, int end, int duration) {
     GameLoopState.strong_duration = duration;
     GameLoopState.strong_start = (unsigned char)start;
@@ -39,6 +42,10 @@ void Vibration_Set_Strong(int start, int end, int duration) {
     GameLoopState.strong_total_duration = duration;
 }
 
+/*
+ * Advances both motors by one step: counts the weak duration down, and sets the strong output on a
+ * linear ramp from start to end while counting its duration down.
+ */
 void VibrationEngine(void) {
     if (GameLoopState.weak_duration != 0) {
         int remaining = GameLoopState.weak_duration - 1;

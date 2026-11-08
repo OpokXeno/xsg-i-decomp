@@ -40,7 +40,6 @@ extern const char eyeTargetShionName[];
 extern const char eyeTargetKosmosName[];
 extern const char eyeTargetMomoName[];
 
-/* MARK provisional: .lit4 0x004d8564 */
 extern StudioCamera *xglStudioGetActiveCamera(void);
 
 static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place);
@@ -62,11 +61,13 @@ static inline void look_copy_matrix(Matrix4 destination, Matrix4 source)
     QuadwordCopyMatrix(destination, source);
 }
 
+/*
+ * Returns the arc sine of value: pi/2 minus sqrt(1 - value) times a cubic in value.
+ */
 float xglAsin(float value)
 {
-    /* MARK: explicit NaN-fallback call structure -- emits sqrt.s + c.eq.s/bc1t
-     * plus jal sqrtf@0x003240f8 on the NaN path; a plain sqrtf() call cannot
-     * reproduce this (S2 evidence). */
+    /* __builtin_sqrtf keeps the inline sqrt.s and the NaN-path call to sqrtf;
+     * a plain sqrtf() call compiles differently. */
     float root = __builtin_sqrtf(1.0f - value);
     float result;
     float cubic = xglAsin_cubic;
@@ -83,10 +84,10 @@ float xglAsin(float value)
     return xglAsin_pi_over_two - root * result;
 }
 
+/* Moves *angle one step of limit toward zero; an angle within limit of zero becomes 0. */
 void look_limit(float *angle, float limit)
 {
-    /* MARK: __builtin_fabsf required -- emits inline abs.s, no call (S1: plain
-     * fabsf() adds jal fabsf and mismatches). */
+    /* __builtin_fabsf keeps the absolute value inline (abs.s) instead of calling fabsf. */
     if (__builtin_fabsf(*angle) < limit) {
         *angle = 0.0f;
         return;
@@ -99,9 +100,10 @@ void look_limit(float *angle, float limit)
     }
 }
 
+/* Moves *angle toward target by at most step; it snaps to target when within one step. */
 void look_limit_add(float *angle, float target, float step)
 {
-    /* MARK: __builtin_fabsf required -- emits inline abs.s, no call (S1). */
+    /* __builtin_fabsf keeps the absolute value inline (abs.s). */
     float delta = *angle - target;
 
     if (__builtin_fabsf(delta) < step) {
@@ -117,6 +119,7 @@ void look_limit_add(float *angle, float target, float step)
     }
 }
 
+/* Stores the look point selected by actor->lookMode in *place. Returns 0 when a point was found, 1 otherwise. */
 static int look_get_place(LookCharacter *actor, LookAlignedVector4 *place)
 {
     LookCharacter *target;
@@ -183,6 +186,10 @@ void LOOK_target_doit(void)
 {
 }
 
+/*
+ * Joint continuation: adds a z rotation to the joint element, aimed at the look place
+ * or limited when there is no place.
+ */
 void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 {
     Matrix4 matrix;
@@ -239,6 +246,7 @@ void *LOOK_sebo_cont(LookJointWork *work, void *channels, LookCharacter *actor)
     return channels;
 }
 
+/* Joint continuation for the head: aims it at the look place and adds its rotation to the joint element. */
 void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
 {
     Matrix4 matrix;
@@ -258,6 +266,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
         if (!(__builtin_fabsf(weight) < LOOK_HEAD_MIN_WEIGHT)) {
             if (weight <= 0.0f)
                 weight = 1.0f;
+            /* Compose the joint's world matrix and store the head position. */
             CUR_MATRIX_Set(work->matrixBuffer[work->jointIndex - 1]);
             CUR_MATRIX_Txyz4s(&element->translation);
             CUR_MATRIX_Rzyx4s((const int *)element->rotation); /* COP2 takes the raw float words, as in jnt.c */
@@ -269,6 +278,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
             QuadwordCopy(&actor->headPosition, matrix[3]);
             actor->headPositionValid = 1;
             actor->headPosition.y += LOOK_HEAD_POSITION_Y_OFFSET;
+            /* Aim at the look place, clamping the head angles to their limits. */
             if (look_get_place(actor, &place) == 0) {
                 place.v.w = 1.0f;
                 QuadwordZero(&rotation);
@@ -298,6 +308,7 @@ void *LOOK_head_cont(LookJointWork *work, void *channels, LookCharacter *actor)
                 look_limit(&actor->lookAngles[1][1], weight * LOOK_HEAD_Y_LIMIT);
                 look_limit(&actor->lookAngles[1][2], weight * LOOK_HEAD_Z_LIMIT);
             }
+            /* Convert the look angles into the joint's rotation. */
             xglMatrixUnit(matrix);
             xglMatrixRotX(matrix, matrix, actor->lookAngles[1][2]);
             xglMatrixRotY(matrix, matrix, actor->lookAngles[1][1]);
@@ -330,6 +341,10 @@ static const float s_aEyeControl[15][4] ;
 
 static const float s_aEyeDefault[1][4];
 
+/*
+ * Joint continuation for one eye (side 0 for LOOK_eyeL_cont, 1 for LOOK_eyeR_cont): applies
+ * the eye mode's angles, aims the eye at the look place and adds the per-side offsets.
+ */
 void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, int side)
 {
     Matrix4 jointMatrix;
@@ -426,12 +441,14 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
     case EYE_MODE_DEFAULT:
         break;
     }
+    /* Modes that set no control angles return the eye to its rest pose. */
     if (!controlled) {
         const float *rest = s_aEyeDefault[0];
 
         look_limit_add(&eyes[side].yaw, rest[EYE_YAW], rest[EYE_STEP]);
         look_limit_add(&eyes[side].pitch, rest[EYE_PITCH], rest[EYE_STEP]);
     }
+    /* Aim the eye at the look place; without one, pull the angles toward zero. */
     if (look_get_place(actor, &targetPlace) == 0) {
         targetPlace.v.w = 1.0f;
         look_copy_matrix(jointMatrix, work->matrixBuffer[work->jointIndex - 1]);
@@ -464,6 +481,7 @@ void *LOOK_eye_cont(LookJointWork *work, void *channels, LookCharacter *actor, i
         element->rotation[1] -= actor->lookAngles[side][0] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_YAW_ROTATION_SCALE;
         element->rotation[0] += actor->lookAngles[side][3] * LOOK_EYE_ROTATION_SCALE * LOOK_EYE_ROTATION_SCALE;
     }
+    /* Add the per-side eye offsets to the joint rotation. */
     element->rotation[1] += actor->eyeAngles[side][2];
     element->rotation[0] += actor->eyeAngles[side][3];
     }

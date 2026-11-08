@@ -29,6 +29,7 @@ typedef struct TyaGaugePacket {
     u32 unfilled_vertices[2][TYA_GAUGE_VERTEX_WORD_COUNT];
 } TyaGaugePacket;
 
+/* Packet template: tyaDrawGauge rewrites its color and vertex words on every call. */
 static TyaGaugePacket TestEnv_0_0036AC70[] = {
     {
         {0, 0, 0, 0x51000008},
@@ -41,6 +42,11 @@ static TyaGaugePacket TestEnv_0_0036AC70[] = {
     }
 };
 
+/*
+ * Draws a horizontal gauge as two rectangles: a filled part whose width is current / maximum of the
+ * gauge width (clamped to 0..width), and the unfilled rest. Coordinates are scaled by 0x10 and offset
+ * by the gauge origin, and the packet goes out through nmlModelDirectSend.
+ */
 void tyaDrawGauge(TyaGaugeArgs *gauge)
 {
     int left_x;

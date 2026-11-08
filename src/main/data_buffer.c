@@ -3,6 +3,10 @@
 #include "main/data_buffer.h"
 #include "data_buffer.h"
 
+/*
+ * Sets up a reader over length bytes at base. big_endian selects the byte order used by
+ * DataBuffer_getUShortAt and DataBuffer_getUIntAt.
+ */
 void DataBuffer_init(DataBuffer *buffer, DataBufferByte *base, int length, int big_endian)
 {
     if (big_endian == 0)
@@ -30,6 +34,10 @@ void DataBuffer_seek(DataBuffer *buffer, int offset)
     buffer->position += offset;
 }
 
+/*
+ * Copies length bytes from the current position into destination and advances past them. Returns -1
+ * without copying when that would pass the limit, else length.
+ */
 int DataBuffer_getBytes(DataBuffer *buffer, DataBufferByte *destination, int length)
 {
     DataBufferByte *position = buffer->position;
@@ -64,6 +72,7 @@ DataBufferWord DataBuffer_getUIntAt(DataBuffer *buffer)
     return buffer->reader(buffer, 4);
 }
 
+/* Reads length bytes as an unsigned integer, least significant byte first, and advances past them. */
 DataBufferWord DataBuffer_LittleEndian_getUIntegerAt(DataBuffer *buffer, int length)
 {
     DataBufferWord value = buffer->position[length - 1];
@@ -77,6 +86,7 @@ DataBufferWord DataBuffer_LittleEndian_getUIntegerAt(DataBuffer *buffer, int len
     return value;
 }
 
+/* Reads length bytes as an unsigned integer, most significant byte first, and advances past them. */
 DataBufferWord DataBuffer_BigEndian_getUIntegerAt(DataBuffer *buffer, int length)
 {
     DataBufferWord value = buffer->position[0];

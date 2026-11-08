@@ -63,6 +63,7 @@ enum {
 #define ANIM_SLOT_FLAG_STOP_FREE_FALL 0xc0000000u
 
 
+/* Returns the index of the enemy entry whose entry_id is target, or -1 when none matches. */
 int Get_ActorNumber(int target)
 {
     EnemyWork *base;
@@ -79,6 +80,10 @@ int Get_ActorNumber(int target)
     return -1;
 }
 
+/*
+ * Starts motion on actor, looping when mode is 1. speed_percent sets the playback
+ * speed. motion_start and motion_end set the frame limits, where -1 keeps the current limit.
+ */
 void Enemy_Command_Motion(Actor *actor, int motion, signed char mode,
                           int motion_start, int motion_end,
                           int update_flags, int speed_percent)
@@ -106,6 +111,10 @@ void Enemy_Command_Motion(Actor *actor, int motion, signed char mode,
         actor->animation.slot.frame = actor->animation.slot.reverseLimit;
 }
 
+/*
+ * Sets the freeze state of the enemy. Release restores the saved speed, stop
+ * saves it and sets speed to 0, and slow saves it and sets the slow speed.
+ */
 void Enemy_Command_Freeze(Actor *actor, int command)
 {
     EnemyWork *work;
@@ -139,6 +148,7 @@ void Enemy_Command_Freeze(Actor *actor, int command)
     }
 }
 
+/* Sets, clears or toggles the turn lock of the enemy. */
 void Enemy_Command_Turn(Actor *actor, signed char command)
 {
     EnemyWork *work;
@@ -163,6 +173,7 @@ void Enemy_Command_Turn(Actor *actor, signed char command)
     }
 }
 
+/* Sets, clears or toggles the light flag of the enemy. */
 void Enemy_Command_Light(Actor *actor, signed char light)
 {
     EnemyWork *work;
@@ -187,6 +198,7 @@ void Enemy_Command_Light(Actor *actor, signed char light)
     }
 }
 
+/* Sets or clears the free-fall stop bits in the actor's animation slot flags. */
 void Enemy_Command_Stop_FreeFall(Actor *actor, signed char command)
 {
     switch (command) {
@@ -209,6 +221,7 @@ void Enemy_Command_Code(Actor *actor, int code)
     ENEMY_SELECT_CODE(actor, code);
 }
 
+/* Sets the enemy's target to the player for ENEMY_TARGET_PLAYER, otherwise to the entry with id target. */
 void Enemy_Command_Target(Actor *actor, int target)
 {
     EnemyWork *work;
@@ -222,6 +235,10 @@ void Enemy_Command_Target(Actor *actor, int target)
     ENEMY_TARGET(work) = Get_ActorNumber(target);
 }
 
+/*
+ * Points the enemy's look-at at the player, at the actor with entry id target,
+ * or releases it for ENEMY_LOOK_AT_RELEASE. Returns the target's actor number.
+ */
 int Enemy_Command_LookAt(Actor *enemy_actor, int target)
 {
     int target_number;
@@ -246,6 +263,10 @@ int Enemy_Command_LookAt(Actor *enemy_actor, int target)
     return target_number;
 }
 
+/*
+ * Scales the enemy to scale_percent. A duration of 0 applies the scale at once
+ * and resets the motion; otherwise the scale is eased over duration frames.
+ */
 void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
 {
     EnemyWork *work;
@@ -271,6 +292,10 @@ void Enemy_Command_Scale(Actor *actor, int scale_percent, int duration)
     } while (0);
 }
 
+/*
+ * Stores value and argument in the first free slot of the enemy's action table
+ * for action_id, and resets the action frame and duration.
+ */
 void Enemy_Command_Action(Actor *actor, int action_id, int value,
                           int argument)
 {
@@ -309,6 +334,10 @@ void Enemy_Command_Encount(Actor *actor, int command)
     } while (0);
 }
 
+/*
+ * Moves the actor to (target_x, target_z) at once when duration is 0. Otherwise
+ * it starts a timed move over duration frames and sets the turn-request flag.
+ */
 void Enemy_Command_Sac_Move(Actor *actor, int duration, float target_x,
                             float target_z)
 {
@@ -334,6 +363,11 @@ void Enemy_Command_Sac_Move(Actor *actor, int duration, float target_x,
     }
 }
 
+/*
+ * Turns the rotation lane axis (0 x, 1 y, 2 z) of the actor toward angle_degrees,
+ * converted to radians. angle_mode at or below 0 picks the wrap direction for
+ * the turn. A duration of 0 sets the angle at once; otherwise it starts a timed turn.
+ */
 void Enemy_Command_Sac_Turn(Actor *actor, int duration,
                             float angle_degrees, float angle_mode,
                             short axis)
@@ -343,16 +377,8 @@ void Enemy_Command_Sac_Turn(Actor *actor, int duration,
     work = enepc + actor->number;
 
     /* `axis` selects one lane of Actor.rotation at run time, so the lane is
-     * indexed from the first one instead of named. That is what the original
-     * computes: it forms actor + axis * 4 once (sll v1,a2,16 / sra v1,a2,16 /
-     * sll v1,a2,2 at 0x002d3408..0x002d342c) and addresses the rotation lane
-     * at +0x50 of it; the instantaneous branch reuses the untouched actor for
-     * the +0x9e4 target angle (0x002d34a4). A `float *rotation =
-     * &actor->rotation.x;` local instead was compiled (form 01,
-     * .work/attempts/style-enemy-actor-family/form01-enemy_2.c): it makes
-     * ee-gcc 2.96 materialise actor + 0x50 in its own register, grows the
-     * function by 8 bytes and the main link refuses it with "cannot move
-     * location counter backwards (from 002d3830 to 002d3828)". */
+     * indexed from the first one instead of named. A named float * local for
+     * the lane would change the generated code. */
 
     angle_degrees = angle_degrees / 180.0f;
     angle_degrees = angle_degrees * sac_turn_pi;
@@ -380,6 +406,10 @@ void Enemy_Command_Sac_Turn(Actor *actor, int duration,
     }
 }
 
+/*
+ * Stores the type, scale (percent) and mode of the ladder at state_index, which
+ * is 1-based in the map state's ladder arrays.
+ */
 void Map_Command_Ladder(int state_index, int ladder_type, int scale_percent,
                         int ladder_mode)
 {
@@ -391,6 +421,7 @@ void Map_Command_Ladder(int state_index, int ladder_type, int scale_percent,
     state->ladder_mode[state_index - 1] = ladder_mode;
 }
 
+/* Runs the actor's queued enemy commands in order, then empties the queue. */
 void Start_Enemy_Command(Actor *actor)
 {
     ActorJavaArgs *queue;
@@ -403,6 +434,7 @@ void Start_Enemy_Command(Actor *actor)
     short i;
 
     queue = &actor->args;
+    /* Each entry loads its five parameter columns, then the switch dispatches on its type. */
     for (i = 0; i < queue->command_count && i < ENEMY_COMMAND_QUEUE_SIZE; i++) {
         type = queue->command_type[i];
         first = queue->command_parameter[0][i];
@@ -410,17 +442,15 @@ void Start_Enemy_Command(Actor *actor)
         third = queue->command_parameter[2][i];
         fourth = queue->command_parameter[3][i];
         fifth = queue->command_parameter[4][i];
-        /* A type-15 (Sac_Move) test that leaves the values unchanged: the
-         * fifth column is read again through a plain int pointer. The
-         * original carries it - the compare constant survives without a
-         * user (li v0,15 at 0x002d3594) and the bounds check (sltiu at
-         * 0x002d3598) is scheduled after all six column loads, which the
-         * statement-macro block reproduces. */
+        /* For Sac_Move entries the fifth column is read again through a plain
+         * int pointer. This keeps the original's load order: the bounds check
+         * follows all six column loads. */
         do {
             if (type == ENEMY_COMMAND_SAC_MOVE)
                 fifth = *(queue->command_parameter[4] + i);
         } while (0);
 
+        /* Each type calls its Enemy_Command_* or Map_Command_* function. */
         switch (type) {
         case ENEMY_COMMAND_MOTION:
             Enemy_Command_Motion(actor, first, 0, -1, -1, 0, 100);

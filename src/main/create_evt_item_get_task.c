@@ -63,11 +63,10 @@ typedef struct ItemModelHeader {
     int matrixOffset;
 } ItemModelHeader;
 
-/* Partial view of MapUnitRecord (include/main/exm_2.h); kept: switching it needs
- * canonical names MapUnitRecord lacks (texture, sequenceNo, sequenceEnd, translation,
- * extent, matrixPtr, seChannel, ownerNo, savedMatrix), and its position/translation are copied with aligned
- * doublewords (ld/sd), which MapUnitRecord's 4-aligned Vector4 position does
- * not reproduce. Not switched; no object measurement taken. */
+/* Partial view of MapUnitRecord (include/main/exm_2.h). Kept separate: MapUnitRecord
+ * lacks canonical names for texture, sequenceNo, sequenceEnd, translation, extent,
+ * matrixPtr, seChannel, ownerNo and savedMatrix, and its 4-aligned Vector4 position
+ * does not match the aligned doubleword copies of position and translation. */
 typedef struct MapUnitRecordItemView {
     unsigned int flags;
     void (*update)(struct MapUnitRecordItemView *);
@@ -121,14 +120,9 @@ typedef struct ItemOwnerUnit {
 } ItemOwnerUnit;
 
 /*
- * Only the fields MAP_drawUnitItemBox reads/writes are evidenced: the
- * embedded placement matrix at +0x40 (addiu $4,$16,64 into nmlModelSetPlace),
- * the rotation-X angle at +0xA8 (lh 0xA8, divided by 9.0 before
- * xglMatrixStackRotX), the embedded translation vector at +0xC0 (addiu
- * $17,$16,192, passed to xglMatrixStackTrans), the model entry index at
- * +0xE0 (lw 0xE0 into nmlModelEntry), the texture pointer at +0xE4 (lw 0xE4
- * into nmlModelSetTexture) and the saved-matrix pointer at +0x230 (lw 0x230
- * into xglMatrixStackSave). The spans between them are left unmodelled.
+ * Fields used by MAP_drawUnitItemBox: the placement matrix, the X rotation
+ * angle (divided by 9.0 before use), the translation, the model entry index,
+ * the texture and the saved matrix. The spans between them are left unmodelled.
  */
 typedef struct UnitItemBox {
     unsigned char unmodeled_00[0x40];  /* +0x00 */
@@ -234,6 +228,11 @@ ItemBoxRecord ItemBoxTbl[ITEM_BOX_COUNT] = {{0}};
 char EvtItemTbl[EVT_ITEM_COUNT * EVT_ITEM_NAME_SIZE] = { 0 };
 
 /* Definitions follow their callers so references remain address-based. */
+/*
+ * Item-get task. On the first run it builds the window message (money, a count or
+ * a name), marks the item as collected and opens the window. When the window
+ * closes it runs the owner's item-get method and removes the task.
+ */
 static void taskItemGet(XglTaskPrefix *entry)
 {
     EventItemTask *task = (EventItemTask *)entry;
@@ -246,6 +245,7 @@ static void taskItemGet(XglTaskPrefix *entry)
     int item_index;
     int count;
     GameLoopState->cleared_1c = 0;
+    /* First run: build the message, collect the item and create the window. */
     if (task->window_created == 0) {
         memset(message, 0, sizeof(message));
         table = ItemBoxTbl;
@@ -294,6 +294,7 @@ static void taskItemGet(XglTaskPrefix *entry)
         task->window = createItemGetWin(message);
         GameLoopState->flags |= GAME_LOOP_FLAG_ITEM_WINDOW;
     }
+    /* Window closed: run the owner's item-get method, clear its action and end the task. */
     if (task->window->state == 2) {
         unit = task->owner_unit;
         info = &unit->info;
@@ -308,6 +309,7 @@ static void taskItemGet(XglTaskPrefix *entry)
     }
 }
 
+/* Event item-get task: shows the item name in a window and removes the task when the window closes. */
 static void taskEvtItemGet(EventItemTask *task)
 {
     char message[ITEM_MESSAGE_SIZE];
@@ -328,6 +330,10 @@ static void taskEvtItemGet(EventItemTask *task)
     }
 }
 
+/*
+ * Calls dataBoxInc for item and count; when that returns nonzero, queues a
+ * taskEvtItemGet task for the item name. Returns 1 when a task was queued, else 0.
+ */
 int CreateEvtItemGetTask(int item, int count)
 {
     XglTaskScheduler *scheduler;
@@ -349,6 +355,11 @@ int CreateEvtItemGetTask(int item, int count)
     return 1;
 }
 
+/*
+ * Returns the name of item in category: categories 0 to 3 use the menu text tables
+ * and ITEM_CATEGORY_EVENT uses the event item table. Falls back to "NULL" when no
+ * name is found; an unknown category prints an error and returns 0.
+ */
 const char *GetItemName(int category, int item)
 {
     static char deb[5] = "NULL";
@@ -388,6 +399,7 @@ const char *GetItemName(int category, int item)
     }
 }
 
+/* Returns the name slot of event item index, which is numbered from 1. */
 char *dataEvtItmNameGet(int index)
 {
     return EvtItemTbl + index * EVT_ITEM_NAME_SIZE - EVT_ITEM_NAME_SIZE;
@@ -409,6 +421,10 @@ static int Pow(int base, int exponent)
     return result;
 }
 
+/*
+ * Appends the decimal digits of value to result, using the strno digit strings,
+ * and returns the digit count. A negative value appends nothing and returns 1.
+ */
 int HexToStr(int value, char *result)
 {
     int digits = 1;
@@ -438,6 +454,11 @@ int HexToStr(int value, char *result)
     return digits;
 }
 
+/*
+ * Sets up a field item box: its model and texture from the serial, its
+ * placement matrix and update callbacks. A box whose item was already collected
+ * starts in the opened state.
+ */
 void InitItemBox(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -462,6 +483,7 @@ void InitItemBox(MapUnitRecordItemView *unit)
         unit->texture = xtxres_tbl[UWARES_ITEM_BOX];
         break;
     }
+    /* Find the model's matrix past matrixOffset, save it and copy its translation. */
     header = unit->model;
     matrix = (Matrix4 *)((char *)header + header->matrixOffset) + 1;
     unit->savedMatrix = matrix;
@@ -477,6 +499,7 @@ void InitItemBox(MapUnitRecordItemView *unit)
     }
     info->clearedWord = 0;
     unit->flags |= 4;
+    /* Box extent, then the placement matrix from the unit's position and rotation. */
     unit->extent[0] = 0.3f;
     unit->extent[1] = 0.5f;
     unit->extent[2] = 0.2f;
@@ -500,6 +523,7 @@ void InitItemBox(MapUnitRecordItemView *unit)
         owner->flags |= 4;
         owner->position = unit->position;
     }
+    /* An item number at or above the table limit makes the box invalid. */
     if (info->itemNo >= ITEM_NO_LIMIT) {
         unit->serial = (unsigned short) -1;
         unit->update = 0;
@@ -507,6 +531,7 @@ void InitItemBox(MapUnitRecordItemView *unit)
         printf(itemBoxSerialErrorFormat, (short) info->itemNo);
         return;
     }
+    /* Already collected: start in the opened state and stop its effects. */
     if (xglFlagsGet1(ITEM_COLLECTED_FLAG_BASE + (short) info->itemNo) == 1) {
         unit->sequenceNo = ITEM_OPENED_SEQUENCE;
         unit->actionSub = 3;
@@ -518,6 +543,10 @@ void InitItemBox(MapUnitRecordItemView *unit)
     }
 }
 
+/*
+ * Sets up a field item symbol: its placement, update callback and model resource.
+ * Special symbols and already collected items are handled before the resource.
+ */
 void InitItemSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -560,6 +589,7 @@ void InitItemSymbol(MapUnitRecordItemView *unit)
     SetItemSymbolRsrc(unit);
 }
 
+/* Sets up a special symbol unit: its placement, its update callback and its model resource. */
 void InitSpecialSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -580,6 +610,11 @@ void InitSpecialSymbol(MapUnitRecordItemView *unit)
     SetItemSymbolRsrc(unit);
 }
 
+/*
+ * Chooses the model and texture of a symbol unit from its serial. The table symbol
+ * (ITEM_SERIAL_SYMBOL_FROM_TABLE) takes them from its item's category and count,
+ * and a money item switches the unit to the money symbol.
+ */
 void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -662,6 +697,11 @@ void SetItemSymbolRsrc(MapUnitRecordItemView *unit)
     }
 }
 
+/*
+ * Per-frame update of an item box. State 0 waits for the signal, state 1 queues
+ * taskItemGet for the item, state 2 runs the opening sequence and state 3 clears
+ * the effects.
+ */
 void MAP_updateUnitItemBox(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -715,6 +755,7 @@ void MAP_updateUnitItemBox(MapUnitRecordItemView *unit)
     }
 }
 
+/* Draws an item box: applies its translation, rotation and saved matrix, then draws its model entry. */
 void MAP_drawUnitItemBox(UnitItemBox *box)
 {
     xglMatrixStackUnit();
@@ -730,6 +771,10 @@ void MAP_drawUnitItemBox(UnitItemBox *box)
     xglMatrixStackSave(*box->saved_matrix);
 }
 
+/*
+ * Spins an item symbol. When the player comes within pickup distance and no item
+ * window is open, queues taskItemGet for it and removes the unit.
+ */
 void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info;
@@ -769,6 +814,10 @@ void MAP_updateUnitItemSymbol(MapUnitRecordItemView *unit)
     }
 }
 
+/*
+ * Animates a special symbol: once triggered it grows and rises, then spins. When
+ * its action is set to 5 it moves toward the player and shrinks away.
+ */
 void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit)
 {
     ItemUnitInfo *info = &unit->info;
@@ -816,6 +865,11 @@ void MAP_updateUnitSpecialSymbol(MapUnitRecordItemView *unit)
     }
 }
 
+/*
+ * Per-frame update of an item unit. It does nothing while its owner unit still has
+ * a serial; once the owner is gone the unit spins and, when triggered, blinks its
+ * parts and removes itself after the opening sequence.
+ */
 void MAP_updateUnitItem(MapUnitRecordItemView *unit)
 {
     unsigned short nextSequenceNo;

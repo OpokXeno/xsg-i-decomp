@@ -208,6 +208,7 @@ static void _DisposeHomingThread(RgHomingThread *thread)
     RgHeapFree(InstanceOfRgHeap(), thread, robotSourcePath, 94);
 }
 
+/* Arms the thread to steer geometry toward target; a null geometry leaves it idle. */
 static void _StartHomingThread(RgHomingThread *thread, RgGeomPoint *geometry,
                                RgGeomPoint *target, float actionTime)
 {
@@ -258,6 +259,7 @@ static float _GetSleepTimeHomingThread(RgHomingThread *thread)
     return sleepTime;
 }
 
+/* Steers toward the target until actionTime runs out, then sleeps and counts sleepTime. */
 static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
 {
     float actionTime;
@@ -282,6 +284,7 @@ static void _PassTimeHomingThread(RgHomingThread *thread, float deltaTime)
     }
 }
 
+/* Scales baseSpeed by the spec weight and divides it by the geometry weight. */
 static float _CalcMaxSpeed(RgBody *body, float baseSpeed)
 {
     float specWeight;
@@ -304,6 +307,7 @@ static void _StopAllShotThread(RgBody *body)
     }
 }
 
+/* Marks the body grounded; the landing sound plays on the frame it touches down. */
 static void _BodyOnGround(RgBody *body)
 {
     if (body->grounded == 0) {
@@ -334,6 +338,7 @@ static RgRobotStatus *_CreateStatue(void)
     return status;
 }
 
+/* Runs the current status's exit method, then resets the status and sets its type. */
 static void _SetStatus(RgRobotStatus *status, int type, RgBody *body)
 {
     RgStatusExitFunc exitMethod;
@@ -371,6 +376,7 @@ static int _StatusExecCmd(RgRobotStatus *status, RgCmd *command, RgBody *body)
     return 0;
 }
 
+/* Runs the status's pass-time method and adds dt to elapsedTime. */
 static int _StatusPassTime(RgRobotStatus *status, RgBody *body, float dt)
 {
     RgStatusPassTimeFunc passTimeMethod;
@@ -445,9 +451,9 @@ static int _AllowAllCmdInMoving(RgRobotStatus *status, RgBody *body, RgCmd *comm
 }
 
 /*
- * The original range-checks the command type with sltiu (ov12:0x00a02d78)
- * before splitting the 8/9/14 cases, which GCC only emits for an unsigned
- * switch operand.
+ * Dispatches damage, weak damage and hit-by-body commands. The original
+ * range-checks the command type with sltiu before splitting the cases, which
+ * GCC only emits for an unsigned switch operand.
  */
 static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
@@ -468,6 +474,7 @@ static int _AllowDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return result;
 }
 
+/* Dispatches only damage and weak damage commands. */
 static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -484,6 +491,7 @@ static int _AllowDamageCmdNotVRDashHit(RgRobotStatus *status, RgBody *body, RgCm
     return result;
 }
 
+/* Subtracts the damage from life, clamped at zero; returns 0x80 for damage and weak damage. */
 static int _AllowDamageCmdNotPetrify(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -509,6 +517,7 @@ damage:
 
 const char robotAssertMotionInfoNotNil[] = "pMotInfo != NIL";
 
+/* Picks the locomotion motion from the speed and turn rate, and recovers dash time. */
 static int _MovingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     RgVector velocity;
@@ -560,6 +569,7 @@ static void _InitMovingStatus(RgRobotStatus *status, RgBody *body)
     status->scratch0 = RG_MOT_NONE;
 }
 
+/* Handles a command during an attack; a weapon hit may chain into the next attack motion. */
 static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgRobotStatus *nextStatus;
@@ -593,6 +603,7 @@ static int _ExecCmdInAttack(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return result;
 }
 
+/* Fires the attack weapon at the motion's shot action and returns to moving when the motion ends. */
 static int _AttackPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     RgWeapon *weapon;
@@ -626,6 +637,7 @@ static int _AttackPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 32;
 }
 
+/* Stops the attack's shot and homing, then plays the weapon's end motion. */
 static void _AttackExit(RgRobotStatus *status, RgBody *body)
 {
     RgWeapon *shotWeapon;
@@ -650,6 +662,7 @@ static void _AttackExit(RgRobotStatus *status, RgBody *body)
     }
 }
 
+/* Switches to the attack status for motion and weapon; returns 0 when the body has no actor. */
 static RgRobotStatus *_InitAttackStatus(RgRobotStatus *status, RgBody *body,
                                         int motion, RgWeapon *weapon, int eSide)
 {
@@ -705,6 +718,7 @@ static int _ExecCmdInHissatu(RgRobotStatus *status, RgBody *body, RgCmd *command
     return _AllowDamageCmd(status, body, command);
 }
 
+/* Advances a hissatu special attack; the body's charID selects its boost, homing and shot sequence. */
 static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
                             float deltaTime)
 {
@@ -746,6 +760,7 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
         status->boosting = 0;
     }
 
+    /* Each case is one character's hissatu sequence. */
     switch (body->charID) {
     case 0:
         if (status->boosting != 0) {
@@ -939,10 +954,12 @@ static int _HissatuPassTime(RgRobotStatus *status, RgBody *body,
     default:
         break;
     }
+    /* Clears the pending shot and returns the accumulated result with the 0x200 bit set. */
     status->shotPending = 0;
     return result | 0x200;
 }
 
+/* Restores the lock-on, shot and speed state and ends the dash and jet effects. */
 static void _HissatuExit(RgRobotStatus *status, RgBody *body)
 {
     float maxSpeed;
@@ -967,6 +984,7 @@ static void _HissatuExit(RgRobotStatus *status, RgBody *body)
     RgRobotEffectTermJet(body->effect);
 }
 
+/* Enters the hissatu status and starts its motion. */
 static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body)
 {
     RgMotionShotInfo *motionInfo;
@@ -989,6 +1007,7 @@ static void _InitStatusHissatu(RgRobotStatus *status, RgBody *body)
     _BodyPlayMotion(body, RG_MOT_HISSATU);
 }
 
+/* Handles a command while the shield is up; damage is applied first. */
 static int _ExecCmdInShield(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -1056,6 +1075,7 @@ static int _ShieldPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
             _BodyPlayMotion(body, action->shiftMotionNo);
         }
     }
+    /* Shield states: 0 waits for the start motion, 1 holds the shield up, 2 waits for the end motion. */
     {
     state = *(unsigned int *)&status->scratch0;
     switch (state) {
@@ -1113,6 +1133,7 @@ static void _ShieldExit(RgRobotStatus *status, RgBody *body)
     }
 }
 
+/* Enters the shield status with motion and the shield weapon, and stops the lock-ons. */
 static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion,
                               RgWeapon *shieldWeapon, int scratch2Arg)
 {
@@ -1147,6 +1168,7 @@ static void _InitShieldStatus(RgRobotStatus *status, RgBody *body, int motion,
     }
 }
 
+/* Damage is always applied; movement commands pass through only once the targetting time has elapsed. */
 static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int mask;
@@ -1178,6 +1200,7 @@ static int _ExecCmdInTargetting(RgRobotStatus *status, RgBody *body, RgCmd *comm
     return mask;
 }
 
+/* Advances targetting; returns to moving once the targetting time has passed. */
 static int _TargettingPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     float elapsedTime;
@@ -1221,6 +1244,11 @@ static void _ExitTargettingStatus(RgRobotStatus *status, RgBody *body)
     RgRobotEffectSetJetInertia(body->effect, 1);
 }
 
+/*
+ * Enters the targetting status. A jump launches the body upward and starts
+ * its jet; homing starts unless the target is missing, the body is confused
+ * or the eye geometry's event flag is set.
+ */
 static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump)
 {
     RgVector velocity;
@@ -1276,6 +1304,7 @@ static void _InitTargettingStatus(RgRobotStatus *status, RgBody *body, int jump)
     status->scratch0 = 0;
 }
 
+/* Applies a rotate command during braking as a rotation force. */
 static int _ExecCmdInBreaking(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int mask;
@@ -1328,6 +1357,7 @@ static void _InitBreakingStatus(RgRobotStatus *status, RgBody *body)
     _BodyPlayMotion(body, RG_MOT_BREAK);
 }
 
+/* Handles a command during a dash; a continue command may switch to dash VR. */
 static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgVector vector;
@@ -1351,6 +1381,10 @@ static int _DashExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return result;
 }
 
+/*
+ * Advances a dash. Phase 0 accelerates until its time runs out, then either
+ * switches to dash VR or enters phase 1, which returns to moving after 0.3 s.
+ */
 static int _DashPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     RgRobotSpec *spec;
@@ -1436,6 +1470,7 @@ static void _DashExit(RgRobotStatus *status, RgBody *body)
     XrgSoundRingStopMoving(body->landingSound);
 }
 
+/* Enters the dash status for the spec's dash mode and direction; returns 0 when the dash is refused. */
 static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector direction)
 {
     RgRobotSpec *spec;
@@ -1504,9 +1539,8 @@ static int _InitDashStatus(RgRobotStatus *status, RgBody *body, RgVector directi
 
 /*
  * Sets DashVR's own scratch0/scratchTimer (see RgRobotStatus): scratch0 is
- * the follow-state tag _DashVRPassTime (still asm, ov12:0x00a052b0)
- * compares against 1/2, and scratchTimer is a countdown _DashVRPassTime
- * subtracts deltaTime from every frame.
+ * the follow-state tag _DashVRPassTime compares against 1/2, and scratchTimer
+ * is a countdown _DashVRPassTime subtracts deltaTime from every frame.
  */
 static void _DashVRMainToFollow(RgRobotStatus *status, RgBody *body)
 {
@@ -1524,6 +1558,7 @@ static inline float _ClampFloat(float value, float min, float max)
     return value < min ? min : (value > max ? max : value);
 }
 
+/* Handles a command during dash VR: turns the heading toward the command direction and forwards shots. */
 static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -1618,6 +1653,11 @@ static int _DashVRExecCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return result;
 }
 
+/*
+ * Advances dash VR. Phase 0 turns and drives along the heading until the dash
+ * ends; phase 1 hands over to phase 2, which follows the target and returns to
+ * moving when its timer expires.
+ */
 static int _DashVRPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
     RgRobotSpec *spec;
@@ -1727,6 +1767,7 @@ static void _DashVRExit(RgRobotStatus *status, RgBody *body)
     XrgSoundRingStopMoving(body->landingSound);
 }
 
+/* Enters the dash VR status toward direction; returns 0 when less than 20% of the dash time is left. */
 static int _InitDashVRStatus(RgRobotStatus *status, RgBody *body, RgVector direction)
 {
     RgRobotSpec *spec;
@@ -1811,14 +1852,15 @@ static int _DamagePassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
  * dashEscape becomes the Damage status's scratch1.
  *
  * The float argument comes before the flag: _ExecDamageCmd loads the
- * flag (lw $7, ov12:0x00a07c10) ahead of the float (lwc1 $f12 in the
- * jal delay slot), which GCC only schedules that way for this order.
+ * flag (lw $7) ahead of the float (lwc1 $f12 in the jal delay slot), which
+ * GCC only schedules that way for this order.
  */
 static inline float _ClampStiffTime(float time, float min, float max)
 {
     return time < min ? min : (time > max ? max : time);
 }
 
+/* Enters the damage status; a positive stiffTime overrides the scaled damage stiff time. */
 static void _InitDamageStatus(RgRobotStatus *status, RgBody *body,
                               RgCmd *command, float stiffScale, int dashEscape,
                               float stiffTime)
@@ -1867,12 +1909,10 @@ static int _ExecCmdInDrop(RgRobotStatus *status, RgBody *body, RgCmd *command)
 }
 
 /*
- * Drop status's own scratch1 (see RgRobotStatus) is the drop motion id
- * (see _GetDropMotion) checked against elapsedTime, and scratch0/scratch2
- * are the same equip side and pending flag _ExecCmdInDrop evidences. Once
- * the drop motion's timed removal point is reached, this clears the
- * body's spare weapon at that side (see _BodySetSpareWeapon, RgBody+0x7c)
- * by handing it to _BodyEquipWeapon.
+ * Drop status update. scratch0 is the equip side and scratch2 the pending
+ * flag. Once the drop motion's timed removal point is reached, hands the
+ * body's spare weapon at that side to _BodyEquipWeapon and clears it. Returns
+ * to the moving status 0.15 s after the flag clears.
  */
 static int _DropPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
 {
@@ -1894,6 +1934,7 @@ static int _DropPassTime(RgRobotStatus *status, RgBody *body, float deltaTime)
     return 0;
 }
 
+/* Enters the drop status for the equip side eSide; returns 0 when no weapon there can be dropped. */
 static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
                            int eSide)
 {
@@ -1924,6 +1965,11 @@ static int _InitDropStatus(RgRobotStatus *status, RgBody *body, int motion,
     return 1;
 }
 
+/*
+ * Returns a new queue slot for cmdType, or 0 when the queue is full or the
+ * level check refuses it. A command whose level is above the queued one's
+ * clears the queue first.
+ */
 static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
 {
     RgCmdQueue *pQ = cmdQueue;
@@ -1957,8 +2003,6 @@ static RgCmd *_EntryCmdQueue(void *cmdQueue, int cmdType)
     command->type = cmdType;
     return command;
 }
-
-/* ov12:0x00a51a58 contains the assertion expression "pQ != NIL". */
 
 static void _InitCmdQueue(RgCmdQueue *cmdQueue)
 {
@@ -2042,8 +2086,6 @@ static void _BodyAdvanceForAttack(RgBody *body, float attackPower,
                        spec->enginePower * spec->dashPower * 0.3f * attackFactor);
 }
 
-/* ov12:0x00a51a68 contains the assertion expression "pBody != NIL". */
-
 static int _BodyGetTargetPos(RgBody *body, RgVector position)
 {
     if (body == 0) {
@@ -2073,8 +2115,7 @@ static void _BodySetSpec(RgBody *body, RgRobotSpec *spec)
     }
 }
 
-/* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
-
+/* Installs geometry as the body's geometry, frees the old one and applies the spec's weight and resistance. */
 static void _BodySetGeom(RgBody *body, RgGeomPoint *geometry)
 {
     RgGeomPoint *oldGeometry;
@@ -2114,7 +2155,6 @@ static void _BodySetEyeGeom(RgBody *body, RgGeomPoint *eyeGeometry)
     body->eyeGeometry = eyeGeometry;
 }
 
-/* ov12:0x00a51a78 contains the assertion expression "pGeom != NIL". */
 static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry)
 {
     RgGeomPoint *oldAdvanceGeometry;
@@ -2132,6 +2172,7 @@ static void _BodySetAdvanceGeom(RgBody *body, RgGeomPoint *advanceGeometry)
     body->advanceGeometry = advanceGeometry;
 }
 
+/* Sets the landing sound and passes it to every equipped and spare weapon. */
 static void _BodySetSound(RgBody *body, XrgSound *sound)
 {
     unsigned int eSide;
@@ -2153,6 +2194,7 @@ static void _BodySetSound(RgBody *body, XrgSound *sound)
     }
 }
 
+/* Replaces the body's actor, records its character id and starts the standing loop. */
 static void _BodySetActor(RgBody *body, XrgActorEssence *actorSpec)
 {
     XrgActor *oldActor;
@@ -2183,6 +2225,7 @@ static void _BodySetTarget(RgBody *body, RgGeomPoint *target)
     body->target = target;
 }
 
+/* Detaches the weapon in slot eType, removes its weight and hands it to a drop object. */
 static int _BodyDropWeapon(RgBody *body, unsigned int eType)
 {
     RgWeapon *weapon;
@@ -2218,6 +2261,11 @@ static int _BodyDropWeapon(RgBody *body, unsigned int eType)
     return 0;
 }
 
+/*
+ * Equips weapon in slot side: drops the weapon already there, attaches the
+ * weapon's actor to its mount joint and sets up the slot's shot thread.
+ * Returns the drop result.
+ */
 static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
 {
     RgWeaponEssence *ess;
@@ -2253,6 +2301,7 @@ static int _BodyEquipWeapon(RgBody *body, int side, RgWeapon *weapon)
     geomWeight = RgGeomPointGetWeight(body->geometry);
     RgGeomPointSetWeight(body->geometry,
                          geomWeight + RgWeaponGetWeight(weapon));
+    /* Attach the weapon actor to its mount joint, then run the lock-on checks for its slot. */
     if (RgWeaponGetActor(weapon) != 0 && body->actor != 0) {
         lockonActor = 0;
         RgWeaponGetActor(weapon);
@@ -2346,8 +2395,7 @@ static void _BodySetAutoHomingEnv(RgBody *body, int autoHomingEnv)
     body->autoHomingEnv = autoHomingEnv;
 }
 
-/* ov12:0x00a51b48 contains the assertion expression "pCmd != NIL". */
-
+/* Records the command type in cmdMask and passes the command to the status's execution method. */
 static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
                         RgCmd *command)
 {
@@ -2361,6 +2409,7 @@ static int _BodyExecCmd(RgRobotStatus *robotStatus, RgBody *body,
     return _StatusExecCmd(robotStatus, command, body);
 }
 
+/* Lowers the max turn rate as the body nears its top speed, unless it is turning freely this frame. */
 static void _BodyGeomPassTime(RgBody *body, float deltaTime)
 {
     RgGeomPoint *geometry;
@@ -2386,6 +2435,7 @@ static void _BodyGeomPassTime(RgBody *body, float deltaTime)
     RgGeomPassTime(&geometry->geom, deltaTime);
 }
 
+/* Advances the eye geometry, moves it to the body and the target, and returns its event flag. */
 static int _EyeGeomPassTime(RgBody *body, float deltaTime)
 {
     RgGeomPoint *eyeGeom;
@@ -2404,6 +2454,7 @@ static int _EyeGeomPassTime(RgBody *body, float deltaTime)
     return eventFlag;
 }
 
+/* Advances the advance geometry, placing it ahead of the body by half its velocity. */
 static void _AdvanceGeomPassTime(RgBody *body, float deltaTime)
 {
     RgGeomPoint *advanceGeom;
@@ -2422,6 +2473,7 @@ static void _AdvanceGeomPassTime(RgBody *body, float deltaTime)
     RgGeomPointMovePos(advanceGeom, position);
 }
 
+/* Steers toward the target for each enabled auto-homing entry; a set no-auto-homing flag only clears itself. */
 static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime)
 {
     RgRobotSpec *spec;
@@ -2452,6 +2504,7 @@ static void _BodyAutoHomingPassTime(RgBody *body, float deltaTime)
     }
 }
 
+/* Advances the body one frame, runs its status and sub-systems, and returns the status flags. */
 static int _BodyPassTime(RgRobotStatus *robotStatus, RgBody *body,
                          float deltaTime)
 {
@@ -2532,6 +2585,7 @@ static void _BodyDisp(RgRobotStatus *robotStatus, RgBody *body)
     RgRobotEffectDisp(body->effect);
 }
 
+/* Sets the body to its default state and creates its geometries, shot threads and effect. */
 static void _InitBody(RgBody *body)
 {
     unsigned int eType;
@@ -2580,6 +2634,7 @@ static void _InitBody(RgBody *body)
     } while (0);
 }
 
+/* Frees the body's geometries, weapons, shot threads, effect, actor and landing sound. */
 static void _DestructBody(RgBody *body)
 {
     unsigned int i;
@@ -2621,8 +2676,6 @@ static RgBody *_CreateBody(void)
     _InitBody(body);
     return body;
 }
-
-/* ov12:0x00a51b58 contains the format string "already disposed body %p". */
 
 static void _DisposeBody(RgBody *body)
 {
@@ -2693,6 +2746,11 @@ static int _IsBackWeaponReady(RgBody *body, unsigned int eType)
     return 1;
 }
 
+/*
+ * Fires the weapon in slot command->param: a hissatu check comes first, then a
+ * drop when the weapon is out of shots, then a shot thread, or a shield for
+ * shot type 3.
+ */
 static int _ExecShotOrAttackCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgShotMotStartInfo startParam;
@@ -2778,6 +2836,7 @@ static int _ExecBreakCmd(RgRobotStatus *status, RgBody *body, void *command)
     return 0x40;
 }
 
+/* Starts a dash for the spec's dash mode: mode 1 is dash VR, modes 0 and 2 to 4 the normal dash. */
 static int _ExecDashCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -2803,6 +2862,7 @@ done:
     return result;
 }
 
+/* Starts dash VR for a continue command when the spec's dash mode is VR. */
 static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     int result;
@@ -2815,8 +2875,6 @@ static int _ExecDashContinueCmd(RgRobotStatus *status, RgBody *body, RgCmd *comm
     }
     return result;
 }
-
-/* The format string "unknown equip type (drop weapon) %d". */
 
 static int _GetDropMotion(int eSide)
 {
@@ -2862,6 +2920,7 @@ static int _ExecDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return 0x80;
 }
 
+/* Plays the hit effect, pushes the body along the hit vector, applies damage and starts a damage status. */
 static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     RgVector force;
@@ -2879,6 +2938,10 @@ static int _ExecHitByBody(RgRobotStatus *status, RgBody *body, RgCmd *command)
     return 0x400;
 }
 
+/*
+ * Applies weak damage. Hits accumulate inside a time window; once the total
+ * reaches the threshold a damage status starts, otherwise a weak-hit motion is set.
+ */
 static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *command)
 {
     float windowSeed;
@@ -2906,6 +2969,7 @@ static int _ExecWeakDamageCmd(RgRobotStatus *status, RgBody *body, RgCmd *comman
     return 0x80;
 }
 
+/* Updates the dull flags from the status flags and whether the target is in view, then stores the auto-homing environment. */
 static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime)
 {
     RgVector targetPos;
@@ -2946,6 +3010,7 @@ static void _DullFlagsPassTime(RgStatus *pRobot, float deltaTime)
     _BodySetAutoHomingEnv(pRobot->body, flags);
 }
 
+/* Runs the queued commands unless the robot is dead, then advances the body and the dull flags. */
 static void _PassTimeRobot(RgStatus *pRobot, float deltaTime)
 {
     RgBody *body;
@@ -2979,8 +3044,6 @@ static void _DispRobot(RgStatus *pRobot)
     _BodyDisp(pRobot->robotStatus, pRobot->body);
 }
 
-/* ov12:0x00a51bc0 contains the format string "already disposed robot %p\n". */
-
 static void _DestructRobot(RgStatus *pRobot)
 {
     if (pRobot == 0) {
@@ -2994,6 +3057,7 @@ static void _DestructRobot(RgStatus *pRobot)
     _DisposeCmdQueue(pRobot->cmdQueue);
 }
 
+/* Creates the body, status and command queue of a new robot and resets its dull flags. */
 static void _InitRobot(RgStatus *pRobot)
 {
     RgRobotStatus *status;
@@ -3041,6 +3105,11 @@ void DisposeRgRobot(RgStatus *pRobot)
     RgHeapFree(InstanceOfRgHeap(), pRobot, robotSourcePath, 4051);
 }
 
+/*
+ * Advances a robot one frame. When its life reaches zero it returns to moving;
+ * for five seconds afterwards it plays hit effects and sounds, then moves to
+ * phase 2.
+ */
 void RgRobotPassTime(RgStatus *pRobot, float deltaTime)
 {
     RgVector position;
@@ -3252,6 +3321,7 @@ int RgRobotGetCharID(RgStatus *pRobot)
     return pRobot->body->charID;
 }
 
+/* Returns 1 when a shield is up and the attack direction's dot product with the shield direction is not negative. */
 int RgRobotIsInvalidAttack(RgStatus *pRobot, RgVector direction)
 {
     float *shield;
@@ -3336,11 +3406,6 @@ void RgRobotAccelarateRotate(RgStatus *pRobot, float rotate)
         command->rotate = rotate;
     }
 }
-
-/*
- * ov12:0x00a51a88 contains the range expression
- * "RG_EQUIP_TYPE_MIN <= (eType) && (eType) < RG_EQUIP_TYPE_NUM".
- */
 
 void RgRobotShot(RgStatus *pRobot, unsigned int eType)
 {
@@ -3496,6 +3561,7 @@ void RgRobotInvalidAttack(RgStatus *pRobot, RgVector direction, float scale)
     }
 }
 
+/* Queues a hit-ground command; a nearly upward direction also marks the body grounded. */
 void RgRobotHitBG(RgStatus *pRobot, RgVector direction)
 {
     RgCmd *command;

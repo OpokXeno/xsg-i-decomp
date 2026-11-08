@@ -10,11 +10,6 @@
 #include "ov12/xrg_rand_int.h"
 
 
-/*
- * Scaffold-owned .rodata, kept under splat names:
- * ov12:0x00a55100 "../rg_geom_point.euc.c", 0x00a55118
- * "fWeight > RG_FCONST(0.0)", 0x00a55138 "pGeom != NIL".
- */
 const char rg_point_assert_expression[16] = "pPoint != NIL";
 const char geomPointSourcePath[24] = "../rg_geom_point.euc.c";
 const char geomPointAssertWeightPositive[32] = "fWeight > RG_FCONST(0.0)";
@@ -25,6 +20,7 @@ float RgGetGeomGravity(void)
     return RG_GEOM_GRAVITY;
 }
 
+/* Initializes a point geometry with the given weight, cleared vectors and no horizontal speed limit. */
 void InitRgGeomPoint(RgGeomPoint *point, float weight)
 {
     if (point == 0) {
@@ -45,6 +41,7 @@ void InitRgGeomPoint(RgGeomPoint *point, float weight)
     point->maxXYSpd = RG_GEOM_NO_LIMIT;
 }
 
+/* Allocates and initializes a point geometry with the given weight. */
 RgGeomPoint *CreateRgGeomPoint(float weight)
 {
     RgGeomPoint *point;
@@ -58,6 +55,7 @@ RgGeomPoint *CreateRgGeomPoint(float weight)
     return point;
 }
 
+/* Sets the position and the old position to the same value. */
 void RgGeomPointSetPos(RgGeomPoint *point, RgVector position)
 {
     if (point == 0) {
@@ -67,6 +65,7 @@ void RgGeomPointSetPos(RgGeomPoint *point, RgVector position)
     XrgCopyVector(point->oldPosition, position);
 }
 
+/* Moves the position and leaves the old position unchanged. */
 void RgGeomPointMovePos(RgGeomPoint *point, RgVector position)
 {
     if (point == 0) {
@@ -75,6 +74,7 @@ void RgGeomPointMovePos(RgGeomPoint *point, RgVector position)
     XrgCopyVector(point->position, position);
 }
 
+/* Sets the old position to the current position. */
 void RgGeomPointResetPos(RgGeomPoint *point)
 {
     if (point == 0) {
@@ -91,6 +91,7 @@ void RgGeomPointSetVel(RgGeomPoint *point, RgVector velocity)
     XrgCopyVector(point->velocity, velocity);
 }
 
+/* Adds force to the force accumulated for the next time step. */
 void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
 {
     if (point == 0) {
@@ -99,6 +100,7 @@ void RgGeomPointAddForce(RgGeomPoint *point, RgVector force)
     XrgAddVectorXYZ(point->force, point->force, force);
 }
 
+/* Sets the weight, which must be positive. */
 void RgGeomPointSetWeight(RgGeomPoint *point, float weight)
 {
     if (point == 0) {
@@ -119,9 +121,9 @@ void RgGeomPointSetMoveResist(RgGeomPoint *point, float moveResist)
 }
 
 /*
- * The pointer-validation assert reuses the "pGeom != NIL" text
- * (ov12:0x00a55138), not "pPoint != NIL"; the parameter stays an
- * RgGeomPoint, the same object every other setter here validates.
+ * The pointer-validation assert uses the "pGeom != NIL" text, not
+ * "pPoint != NIL"; the parameter stays an RgGeomPoint, the object every
+ * other setter here validates.
  */
 void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxXYSpd)
 {
@@ -134,6 +136,7 @@ void RgGeomPointSetMaxXYSpd(RgGeomPoint *point, float maxXYSpd)
     point->maxXYSpd = maxXYSpd;
 }
 
+/* Copies the position into destination. source_file and source_line give the caller's location for the assert. */
 void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
                          const char *source_file, int source_line)
 {
@@ -143,6 +146,7 @@ void __RgGeomPointGetPos(RgGeomPoint *point, RgVector destination,
     XrgCopyVector(destination, point->position);
 }
 
+/* Copies the old position into destination. source_file and source_line give the caller's location for the assert. */
 void __RgGeomPointGetOldPos(RgGeomPoint *point, RgVector destination,
                             const char *source_file, int source_line)
 {
@@ -184,6 +188,11 @@ float RgGeomPointGetMoveResist(RgGeomPoint *point)
     return point->moveResist;
 }
 
+/*
+ * Advances the point by deltaTime: integrates force into velocity, limits
+ * horizontal speed, applies gravity, moves the position and applies move
+ * resistance.
+ */
 void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime)
 {
     RgVector delta;
@@ -192,6 +201,7 @@ void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime)
         assert_prog(rg_point_assert_expression, geomPointSourcePath, 172);
     }
 
+    /* Copies position to oldPosition through vf31 before the position is integrated. */
     __asm__ __volatile__(
         "lqc2 $vf31, 0(%1)\n\t"
         "sqc2 $vf31, 0(%0)\n\t"
@@ -205,6 +215,7 @@ void RgGeomPointPassTime(RgGeomPoint *pPoint, float deltaTime)
         pPoint->maxXYSpd * pPoint->maxXYSpd) {
         RgVector horizontal;
 
+        /* Copies the velocity to horizontal through vf31 so its horizontal part can be clamped. */
         __asm__ __volatile__(
             "lqc2 $vf31, 0(%1)\n\t"
             "sqc2 $vf31, 0(%0)\n\t"

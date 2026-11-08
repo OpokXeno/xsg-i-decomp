@@ -58,10 +58,7 @@ typedef unsigned int GameLoopStateWords[];
 extern GameLoopStateWords GameLoopState;
 extern const char animationCharFormat[];
 
-/*
- * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
- * it clears (main:0x002409b0).  Same prototype as src/ov01/snd.h.
- */
+/* Returns the SPU-DMA busy state of RssdWork; a nonzero wait first spins until it clears. */
 extern int SsdSpuDmaCompleted(int wait);
 
 extern void xglSoundSequenceNormal3(int channel, int volume, int time);
@@ -125,6 +122,11 @@ void xglSoundWaitDma(void)
     SsdSpuDmaCompleted(0);
 }
 
+/*
+ * Replaces the wave data of one sound slot: stops what plays there, disposes the
+ * old wave bank and loads swd. A negative bank selects a sequence channel.
+ * Returns the new handle.
+ */
 int xglSoundSendSwd(void *swd, int bank)
 {
     SoundChannelEntry *entry;
@@ -169,6 +171,7 @@ int xglSoundSendSwd(void *swd, int bank)
     return returned;
 }
 
+/* Replaces the sequence in channel `bank` with smd, stopping and disposing the old one. Returns the new handle. */
 int xglSoundSendSmd2(void *smd, int bank)
 {
     SoundChannelEntry *entry = &SoundWork.channels[bank];
@@ -203,6 +206,7 @@ void xglSoundSendSmd(void *smd)
     xglSoundSendSmd2(smd, 0);
 }
 
+/* Replaces the effect data of effect bank `bank` with sed, disposing the old one. Returns the new handle. */
 int xglSoundSendSed(void *sed, int bank)
 {
     SoundEffectBankEntry *entry = &SoundWork.effect_banks[bank];
@@ -232,6 +236,7 @@ int xglSoundSendSed(void *sed, int bank)
     return result;
 }
 
+/* Reads the wave file `file_name` from the sound data directory into buffer. Returns the read result. */
 int xglSoundLoadSwd(const char *file_name, void *buffer)
 {
     char path[256];
@@ -261,6 +266,7 @@ int xglSoundLoadSwd(const char *file_name, void *buffer)
     return xglCdReadFile(path, buffer, 0, 0);
 }
 
+/* Sends wave and effect data to an effect bank, waiting for the SPU DMA between the two. */
 void xglSoundSendEffect(void *swd, void *sed, int bank)
 {
     xglSoundSendSwd(swd, bank);
@@ -270,6 +276,10 @@ void xglSoundSendEffect(void *swd, void *sed, int bank)
     xglSoundSendSed(sed, bank);
 }
 
+/*
+ * Loads the wave and effect files named file_name from the effect directory into
+ * effect bank `bank`. Null arguments clear the bank.
+ */
 void xglSoundLoadEffect(const char *file_name, void *buffer, int bank)
 {
     char path[256];
@@ -306,6 +316,7 @@ void xglSoundLoadEffect(const char *file_name, void *buffer, int bank)
 
         } while (SsdSpuDmaCompleted(0) != 0);
     }
+    /* Build the .SED path in the same buffer. */
     request_destination = path;
     request_source = SoundDataPath;
     while (*request_source != '\0') {
@@ -339,6 +350,7 @@ void xglSoundLoadEffect(const char *file_name, void *buffer, int bank)
     }
 }
 
+/* Loads the sequence file named file_name from the sequence directory and makes it channel 0's sequence. Null arguments clear it. */
 void xglSoundLoadRequestSmd(const char *file_name, void *buffer)
 {
     char path[256];
@@ -375,6 +387,7 @@ void xglSoundLoadRequestSmd(const char *file_name, void *buffer)
 
         } while (SsdSpuDmaCompleted(0) != 0);
     }
+    /* Build the .SMD path in the same buffer. */
     request_destination = path;
     request_source = SoundDataPath;
     while (*request_source != '\0') {
@@ -409,6 +422,7 @@ void xglSoundLoadRequestSmd(const char *file_name, void *buffer)
     xglSoundSequenceNormal2(0, SOUND_VOLUME_MAX);
 }
 
+/* Starts the sequence on `channel` with the clamped volume and the halved time. */
 void xglSoundSequenceNormal3(int channel, int volume, int time)
 {
     int result;
@@ -431,6 +445,7 @@ void xglSoundSequenceNormal(int volume)
     xglSoundSequenceNormal3(0, volume, 0);
 }
 
+/* Pauses the sequence on `channel` with the halved time, if one is playing. */
 void xglSoundSequenceFadeOut2(int channel, int time)
 {
     int result;
@@ -451,6 +466,7 @@ void xglSoundSequenceFadeOut(int time)
     xglSoundSequenceFadeOut2(0, time);
 }
 
+/* Stops the sequence on `channel`, if one is playing. */
 void xglSoundSequenceStop2(int channel)
 {
     int result;
@@ -471,6 +487,10 @@ void xglSoundSequenceStop(void)
     xglSoundSequenceStop2(0);
 }
 
+/*
+ * Plays the effect directly, with a random source offset for ids 1-3 and 5.
+ * Does nothing when its bank is not loaded.
+ */
 void xglSoundEffectNormalDirect(int effect_id)
 {
     unsigned short handle = SoundWork.effect_banks[effect_id >> 16].handle;
@@ -490,6 +510,7 @@ void xglSoundEffectNormalDirect(int effect_id)
                         source_id);
 }
 
+/* Queues a normal play packet for the effect; a zero pitch is randomized for ids 1-3 and 5. */
 void xglSoundEffectNormalID(int soundEffectId, int pitch)
 {
     int bank = soundEffectId >> 16;
@@ -537,6 +558,11 @@ void xglSoundEffectParamID(int soundEffectId, int volume, int pan, int pitch)
     }
 }
 
+/*
+ * Plays the effect at `position`, relative to the sound listener (the player
+ * actor), with pan and volume taken from its angle and distance. The effect
+ * stops when the distance exceeds 6 units.
+ */
 void xglSoundEffectPosID(int soundEffectId, const float *position, int use_update_packet, int source)
 {
     SoundListener *listener = (SoundListener *) GameLoopState[1];
@@ -610,6 +636,7 @@ void xglSoundEffectStopID(int soundEffectId, int source)
     }
 }
 
+/* Returns the playback check result for the effect, or for all effects when the id is negative. */
 int xglSoundEffectCheckID(int soundEffectId)
 {
     int result;
@@ -632,6 +659,7 @@ int xglSoundEffectCheckID(int soundEffectId)
     return result;
 }
 
+/* Opens a PCM stream from the CD file `source` on stream 0, prefilling its ring before playback. */
 void xglSoundStreamOpenPcm(int stream, const char *source)
 {
     SoundStream *state;
@@ -657,6 +685,7 @@ void xglSoundStreamOpenPcm(int stream, const char *source)
     }
 }
 
+/* Opens a stereo VAG stream from the CD file `source` on stream 0, with the given pitch and volume. */
 void xglSoundStreamOpenVagStereoParam(int stream, const char *source, int pitch, int volume)
 {
     SoundStream *state;
@@ -687,6 +716,7 @@ void xglSoundStreamOpenVagStereo(int stream, const char *source)
     xglSoundStreamOpenVagStereoParam(stream, source, SOUND_PITCH_NORMAL, SOUND_VOLUME_MAX);
 }
 
+/* Opens a mono VAG stream from the CD file `source` on stream 0, with the given pitch, volume and pan. */
 void xglSoundStreamOpenVagMultiParam(int stream, const char *source, int pitch, int volume, int pan)
 {
     SoundStream *state;
@@ -721,6 +751,7 @@ void xglSoundStreamOpenVagMulti(int stream, const char *source)
     xglSoundStreamOpenVagMultiParam(stream, source, SOUND_PITCH_NORMAL, SOUND_VOLUME_MAX, SOUND_PAN_CENTER);
 }
 
+/* Stops stream 0: closes its CD source and releases the driver stream of its type. */
 void xglSoundStreamStop(int stream)
 {
     SoundStream *state;
@@ -767,6 +798,7 @@ void xglSoundStreamStop(int stream)
     state->playback.type = SOUND_STREAM_NONE;
 }
 
+/* Sends silent chunks to the stereo VAG stream while the driver reports free space. */
 void xglSoundStreamMute(void)
 {
     int result;
@@ -794,6 +826,10 @@ void xglSoundStreamMute(void)
     }
 }
 
+/*
+ * Decides whether the driver needs another chunk: returns 1 to feed one, 0 to
+ * wait, and -1 when the stream has ended. Writes silence while it is priming.
+ */
 static int stream_check(int stream_flags, CdStreamParam *stream)
 {
     int request = stream_flags >> 8;
@@ -823,6 +859,10 @@ static int stream_check(int stream_flags, CdStreamParam *stream)
     return result;
 }
 
+/*
+ * Shows the stream activity indicator and feeds the driver the next chunk of the
+ * active stream. Stops the stream when it ends.
+ */
 int xglSoundStreamMain(void)
 {
     SoundStream *state = &SoundWork.stream;
@@ -885,6 +925,7 @@ int xglSoundStreamMain(void)
     return status;
 }
 
+/* Appends one SE packet, the command with four argument words from the variadic list, if the queue has room. */
 void xglMakeSePacket(short command, ...)
 {
     SoundArgumentList args;
@@ -910,6 +951,7 @@ void xglMakeSePacket(short command, ...)
     }
 }
 
+/* Sends the queued SE packets to the sound driver and empties the queue. */
 void xglSendSePacket(void)
 {
     SsdSendFuncPacket(SoundWork.packets, SoundWork.packet_count);
@@ -917,6 +959,7 @@ void xglSendSePacket(void)
     memset(SoundWork.packets, 0, SOUND_SE_QUEUE_BYTES);
 }
 
+/* Clears every sound bank, the stream state and the SE queue. */
 void xglSoundReset(void)
 {
     SoundStream *state;
@@ -938,6 +981,7 @@ void xglSoundReset(void)
     memset(SoundWork.packets, 0, SOUND_SE_QUEUE_BYTES);
 }
 
+/* Initializes the sound driver and resets the channel and effect bank handles. */
 void xglSoundInitial(void)
 {
     SoundChannelEntry *channel;

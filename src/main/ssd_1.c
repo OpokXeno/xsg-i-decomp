@@ -11,20 +11,8 @@
 #define RSSD_CMD_ADD_EFFECT_DATA 0x60
 
 /*
- * RssdWork, RssdRequest and RssdCallFunc: the one spelling lives in main/tu110's
- * own header, src/main/ssd_init.h. The generated include/main/ssd_init.h cannot
- * carry RssdWork's type yet, so that
- * header is included directly.
- */
-/* canon: config/header-canon.json chose src/core/main-00240188/private.h over 1 other accepted spelling */
-/*
- * RssdWork is the RSSD RPC / background-wave work area, main:0x004aa080,
- * ELF symbol size 0x200 bytes. The accepted RssdWorkFlags in
- * xeno/core/types.h (from RssdBackgroundNextWave, main:0x0023ff28) only
- * carries the leading `flags` word; this function evidences more of the same
- * object, so the type is extended here under the same tag and leading field
- * Only the evidenced members are modeled here. Bytes this TU does not access
- * stay explicit unmodeled spans.
+ * RssdWork is the RSSD RPC and background-wave work area (0x200 bytes). Only
+ * the members this TU accesses are modeled; the other bytes stay unmodeled.
  */
 struct SsdMemoryBlock;
 
@@ -85,33 +73,17 @@ enum {
     RSSD_CMD_ADD_WAVE_DATA = 0x20
 };
 
-/*
- * SIF RPC end callback for the RSSD work area: clears flag bit 3, copies the
- * 32-byte receive record into RssdWork, reports a status (-1 on a nonzero
- * result, else flag bit 5) through the registered one-shot completion
- * callback, then signals the waiting thread's semaphore.
- *
- * It runs from the SIF RPC interrupt context, so it ends with the
- * ee-interrupt-handler-return primitive (docs/ps2-capabilities.md): `sync.l`
- * orders every earlier load/store, including the iSignalSema effects, before
- * `ei` re-enables interrupts on the way out.
- */
 extern void *sceSifGetNextRequest(void *queue);
 
 extern void sceSifExecRequest(void *request);
 
-/*
- * Returns the SPU-DMA busy bit of RssdWork; a nonzero wait first spins until
- * it clears (main:0x002409b0). Same prototype as src/main/xgl_sound.c and
- * src/ov01/snd.h.
- */
 extern int SsdSpuDmaCompleted(int wait);
 
 extern int printf(const char *format, ...);
 
 /*
- * Sends count 32-byte packets read from packets over SIF RPC; count << 5 is
- * the RssdCallFunc payload size, sizeof(RssdRequest). No-op when count is 0.
+ * Sends count 32-byte packets read from packets over SIF RPC (count << 5 bytes).
+ * Does nothing when count is 0.
  */
 void SsdSendFuncPacket(void *packets, int count)
 {
@@ -125,6 +97,7 @@ void SsdSendFuncPacket(void *packets, int count)
     }
 }
 
+/* Starts a direct read of size bytes into SPU memory at spuPtr. transSize is sent as the first request argument. */
 int SsdSpuDirectRead(unsigned char *spuPtr, int transSize, int size)
 {
     RssdRequest request;
@@ -143,6 +116,10 @@ int SsdSpuDirectRead(unsigned char *spuPtr, int transSize, int size)
     return printf("Ssd spu read  SpuPtr=0x%08x  TransSize=0x%0x\n", transSize, size);
 }
 
+/*
+ * Adds the wave data described by a wave header to SPU memory and returns its
+ * wave id, or -1 on error. The first chunk is at most RSSD_TRANSFER_MAX bytes.
+ */
 int SsdAddWaveData(SsdWaveHeader *data, int size, int wave)
 {
     /*
@@ -244,6 +221,10 @@ int SsdCheckWaveData(int wave)
     return 0;
 }
 
+/*
+ * Returns the SPU DMA busy bit of RssdWork. With wait set, processes pending
+ * SIF requests until the bit clears.
+ */
 int SsdSpuDmaCompleted(int wait)
 {
     int busy = (RssdWork.flags >> RSSD_FLAG_SPU_DMA_SHIFT) & 1;
@@ -261,7 +242,7 @@ int SsdSpuDmaCompleted(int wait)
     return busy;
 }
 
-/* Forwards value (an SPU memory size or address) unchanged; no further evidenced use in this function. */
+/* Sends value (an SPU memory size or address) to RSSD as a memory check request. */
 void SsdCheckSpuMemory(int value)
 {
     RssdRequest request;
@@ -271,6 +252,7 @@ void SsdCheckSpuMemory(int value)
     RssdCallFunc(RSSD_CMD_CHECK_SPU_MEMORY, &request, 0, 0);
 }
 
+/* Adds the effect data described by an effect header and returns the response value, or -1 when the tag is wrong. */
 int SsdAddEffectData(RssdEffectData *effectData, int unused)
 {
     RssdRequest request;

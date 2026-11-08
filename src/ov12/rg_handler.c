@@ -22,6 +22,7 @@
 #define RG_HANDLER_CAMERA_HIDE_TIME 0.5f
 
 
+/* Applies the body contact of two robots in both directions: flag 0x400 hits with the body damage, flag 0x100 only pushes. */
 void RgHandlerRobotVsRobot(RgGeom *robotGeom, RgBgCollision *collision)
 {
     RgStatus *robotAStatus;
@@ -97,6 +98,7 @@ void RgHandlerWeaponVsBG(RgGeom *weaponGeom, RgBgCollision *collision)
     RgWeaponHitBG(weapon, RgGeomGetParent(collision->geom), collision->hitDirection);
 }
 
+/* Hides the background object the camera passes through, for a short time. */
 void RgHandlerCameraVsBG(RgGeom *cameraGeom, RgBgCollision *collision)
 {
     void *bgObject;
@@ -108,6 +110,7 @@ void RgHandlerCameraVsBG(RgGeom *cameraGeom, RgBgCollision *collision)
 }
 
 /* The robot's geometry is a point: its RgGeom head leads the RgGeomPoint. */
+/* Reports a background contact to the robot and, when a background object is hit, applies a body attack from the robot weight and speed. */
 void RgHandlerRobotVsBG(RgGeom *robotGeom, RgBgCollision *collision)
 {
     RgGeomPoint *point = (RgGeomPoint *) robotGeom;

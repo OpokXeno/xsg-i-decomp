@@ -125,7 +125,7 @@ typedef struct RgSelectAGWSDataWords {
     u64 word[sizeof(struct RgSelectAGWSData) / 8];
 } RgSelectAGWSDataWords;
 
-/* Defined elsewhere (scaffold data): messages, picture names and tables. */
+/* Messages, picture names and tables used by this TU. */
 static RgFontColor s_aRed_1[2];
 static RgFontColor s_aWhite_2[2];
 static RgSelCharPicEntry s_ainPics_3[6];
@@ -300,6 +300,7 @@ static void _SinInit(void)
     s_fSinRad = 0.0f;
 }
 
+/* Advances the arrow bobbing phase by SEL_SIN_STEP, wrapped into -SEL_PI..SEL_PI. */
 static void _SinPassTime(void)
 {
     float phase = s_fSinRad + SEL_SIN_STEP;
@@ -315,6 +316,7 @@ static int _SinGet(int amplitude)
     return (int)(sinf(s_fSinRad) * (float)amplitude);
 }
 
+/* Returns the equip conflict result of the weapon essences, one per equip type, at slot. */
 static int _CheckEquipWeps(RgWeaponEssence **essences,
                            int slot)
 {
@@ -327,6 +329,7 @@ static int _CheckEquipWeps(RgWeaponEssence **essences,
     return RgEquipCheckConfrict(equipData, slot);
 }
 
+/* Character id of each character-select cursor position. */
 static int s_aeCharTbl[RG_ACTOR_CHAR_NUM] = {0, 4, 2, 5, 3, 1};
 
 static int _CharCursorToCharID(int charCursor)
@@ -400,6 +403,10 @@ static void _SetSelectableSelectChar(SelChar *pSelChar, unsigned int charIDMask)
 }
 
 
+/*
+ * Moves the cursor to charID's position when that position is selectable;
+ * otherwise it falls back to the highest selectable position.
+ */
 static void _SetCharSelectChar(SelChar *pSelChar, int charID)
 {
     int cursor;
@@ -460,6 +467,10 @@ static int _GetSelectableSelectChar(SelChar *pSelChar)
 }
 
 
+/*
+ * Moves the cursor up or down to the next selectable position and plays the
+ * cursor sound when it moves.
+ */
 static void _PassTimeSelectChar(SelChar *pSelChar, float deltaTime)
 {
     int cursor;
@@ -613,8 +624,8 @@ static void _GetNameOnCursorSelWep(SelWep *pSelWep, char *name)
 }
 
 /*
- * deltaTime is unused here, but _PassTimeSelType passes its own deltaTime
- * through in $f12 (mov.s $f12, $f20 at 0x00a39548) to this call.
+ * deltaTime is unused here, but the caller _PassTimeSelType still passes its
+ * deltaTime in $f12 to this call.
  */
 static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
 {
@@ -642,6 +653,10 @@ static void _PassTimeSelWep(SelWep *pSelWep, float deltaTime)
 }
 
 
+/*
+ * Maps a cursor position to its equip type, or RG_EQUIP_TYPE_INVALID for a
+ * position that is no type.
+ */
 static int _EquipCurIDToEquipType(int curID)
 {
     int eType;
@@ -853,6 +868,7 @@ static void _GetAllSelType(SelType *pSelType,
 }
 
 
+/* Writes the name under each equip type's cursor into aszName, WEP_NAME_SIZE bytes apiece. */
 static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
@@ -868,6 +884,7 @@ static void _GetAllNameOnCursorSelType(SelType *pSelType, char *aszName)
     }
 }
 
+/* Recomputes the conflict result of each equip type from the weapons under its cursor. */
 static void _CheckConfrictSelType(SelType *pSelType)
 {
     RgWeaponEssence *essences[RG_EQUIP_TYPE_NUM];
@@ -882,6 +899,7 @@ static void _CheckConfrictSelType(SelType *pSelType)
 }
 
 
+/* Moves each equip type's cursor to the weapon named in aszName, then rechecks conflicts. */
 static void _SetAllCursorByNameSelType(SelType *pSelType, char *aszName)
 {
     unsigned int i;
@@ -898,6 +916,7 @@ static void _SetAllCursorByNameSelType(SelType *pSelType, char *aszName)
     _CheckConfrictSelType(pSelType);
 }
 
+/* Clears the cursors, conflict results and weapon lists, and sets the character to none. */
 static void _InitSelType(SelType *pSelType)
 {
     unsigned int i;
@@ -914,6 +933,7 @@ static void _InitSelType(SelType *pSelType)
     pSelType->charID = RG_ACTOR_CHAR_NOP;
 }
 
+/* Resets the selector and loads the weapon list of each equip type for charID. */
 static void _InitByCharSelType(SelType *pSelType, int charID)
 {
     unsigned int i;
@@ -930,6 +950,10 @@ static void _InitByCharSelType(SelType *pSelType, int charID)
 }
 
 
+/*
+ * Moves the equip type cursor left or right on pad input, skipping the
+ * determination position.
+ */
 static void _PassTimeSelType(SelType *pSelType, float deltaTime)
 {
     int cursor;
@@ -966,6 +990,10 @@ static void _PassTimeSelType(SelType *pSelType, float deltaTime)
     _CheckConfrictSelType(pSelType);
 }
 
+/*
+ * If the current equip type conflicts, resets the cursor of each conflicting
+ * list and returns 1.
+ */
 static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
 {
     int eType;
@@ -992,6 +1020,10 @@ static int _DetachWeaponIfConfrictSelType(SelType *pSelType)
 }
 
 
+/*
+ * Sets up a weapon list display: its font, frame and arrow pictures from pBxx,
+ * and its default origin.
+ */
 static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx)
 {
     struct RgBxxPic *pTex;
@@ -1015,6 +1047,7 @@ static void _InitWepListDisp(WepListDisp *pDisp, RgBxx *pBxx)
 }
 
 
+/* Allocates a weapon list display and initializes it from pBxx. */
 static WepListDisp *_CreateWepListDisp(RgBxx *pBxx)
 {
     WepListDisp *pDisp;
@@ -1057,6 +1090,11 @@ static void _SetSelectorWepListDisp(WepListDisp *pDisp, SelType *pSelType)
 }
 
 
+/*
+ * Draws the visible rows of the selected equip type's weapon list with the
+ * cursor frame, the scroll arrows and the name or conflict message of the
+ * current weapon.
+ */
 static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
                              int ofsY)
 {
@@ -1143,6 +1181,10 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
         y += WEP_LIST_ROW_HEIGHT;
     }
 
+    /*
+     * Up arrow when the cursor is below the top row, down arrow when it is not
+     * on the last weapon.
+     */
     if (topIndex < cursor) {
         x += 108;
         y = yBase - _SinGet(SEL_ARROW_BOB) + 58;
@@ -1158,6 +1200,7 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
         XrgPaint2DDrawXYWH(paint, XRG_PAINT2D_MODE_PIC_SIZE, x, y, 0, 0);
     }
 
+    /* Glyphs marking more rows above and below the visible window. */
     RgFontSetDefaultColor(pDisp->font);
     if (topIndex > 0) {
         RgFontPut(paint, pDisp->font, WEP_FONT_MORE_ABOVE, xBase + 32, yBase - 20, 1);
@@ -1166,6 +1209,7 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
         RgFontPut(paint, pDisp->font, WEP_FONT_MORE_BELOW, xBase + 32, yBase + 156, 1);
     }
 
+    /* Name of the current weapon, or the conflict message in its place. */
     x = xBase - 48;
     y = yBase + 192;
     ess = _GetCurrentWeaponSelType(pDisp->pSelType);
@@ -1179,6 +1223,10 @@ static void _DrawWepListDisp(WepListDisp *pDisp, XrgPaint2D *paint, int ofsX,
     }
 }
 
+/*
+ * Initializes a selector to character selection, with no character and the
+ * weapon lists cleared.
+ */
 static void _InitSelectData(SelDat *pSelDat)
 {
     SelChar *pSelChar;
@@ -1197,6 +1245,7 @@ static void _InitSelectData(SelDat *pSelDat)
     InitRgSelectAGWSData(&pSelDat->base);
 }
 
+/* Logs the selected and available characters and the weapon name table of pData. */
 static void _DumpSelect__(struct RgSelectAGWSData *pData, const char *pszTitle, int nValue)
 {
     unsigned int i;
@@ -1211,6 +1260,7 @@ static void _DumpSelect__(struct RgSelectAGWSData *pData, const char *pszTitle, 
     }
 }
 
+/* Saves the selected and the selectable characters of pSelDat into pData. */
 static void _SaveCharSelectData(SelDat *pSelDat,
                                 struct RgSelectAGWSData *pData)
 {
@@ -1253,6 +1303,7 @@ static int _SaveWepSelectData(SelDat *pSelDat,
     }
 }
 
+/* Restores the selected and the selectable characters of pSelDat from pData. */
 static void _LoadCharSelectData(SelDat *pSelDat,
                                 struct RgSelectAGWSData *pData)
 {
@@ -1304,6 +1355,10 @@ static void _GetBaseSelectData(SelDat *pSelDat,
     *(RgSelectAGWSDataWords *) pResult = *(RgSelectAGWSDataWords *) &pSelDat->base;
 }
 
+/*
+ * Loads pData into pSelDat: copies the base record, then restores the
+ * character and weapon selections.
+ */
 static void _SetBaseSelectData(SelDat *pSelDat,
                                struct RgSelectAGWSData *pData)
 {
@@ -1344,6 +1399,7 @@ static void _DisposeSelectData(SelDat *pSelDat)
     RgHeapFree(InstanceOfRgHeap(), pSelDat, agwsSelectSourcePath, 1100);
 }
 
+/* Switches from character selection to weapon selection, saving the character choice first. */
 static void _TransitToWeaponSelect(SelDat *pSel)
 {
     struct RgSelectAGWSData *pData;
@@ -1360,6 +1416,10 @@ static void _TransitToWeaponSelect(SelDat *pSel)
     _LoadWepSelectData(pSel, pData);
 }
 
+/*
+ * Switches from weapon selection back to character selection, saving the
+ * weapon choices first.
+ */
 static void _TransitToCharSelect(SelDat *pSel)
 {
     struct RgSelectAGWSData *pData;
@@ -1373,6 +1433,7 @@ static void _TransitToCharSelect(SelDat *pSel)
     pSel->mode = SEL_MODE_CHAR;
 }
 
+/* Writes the current weapon and character selections into the base record. */
 static void _SaveToBaseData(SelDat *pSel)
 {
     struct RgSelectAGWSData *pData;
@@ -1407,6 +1468,7 @@ static int _GetPlayerModeSelectData(SelDat *pSel)
 }
 
 
+/* Passes the time to the active selector and sets the pad to the player of playerMode. */
 static void _PassTimeSelectData(SelDat *pSel, float deltaTime)
 {
     if (pSel == 0) {
@@ -1437,6 +1499,10 @@ static int _GetSelectCharID(SelDat *pSelDat)
     return _GetSelectChar(&pSelDat->selChar);
 }
 
+/*
+ * Fills essences with the current weapon of each equip type and confricts with
+ * its conflict result.
+ */
 static void _GetSelectWeps(SelDat *pSel,
                            RgWeaponEssence **essences,
                            int *confricts)
@@ -1454,6 +1520,10 @@ static void _GetSelectWeps(SelDat *pSel,
     }
 }
 
+/*
+ * Stores the weapon of each equip type in apCollects, taking the first entry of
+ * a list that conflicts. Returns the mask of the equip types that conflict.
+ */
 static int _GetWepSelection(SelDat *pSelDat,
                             RgWeaponEssence **apCollects)
 {
@@ -1481,6 +1551,7 @@ static int _GetWepSelection(SelDat *pSelDat,
 }
 
 
+/* Draws the frame of the player selected by playerMode (0 or 1). */
 static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
 {
     struct RgBxxPic *pic;
@@ -1503,6 +1574,10 @@ static void _DrawPlayerMode(XrgPaint2D *paint, RgBxx *pBxx, int playerMode)
 }
 
 
+/*
+ * Updates the character-select picture list: the state of each character cell
+ * from the selectable mask and the cursor, and the scroll arrows.
+ */
 static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
 {
     int i;
@@ -1597,6 +1672,7 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
         }
     }
 
+    /* Pictures 44 and 57 are darkened while the cursor is on a character. */
     flag = (cursor != SEL_CHAR_CURSOR_NOP);
     RgPicSetDark(RgPicListGetPic(pList, 44), flag);
     RgPicSetDark(RgPicListGetPic(pList, 57), flag);
@@ -1622,6 +1698,7 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
         }
     }
 
+    /* Picture 58 is drawn while an item lies above the cursor, picture 59 while one lies below; both bob vertically. */
     {
         pUp = RgPicListGetPic(pList, 58);
 
@@ -1649,6 +1726,7 @@ static void _SetCharSelDisp(RgPicList *pList, SelChar *pSelChar, int playerMode)
 }
 
 
+/* Loads the pictures of the determination window into pWinInfo and checks each one. */
 static void _InitDetermWin(WinInfo *pWinInfo, RgBxx *pBxx, int value0, int value1)
 {
     struct RgBxxPic *pBatu;
@@ -1704,6 +1782,10 @@ static void _InitDetermWin(WinInfo *pWinInfo, RgBxx *pBxx, int value0, int value
 
 
 
+/*
+ * Draws the determination window: its frame, the weapon name of each equip
+ * type and the confirm and cancel texts.
+ */
 static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
                               SelDat *pSelDat)
 {
@@ -1775,6 +1857,7 @@ static void _DispDetermWindow(XrgPaint2D *paint, WinInfo *pWinInfo,
     XrgDispMainFont(372, y + 36, agwsSelectDetermCancelText, 0);
 }
 
+/* Loads the left and right arrow pictures and clears the arrow positions and visibility. */
 static void _InitFloatArrowHori(FloatArrow *pDat, RgBxx *pBxx)
 {
     pDat->m_apPic[0] = RgBxxGetPic(pBxx, agwsSelectLeftArrowTextureName);
@@ -1799,6 +1882,7 @@ static void _InitFloatArrowHori(FloatArrow *pDat, RgBxx *pBxx)
     } while (0);
 }
 
+/* Sets the positions of both arrows from two points, each shifted by the offset. */
 static void _SetFloatArrowPos(FloatArrow *arrow, int first_x, int first_y,
                               int second_x, int second_y, int offset_x,
                               int offset_y)
@@ -1810,6 +1894,7 @@ static void _SetFloatArrowPos(FloatArrow *arrow, int first_x, int first_y,
 }
 
 
+/* Draws each visible arrow, bobbing it horizontally by SEL_ARROW_BOB. */
 static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat)
 {
     int aOfs[2] = {-1, 1};
@@ -1829,6 +1914,10 @@ static void _DispFloatArrow(XrgPaint2D *paint, FloatArrow *pDat)
 }
 
 
+/*
+ * Updates the weapon-select picture list while the weapon selector is active:
+ * the conflict color of each equip type and the state of the cursor pictures.
+ */
 static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
 {
     unsigned int slot;
@@ -1871,6 +1960,7 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
         }
         RgPicSetDark(RgPicListGetPic(pList, 16), 1);
         RgPicSetDark(RgPicListGetPic(pList, 15), 1);
+        /* Picture 14 is darkened unless the cursor is before SEL_TYPE_CURSOR_DETERM. */
         pic = RgPicListGetPic(pList, 14);
         RgPicSetAlpha(pic, 2);
         if (cursor < SEL_TYPE_CURSOR_DETERM) {
@@ -1895,6 +1985,10 @@ static void _SetWepSelPicList(RgPicList *pList, SelDat *pSelDat)
 }
 
 
+/*
+ * Draws the overlays of the weapon selector: the arrows beside the equip types,
+ * or the determination window at its position.
+ */
 static void _DispWepSelOverlaps(XrgPaint2D *paint, RgBxx *pBxx, SelDat *pSelDat,
                                 int ofsX, int ofsY)
 {
@@ -1951,6 +2045,7 @@ static void _init_camera(RgDrawView *pView)
 }
 
 
+/* Places the view at (0, 1, 4) with no rotation. */
 static void _set_camera(RgDrawView *pView)
 {
     RgVector position;
@@ -1965,6 +2060,10 @@ static void _set_camera(RgDrawView *pView)
 }
 
 
+/*
+ * Releases the paint, the picture lists, the selector data and the weapon list
+ * display of pSel.
+ */
 void _Destruct(RgSelectAGWS *pSel) {
     if (pSel == 0) {
         assert_prog(agwsSelectAssertSelNotNil, agwsSelectSourcePath, 0x6F0);
@@ -1981,6 +2080,10 @@ void _Destruct(RgSelectAGWS *pSel) {
 }
 
 
+/*
+ * Advances the select screen state machine by one frame and updates the robot
+ * and the selection record.
+ */
 static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
 {
     SelDat *pSelDat;
@@ -2084,6 +2187,7 @@ static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
             }
         }
         break;
+    /* Slides the picture lists back to the character side, then starts character selection. */
     case AGWS_STATE_SLIDE_TO_CHAR:
         if (pSel->ofsX < 0) {
             pSel->ofsX += SEL_SLIDE_STEP;
@@ -2099,6 +2203,7 @@ static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
         RgSelectRobotScreenPos(pSel->pRobot,
                                (float) -pSel->ofsX * (1.0f / SEL_SLIDE_WIDTH));
         break;
+    /* Slides the picture lists to the weapon side, then starts weapon selection. */
     case AGWS_STATE_SLIDE_TO_WEAPON:
         if (pSel->ofsX < -(SEL_SLIDE_WIDTH - 1)) {
             pSel->state = AGWS_STATE_START_WEAPON;
@@ -2134,6 +2239,10 @@ static void _PassTime(RgSelectAGWS *pSel, float deltaTime)
         RgError(agwsSelectUnknownSelectModeFormat, agwsSelectSourcePath, 1987, pSel->state);
         break;
     }
+    /*
+     * Applies this frame's pad input to the selectors, then sends the
+     * selection to the robot.
+     */
     _PassTimeSelectData(pSelDat, deltaTime);
     RgSelectRobotPassTime(pSel->pRobot, deltaTime);
     aSelection.actorID = _GetSelectCharID(pSelDat);
@@ -2160,6 +2269,10 @@ const char agwsSelectWepPicListFileName[16] = "wepsel.r2d";
 const char agwsSelectAssertCollectsNotNil[24] = "apCollects != NIL";
 
 
+/*
+ * Draws the select screen: the robot, the character and weapon picture lists,
+ * the weapon list and the overlays.
+ */
 void _Disp(RgSelectAGWS *pSel) {
     SelDat *pSelDat;
 
@@ -2185,6 +2298,7 @@ void _Disp(RgSelectAGWS *pSel) {
     XrgPaint2DFlush(pSel->paint);
 }
 
+/* Loads the picture list stored in the data file pszFileName, with the textures of pBxx. */
 static struct RgPicList *_LoadPicList(const char *pszFileName, struct RgBxx *pBxx)
 {
     RgFileSysData *pFile;
@@ -2206,6 +2320,10 @@ static struct RgPicList *_LoadPicList(const char *pszFileName, struct RgBxx *pBx
 }
 
 
+/*
+ * Creates the select screen: its data, camera, BXX resource, picture lists,
+ * weapon list, paint object and robot.
+ */
 void _InitSelect(RgSelectAGWS *pSel) {
     RgBxx *pBxx;
     RgDrawStudio *pStudio;
@@ -2244,6 +2362,10 @@ void _InitSelect(RgSelectAGWS *pSel) {
     _SinInit();
 }
 
+/*
+ * Sets pData to the default record: character 0 selected, only character 0
+ * available, no weapon names.
+ */
 void InitRgSelectAGWSData(struct RgSelectAGWSData *pData)
 {
     unsigned int charID;
@@ -2286,6 +2408,7 @@ void RgSelectAGWSGetSelectData(RgSelectAGWS *pSel,
     _GetBaseSelectData(pSel->pSelDat, pData);
 }
 
+/* Stores the weapon of each equip type in apCollects and returns the selected character id. */
 int RgSelectAGWSGetCollectData(RgSelectAGWS *pSel,
                                RgWeaponEssence **apCollects)
 {
@@ -2307,6 +2430,10 @@ void RgSelectAGWSSetMode(RgSelectAGWS *pSel, int mode)
     _SetPlayerModeSelectData(pSel->pSelDat, mode);
 }
 
+/*
+ * Returns RG_SELECT_AGWS_END_DONE or RG_SELECT_AGWS_END_CANCELLED once the
+ * screen has finished, else RG_SELECT_AGWS_END_NONE.
+ */
 int RgSelectAGWSIsEnd(RgSelectAGWS *pSel)
 {
     int result;
@@ -2382,6 +2509,10 @@ void RgSelectAGWSDisp(RgSelectAGWS *pSel)
 
 
 
+/*
+ * Weapon list text colors, indexed by the selected flag: red for a conflicting
+ * weapon, white otherwise.
+ */
 static RgFontColor s_aRed_1[2] = {
     { 0x50, 0x10, 0x10, 0x7F },
     { 0x80, 0x20, 0x20, 0x7F }
@@ -2392,6 +2523,7 @@ static RgFontColor s_aWhite_2[2] = {
     { 0x80, 0x80, 0x80, 0x7F }
 };
 
+/* Picture indices of the six pictures of each character cell on the character-select list. */
 static RgSelCharPicEntry s_ainPics_3[6] = { { .m_idx = { 38, 45, 51, 60, 66, 72 } }, { .m_idx = { 43, 50, 56, 65, 71, 77 } }, { .m_idx = { 39, 47, 53, 62, 68, 74 } }, { .m_idx = { 41, 49, 55, 64, 70, 76 } }, { .m_idx = { 40, 46, 52, 61, 67, 73 } }, { .m_idx = { 42, 48, 54, 63, 69, 75 } } };
 
 const char agwsSelectAssertCharIdNotNop[32] = "eCharID != RG_ACTOR_CHAR_NOP";

@@ -14,6 +14,7 @@ void SsdSetGroupOutputVolume(int volume, int unused, int group);
 void SsdReverbClear(void);
 void SsdReverbClearCallback(void);
 
+/* Sets the default output state: stereo, default SPU and CD volume, CD reverb, SPDIF mode and cleared mix bits on each core. */
 void SsdInitOutputControl(void) {
     int core;
     unsigned short parameter;
@@ -33,6 +34,7 @@ void SsdInitOutputControl(void) {
     }
 }
 
+/* Switches to the output mode (stereo or surround), then refreshes the reverb depths, voice volumes and core 1 output levels. */
 void SsdSetOutputMode(int mode) {
     SsdSequence *sequence;
     int left;
@@ -53,6 +55,7 @@ void SsdSetOutputMode(int mode) {
     sceSdSetParam(SD_P_AVOLR | SD_CORE_1, right);
 }
 
+/* Sets the master volume: applied at once when frames is 0, otherwise faded over frames. */
 void SsdSetSpuVolume(int volume, int frames) {
     int difference;
     SsdWork.master_fade.target = volume;
@@ -71,6 +74,7 @@ void SsdSetSpuVolume(int volume, int frames) {
     }
 }
 
+/* Sets the CD volume: applied at once when frames is 0, otherwise faded over frames. */
 void SsdSetCDVolume(int volume, int frames) {
     int difference;
     SsdWork.cd_fade.target = volume;
@@ -90,16 +94,19 @@ void SsdSetCDVolume(int volume, int frames) {
     }
 }
 
+/* Sets the output volume of sequences (not effects) and applies it to them. */
 void SsdSetSequenceOutputVolume(int volume, int unused) {
     SsdWork.sequence_volume = volume;
     SsdSetGroupOutputVolume(volume, unused, 0);
 }
 
+/* Sets the output volume of effect sequences and applies it to them. */
 void SsdSetEffectOutputVolume(int volume, int unused) {
     SsdWork.effect_volume = volume;
     SsdSetGroupOutputVolume(volume, unused, 1);
 }
 
+/* Applies volume to every sequence whose effect flag equals group. */
 void SsdSetGroupOutputVolume(int volume, int unused, int group) {
     SsdSequence *sequence;
     for (sequence = SsdWork.sequences; sequence; sequence = sequence->next) {
@@ -110,14 +117,21 @@ void SsdSetGroupOutputVolume(int volume, int unused, int group) {
     }
 }
 
+/* Sets the left and right CD reverb levels. */
 void SsdSetCDMixingReverb(int left, int right) {
     SsdWork.cd_reverb_left = left;
     SsdWork.cd_reverb_right = right;
     SsdWork.output_flags |= SSD_OUTPUT_CD_REVERB;
 }
 
+/* Does nothing. */
 void SsdSetAudioAttenuator(int value) {}
 
+/*
+ * Sets the mode, delay, feedback and depth of a reverb core; the high byte of mode
+ * selects the core. Reprograms the core's effect work area when the mode changes and
+ * returns 1 in that case.
+ */
 int SsdSetReverbParameter(int mode, int depth, int delay, int feedback) {
     SceSdEffectAttr attributes;
     int core;
@@ -161,6 +175,7 @@ int SsdSetReverbParameter(int mode, int depth, int delay, int feedback) {
     return changed;
 }
 
+/* Writes the stored reverb settings of core to the hardware. */
 void SsdEnableReverbParam(int core) {
     SceSdEffectAttr attributes;
     attributes.core = core;
@@ -172,6 +187,7 @@ void SsdEnableReverbParam(int core) {
     sceSdSetEffectAttr(core, &attributes);
 }
 
+/* Recomputes the volume records of the master, CD and both reverb cores for the current output mode. */
 void SsdCheckWideMode(void) {
     SsdSetVolumeRec(SsdWork.master_depth, &SsdWork.master_volume, 0);
     SsdWork.cd_volume.right = SsdWork.cd_depth;
@@ -181,6 +197,7 @@ void SsdCheckWideMode(void) {
     SsdWork.output_flags |= SSD_OUTPUT_MASTER_VOLUME;
 }
 
+/* Writes volume to the left and right fields of output, negating one side in surround modes. */
 void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int reverb) {
     unsigned int mode;
     output->right = volume;
@@ -199,10 +216,13 @@ void SsdSetVolumeRec(int volume, SsdStereoVolume *output, int reverb) {
     }
 }
 
+/* Does nothing. */
 void SsdReverbClear(void) {}
 
+/* Does nothing. */
 void SsdReverbClearCallback(void) {}
 
+/* Queries the voice transfer status of core and returns the stored reverb clear result. */
 int SsdReverbClearCompleted(int core, int wait) {
     sceSdVoiceTransStatus(core, 1);
     return SsdWork.reverb_clear_result;

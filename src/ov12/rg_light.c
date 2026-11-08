@@ -14,6 +14,7 @@ const char lightAssertLightNotNil[] = "pLight != NIL";
 const char lightSourcePath[] = "../rg_light.euc.c";
 const char lightAssertSourceNotNil[] = "pSrc != NIL";
 
+/* Sets the default ambient color, directions and colors of a light. */
 void InitRgLight(RgLight *light)
 {
     if (light == 0) {
@@ -33,6 +34,7 @@ static void _DisposeGlobalLight(void *light)
     RgHeapFree(InstanceOfRgHeap(), light, lightSourcePath, 35);
 }
 
+/* Returns the global light singleton, creating it on first use. */
 RgLight *InstanceOfGlobalLight(void)
 {
     RgLight *light;
@@ -47,6 +49,7 @@ RgLight *InstanceOfGlobalLight(void)
     return light;
 }
 
+/* Copies the ambient color and the colors and directions of pSrc into pLight. */
 void RgLightCopy(RgLight *pLight, RgLight *pSrc)
 {
     int i;

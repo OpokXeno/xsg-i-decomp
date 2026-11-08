@@ -68,7 +68,7 @@ enum {
 #define MENU_SYSTEM_VIBRATION_TEST_STRENGTH 128
 #define MENU_SYSTEM_VIBRATION_TEST_DURATION 32
 
-/* Existing option names designate entries in the contiguous option array. */
+/* These names are entries of the contiguous options array. */
 #define soundOutput options[MENU_SYSTEM_OPTION_SOUND_OUTPUT]
 
 #define padMode options[MENU_SYSTEM_OPTION_CURSOR_MEMORY]
@@ -76,8 +76,7 @@ enum {
 #define displayMode options[MENU_SYSTEM_OPTION_RADAR]
 #define hddActive options[MENU_SYSTEM_OPTION_HDD]
 
-/* Offsets named here are touched by MenuSystemInfoMain, MenuSystemInitSet,
- * and the existing MenuSystem2 completion poll. */
+/* Shared state of the system-options screen; options[] holds one value per row. */
 typedef struct MenuSystemWork {
     unsigned char unmodeled_00[3];
     unsigned char menuState;
@@ -189,7 +188,7 @@ typedef const char *MenuSystemOptionNames[2];
 
 extern unsigned char *MainMenuWorkEnd;
 
-/* The original stores the HDD mount result through this four-byte object. */
+/* Holds the HDD mount result. */
 extern int MenuHddCheck;
 
 extern MenuSystemWork MenuWork;
@@ -262,9 +261,9 @@ static const char * msg02_3_0036DD28[] = { MenuSystemOnText, MenuSystemOffText }
 static const char * msg03_4_0036DD30[] = { proceedQuestionText, MenuSystemYesNoText };
 
 /*
- * Drives the system-options screen for one frame and reports whether it is
- * still running: MenuWork.state is 0xFF once the screen driven by
- * subMenuSystemMain has finished.
+ * Draws the help-text panel of the system-options screen for one frame. The
+ * panel slides in while MenuWork.state shows a list or option row, and out
+ * otherwise.
  */
 void MenuSystemPasMain(void)
 {
@@ -328,6 +327,10 @@ void MenuSystemPasMain(void)
     }
 }
 
+/*
+ * Draws the message bar: it slides up in the list and option states, copying
+ * the selected row's message into it, and slides away otherwise.
+ */
 void MenuSystemInfoMain(void)
 {
     MenuSystemInfoBlock *info = MenuSystemInfo;
@@ -379,6 +382,11 @@ void MenuSystemInfoMain(void)
     WindowDXMain(&info->window);
 }
 
+/*
+ * Draws the options screen: the title window with the option labels and
+ * values, plus the choice and confirm windows that slide in for the current
+ * MenuWork.state.
+ */
 void MenuSystemMenuMain(void)
 {
     MenuSystemMenuBlock *menu = MenuSystemMenu;
@@ -391,6 +399,7 @@ void MenuSystemMenuMain(void)
     WindowDX *choiceWindow;
     ECursolMainData *choiceCursor;
 
+    /* INIT builds the windows once; RUN only reuses the blocks. */
     switch (menu->state) {
     case MENU_SYSTEM_BLOCK_INIT:
         menu->color = MENU_SYSTEM_WINDOW_STYLE;
@@ -472,6 +481,7 @@ void MenuSystemMenuMain(void)
         return;
     }
 
+    /* Target x of each window for the current MenuWork.state. */
     titleTarget = 528;
     choiceTarget = 528;
     confirmTarget = 528;
@@ -551,6 +561,8 @@ void MenuSystemMenuMain(void)
     WindowDXMain(confirmWindow);
 }
 
+/* Resets the system options to their defaults and applies them to the sound,
+ * radar, vibration and HDD settings. */
 void MenuSystemInitSet(void)
 {
     PartyDataPrefix *party;
@@ -575,6 +587,11 @@ void MenuSystemInitSet(void)
     }
 }
 
+/*
+ * Advances the options screen by one frame: applies the pending state change,
+ * handles the pad input of the current state, then draws the panel, info and
+ * menu blocks.
+ */
 void subMenuSystemMain(void)
 {
     unsigned char optionStates[7];
@@ -593,6 +610,7 @@ void subMenuSystemMain(void)
     if (MenuWork.inputDelay != 0)
         MenuWork.inputDelay--;
 
+    /* Pad input of the current state; each choice sets nextState. */
     switch (MenuWork.state) {
     case MENU_SYSTEM_STATE_LIST:
         if (MenuWork.inputDelay == 0) {
@@ -767,6 +785,7 @@ void subMenuSystemMain(void)
             }
         }
         break;
+    /* Waits for the close delay, then moves to the done state. */
     case MENU_SYSTEM_STATE_CLOSE:
         if ((unsigned char)(MenuWork.flags & MENU_FLAG_ENTER))
             MenuWork.inputDelay = MENU_SYSTEM_DELAY_CLOSE;
@@ -781,6 +800,8 @@ void subMenuSystemMain(void)
     xglFontDebugPrintf(0, 80, messageDelayFormat, MenuWork.messageIndex);
 }
 
+/* Places the option blocks after workEnd, loads the saved option values and
+ * checks for a mounted HDD. */
 void subMenuSystemInit(int workEnd)
 {
     PartyDataPrefix *party;
@@ -813,10 +834,12 @@ void subMenuSystemInit(int workEnd)
     }
 }
 
+/* Runs the options menu task: init, one main step per frame, then leaves to
+ * the top level. */
 void MenuSystem(void)
 {
     switch (MenuWork.menuState) {
-        /* Keep both completion paths in this single dispatch scope. */
+        /* Both completion paths share this do { } while (0) scope. */
         do {
         case MENU_SYSTEM_TASK_INIT:
             subMenuSystemInit((int)MainMenuWorkEnd);
@@ -840,6 +863,8 @@ void MenuSystem2Init(void) {
     subMenuSystemInit((int)MainMenuWorkEnd);
 }
 
+/* Runs one frame of the options screen for a caller that polls it; returns
+ * nonzero while the screen is open. */
 int MenuSystem2(void)
 {
     subMenuSystemMain();

@@ -35,13 +35,10 @@
 #define XRG_PARTICLE_SPRITE_REGS 0x434343431ULL
 
 /*
- * _openVifGif and _openVifGifAD build the 128-bit VIF1 GIF tag
- * sceVif1PkOpenGifTag takes in the single register the original loads with
- * one `lq`; no wide arithmetic is done on it: bit 15 is EOP, bit 46 is PRE,
- * bits 47..57 are PRIM, bits 60..63 are NREG, and the high 64 bits are the
- * REGS descriptor. The union lets the two halves be stored as ordinary
- * 64-bit fields and the whole 16 bytes be read back as the single register
- * sceVif1PkOpenGifTag takes.
+ * _openVifGif and _openVifGifAD build the 128-bit GIF tag that sceVif1PkOpenGifTag
+ * takes: bit 15 is EOP, bit 46 is PRE, bits 47..57 are PRIM, bits 60..63 are NREG, and
+ * the high 64 bits hold the REGS descriptor. The union stores the two halves as 64-bit
+ * fields and reads the 16 bytes back as one quadword.
  */
 typedef union XrgParticleGifTag {
     struct {
@@ -66,11 +63,7 @@ static void _openVifGif(XglPacket *packet, unsigned int prim,
     sceVif1PkOpenGifTag(packet, tag.quad);
 }
 
-/*
- * ov12:0x00a58f10 is a fixed GIF tag: EOP set, NREG 1, REGS 0xE (the A+D
- * address+data register code), the constant _openVifGifAD passes to
- * sceVif1PkOpenGifTag.
- */
+/* Fixed GIF tag for the A+D path: EOP set, NREG 1 and REGS 0xE (the A+D register code). */
 const XrgParticleGifTag particleGifTag = {
     .part = { 0x1000000000008000ULL, 0x000000000000000EULL }
 };
@@ -102,8 +95,7 @@ static void _openVifGifAD(XglPacket *packet)
     sceVif1PkOpenGifTag(packet, tag.quad);
 }
 
-/* Both libvifpk closers take the packet being built. */
-
+/* Closes the GIF tag and the direct-HL code section of the packet. */
 static void _closeVifGif(XglPacket *packet)
 {
     sceVif1PkCloseGifTag(packet);
@@ -129,7 +121,7 @@ static void _DisposeDriver(XrgParticleDriver *driver)
 }
 
 
-/* dst += src * elapsed: scales into the shared temporary, then one VU0 add. */
+/* Multiplies the four lanes of v by factor in place. */
 static inline void _Damp(float *v, float factor)
 {
     v[0] *= factor;
@@ -137,6 +129,7 @@ static inline void _Damp(float *v, float factor)
     v[2] *= factor;
     v[3] *= factor;
 }
+/* Stores src * elapsed in tmp and returns dst, which the caller then adds into. */
 static inline float *_ScaleFor(float *dst, float *tmp, float *src, float elapsed)
 {
     tmp[0] = src[0] * elapsed;
@@ -168,6 +161,10 @@ static inline void _ClampState(XrgParticle *e, float zero, float sizeMax, float 
     e->appearance.vec[3] = _WrapAngle(e->appearance.vec[3]);
 }
 
+/*
+ * Advances count particles by elapsed. Without a positive rate they move freely;
+ * with one, velocity is damped each step.
+ */
 static void _Calc(XrgParticle *particle, int count, float rate,
                   float elapsed)
 {
@@ -180,6 +177,7 @@ static void _Calc(XrgParticle *particle, int count, float rate,
     float sizeMax = XRG_PARTICLE_SIZE_MAX;
     float one = 1.0f;
 
+    /* No positive rate: the particles are advanced without damping. */
     if (rate <= zero) {
         for (;;) {
             old = count;
@@ -233,6 +231,10 @@ static void _Calc(XrgParticle *particle, int count, float rate,
 
 static RgDrawView *s_pCurView_00A511F4;
 
+/*
+ * Projects the particles and sends the visible ones as GS sprite packets. Particles
+ * are handled in batches of XRG_PARTICLE_DISP_BATCH.
+ */
 static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgParticleRow *rows)
 {
     float depthLimit = XRG_PARTICLE_DEPTH_LIMIT;
@@ -258,6 +260,7 @@ static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgP
     sceVif1PkAddGsAD((XglPacket *)packet, SCE_GS_TEX0_1, (unsigned long long)tex0);
     _closeVifGif((XglPacket *)packet);
 
+    /* Load the view matrix (vf27-vf30) and the axis vectors (vf25, vf26). */
     __asm__ __volatile__(
         "lqc2 vf27, 0(%0)\n"
         "lqc2 vf28, 16(%0)\n"
@@ -322,9 +325,11 @@ static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgP
                 : "=r"(mask)
                 : "r"(pPoints), "r"(pScratch), "r"(pStore)
                 : "$2", "memory");
+            /* The clip flags from the VU0 block reject particles outside the view. */
             if (mask != 0) {
                 continue;
             }
+            /* Particles at or beyond the depth limit are skipped. */
             if (work[6].vec[2] < depthLimit) {
                 int ix;
                 int iy;
@@ -411,6 +416,7 @@ static void _Disp(XrgParticle *pPoints, unsigned int count, long long tex0, XrgP
                 }
             }
         }
+        /* Send the batch when its packet holds data, then start a new packet. */
         if ((ret = sceVif1PkSize((XglPacket *)packet)) != 0) {
             nmlModelDirectSend(pView->projectionMode, (void *)SCRATCHPAD_BASE, ret);
             sceVif1PkInit((XglPacket *)packet, SCRATCHPAD_BASE);
@@ -443,6 +449,7 @@ static void _WrapperDestruct(void *driver)
     DisposeXrgParticleDriver(driver);
 }
 
+/* Returns the singleton particle driver, creating and registering it on first use. */
 XrgParticleDriver *InstanceOfXrgParticleDriver(void)
 {
     XrgParticleDriver *driver;
@@ -464,6 +471,7 @@ void XrgParticleDriverSet(XrgParticleDriver *driver, int params0, int params1)
     driver->params1 = params1;
 }
 
+/* Queues a calc request for pPoints; XrgParticleDriverPassTime runs it. */
 void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, XrgParticle *pPoints,
                                   int count, float rate)
 {
@@ -484,6 +492,7 @@ void XrgParticleDriverPassTimeReq(XrgParticleDriver *driver, XrgParticle *pPoint
     driver->calcReq[idx].rate = rate;
 }
 
+/* Queues a display request that draws pPoints with the picture pPic. */
 void XrgParticleDriverDispReq(XrgParticleDriver *driver, XrgParticle *pPoints,
                               int count, RgBxxPic *pPic)
 {
@@ -507,6 +516,7 @@ void XrgParticleDriverDispReq(XrgParticleDriver *driver, XrgParticle *pPoints,
     driver->dispReq[idx].pPic = pPic;
 }
 
+/* Runs every queued calc request for elapsed time, then clears the queue. */
 void XrgParticleDriverPassTime(XrgParticleDriver *pDrv, float elapsed)
 {
     unsigned int i;
@@ -522,10 +532,11 @@ void XrgParticleDriverPassTime(XrgParticleDriver *pDrv, float elapsed)
     pDrv->m_uReqCalcNum = 0;
 }
 
-/* The assertion texts "pEnv != NIL" and "pView != NIL", defined elsewhere. */
+/* Declared here: the assertion texts are defined at the end of this file. */
 extern const char particleAssertEnvNotNil[];
 extern const char particleAssertViewNotNil[];
 
+/* Draw callback: sends each display request's texture and draws its particles through _Disp. */
 void _DrawDriver(void *pObject, RgDrawStudio *pStudio)
 {
     XrgParticleDriver *driver = pObject;
@@ -585,6 +596,7 @@ static void _ClearReqDisp(void *pObject)
     driver->m_uReqDispNum = 0;
 }
 
+/* Queues the driver's draw callback in the draw list. */
 void XrgParticleDriverDisp(XrgParticleDriver *driver)
 {
     if (driver == 0) {
@@ -595,7 +607,7 @@ void XrgParticleDriverDisp(XrgParticleDriver *driver)
 
 /*
  * Creates the particle array: count elements of sizeof(XrgParticle), each
- * vector cleared and the first vector's w lane set to 1.0f. The array is
+ * vector cleared and position's w lane set to 1.0f. The array is
  * asserted non-null before it is initialised.
  */
 XrgParticle *CreateArrayOfXrgParticle(int count)

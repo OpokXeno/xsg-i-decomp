@@ -25,6 +25,10 @@ void SsdMidiControlNonRegParMSB(SsdChannel *channel, int value);
 void SsdMidiControlSetRegParDataMSB(SsdChannel *channel, int value);
 void SsdMidiControlSetRegParDataLSB(SsdChannel *channel, int value);
 
+/*
+ * Empties both MIDI event queues, creates the MIDI device for the channel and resets
+ * its parameters and channels. Returns the device.
+ */
 SsdMidiDevice *SsdMakeMidiSequenceRec(int channel)
 {
     SsdMidiDevice *device;
@@ -42,6 +46,7 @@ SsdMidiDevice *SsdMakeMidiSequenceRec(int channel)
     return device;
 }
 
+/* Appends one packed MIDI event to the queue; the event is dropped when the queue is full. */
 void SsdInMidiEvent(unsigned int event)
 {
     SsdMidiEventQueue *queue = &SsdMidi.queues[0];
@@ -56,6 +61,11 @@ void SsdInMidiEvent(unsigned int event)
     CpuEnableIntr();
 }
 
+/*
+ * Decodes one packed MIDI event and dispatches it to the matching channel handler.
+ * Byte 0 selects the device, byte 1 holds the status and MIDI channel, and bytes 2
+ * and 3 are the data values.
+ */
 void SsdMidiEventDecode(SsdMidiDevice *device, unsigned int event)
 {
     int channel_index = event & 0xff;
@@ -72,6 +82,7 @@ void SsdMidiEventDecode(SsdMidiDevice *device, unsigned int event)
     if (status < SSD_MIDI_SYSTEM)
         status = message & 0xf0;
 
+    /* Pressure messages are ignored; the other messages jump to their handler labels. */
     if (status == SSD_MIDI_CHANNEL_PRESSURE)
         return;
     if (status < SSD_MIDI_CHANNEL_PRESSURE + 1) {
@@ -334,7 +345,7 @@ SsdMidiController SsdMidiControlChangeTable[SSD_MIDI_CONTROLLER_COUNT] = {
     /* 0x62 NRPN LSB */ SsdMidiControlNonRegParLSB,
     /* 0x63 NRPN MSB */ SsdMidiControlNonRegParMSB,
     /* 0x64 RPN LSB */ SsdMidiControlRegParLSB,
-    /* 0x65 RPN MSB (the original table also points it at the LSB handler) */ SsdMidiControlRegParLSB,
+    /* 0x65 RPN MSB, handled by the LSB handler */ SsdMidiControlRegParLSB,
     /* 0x66 */ 0,
     /* 0x67 */ 0,
     /* 0x68 */ 0,

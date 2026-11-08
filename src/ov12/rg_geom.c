@@ -7,12 +7,13 @@
 #include "ov12/rg_geom.h"
 #include "ov12/rg_heap.h"
 
-/* Referenced by every accessor below: the assertion text "pGeom != NIL" and
-   this TU's own original file name "../rg_geom.euc.c", both scaffold-owned
-   .rodata (not registered under a friendlier name in config/symbols/ov12.txt). */
+/* Shared by every accessor below: the assertion text "pGeom != NIL" and
+   the original source file name of this unit, both in .rodata. */
 const char geomAssertGeomNotNil[] = "pGeom != NIL";
 const char geomSourcePath[] = "../rg_geom.euc.c";
 
+/* Resets a geometry object to its defaults: no type, no parent, active,
+   no event flag and no pass-time or destruct method. */
 void RgGeomInit(RgGeom *pGeom)
 {
     if (pGeom == 0) {
@@ -26,6 +27,7 @@ void RgGeomInit(RgGeom *pGeom)
     pGeom->destructMethod = 0;
 }
 
+/* Calls the destruct method when one is set, then frees the object to the heap. */
 void RgGeomFree(RgGeom *pGeom)
 {
     RgGeomDestructMethod destruct;
@@ -120,6 +122,8 @@ int RgGeomGetEventFlag(RgGeom *pGeom)
     return pGeom->eventFlag;
 }
 
+/* Clears the event flag, then calls the pass-time method when one is set
+   and the object is active. */
 void RgGeomPassTime(RgGeom *pGeom, float deltaTime)
 {
     RgGeomPassTimeMethod method;

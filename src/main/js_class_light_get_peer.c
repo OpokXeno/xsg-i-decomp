@@ -35,6 +35,7 @@ extern void initLight2(void);
 
 char jsClassLightGetPeerLightClassName[8] = "light";
 
+/* Returns the light class name for identifier -1, or 0 for any other identifier. */
 void *JS_classLight_getPeer(int identifier)
 {
     if (identifier == -1)
@@ -42,6 +43,11 @@ void *JS_classLight_getPeer(int identifier)
     return 0;
 }
 
+/*
+ * Sets the color of the light the peer selects (0 for ambient, 1..3 for directional), converting
+ * integer components from 0..255 when color_mode says so, then calls initLight2. Returns 1 for an
+ * unknown light_type, else 0.
+ */
 int JS_classLight_setColor(void *peer)
 {
     StudioLight *studio;
@@ -72,6 +78,10 @@ int JS_classLight_setColor(void *peer)
     return 0;
 }
 
+/*
+ * Sets the direction of the directional light the peer selects from its three float components,
+ * then calls initLight2. Returns 1 for an unknown light_type, else 0.
+ */
 int JS_classLight_setDirection2(void *peer)
 {
     StudioLight *studio;

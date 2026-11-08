@@ -6,17 +6,11 @@
 #include "party.h"
 
 /*
- * Party state: the original party source file, main 0x002b56c0..0x002b6494
- * (the file begins at the gcc2_compiled. marker 0x002b56c0; this candidate
- * stops after PartyAllPartyGet2, before PartyAgwsGet).
- *
- * Every function except PartyAllPartyGet and PartyReserveGet is an accepted
- * unit included here unchanged, in original address order, so that the two
- * new functions are compiled in the same translation unit as the callees
- * that precede them (PartyFriendCheck, PartyFriendLockCheck). GCC 2.96 only
- * lets the loop exits of PartyAllPartyGet/PartyReserveGet carry the return
- * value in a plain beq delay slot when those callees are defined earlier in
- * the same file; compiled alone the same source produces beql.
+ * Party state and the party helpers. PartyAllPartyGet and PartyReserveGet
+ * come after the functions they call (PartyFriendCheck, PartyFriendLockCheck)
+ * in this file: GCC 2.96 emits the loop exits of those two with the return
+ * value in a plain beq delay slot only when the callees are defined earlier
+ * in the same file. Compiled alone, the same source produces beql.
  */
 /*
  * Party ids: friends are 1..7 and bits of friend_mask, the lock and out masks
@@ -125,6 +119,7 @@ void PartyDataInit(void)
         SaveData[SAVE_UMN_WORK + i] = 0xFF;     /* empty mail-box slot */
     }
 
+    /* Sets bit 0 of the data for mail boxes 78 to 80. */
     UmnMailBoxSet(78);
     *UmnMailDataGet(78) |= 1;
     UmnMailBoxSet(79);
@@ -141,6 +136,7 @@ void PartyDataInit(void)
         mail_data++;
     }
 
+    /* Clear the inventories. */
     memset(itmBox, 0, sizeof(itmBox));
     memset(wpnBox, 0, sizeof(wpnBox));
     memset(bltBox, 0, sizeof(bltBox));
@@ -161,6 +157,10 @@ void PartyDataInit(void)
     PartyTimeInit();
 }
 
+/*
+ * Recruits friends 1 to 3, fills attack slots 0 to 2 with members 3, 1 and 2
+ * (attack positions 1, 2 and 3), and sets the leader's battle id to 0.
+ */
 void PartyDataInit2(void)
 {
     PartyDataPrefix *party_data;
@@ -360,8 +360,7 @@ void PartyBattleChange(int party_id)
 int PartyLeaderSet(int leader)
 {
     /* Costume battle ids, indexed [battle id - 1][costume - 1]; an entry of 0
-     * keeps the member's own battle id. The original object is the
-     * function-local static CostumData.0 at 0x0036dd38. */
+     * keeps the member's own battle id. */
     static u16 CostumData[8][2] = {
         { 11, 9 },
         { 0, 0 },
@@ -393,6 +392,7 @@ int PartyLeaderSet(int leader)
     return 1;
 }
 
+/* Returns 1 when chara_id is the party leader's character. */
 int PartyLeaderCheck(int chara_id)
 {
     PartyDataPrefix *data = PartyDataGet();
@@ -535,6 +535,7 @@ int PartyAllPartyGet2(int *out, PartyDataPrefix *state)
     return count;
 }
 
+/* Stores the ids (17 and up) of the owned AGWS units, up to six, and returns how many. */
 int PartyAgwsGet(int *party_ids)
 {
     int owned_agws;
@@ -594,6 +595,7 @@ int PartyAgwsNumGet(void)
     return set_bit_count;
 }
 
+/* Returns 1 when party_id is in an attack slot. Ids 11 and 12 are matched as 20 and 19. */
 int PartyAttackerCheck(int party_id)
 {
     PartyDataPrefix *data = PartyDataGet();
@@ -661,6 +663,7 @@ void PartyAttackPosSet(int party_id, int attack_position)
     }
 }
 
+/* Swaps the attack positions of two party members. */
 void PartyAttackPosChange(int first_party_id, int second_party_id)
 {
     PartyAttackPosition *slot = (PartyDataGet())->attack_slots;
@@ -680,20 +683,10 @@ void PartyAttackPosChange(int first_party_id, int second_party_id)
 }
 
 /*
- * PartyTimeLimitCheck (main 0x002b6868, 88 B): clamps an accumulated
- * party-time record shaped like XglClock (the same day/hour/minute/second
- * breakdown xglClockUInt2DayTime writes) to a maximum of 5 days, 3 hours,
- * 59 minutes and 59 seconds.
- *
- * Evidence: PartyTimeUpDate (0x002b6954) refreshes the static party-time
- * record at 0x00491818 with xglClockUInt2DayTime/xglClockDayTime2UInt (an
- * 8-byte ldl/ldr -> sdl/sdr copy) and then calls this function; SeisanTimeEx
- * (0x0029fc44) builds a matching stack record with
- * xglClockUInt2DayTime(sp, quotient) and passes the same record on to
- * PartyTimeDispChange. Both callers discard the returned flag.
- *
- * Only day/hour/minute/second are read or written; status, month and year
- * are never accessed by this function.
+ * Clamps a play-time record (the day/hour/minute/second breakdown that
+ * xglClockUInt2DayTime writes) to at most 5 days, 3 hours, 59 minutes and
+ * 59 seconds. Returns 1 when it clamped, else 0. Only the day, hour, minute
+ * and second fields are accessed.
  */
 int PartyTimeLimitCheck(XglClock *elapsed)
 {
@@ -710,6 +703,7 @@ int PartyTimeLimitCheck(XglClock *elapsed)
     return 0;
 }
 
+/* Zeroes the play-time record and takes the current clock reading as the reference. */
 void PartyTimeInit(void)
 {
     xglClockUInt2DayTime((XglClock *)(SaveData + SAVE_PLAY_TIME), 0);
@@ -717,12 +711,10 @@ void PartyTimeInit(void)
 }
 
 /*
- * Refreshes the persistent play-time record (SaveData+0x68, the same
- * offset PartyTimeInit uses to seed it) with the elapsed clock ticks
- * since the last call, mirrors the fresh reading into _CountTime for the
- * next call, clamps the record at the 99-day limit via
- * PartyTimeLimitCheck, and returns the record for the caller
- * (PartyTimePauseStart forwards it unchanged).
+ * Adds the clock ticks elapsed since the previous reading to the persistent
+ * play-time record (SaveData + SAVE_PLAY_TIME), clamps it with
+ * PartyTimeLimitCheck and returns it. _CountTime keeps the reading taken
+ * by this call for the next one.
  */
 XglClock *PartyTimeUpDate(void)
 {
@@ -756,11 +748,13 @@ void PartyTimeDispChange(XglClock *elapsed)
     }
 }
 
+/* Updates the play-time record at the start of a pause and returns it. */
 XglClock *PartyTimePauseStart(void)
 {
     return PartyTimeUpDate();
 }
 
+/* Takes a new clock reading as the reference when a pause ends. */
 void PartyTimePauseEnd(void)
 {
     xglClockRead(&_CountTime);

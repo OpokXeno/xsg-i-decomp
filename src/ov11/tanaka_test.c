@@ -10,6 +10,7 @@ extern void xglStudioChange(int studio_index);
 extern void xglStudioGetCamera(StudioCamera **camera_out, int camera_index);
 extern void xglLightSetDefault(StudioLight *light);
 
+/* Sets the main camera position and rotation, then the default light. */
 static void Init(void)
 {
     StudioCamera *camera;
@@ -48,6 +49,7 @@ extern int printf(const char *format, ...);
 const char casinoEntryDebugText[] = "Casino Entry\n";
 const char casinoExitDebugText[] = "Casino Exit\n";
 
+/* Runs the casino test: clears the frame, runs the mini-game until it returns nonzero, then clears depth. */
 void TanakaTest(void)
 {
     xglRenderClearFrame();

@@ -104,6 +104,7 @@ static FlushEnvironmentPacket FlushEnv_2_0036AC40 = {
     .finish = { { .value = 0 }, 0x3F, 0 },
 };
 
+/* Appends the test-pattern packet and the two halves of the framebuffer image to the current packet. */
 static void DrawImage(u8 *framebuffer)
 {
     XglPacket *packet;
@@ -120,6 +121,11 @@ static void DrawImage(u8 *framebuffer)
     sceVif1PkRef(packet, &FlushEnv_2_0036AC40, 3, 0, 0, 0);
 }
 
+/*
+ * Display adjustment.  NULL applies the saved offsets, 1 resets them to zero, and
+ * any other value is a framebuffer: the test image is decoded into it and the pad
+ * moves the offsets until CIRCLE or CROSS is pressed.
+ */
 void tyaDisplaySetting(u8 *framebuffer_or_mode)
 {
     short saved_x;
@@ -147,6 +153,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
         u8 *framebuffer = framebuffer_or_mode;
         u8 *image_source;
 
+        /* The JPEG is read into a scratch area 1 MiB past the framebuffer, then decoded into it. */
         image_source = framebuffer_or_mode + 0x100000;
         xglCdReadFile(displaySettingImagePath, image_source, 0, 1);
         {
@@ -162,6 +169,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
             short vertical;
             int directions;
 
+            /* Adjust loop: redraw each frame until CIRCLE (confirm) or CROSS (cancel) is pressed. */
             for (;;) {
                 horizontal = ((TyaSaveDataRecord *)SaveData)->horizontal_display_offset;
                 vertical = ((TyaSaveDataRecord *)SaveData)->vertical_display_offset;
@@ -220,6 +228,7 @@ void tyaDisplaySetting(u8 *framebuffer_or_mode)
                         DispEnv.display.dy = environment.display.dy + vertical;
                         ((TyaSaveDataRecord *)SaveData)->vertical_display_offset = vertical;
 
+                        /* CIRCLE plays the decide sound and CROSS the cancel sound; both leave the loop. */
                         if (input_event & PAD_CIRCLE) {
                             xglSoundEffectNormalDirect(SE_DECIDE);
                         } else if (input_event & PAD_CROSS) {

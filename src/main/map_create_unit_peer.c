@@ -48,6 +48,10 @@
 
 extern void ANM_resetDefault(MapUnitAnmState *anim, int param);
 extern void *PLAY_getCurrent(void);
+/*
+ * Creates the unit for slot and serial, then resets its animation, scale and
+ * sequence entry to defaults. Returns the unit, or 0 when none was created.
+ */
 MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
 {
     MapUnitGroupEntry *unit = (MapUnitGroupEntry *)MAP_createUnit(slot, serial);
@@ -91,6 +95,10 @@ MapUnitGroupEntry *MAP_createUnitPeer(int slot, int serial)
     return unit;
 }
 
+/*
+ * Turns the unit's yaw toward the track goal point, transformed by the bone
+ * matrix.
+ */
 void SEQ_rotYCNSUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
@@ -111,6 +119,7 @@ void SEQ_rotYCNSUnitChr(MapUnitRecord *unit)
     rotation->y = xglAtan2(world.x - position->x, world.z - position->z);
 }
 
+/* Moves the unit to the track offset point, transformed by the bone matrix. */
 void SEQ_transCNSUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
@@ -133,6 +142,7 @@ void SEQ_transCNSUnitChr(MapUnitRecord *unit)
     position->z = world.z;
 }
 
+/* Steps each rotation axis toward its goal angle over its track duration. */
 void SEQ_rotateUnit(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
@@ -145,6 +155,10 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
     MapUnitRecord *target = track->target;
     float distance[3];
 
+    /*
+     * Start each axis whose track has just begun, or hold it still when it is
+     * not running.
+     */
     if ((sequence->flags & MAP_SEQ_ROTATE_X) == 0) {
         if (sequence->state & MAP_SEQ_ROTATE_X) {
             start[0] = rotation->x;
@@ -197,6 +211,7 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
         }
     }
 
+    /* Advance each axis that is still turning toward its goal. */
     if (sequence->state & MAP_SEQ_ROTATE_X) {
         if (track->faceFlags & 0x1)
             goal[1] = xglAtan2(unit->position.y - position->y, unit->position.z - position->z);
@@ -232,6 +247,7 @@ void SEQ_rotateUnit(MapUnitRecord *unit)
     }
 }
 
+/* Steps each scale axis toward its goal over its track duration. */
 void SEQ_scaleUnit(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
@@ -242,6 +258,10 @@ void SEQ_scaleUnit(MapUnitRecord *unit)
     Vector4 *scale = &unit->scale;
     float distance[3];
 
+    /*
+     * Start each axis whose track has just begun, or hold it still when it is
+     * not running.
+     */
     if ((sequence->flags & 0x20) == 0) {
         if (sequence->state & 0x20) {
             start[0] = scale->x;
@@ -279,6 +299,7 @@ void SEQ_scaleUnit(MapUnitRecord *unit)
         }
     }
 
+    /* Advance each axis that is still scaling toward its goal. */
     if (sequence->state & 0x20) {
         distance[0] = __builtin_fabsf(goal[0] - scale->x);
         if (distance[0] <= __builtin_fabsf(step[0])) {
@@ -308,6 +329,10 @@ void SEQ_scaleUnit(MapUnitRecord *unit)
     }
 }
 
+/*
+ * Samples the rotation spline for the current frame and stores the angles in
+ * radians.
+ */
 void SEQ_rotateUnitSPL(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
@@ -331,6 +356,7 @@ void SEQ_rotateUnitSPL(MapUnitRecord *unit)
         sequence->state &= ~0xe;
 }
 
+/* Samples the scale spline for the current frame and stores the scale. */
 void SEQ_scaleUnitSPL(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
@@ -354,6 +380,11 @@ void SEQ_scaleUnitSPL(MapUnitRecord *unit)
         sequence->state &= ~0xe0;
 }
 
+/*
+ * Samples the move spline for the current frame and moves the unit to the
+ * sample. Faces the unit along the path when the move track asks for it and no
+ * Y rotation track is running.
+ */
 void SEQ_moveUnitSPL(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->slot];
@@ -381,6 +412,10 @@ void SEQ_moveUnitSPL(MapUnitRecord *unit)
         sequence->state &= ~0x1;
 }
 
+/*
+ * Walks the unit toward its followed unit at the track step, turning to face
+ * it, and ends the move when it gets close to that unit.
+ */
 void SEQ_moveUnitChr(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
@@ -430,6 +465,10 @@ void SEQ_moveUnitChr(MapUnitRecord *unit)
     }
 }
 
+/*
+ * Walks the unit toward the track destination in the XZ plane at the track
+ * step, and ends the move when it is within one step.
+ */
 void SEQ_moveUnitXZ(MapUnitRecord *unit)
 {
     Vector4 *position = &unit->position;
@@ -478,6 +517,10 @@ void SEQ_moveUnitXZ(MapUnitRecord *unit)
     sequence->frameCounter++;
 }
 
+/*
+ * Starts the motion track on the first call. Clears the sequence state when
+ * only the motion bit remains and the animation has flag 0x1000.
+ */
 void SEQ_motionUnit(MapUnitMotionRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence = &unitSequence[unit->serial];
@@ -515,6 +558,10 @@ void MAP_updateUnitMotion(void)
 {
 }
 
+/*
+ * Calls callback with the flags of every unit whose sequence entry belongs to
+ * group. Returns 0.
+ */
 int MAP_callUnitGroup(int group, void (*callback)(int *))
 {
     MapUnitGroupSequenceEntry *sequence_entry;
@@ -531,6 +578,10 @@ int MAP_callUnitGroup(int group, void (*callback)(int *))
     return 0;
 }
 
+/*
+ * Rebuilds the unit transform, advances its motion and copies the play time
+ * into the animation.
+ */
 void MAP_updateUnitMPack(MapUnitMotionRecord *unit)
 {
     Play *play = PLAY_getCurrent();
@@ -538,10 +589,15 @@ void MAP_updateUnitMPack(MapUnitMotionRecord *unit)
     MAP_BUILD_UNIT_TRANSFORM(unit);
     SEQ_motionUnit(unit);
 
-    /* PLAY_setupDefault and PLAY_ctrl establish currentTime at +0x44. */
+    /* Play.currentTime is the float at +0x44. */
     unit->anim.motionTime = play->currentTime;
 }
 
+/*
+ * Runs the unit's sequence callbacks, clears the sequence once no track is
+ * running, snaps the unit to the ground when flagged, and rebuilds the
+ * transform.
+ */
 void MAP_updateUnitSequence(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence_entry;
@@ -574,6 +630,7 @@ void MAP_updateUnitSequence(MapUnitRecord *unit)
     MAP_BUILD_UNIT_TRANSFORM(unit);
 }
 
+/* Snaps the unit to the ground when flagged, then rebuilds its transform. */
 void MAP_updateUnitDefault(MapUnitRecord *unit)
 {
     if (unit->flags & MAP_UNIT_FOLLOW_GROUND) {
@@ -592,6 +649,7 @@ void MAP_updateUnitDefault(MapUnitRecord *unit)
     xglMatrixStackSave(unit->matrix);
 }
 
+/* Resets all 64 sequence entries and unit records to their defaults. */
 void MAP_initUnitSequance(void)
 {
     MapUnitGroupEntry *unit = MapUnit;
@@ -626,6 +684,11 @@ void MAP_initUnitSequance(void)
     } while (remaining >= 0);
 }
 
+/*
+ * Runs the unit's sequence callbacks and snaps it to the ground when flagged.
+ * Without a resource model, saves its matrix into its part slot of the display
+ * model.
+ */
 void MAP_updateUnitPartsSequence(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence_entry;
@@ -670,6 +733,10 @@ void MAP_updateUnitPartsSequence(MapUnitRecord *unit)
     }
 }
 
+/*
+ * Like MAP_updateUnitPartsSequence, but builds the part matrix about the
+ * sequence pivot in the axis selected by axis_w.
+ */
 void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
 {
     MapUnitGroupSequenceEntry *sequence_entry;
@@ -711,7 +778,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             float rot_y;
             float rz;
 
-            /* Aligned matrix copies use the SDK's scratch-register quartet. */
+            /* Copies the 4x4 matrix with lq/sq pairs. */
             QuadwordCopyMatrix(local, unit->matrix);
             local[3][0] = 0.0f;
             local[3][3] = 1.0f;
@@ -757,6 +824,9 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             delta.y = centre.y;
             delta.z = centre.z;
             negated.w = 1.0f;
+            /*
+             * Compose the part matrix about the pivot, then save it to local.
+             */
             xglMatrixStackUnit();
             xglMatrixStackTrans(&centre.x);
             xglMatrixStackMul(inverse);
@@ -768,6 +838,7 @@ void MAP_updateUnitPartsSequence2(MapUnitRecord *unit)
             xglMatrixStackMul(aligned);
             xglMatrixStackTrans(&negated.x);
             xglMatrixStackSave(local);
+            /* Fold the rotated unit position into the translation row. */
             angles.x = unit->position.x * inverse[0][0] + unit->position.y * inverse[1][0] + unit->position.z * inverse[2][0];
             angles.y = unit->position.x * inverse[0][1] + unit->position.y * inverse[1][1] + unit->position.z * inverse[2][1];
             angles.z = unit->position.x * inverse[0][2] + unit->position.y * inverse[1][2] + unit->position.z * inverse[2][2];

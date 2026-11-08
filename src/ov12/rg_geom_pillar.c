@@ -60,17 +60,9 @@ RgGeom *CreateRgGeomPillar(void)
 }
 
 /*
- * Tests the point's path this frame -- the segment from its old position to
- * its current one, the pair __RgGeomPointGetOldPos / __RgGeomPointGetPos
- * reads -- against the pillar's local box, and on a hit transforms the
- * contact point from the pillar's local space back to world space.
- *
- * The path is brought into the pillar's local space with the inverse-local
- * matrix, tested against a box whose two diagonal corners carry the pillar's
- * own half-extents in local X and Z, and the hit point is brought back out
- * with the local matrix.  The two path endpoints and the box's two corners
- * are the function's own four scratch vectors.
- *
+ * Tests the point's path this frame, from its old position to its current one,
+ * against the pillar's local box. On a hit, maps the contact point back from
+ * local to world space.
  */
 int RgGeomPillarCheckPoint(RgGeomTray *pillar, RgGeomBall *ball, RgVector contact)
 {
@@ -132,7 +124,7 @@ int RgGeomPillarCheckPoint(RgGeomTray *pillar, RgGeomBall *ball, RgVector contac
     return hit;
 }
 
-/* Swap the single-precision values addressed by the two local-helper pointers. */
+/* Swaps the two float values that left and right point to. */
 static void swapf(float *left, float *right)
 {
     float value = *left;
@@ -229,6 +221,7 @@ static int GetIntersectionPointLineZ(float *intersection, const RgVector lineSta
     return 1;
 }
 
+/* Returns the sign of the cross product of the XZ directions p0->p1 and p2->p3, or 0 when it is zero. */
 static int CheckSlope(const RgVector p0, const RgVector p1, const RgVector p2,
                       const RgVector p3)
 {
@@ -244,6 +237,7 @@ static int CheckSlope(const RgVector p0, const RgVector p1, const RgVector p2,
     return -1;
 }
 
+/* Returns 1 when point lies strictly inside the XZ extent of the box from lower to upper. */
 static int CheckInBox(const RgVector point, const RgVector lower,
                       const RgVector upper)
 {
@@ -264,13 +258,17 @@ enum {
     RG_SIDE_HIT_Z = 16
 };
 
-/* The frame reserves 16 bytes after the two bounds corners that
- * CheckBallBoxCollision never accesses. */
+/* The 16 bytes after the two bounds corners are never accessed by CheckBallBoxCollision. */
 typedef struct RgBoundsFrame {
     RgVector bounds[2];
     unsigned char unmodeled_20[16];
 } RgBoundsFrame;
 
+/*
+ * Tests segment corners[2]-corners[3] against the box spanned by corners[0] and
+ * corners[1], grown by the radius in corners[2][3]. Returns 1 on a hit, 0 otherwise;
+ * a hit writes the contact point to contact when it is non-null.
+ */
 static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int flag)
 {
     RgBoundsFrame frame;
@@ -452,6 +450,7 @@ static int CheckBallBoxCollision(RgVector contact, RgVector *corners[4], int fla
     return 1;
 }
 
+/* Tests a ball against the pillar. On a hit, writes the world-space contact, normal and correction to worldResults[0..2]. */
 int RgGeomPillarCheckBall(RgGeomTray *pillar, RgGeomBall *ball,
                           RgVector worldResults[3])
 {
@@ -461,6 +460,7 @@ int RgGeomPillarCheckBall(RgGeomTray *pillar, RgGeomBall *ball,
     RgVector localCorrection;
     int hit;
 
+    /* Maps the ball position into the pillar's local space. */
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%2)\n\t"
         "lqc2 $vf3, 0(%1)\n\t"
@@ -482,6 +482,7 @@ int RgGeomPillarCheckBall(RgGeomTray *pillar, RgGeomBall *ball,
         return hit;
     }
 
+    /* On a hit, maps the contact point, normal and correction back to world space. */
     __asm__ __volatile__(
         "lqc2 $vf2, 0(%1)\n\t"
         "lqc2 $vf3, 0(%2)\n\t"
@@ -545,6 +546,11 @@ static inline void _CopyContact(RgVector localContact, RgVector probe)
         : : "r"(localContact), "r"(probe) : "memory");
 }
 
+/*
+ * Tests the ball centre in local space against the pillar faces and corners.
+ * On a hit, pushes localNormal out of the pillar, sets localContact and fills
+ * localCorrection with the push direction.
+ */
 static int _CheckPillarBall(const RgVector localPosition,
                             RgVector localNormal,
                             RgVector localContact,
@@ -577,6 +583,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         : : "r"(probe), "r"(localPosition) : "memory");
     localCorrection[0] = localCorrection[1] = localCorrection[2] = localCorrection[3] = 0.0f;
 
+    /* Classifies the centre into one of the nine cells around the box (see the enum above). */
     negHalfWidth = -halfWidth;
     x = localNormal[0];
     if (x < negHalfWidth) {
@@ -597,6 +604,7 @@ static int _CheckPillarBall(const RgVector localPosition,
         }
     }
 
+    /* Face cells push the normal out along one axis, corner cells along the corner offset, and the inside cell along the nearest face. */
     switch (cell) {
     case RG_PILLAR_CELL_NEG_Z_FACE:
         faceDistance = negHalfDepth - z;

@@ -78,6 +78,11 @@ static void fnMSP00_DM000(void *self, struct MSP00DrawState *work);
 static void fnMSP00_DP000(void *self, MSP00Effect *effect);
 static void fnMSP00_PO000(void *self, MSP00Effect *effect);
 
+/*
+ * Initializes an MSP00 effect. The spawn point is the source actor's matrix applied to
+ * the creation offset; the velocity points from it toward a point on a radius-1 circle
+ * around the target actor, spread over MSP00_FLIGHT_FRAMES. Returns 1.
+ */
 int MEfCreate_MSP00(MSP00Object *object)
 {
     MSP00Effect *effect = &object->work;
@@ -150,6 +155,7 @@ static void fnMSP00_PR000(void *self, MSP00Effect *effect)
         effect->angles.z += 0.5235988f;
     }
 
+    /* Shift the trail history down one slot, copying each slot's points and twist. */
     for (slot = MSP00_TRAIL_SLOTS - 2; slot >= 0; slot--) {
         effect->active[slot + 1] = effect->active[slot];
         for (point = 0; point < MSP00_TRAIL_POINTS; point++) {
@@ -204,6 +210,10 @@ typedef struct MSP00DrawState {
     Vector4 angles;             /* +0xd0 */
 } MSP00DrawState;
 
+/*
+ * Draws the model while the effect is in flight: oriented by its angles, scaled by a
+ * fixed vector and placed at its position.
+ */
 static void fnMSP00_DM000(void *self, MSP00DrawState *work)
 {
     static const Vector4 scale = { 0.04f, 0.04f, 0.2f, 1.0f };
@@ -229,6 +239,10 @@ extern Quadword McEfSTQtbl[];
 static const Quadword coltbl_1_00A51390[10];
 static const float sztbl_2_00A51430[10];
 
+/*
+ * Draws the trail: one textured strip per point of every active slot, appended to the
+ * effect's draw packet between a GS state setup and the packet terminator.
+ */
 static void fnMSP00_DP000(void *self, MSP00Effect *effect)
 {
     int i;
@@ -249,6 +263,7 @@ static void fnMSP00_DP000(void *self, MSP00Effect *effect)
     int nloop;
     int texReg;
 
+    /* Packet header: GS state for test, texture filter, clamp, z buffer and additive alpha. */
     pk = &effect->drawPacket;
     MGsGPInit(pk, 0, 0);
     q = pk->current;
@@ -275,6 +290,7 @@ static void fnMSP00_DP000(void *self, MSP00Effect *effect)
     pk->current->nloop |= nreg;
     pk->current += n;
     pk->count += n;
+    /* Each active trail slot adds one textured strip per point. */
     i = 0;
     for (; i < MSP00_TRAIL_SLOTS; i++) {
         if (effect->active[i] != 0) {
@@ -342,12 +358,14 @@ static void fnMSP00_DP000(void *self, MSP00Effect *effect)
  * is defined by src/main/sef.c. */
 extern void sefHitEffect(void);
 
-/* The post callback advances the frame counter (+0x70) once per call, fires
- * sefHitEffect at MSP00_HIT_FRAME and expires through MEfObjDestroy at
- * MSP00_LIFETIME. */
 #define MSP00_HIT_FRAME 0x12
 #define MSP00_LIFETIME  0x1C
 
+/*
+ * The post callback advances the frame counter (+0x70) once per call, fires
+ * sefHitEffect at MSP00_HIT_FRAME and expires through MEfObjDestroy at
+ * MSP00_LIFETIME.
+ */
 static void fnMSP00_PO000(void *self, MSP00Effect *effect)
 {
     effect->frame++;
