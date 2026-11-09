@@ -98,6 +98,9 @@
 # not part of the build system this directory otherwise holds.
 /tools/tu/function_object.py
 
+# The documentation
+!/documentation
+
 # -------------------------------------------------------------- generated
 __pycache__/
 *.pyc
