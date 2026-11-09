@@ -1,8 +1,8 @@
 {
   "accepted_c_functions": 0,
   "build_report": {
-    "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/main-comments-20261108/iop-report2.json",
-    "sha256": "3038677a17570adf8c5f096d882c4f5ecb47a36199836369bd906a5326484baf"
+    "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/naming-fix-20261109/iop-report.json",
+    "sha256": "13a0d6ac0bc1467dbd056a4ee8d00e57ed95e71d6d97c971701fadfe83d6fcaf"
   },
   "native_objdiff_report": {
     "path": ".work/iop-original-names-20261024/objdiff/native-report.json",
@@ -2994,7 +2994,7 @@
   "independent_review": "not_performed_per_user_instruction",
   "manifest": {
     "path": "config/iop-build.json",
-    "sha256": "a79e374c25f9c18ad3a4df26b4e9e24b926630a8b463d3ab638d81994e329f99"
+    "sha256": "77ccb5e961bddf9cdb4cb776f64bc0439653c7f8712c84c8dc26d2c756bd6917"
   },
   "plan_submission_resolution": [
     {
@@ -3167,7 +3167,7 @@
       "float_mode": "soft",
       "functions": 101,
       "source": "src/audio/ssd/ssd_trap.c",
-      "source_sha256": "88f3a71ee70341f2a4864e9614f01cab2a61fbe89a18108b25e712b5a1ad2e43",
+      "source_sha256": "0037359580112f6a919e27baf3ffe432206c1bd25bdb8f6583b3fba3b7542254",
       "unit": "iop_ssd"
     },
     {
@@ -3284,8 +3284,8 @@
     "user_request": "100% of SSD/RSSD data recovered as C, 0% data scaffolding",
     "ownership_evidence": "ECOFF EXTR ifd per original data symbol; FDR link order for file-local strings and alignment fill",
     "build_report": {
-      "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/main-comments-20261108/iop-report2.json",
-      "sha256": "3038677a17570adf8c5f096d882c4f5ecb47a36199836369bd906a5326484baf"
+      "path": "/home/pc/xenosaga1-port/xenosaga-i-decomp/.work/naming-fix-20261109/iop-report.json",
+      "sha256": "13a0d6ac0bc1467dbd056a4ee8d00e57ed95e71d6d97c971701fadfe83d6fcaf"
     },
     "units": {
       "iop_rssd": {

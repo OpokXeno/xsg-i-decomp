@@ -20,7 +20,8 @@
 #define ANIM_SPEED_DEFAULT 0.033333335f /* one frame per 1/30 s tick */
 #define ANIM_BLEND_DURATION_DEFAULT 0.26666668f /* 8 ticks */
 
-/* Accessory and relation ids understood by ACT_setArms / ACT_setRelation. */
+/* Accessory and relation ids understood by ACT_setArms / ACT_setRelation.
+ * The skeleton's accessory record holds 40 ids, one fewer than the count. */
 #define ACT_ACCESSORY_COUNT 0x29
 #define ACT_ACCESSORY_ARMS 0x108
 #define ACT_RELATION_JOINT_FLAG 0x8000 /* relation is an accessory selector */

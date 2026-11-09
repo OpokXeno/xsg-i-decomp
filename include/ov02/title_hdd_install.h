@@ -68,9 +68,9 @@ typedef struct UmnWorkData {
             signed char count;          /* +0x51 */
             signed char entry;          /* +0x52: mail id, plugin id or database entry */
             signed char mail_cursor;            /* +0x53 */
-            signed char name_char_count;        /* +0x54 */
-            signed char name_lookup;            /* +0x55 */
-            signed char name[3];                /* +0x56 */
+            signed char reply_count;            /* +0x54 */
+            signed char selected_reply;         /* +0x55: mail id of the chosen reply */
+            signed char reply_ids[3];           /* +0x56 */
             signed char header_gate_flag;       /* +0x59 */
             signed char mail_text_ready;        /* +0x5A */
             signed char mail_has_data;          /* +0x5B */

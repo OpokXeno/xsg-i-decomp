@@ -95,6 +95,7 @@ extern GameResourceEntry GameResource[];
 extern MapResource *RES_loadFile(int file_id, int resource_type, int map_id, int flags);
 extern void xglRenderDrawFlipPk(XglPacket *packet);
 static void taskMapChange(void *task);
+/* OV01's dataThinkDataSet: copies a map's think data into its think buffer. */
 extern int func_A1CFB8(int think_no, const void *data);
 extern void xglCullingMapSet(int culling_map);
 extern StudioLight *xglStudioGetLight2(void);

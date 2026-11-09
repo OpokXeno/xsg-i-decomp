@@ -201,26 +201,25 @@ typedef struct SvImageMapperStorage {
 
 
 /*
- * One svAddScript2 sub-record, at +0x1C of a 0x24-byte slot of the type
- * list's item array. Only the fields svAddScript2 writes are modeled, at
- * their byte offset from this sub-record's own base: `codePtr` (+0x00, the
- * script's +0xC0 address), `active` (+0x08, always 1), `kind` (+0x0C, always
- * 5, the SV_RES_SCRIPT kind), `id` (+0x0E, the script's +0xA halfword), two
- * cleared halfwords (+0x18/+0x1A) and `dataPtr` (+0x20, the script's +0x14
- * address). That +0x20 lands at slot offset 0x3C, past the 0x24-byte stride,
- * in the next slot's leading bytes.
+ * The type-list entry svAddScript2 fills for a script chunk. The type list
+ * has a 0x1C-byte header, so typeListAddr + index * 0x24 + 0x1C is exactly
+ * entries[index], and these fields are the SvTypeListEntry fields at the same
+ * offsets: `data` (+0x00, the script's +0xC0 address), `used` (+0x08, always
+ * 1), `resourceKind` (+0x0C, always 5, the SV_RES_SCRIPT kind), `typeFlags`
+ * (+0x0E, the chunk's +0xA halfword), the cleared width and height
+ * (+0x18/+0x1A) and `name` (+0x20, the chunk name at +0x14).
  */
 typedef struct SvScriptSlot {
-    void *codePtr;                  /* 0x00 */
+    void *data;                     /* 0x00 */
     unsigned char unmodeled_04[4];
-    int active;                      /* 0x08 */
-    short kind;                       /* 0x0C */
-    short id;                          /* 0x0E */
+    int used;                        /* 0x08 */
+    short resourceKind;               /* 0x0C */
+    short typeFlags;                   /* 0x0E */
     unsigned char unmodeled_10[8];
-    short clearedA;                     /* 0x18 */
-    short clearedB;                      /* 0x1A */
+    short width;                        /* 0x18 */
+    short height;                        /* 0x1A */
     unsigned char unmodeled_1C[4];
-    void *dataPtr;                        /* 0x20 */
+    void *name;                           /* 0x20 */
 } SvScriptSlot;
 
 
@@ -268,7 +267,7 @@ typedef struct SvImageChunk {
     short width;
     unsigned short height;
     short bitsPerPixel;
-    unsigned char unmodeled_12[2];
+    unsigned short packClass;   /* never read: 0 default.esp, 1 character and enemy packs, 2 weapons, 4 cf_def.esp */
     char name[0x2c];
     char data[1];
 } SvImageChunk;
@@ -279,7 +278,7 @@ typedef struct SvClutChunk {
     short width;
     unsigned short height;
     unsigned short bitsPerPixel;
-    unsigned char unmodeled_12[2];
+    unsigned short packClass;   /* unread, see SvImageChunk */
     char name[44];
     unsigned char data[1];
 } SvClutChunk;
@@ -899,39 +898,41 @@ static int svAddScript(SvTypeList *typeList, SvResourceChunk *chunk)
 }
 
 /*
- * Adds a script chunk as a sub-record at slot offset 0x1C: the code pointer from
- * chunk+0xC0, the data pointer from chunk+0x14 and the id from the halfword at chunk+0xA.
+ * Adds a script chunk as an entry of the type list: the code pointer from
+ * chunk+0xC0, the chunk name from chunk+0x14 and the type flags from the
+ * halfword at chunk+0xA.
  */
 static int svAddScript2(int typeListAddr, void *script)
 {
   int index;
   void *codePtr;
-  void *dataPtr;
+  void *name;
   void *slot;
   SvScriptSlot *sub;
 
   index = svImageListAlloc(typeListAddr);
   codePtr = (unsigned char *) script + 0xC0;
-  dataPtr = (unsigned char *) script + 0x14;
+  name = (unsigned char *) script + 0x14;
   slot = (void *) (typeListAddr + (index * 0x24));
   if (index < 0)
   {
     return -1;
   }
   sub = (SvScriptSlot *) ((unsigned char *) slot + 0x1C);
-  sub->kind = 5;
-  sub->dataPtr = dataPtr;
-  sub->codePtr = codePtr;
-  sub->id = (short) *((u16 *) (((unsigned char *) script) + 0xA));
-  sub->active = 1;
-  sub->clearedB = 0;
-  sub->clearedA = 0;
+  sub->resourceKind = 5;
+  sub->name = name;
+  sub->data = codePtr;
+  sub->typeFlags = (short) *((u16 *) (((unsigned char *) script) + 0xA));
+  sub->used = 1;
+  sub->height = 0;
+  sub->width = 0;
   return index;
 }
 
 /*
  * Walks the resource chunks of a file and adds each one to the type list by its
- * kind, until SV_CHUNK_END or an unknown kind. Kinds 1 and 2 are skipped.
+ * kind, until SV_CHUNK_END or an unknown kind. Kind 1, the file header chunk,
+ * and kind 2, which no file contains, are skipped.
  */
 static void svAnalyzeChunk(SvTypeList *typeList, void *chunkFile)
 {

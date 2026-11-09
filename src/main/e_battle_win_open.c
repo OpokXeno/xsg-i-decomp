@@ -31,9 +31,9 @@ typedef struct BattleWinAnalysisParams {
     int y;
     int style;
     const char *name;
-    short display_value_low;
-    short display_value_high;
-    unsigned short condition_flags;
+    short current_hp;
+    short max_hp;
+    unsigned short weakness_flags;
     unsigned char unmodeled_16[2];
     int tech_points;
     int ether_points;
@@ -447,7 +447,7 @@ void eBattleWinOpen3(void *data)
         message_window->messages[1].mode = E_MODE_SHOW_START;
         display_index = 0;
     }
-    /* Clears the condition text, then copies up to two set condition labels into it. */
+    /* Clears the weakness text, then copies the labels of up to two set weakness bits into it. */
     {
         unsigned char *condition_text = (unsigned char *)msg03_3;
         int clear_index;
@@ -460,7 +460,7 @@ void eBattleWinOpen3(void *data)
         int condition_index;
 
         for (condition_index = 0; condition_index < 10; condition_index++) {
-            if ((param->condition_flags >> condition_index) & 1) {
+            if ((param->weakness_flags >> condition_index) & 1) {
                 msg03_3[display_index] = condition_labels.rows[condition_index][0];
                 if (display_index == 1) {
                     break;
@@ -499,8 +499,8 @@ void eBattleWinOpen3(void *data)
     }
     (*analysis_window_slot)->number.digits = 5;
     (*analysis_window_slot)->number.value =
-        ((unsigned int)param->display_value_high << 16) +
-        param->display_value_low;
+        ((unsigned int)param->max_hp << 16) +
+        param->current_hp;
     WindowDXSet(&(*analysis_window_slot)->window2);
     {
         BattleWindow3 *window = (*analysis_window_slot);

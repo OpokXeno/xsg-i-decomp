@@ -359,15 +359,15 @@ typedef struct SpotLightTable {
 typedef struct CharParaData {
     short maxHp;                /* +0x00 */
     short maxEp;                /* +0x02 */
-    short attack;               /* +0x04 */
-    short phyDefense;           /* +0x06 */
-    short stat4;                /* +0x08: statIndex 4 of MenuParaPtNowGet */
-    short magDefense;           /* +0x0A */
-    signed char stat6;          /* +0x0C: statIndex 6 */
-    signed char stat7;          /* +0x0D: statIndex 7 */
-    signed char stat8;          /* +0x0E */
+    short attack;               /* +0x04: Str */
+    short phyDefense;           /* +0x06: Vit */
+    short magAttack;            /* +0x08: Eatk, statIndex 4 of MenuParaPtNowGet */
+    short magDefense;           /* +0x0A: Edef */
+    signed char hitStat;        /* +0x0C: Dex, statIndex 6 */
+    signed char evadeStat;      /* +0x0D: Eva, statIndex 7 */
+    signed char agility;        /* +0x0E: Agl */
     unsigned char unmodeled_0f[0x1E - 0x0F];
-    short stat9;                /* +0x1E */
+    short weight;               /* +0x1E */
     unsigned char unmodeled_20[0x34 - 0x20];
     short hp;                   /* +0x34 */
     short ep;                   /* +0x36 */
@@ -998,7 +998,9 @@ static signed char ParaPointTbl[];
  * tables (one such table per stat display, e.g. base); each character's row
  * is 8 halfwords wide. ParaDataChangeTbl (8 bytes) remaps a stat index
  * (statIndex) to its halfword slot within that row. MenuParaPtBaseGet reads
- * the computed slot from a table 56 halfwords after ParaDataBuf.
+ * the base table at byte 0x80 of the file: it adds 56 halfwords to
+ * ParaDataBuf, and character numbers start at 1, so the first row lies one
+ * more row (8 halfwords) further on.
  */
 extern unsigned short *ParaDataBuf;
 
@@ -1312,7 +1314,7 @@ unsigned short MenuParaPtBaseGet(int chrNo, int statIndex)
 
 /*
  * The character's current value of one displayed parameter (statIndex 0..7:
- * maxHp, maxEp, attack, phyDefense, stat4, magDefense, stat6, stat7); 0 for
+ * maxHp, maxEp, attack, phyDefense, magAttack, magDefense, hitStat, evadeStat); 0 for
  * any other index.
  */
 unsigned short MenuParaPtNowGet(int chrNo, int statIndex)
@@ -1325,13 +1327,13 @@ unsigned short MenuParaPtNowGet(int chrNo, int statIndex)
     case 3:
         return org->phyDefense;
     case 4:
-        return org->stat4;
+        return org->magAttack;
     case 5:
         return org->magDefense;
     case 6:
-        return org->stat6;
+        return org->hitStat;
     case 7:
-        return org->stat7;
+        return org->evadeStat;
     case 0:
         return org->maxHp;
     case 1:
@@ -1425,16 +1427,16 @@ void MenuParaUp(int chrNo, int statIndex)
         org->phyDefense++;
         break;
     case 4:
-        org->stat4++;
+        org->magAttack++;
         break;
     case 5:
         org->magDefense++;
         break;
     case 6:
-        org->stat6++;
+        org->hitStat++;
         break;
     case 7:
-        org->stat7++;
+        org->evadeStat++;
         break;
     case 0:
         org->maxHp += 10;
@@ -1720,8 +1722,8 @@ int MenuCharEquipCalcPointGet(int chrNo)
             points += defense[0];
             break;
         case 4:
-            points = total->stat4;
-            points -= org->stat4;
+            points = total->magAttack;
+            points -= org->magAttack;
             break;
         case 5:
             points = total->magDefense;
@@ -1729,12 +1731,12 @@ int MenuCharEquipCalcPointGet(int chrNo)
             points += defense[1];
             break;
         case 6:
-            points = total->stat6;
-            points -= org->stat6;
+            points = total->hitStat;
+            points -= org->hitStat;
             break;
         case 7:
-            points = total->stat7;
-            points -= org->stat7;
+            points = total->evadeStat;
+            points -= org->evadeStat;
             break;
     }
     return points;
@@ -2977,16 +2979,16 @@ void CharParameterMain(void)
                                         ((paraUnit[1].attack + UpPara[2]) << 16);
                 work->number[1].value = paraUnit[0].phyDefense +
                                         ((paraUnit[1].phyDefense + UpPara[3]) << 16);
-                work->number[2].value = paraUnit[0].stat4 +
-                                        ((paraUnit[1].stat4 + UpPara[4]) << 16);
+                work->number[2].value = paraUnit[0].magAttack +
+                                        ((paraUnit[1].magAttack + UpPara[4]) << 16);
                 work->number[3].value = paraUnit[0].magDefense +
                                         ((paraUnit[1].magDefense + UpPara[5]) << 16);
-                work->number[4].value = paraUnit[0].stat6 +
-                                        ((paraUnit[1].stat6 + UpPara[6]) << 16);
-                work->number[5].value = paraUnit[0].stat7 +
-                                        ((paraUnit[1].stat7 + UpPara[7]) << 16);
-                work->number[6].value = paraUnit[0].stat8 + (paraUnit[1].stat8 << 16);
-                work->number[7].value = paraUnit[0].stat9 + (paraUnit[1].stat9 << 16);
+                work->number[4].value = paraUnit[0].hitStat +
+                                        ((paraUnit[1].hitStat + UpPara[6]) << 16);
+                work->number[5].value = paraUnit[0].evadeStat +
+                                        ((paraUnit[1].evadeStat + UpPara[7]) << 16);
+                work->number[6].value = paraUnit[0].agility + (paraUnit[1].agility << 16);
+                work->number[7].value = paraUnit[0].weight + (paraUnit[1].weight << 16);
                 /* Each arrow compares the current and the recalculated halfword. */
                 for (i = 0; i < 7; i++) {
                     short shown[2];

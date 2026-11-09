@@ -7,7 +7,9 @@
 
 struct RgReadText;
 
-/* The camera version CreateRgCamera builds (the only one that exists). */
+/* The only camera version CreateRgCamera builds. Its number is 2, although
+ * the functions call the mode Version3 (_CreateBattleCamera passes 2 and
+ * reads the "CAM" "2" paragraph of rg_camera.info). */
 #define RG_CAMERA_VERSION3 2
 
 /* Number of conditions (see s_aszVer3TimerName in rg_camera.c) the Version3 camera tracks. */

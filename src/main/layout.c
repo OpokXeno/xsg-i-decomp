@@ -2,9 +2,9 @@
 #include "layout.h"
 #include "main/jni.h"
 
-/* UnduDataGetHeader keys: the map id is offset into the Undu map index space and the unit id is flagged for a by-index lookup. */
-#define LAYOUT_UNDU_MAP_BASE 0x200
-#define LAYOUT_UNDU_UNIT_FLAG 0x8000
+/* UnduDataGetHeader keys: locator group n of the map's .id data is list 0x200 + n, and the flag looks the locator up by index. */
+#define LAYOUT_UNDU_LOCATOR_GROUP_BASE 0x200
+#define LAYOUT_UNDU_BY_INDEX 0x8000
 
 /* Byte offsets inside a unit / character peer object. */
 #define LAYOUT_PEER_POSITION_OFFSET 16
@@ -19,7 +19,7 @@ int layoutManagerId;
  * Copies the layout entry for unit_id into a Unit object: the peer's position
  * and yaw, then the px/py/pz/ry fields (ry in degrees).
  */
-void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
+void LAYOUT_mapID_setUnit(u8 *layout, int locator_group, int unit_id)
 {
     LayoutHeader *header;
     JavaField *field;
@@ -27,7 +27,7 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
     float *position;
     float *rotation;
 
-    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
+    header = UnduDataGetHeader(locator_group + LAYOUT_UNDU_LOCATOR_GROUP_BASE, unit_id + LAYOUT_UNDU_BY_INDEX);
     if (header == 0)
         return;
 
@@ -61,7 +61,7 @@ void LAYOUT_mapID_setUnit(u8 *layout, int map_id, int unit_id)
  * and yaw (also set at peer+2532), then the px/py/pz/ry fields (ry in degrees).
  * Sets flag 0x1000 in the peer at +1232.
  */
-void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
+void LAYOUT_mapID_setChr(u8 *layout, int locator_group, int unit_id)
 {
     LayoutHeader *header;
     JavaField *field;
@@ -70,7 +70,7 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
     float *rotation;
     float angle;
 
-    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
+    header = UnduDataGetHeader(locator_group + LAYOUT_UNDU_LOCATOR_GROUP_BASE, unit_id + LAYOUT_UNDU_BY_INDEX);
     if (header == 0)
         return;
 
@@ -106,13 +106,13 @@ void LAYOUT_mapID_setChr(u8 *layout, int map_id, int unit_id)
  * Copies the layout entry for unit_id into an Effect object: the peer's position
  * and yaw when the peer exists, then the px/py/pz/ry fields (ry in degrees).
  */
-void LAYOUT_mapID_setEffect(u8 *layout, int map_id, int unit_id)
+void LAYOUT_mapID_setEffect(u8 *layout, int locator_group, int unit_id)
 {
     LayoutHeader *header;
     JavaField *field;
     LayoutEffectPeer *peer;
 
-    header = UnduDataGetHeader(map_id + LAYOUT_UNDU_MAP_BASE, unit_id + LAYOUT_UNDU_UNIT_FLAG);
+    header = UnduDataGetHeader(locator_group + LAYOUT_UNDU_LOCATOR_GROUP_BASE, unit_id + LAYOUT_UNDU_BY_INDEX);
     if (header == 0)
         return;
 
@@ -157,15 +157,15 @@ void Java_xeno_util_Layout_set__Ljava_lang_Object_I(JThread *thread,
     target = arguments->target;
 
     if (JNI_isInstanceOf(target, classJava_xeno_Chr) == 1) {
-        LAYOUT_mapID_setChr(target, map->map_id, unit_id);
+        LAYOUT_mapID_setChr(target, map->locator_group, unit_id);
         return;
     }
     if (JNI_isInstanceOf(target, classJava_xeno_Unit) == 1) {
-        LAYOUT_mapID_setUnit(target, map->map_id, unit_id);
+        LAYOUT_mapID_setUnit(target, map->locator_group, unit_id);
         return;
     }
     if (JNI_isInstanceOf(target, classJava_xeno_Effect) == 1) {
-        LAYOUT_mapID_setEffect(target, map->map_id, unit_id);
+        LAYOUT_mapID_setEffect(target, map->locator_group, unit_id);
         return;
     }
 }

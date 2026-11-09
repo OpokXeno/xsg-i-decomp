@@ -28,8 +28,8 @@
 #define UMN_MAIL_INFO_TEXT_SIZE 0x100
 /* Mails 0..80 are the roots the history tree is searched from. */
 #define UMN_MAIL_HISTORY_ROOTS 81
-/* Header name byte that marks an unused reply slot in UmnWork.name. */
-#define UMN_MAIL_NAME_NONE 0xFF
+/* Reply id that marks an unused reply slot in UmnWork.reply_ids. */
+#define UMN_MAIL_REPLY_NONE 0xFF
 
 /* Folder: records kept, records on screen (a fifth one scrolls in), record pitch and scroll speed in pixels. */
 #define UMN_MAIL_FOLDER_RECORDS 6
@@ -275,7 +275,7 @@ typedef struct UmnMailHensinWork {
     int anchor_color;
     WindowDX window;
     EMessageParam message;
-    EMessageParam messages[UMN_MAIL_NAME_CHARS];
+    EMessageParam messages[UMN_MAIL_REPLY_COUNT];
     ECursolMainData cursor;
 } UmnMailHensinWork;
 typedef struct UmnMailMenuWork {
@@ -572,7 +572,7 @@ void tskUmnMailInfo(UmnObjectTask *task, void *argument)
                     box_header = UmnMailHeaderGet(i);
                     if (box_header != 0) {
                         eMessageCpy(work->text_buffer, caption_a.text[4]);
-                        eMessageCat(box_header->title);
+                        eMessageCat(box_header->sender);
                         eMessageCat(mailSentenceEndText);
                         eMessageCat(caption_a.text[5]);
                         eMessageCat(box_header->subject);
@@ -1053,7 +1053,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
                 endPrintExtFunc(work->color, END_PRINT_CMD_EXT_BASE + END_PRINT_EXT_SCISSOR_SET, &work->box);
             }
 
-            /* Draws each row's icons, subject and title, and attachment mark. */
+            /* Draws each row's icons, subject and sender, and attachment mark. */
             for (i = 0; i < work->count + more; i++) {
                 int pick;
 
@@ -1084,7 +1084,7 @@ void tskUmnMailFolder(UmnObjectTask *task, void *data)
                 }
 
                 eMessageSet(&work->records[i].messages[0], hdr->subject);
-                eMessageSet(&work->records[i].messages[1], hdr->title);
+                eMessageSet(&work->records[i].messages[1], hdr->sender);
                 for (j = 0; j < 2; j++) {
                     eMessageModeChange(&work->records[i].messages[j], E_MODE_SHOW_START);
                     work->records[i].messages[j].x = work->records[i].sprites[j + 1].x + 20;
@@ -1401,11 +1401,11 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
             work->window.width = 6;
             work->window.height = 6;
             tyaUmlDispParamReset(&work->tya_value, 0);
-            work->tya_value = UmnWork.name_lookup;
+            work->tya_value = UmnWork.selected_reply;
             work->scroll_x = 48;
             work->cursor_x = 6;
             work->cursor_pitch = 6;
-            work->shown_entry = UmnWork.name_lookup;
+            work->shown_entry = UmnWork.selected_reply;
             work->step = UMN_MAIL_DISP_NAME_OPEN;
             work->flag_06 = 0;
             work->flag_07 = 0;
@@ -1426,7 +1426,7 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
             if (work->slide_x == goal70_x && work->slide_y == goal70_y) {
                 work->step = UMN_MAIL_DISP_NAME_SHOWN;
             }
-            if (work->shown_entry != UmnWork.name_lookup) {
+            if (work->shown_entry != UmnWork.selected_reply) {
                 work->state = 0;
                 work->step = UMN_MAIL_DISP_NAME_PREPARE;
             }
@@ -1441,7 +1441,7 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
                 work->step = UMN_MAIL_DISP_WAIT_MODEL;
                 break;
             default:
-                if (work->shown_entry != UmnWork.name_lookup) {
+                if (work->shown_entry != UmnWork.selected_reply) {
                     work->state = 0;
                     work->step = UMN_MAIL_DISP_NAME_PREPARE;
                 }
@@ -1511,7 +1511,7 @@ void tskUmnMailDisp(UmnObjectTask *task, void *data)
 
 /*
  * Reply name window task: slides the window in when the reply selection starts and out
- * when it ends, and draws one line per UmnWork.name entry, showing the subject of that mail.
+ * when it ends, and draws one line per UmnWork.reply_ids entry, showing the subject of that mail.
  */
 void tskUmnMailHensin(UmnObjectTask *task, void *data)
 {
@@ -1597,8 +1597,8 @@ void tskUmnMailHensin(UmnObjectTask *task, void *data)
     work->message.draw_parameter = work->window.style + 2;
     eMessageModeChange(&work->message, E_MODE_SHOW_START);
     eMessageMain(&work->message);
-    for (i = 0; i < UmnWork.name_char_count; i++) {
-        header = UmnMailHeaderGet(UmnWork.name[i]);
+    for (i = 0; i < UmnWork.reply_count; i++) {
+        header = UmnMailHeaderGet(UmnWork.reply_ids[i]);
         eMessageSet(&work->messages[i], header->subject);
         work->messages[i].x = work->window.x + 59;
         work->messages[i].draw_parameter = work->window.style + 2;
@@ -2233,26 +2233,26 @@ void UmnMail(int menu_id)
         UmnMailSaveData *kosmos;
         unsigned char *src;
         unsigned char *dst;
-        unsigned char name_char;
-        int name_index;
+        unsigned char reply_id;
+        int reply_index;
         UmnWork.tab_state = UMN_MAIL_STEP_READ;
         UmnWork.moving = 1;
         header = UmnMailHeaderGet(UmnWork.entry);
-        UmnWork.name_char_count = 0;
-        src = header->name;
-        for (name_index = 0; name_index < UMN_MAIL_NAME_CHARS; name_index++) {
-            name_char = *src++;
-            if (name_char != 0) {
-                UmnWork.name[name_index] = name_char;
-                UmnWork.name_char_count++;
+        UmnWork.reply_count = 0;
+        src = header->reply_ids;
+        for (reply_index = 0; reply_index < UMN_MAIL_REPLY_COUNT; reply_index++) {
+            reply_id = *src++;
+            if (reply_id != 0) {
+                UmnWork.reply_ids[reply_index] = reply_id;
+                UmnWork.reply_count++;
             } else {
-                UmnWork.name[name_index] = UMN_MAIL_NAME_NONE;
+                UmnWork.reply_ids[reply_index] = UMN_MAIL_REPLY_NONE;
             }
         }
         UmnWork.mail_cursor = 0;
-        UmnWork.name_lookup = UmnWork.name[0];
+        UmnWork.selected_reply = UmnWork.reply_ids[0];
         if (UmnMailEventCheck(UmnWork.entry) != 0) {
-            UmnWork.name_char_count = 0;
+            UmnWork.reply_count = 0;
         }
         data = UmnMailDataGet(UmnWork.entry);
         if ((data[0] & UMN_MAIL_FLAG_READ) == 0) {
@@ -2275,7 +2275,7 @@ void UmnMail(int menu_id)
             header = UmnMailHeaderGet(UmnWork.entry);
             data[0] |= UMN_MAIL_FLAG_READ;
             UmnWork.header_gate_flag = 0;
-            if ((data[0] & UMN_MAIL_FLAG_REPLY) == 0 && UmnWork.name_char_count != 0 && (data[0] & UMN_MAIL_REPLY_MASK) == 0) {
+            if ((data[0] & UMN_MAIL_FLAG_REPLY) == 0 && UmnWork.reply_count != 0 && (data[0] & UMN_MAIL_REPLY_MASK) == 0) {
                 unsigned short limit = header->scenario_limit;
 
                 if (MenuScenarioNoGet() < limit) {
@@ -2355,7 +2355,7 @@ void UmnMail(int menu_id)
         if (UmnWork.moving == 0 && UmnWork.wait == 0) {
             int new_cursor;
 
-            new_cursor = MenuSelectMove(UmnWork.mail_cursor, UmnWork.name_char_count, 0);
+            new_cursor = MenuSelectMove(UmnWork.mail_cursor, UmnWork.reply_count, 0);
             if (new_cursor != UmnWork.mail_cursor) {
                 UmnWork.mail_cursor = new_cursor;
                 UmnWork.wait = 8;
@@ -2371,7 +2371,7 @@ void UmnMail(int menu_id)
                 xglSoundEffectNormalID(SE_CANCEL, 0);
             }
         }
-        UmnWork.name_lookup = UmnWork.name[UmnWork.mail_cursor];
+        UmnWork.selected_reply = UmnWork.reply_ids[UmnWork.mail_cursor];
         break;
     case UMN_MAIL_STEP_REPLY_CONFIRM_OPEN:
         if (UmnWork.mail_selection_state == 0) {
@@ -2409,12 +2409,12 @@ void UmnMail(int menu_id)
         data = UmnMailDataGet(UmnWork.entry);
         data[0] |= (unsigned char)((UmnWork.mail_cursor + 1) << UMN_MAIL_REPLY_SHIFT);
         {
-            unsigned char *name_data;
+            unsigned char *reply_data;
 
-            name_data = UmnMailDataGet(UmnWork.name_lookup);
-            name_data[0] |= UMN_MAIL_FLAG_RECEIVED | UMN_MAIL_FLAG_REPLY;
+            reply_data = UmnMailDataGet(UmnWork.selected_reply);
+            reply_data[0] |= UMN_MAIL_FLAG_RECEIVED | UMN_MAIL_FLAG_REPLY;
         }
-        UmnMailBoxSet(UmnWork.name_lookup);
+        UmnMailBoxSet(UmnWork.selected_reply);
         if (UmnWork.price_balance > 0) {
             dataMoneyBoxDec(UmnWork.price_balance);
         }

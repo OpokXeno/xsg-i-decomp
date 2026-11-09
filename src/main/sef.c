@@ -473,31 +473,34 @@ typedef struct SefLineData {
     Vector4 parent_position;                 /* +0x50 */
     unsigned char unmodeled_060[0x40];
     Vector4 origin_offset;                   /* +0xa0 */
-    Vector4 position;
+    Vector4 light_position;
     Vector4 position_delta;                  /* +0xc0 */
     unsigned char unmodeled_0D0[0x10];
-    Vector4 scale_vector;
+    Vector4 global_position_vector;
     Vector4 global_position_source;          /* +0xf0 */
-    Vector4 rotation_vector;
+    Vector4 parent_position_vector;
     Vector4 parent_position_source;          /* +0x110 */
-    Vector4 position_vector;
-    Vector4 position_source[3];
+    Vector4 light_position_vector;
+    Vector4 light_position_source[3];
     SefProgressState first_vector_progress;
     SefProgressState second_vector_progress;
     unsigned char unmodeled_1A0[0x0C];
     SefIntegerProgressState first_integer_progress;
     SefIntegerProgressState second_integer_progress;
     unsigned char unmodeled_1C4[0x0C];
-    short *scale_keys;
+    /* Global tracks G0 to G9 of the line (formats/effects.md, "Global tracks"):
+     * G0 the global (emitter) position, G2 the parent (target) position of the
+     * particles and G6 the light position. */
+    short *global_position_keys;
     struct SefKey5Table *first_vector_keys;
-    short *rotation_keys;
+    short *parent_position_keys;
     struct SefKey5Table *second_vector_keys;
     SefModeKeyTable *key_1E0;
     unsigned char *key_1E4;
     struct SefKey3 *first_integer_keys;
     struct SefKey3 *second_integer_keys;
     unsigned char *key_1F0;
-    short *position_keys;
+    short *light_position_keys;
     unsigned char unmodeled_1F8[0x400];
     float gravity;
     float height;
@@ -546,7 +549,8 @@ typedef struct SefLightSet {
 } SefLightSet;
 
 /* Header of a line-script record: the two script table indices, then the
- * gravity, collision and height inputs of the line. */
+ * gravity, collision and height inputs of the line. The files store a sixth
+ * word after them, always 0, that nothing reads. */
 typedef struct SefLineScriptHeader {
     unsigned short table_indices[2];
     short gravity;
@@ -2409,7 +2413,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
                         sefLerpIVector2(line_data->light_keys, &particle->light_progress);
                         __builtin_memcpy(&light_xy, particle->light.coordinates, sizeof(light_xy));
                         if (light_xy != 0 || particle->light.coordinates[2] != 0) {
-                            sefAddLightActor(&line_data->position, &particle->light);
+                            sefAddLightActor(&line_data->light_position, &particle->light);
                             add_light = 1;
                         }
                     }
@@ -2459,7 +2463,7 @@ static int sefExecLineLocalData(SefLineData *line_data, unsigned short frame)
                     if (update_parent) {
                         Vu0SefAddVectorXYZ(&particle->start_position, &particle->start_position, &line_data->position_delta);
                     }
-                    sefMoveParticle(particle, &line_data->scale_keys,
+                    sefMoveParticle(particle, &line_data->global_position_keys,
                                     component_result);
                     if (update_rotation) {
                         sefCalcLocalMatrix(particle, loop_mode,
@@ -2555,7 +2559,7 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
 {
     unsigned short *key_table;
     unsigned short *line_table;
-    short *scale_words;
+    short *global_words;
     short gravity_input;
     short height_input;
     short collision_input;
@@ -2598,22 +2602,22 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
         line_data->line_flags |= 0x400;
     }
 
-    line_data->scale_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 0);
+    line_data->global_position_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 0);
     line_data->first_vector_keys = (struct SefKey5Table *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 1);
-    line_data->rotation_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 2);
+    line_data->parent_position_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 2);
     line_data->second_vector_keys = (struct SefKey5Table *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 3);
     line_data->key_1E0 = (SefModeKeyTable *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 4);
     line_data->key_1E4 = (unsigned char *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 5);
-    line_data->position_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 6);
+    line_data->light_position_keys = (short *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 6);
     line_data->first_integer_keys = (struct SefKey3 *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 7);
     line_data->second_integer_keys = (struct SefKey3 *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 8);
     line_data->key_1F0 = (unsigned char *)scGetImmAdrImmIdx2(_nowScriptAdr, key_table, 9);
 
-    /* Random origin offset, from the range words of the scale keys. */
-    scale_words = line_data->scale_keys;
-    line_data->origin_offset.x = sefLineRandomOffset(&scale_words[1]);
-    line_data->origin_offset.y = sefLineRandomOffset(&scale_words[2]);
-    line_data->origin_offset.z = sefLineRandomOffset(&scale_words[3]);
+    /* Random origin offset, from the range words of the global position keys. */
+    global_words = line_data->global_position_keys;
+    line_data->origin_offset.x = sefLineRandomOffset(&global_words[1]);
+    line_data->origin_offset.y = sefLineRandomOffset(&global_words[2]);
+    line_data->origin_offset.z = sefLineRandomOffset(&global_words[3]);
 
     if (line_data->first_vector_keys != 0 &&
         line_data->first_vector_keys->keys[1].end_frame == SEF_KEY_END_CONSTANT) {
@@ -2626,20 +2630,20 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
                         &line_data->second_vector_progress.vector.floats);
     }
 
-    if (line_data->scale_keys != 0 && line_data->scale_keys[9] == SEF_KEY_END_CONSTANT) {
-        sefLerpVectorA(line_data->scale_keys + 4, &line_data->global_position_source);
+    if (line_data->global_position_keys != 0 && line_data->global_position_keys[9] == SEF_KEY_END_CONSTANT) {
+        sefLerpVectorA(line_data->global_position_keys + 4, &line_data->global_position_source);
         vector_scale = globalPositionScale;
         Vu0SefScaleVectorXYZNI(&line_data->global_position_source, &line_data->global_position_source, vector_scale);
     }
-    if (line_data->rotation_keys != 0 && line_data->rotation_keys[9] == SEF_KEY_END_CONSTANT) {
-        sefLerpVectorA(line_data->rotation_keys + 4, &line_data->parent_position_source);
+    if (line_data->parent_position_keys != 0 && line_data->parent_position_keys[9] == SEF_KEY_END_CONSTANT) {
+        sefLerpVectorA(line_data->parent_position_keys + 4, &line_data->parent_position_source);
         vector_scale = parentPositionScale;
         Vu0SefScaleVectorXYZNI(&line_data->parent_position_source, &line_data->parent_position_source, vector_scale);
     }
-    if (line_data->position_keys != 0 && line_data->position_keys[9] == SEF_KEY_END_CONSTANT) {
-        sefLerpVectorA(line_data->position_keys + 4, line_data->position_source);
+    if (line_data->light_position_keys != 0 && line_data->light_position_keys[9] == SEF_KEY_END_CONSTANT) {
+        sefLerpVectorA(line_data->light_position_keys + 4, line_data->light_position_source);
         vector_scale = positionSourceScale;
-        Vu0SefScaleVectorXYZNI(line_data->position_source, line_data->position_source, vector_scale);
+        Vu0SefScaleVectorXYZNI(line_data->light_position_source, line_data->light_position_source, vector_scale);
     }
 
     line_data->script_parameters[0] = line_table[0];
@@ -2655,9 +2659,9 @@ static void sefInitLineData(SefLineData *line_data, int start_time, int frame,
 
     sefAnalyzeAnim((unsigned char *)line_data);
 
-    /* Initial position, from the source mode in the first scale word. */
+    /* Initial position, from the source mode in the first global position word. */
     initial_position = &line_data->global_position;
-    source_mode = line_data->scale_keys[0];
+    source_mode = line_data->global_position_keys[0];
     if (source_mode != 4) {
         sefGetPosition(initial_position,
                        &line_data->global_position_source,
@@ -3012,23 +3016,24 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
     SefBattleStatus *battle;
     Vector4 initial_position;
     Matrix4 parent_matrix;
-    int scale_is_fixed;
-    int rotation_is_fixed;
+    int global_per_particle;
+    int parent_per_particle;
     int particle_count;
     int emit_count;
     int point_index;
     int count;
     int parent_line;
     short point_handle;
-    unsigned int scale_mode;
+    unsigned int global_mode;
     short **keys;
     SefLineGlobalView *global;
 
-    keys = &line_data->scale_keys;
+    keys = &line_data->global_position_keys;
     global = (SefLineGlobalView *)&line_data->global_position;
     particle_count = global->particle_count;
-    scale_is_fixed = keys[0][0] == 4;
-    rotation_is_fixed = keys[2][0] == 4;
+    /* Point code 4, the parent particle, is resolved again for each live particle of the parent line. */
+    global_per_particle = keys[0][0] == 4;
+    parent_per_particle = keys[2][0] == 4;
     line_data->global_data_state = 0;
     if (particle_count <= 0) {
         return 1;
@@ -3037,23 +3042,23 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
     if ((battle->flags & 0x100) != 0) {
         return 1;
     }
-    scale_mode = (unsigned short)keys[0][0];
-    if ((scale_mode & 0x1000) && _nowScheduler != 0) {
+    global_mode = (unsigned short)keys[0][0];
+    if ((global_mode & 0x1000) && _nowScheduler != 0) {
         unsigned int scheduler_flags = _nowScheduler->flags;
 
         _nowScheduler->flags = scheduler_flags | 0x80;
         if (keys[0][0] >= 0x1001 &&
             (battle->caster != 0 || battle->casterUnit != 0)) {
             _nowScheduler->flags = scheduler_flags | 0x1080;
-            sefGetParentMatrix(_nowScheduler, (short)scale_mode - 0x1000, &parent_matrix);
+            sefGetParentMatrix(_nowScheduler, (short)global_mode - 0x1000, &parent_matrix);
         }
     }
     QuadwordCopyT0(&initial_position, &global->global_position);
-    if (!scale_is_fixed) {
+    if (!global_per_particle) {
         sefGetPosition(&global->global_position, &global->global_position_source, keys[0][0]);
         Vu0SefAddVectorXYZ(&global->global_position, &global->global_position, &line_data->origin_offset);
     }
-    if (!rotation_is_fixed) {
+    if (!parent_per_particle) {
         sefGetPosition(&global->parent_position, &global->parent_position_source, keys[2][0]);
     }
     /* Emit on this frame: per live particle of the parent line, or emit_count particles without one. */
@@ -3070,14 +3075,14 @@ static int sefExecLineGlobalData(SefLineData *line_data, int frame)
                 point_handle = parent_data->pointHandles[parent_line];
                 if (point_handle >= 0) {
                     _nowParentLocal = point_handle;
-                    if (scale_is_fixed) {
+                    if (global_per_particle) {
                         sefGetPosition(&global->global_position, &global->global_position_source, keys[0][0]);
                         __asm__ __volatile__("lqc2 vf1, 0(%0)" : : "r"(&global->global_position) : "memory");
                         __asm__ __volatile__("lqc2 vf2, 0(%0)" : : "r"(&line_data->origin_offset) : "memory");
                         __asm__ __volatile__("vadd.xyz vf1, vf1, vf2");
                         __asm__ __volatile__("sqc2 vf1, 0(%0)" : : "r"(&global->global_position) : "memory");
                     }
-                    if (rotation_is_fixed) {
+                    if (parent_per_particle) {
                         sefGetPosition(&global->parent_position, &global->parent_position_source, keys[2][0]);
                     }
                     if (emit_count > 0) {
@@ -3122,11 +3127,11 @@ static int sefExecLineData(SefLineData *line_data)
     _gravity = line_data->gravity;
     _height = line_data->height;
     _colision = (float)line_data->collision_progress * collisionProgressScale;
-    sefLerpVectorSC(line_data->scale_keys + 4, &line_data->scale_vector);
-    sefLerpVectorSC(line_data->rotation_keys + 4, &line_data->rotation_vector);
-    if (line_data->position_keys != 0) {
-        ((void (*)(void *, Vector4 *))sefLerpVectorSC)(line_data->position_keys + 4, &line_data->position_vector);
-        sefGetPosition(&line_data->position, line_data->position_source, *line_data->position_keys);
+    sefLerpVectorSC(line_data->global_position_keys + 4, &line_data->global_position_vector);
+    sefLerpVectorSC(line_data->parent_position_keys + 4, &line_data->parent_position_vector);
+    if (line_data->light_position_keys != 0) {
+        ((void (*)(void *, Vector4 *))sefLerpVectorSC)(line_data->light_position_keys + 4, &line_data->light_position_vector);
+        sefGetPosition(&line_data->light_position, line_data->light_position_source, *line_data->light_position_keys);
     }
     sefLerpIVector(line_data->first_vector_keys->keys,
                    &line_data->first_vector_progress);
@@ -3594,7 +3599,8 @@ static void sefInitEffectTbl(SefEffectDescriptor *entry, int scheduler_index, in
     int index = 0;
     EffectData *effects = ((SchedulerState *)_scheduler)[scheduler_index].effects;
     SefEffectDescriptor *descriptors = entry;
-    int preserve_setting = -0x100;
+    /* A descriptor with this setting is filled only when bit 0 of init_flags is set. */
+    int init_only_setting = -0x100;
 
     if (entry->category >= 0) {
         SchedulerState *scheduler = &_scheduler[scheduler_index];
@@ -3606,7 +3612,7 @@ process_descriptor:
         {
             int next_category;
             int has_capacity;
-            if (entry->setting != preserve_setting || (init_flags & 1) != 0) {
+            if (entry->setting != init_only_setting || (init_flags & 1) != 0) {
                 sefInitializeDescriptorEffect(effect, entry, scheduler_index, binding, descriptors);
             }
             sefApplyDescriptorCommand(effect, entry->setting);

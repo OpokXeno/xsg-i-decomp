@@ -550,14 +550,14 @@ void nmlFilterStealthMake(int partIndex, StudioCamera *camera,
         _WeightToGlobalPlaceInit(model->fields.place);
         _WeightToGlobalPlaceVec(firstEndpoint,
             &((const Matrix4 *)((const unsigned char *)jointModel +
-                jointModel->weightOffset))[descriptor->firstJoint],
+                jointModel->skinMatrixOffset))[descriptor->firstJoint],
             &((const Matrix4 *)((const unsigned char *)jointModel +
-                jointModel->transformOffset))[descriptor->firstJoint]);
+                jointModel->jointMatrixOffset))[descriptor->firstJoint]);
         _WeightToGlobalPlaceVec(&geometry->endpoints[1],
             &((const Matrix4 *)((const unsigned char *)jointModel +
-                jointModel->weightOffset))[descriptor->secondJoint],
+                jointModel->skinMatrixOffset))[descriptor->secondJoint],
             &((const Matrix4 *)((const unsigned char *)jointModel +
-                jointModel->transformOffset))[descriptor->secondJoint]);
+                jointModel->jointMatrixOffset))[descriptor->secondJoint]);
     } else {
         descriptor = &s_inStealthUnitDat;
         QuadwordCopy(&fallback, &model->fields.center);

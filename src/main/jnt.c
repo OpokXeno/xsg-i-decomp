@@ -52,8 +52,8 @@ struct JntGameLoopState {
 };
 
 typedef struct JntChannelTag {
-    int flag; /* 0x00 */
-    int tag;  /* 0x04 */
+    int word_count; /* 0x00: the record's length in words, never 0 on the disc */
+    int tag;        /* 0x04 */
 } JntChannelTag;
 
 typedef struct JntChannelWork {
@@ -2853,13 +2853,13 @@ void JNT_setModel(void *model, JntHairIdSource *joint)
         return;
     }
     if (joint->version >= 2) {
-        int *attribute_header = &joint->channel_offset;
+        int *attribute_header = &joint->attribute_size;
 
         JNT_readAttribute(work, attribute_header);
         work->channels = (JntStaticChannel *)((unsigned char *)attribute_header + *attribute_header);
         return;
     }
-    work->channels = (JntStaticChannel *)&joint->channel_offset;
+    work->channels = (JntStaticChannel *)&joint->attribute_size;
 }
 
 /*
@@ -3152,7 +3152,8 @@ void JNT_resetHair(void)
 
 /*
  * Returns the channel count for the current tag: the primary count, plus the
- * secondary count when the tag flag is 0, plus the tag value for hair-offset tags.
+ * secondary count when the tag's word count is 0 (it never is on the disc),
+ * plus the tag value for hair-offset tags.
  */
 static int JNT_hairID(JntWork *work)
 {
@@ -3161,7 +3162,7 @@ static int JNT_hairID(JntWork *work)
     int id;
 
     id = source->primary_id;
-    if (tag->flag == 0) {
+    if (tag->word_count == 0) {
         id += source->secondary_id;
     }
     if ((tag->tag & JNT_TAG_KIND_MASK) == JNT_TAG_KIND_HAIR_OFFSET) {
@@ -3404,8 +3405,8 @@ JntStaticChannel *JNT_resetMatrix(JntWork *work, JntStaticChannel *channel)
 
 /*
  * Computes the joint matrices of one channel run. The owner's movement sets a
- * follow speed, the chain root is clip-tested, and the run may be skipped by
- * returning 0 when the clip test rejects it.
+ * follow speed, the inherit channel (flag 0x8000) is clip-tested, and the run
+ * may be skipped by returning 0 when the clip test rejects it.
  */
 JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
 {
@@ -3538,7 +3539,7 @@ JntStaticChannel *JNT_computeMatrix(JntWork *work, JntStaticChannel *channel)
             dynamic_clip_position.x = dynamic_clip_result.elements[3][0] += work->root_matrix.elements[3][0];
             dynamic_clip_position.y = dynamic_clip_result.elements[3][1] += work->root_matrix.elements[3][1];
             dynamic_clip_position.z = dynamic_clip_result.elements[3][2] += work->root_matrix.elements[3][2];
-            /* Clip test on the chain root: a failing test marks the run, and it returns early unless flag 0x100 is set. */
+            /* Clip test on the inherit channel: a failing test marks the run, and it returns early unless flag 0x100 is set. */
             if (nmlModelCalcClip(&dynamic_clip_position) != 0 || (work->flags & 0x200)) {
                 if (!(work->flags & 0x100)) {
                     work->flags |= 0x40;

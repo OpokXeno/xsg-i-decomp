@@ -78,26 +78,31 @@ typedef struct McRequestEntry {
     McRequestPath path;
 } McRequestEntry;
 
-typedef struct McSavePayload {
+/* The header of the PS2 3D icon (xenosaga.ico). Each vertex record that
+ * follows it is shape_count * 8 + 16 bytes. */
+typedef struct McIconHeader {
     unsigned char unmodeled_00[4];
-    int entry_count;
+    int shape_count;
     unsigned char unmodeled_08[8];
-    int group_count;
-} McSavePayload;
+    int vertex_count;
+} McIconHeader;
 
+/* The save template carddata.new: icon.sys at 0x40, the 3D icon at 0x440. */
 typedef struct McSaveHeader {
     unsigned char unmodeled_00[4];
     int start;
     int end;
     unsigned char unmodeled_0c[0x34];
-    char icon_header[0x400];
-    McSavePayload payload;
+    char icon_sys[0x400];
+    McIconHeader icon;
 } McSaveHeader;
 
-typedef struct McSaveChecksum {
+/* The icon seen from the end of its vertex records: the 20-byte header
+ * offset, then the animation header, whose third word is the speed. */
+typedef struct McIconAnimation {
     unsigned char unmodeled_00[28];
-    float checksum;
-} McSaveChecksum;
+    float speed;
+} McIconAnimation;
 
 typedef struct McWorkspaceView {
     McRequestState state;
@@ -561,9 +566,9 @@ static int create_sub2(int result)
 {
     int slot = ((McWorkspaceView *)&mw)->request.slot;
     McSaveHeader *save;
-    McSavePayload *payload;
-    McSaveChecksum *trailer;
-    float *checksum;
+    McIconHeader *icon;
+    McIconAnimation *animation;
+    float *speed;
     int size;
     void *write_data;
 
@@ -585,7 +590,7 @@ static int create_sub2(int result)
         case 1:
         case 2:
             mw.state.descriptor = result;
-            write_data = save->icon_header;
+            write_data = save->icon_sys;
             xglMcWriteMapName(write_data, slot);
             sceMcWrite(mw.state.descriptor, write_data, MC_ICON_SYS_SIZE);
             break;
@@ -601,12 +606,13 @@ static int create_sub2(int result)
             break;
         case 5:
             mw.state.descriptor = result;
-            write_data = &save->payload;
-            payload = write_data;
-            trailer = (McSaveChecksum *)((unsigned char *)payload + (payload->entry_count * 8 + 16) * payload->group_count);
-            checksum = &trailer->checksum;
+            write_data = &save->icon;
+            icon = write_data;
+            animation = (McIconAnimation *)((unsigned char *)icon + (icon->shape_count * 8 + 16) * icon->vertex_count);
+            speed = &animation->speed;
             size = save->end - save->start - 40;
-            *checksum = (xglFRand() - 1.5f) * checksumNoiseScale + 1.0f;
+            /* Each save folder animates its icon at a random speed from 0.7 to 1.3. */
+            *speed = (xglFRand() - 1.5f) * checksumNoiseScale + 1.0f;
             FlushCache(0);
             sceMcWrite(mw.state.descriptor, write_data, size);
             break;

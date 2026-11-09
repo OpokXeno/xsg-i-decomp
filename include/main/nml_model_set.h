@@ -93,13 +93,16 @@ typedef struct NmlModel {
     unsigned char unmodeled_04c[4];
     int weightedMatrixOffset; /* +0x50: byte offset from the model to its weighted matrices */
     unsigned char unmodeled_054[4];
-    int weightOffset;    /* +0x58: byte offset from the model to the sample weights */
-    int transformOffset; /* +0x5c: byte offset from the model to the sample transforms */
+    /* +0x58 and +0x5c: the last two of the four 64-byte matrix arrays that
+     * start at +0x50, one matrix per skin joint (sampleCount): the skin slots
+     * (identity on the disc) and the per-joint constant matrices. */
+    int skinMatrixOffset;  /* +0x58 */
+    int jointMatrixOffset; /* +0x5c */
     u32 geometryTableOffset; /* +0x60: byte offset to the geometry block offset table */
     unsigned char unmodeled_064[8];
     u32 textureSetOffset; /* +0x6c: byte offset to the model's texture set; 0 = none */
-    Vector4 boxMinOffset; /* +0x70: bounding box corners relative to the placement */
-    Vector4 boxMaxOffset; /* +0x80 */
+    Vector4 boxMaxOffset; /* +0x70: bounding box corners relative to the placement, maximum first */
+    Vector4 boxMinOffset; /* +0x80 */
     Vector4 entryTranslation; /* +0x90; w at +0x9c */
     int unclassified_a0;
     unsigned char unmodeled_0a4[0x0c];
@@ -123,14 +126,15 @@ typedef union NmlBlockMaterialParameter {
  */
 typedef struct NmlModelBlock {
     /*
-     * +0x00: the block (material) name.  The name matcher compares it, and
+     * +0x00: the mesh node name (the material name is at +0x170).  The name
+     * matcher compares it, and
      * add_exec_prog searches it with strstr for lenz_name and eye_name (main
      * 0x0023877c and 0x00238794).
      */
     char name[0x20];
     /*
-     * +0x20: the block's visibility and render flags.  Bit 0 picks the
-     * environment microcode family in nmlPacketAddTransMicrocode (main
+     * +0x20: the block's visibility and render flags.  Bit 0 (envelope, a
+     * skinned block) picks the ENV microcode family in nmlPacketAddTransMicrocode (main
      * 0x00236d24 and 0x00236d68); bits 1 and 2 select the face and back
      * program variants the s_aUcode*FaceAdr / s_aUcode*BackAdr rows of
      * s_aUcodeTbl hold; bits 7, 8 and 9 choose the program index in
@@ -180,7 +184,7 @@ typedef struct NmlModelBlock {
         u32 buffer;
         u32 width;
     } textureParameters[6]; /* +0x120 */
-    unsigned char unmodeled_150[0x1c];
+    unsigned char unmodeled_150[0x1c]; /* +0x150: a group name no code reads */
     signed char shapeMathParameter;
     signed char shapeMode, shapeWeight;
     /* +0x16f: the shape blender reads it unsigned (lbu); the material tag

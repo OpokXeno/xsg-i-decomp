@@ -250,6 +250,7 @@ extern int SsdCheckPlayEffectFileID(u16 file_id);
 extern void xglSoundSendSmd(void *address);
 extern char *MAP_getPath(char *name);
 extern char *MapGetName(int scene_id);
+/* OV01's dataThinkNameGet: writes the path of a scene's think file. */
 extern int func_A1CF18(char *path, int scene_id);
 int GameResourceGetIndex(void *address);
 static int RES_GetMdlFileNameSub(char *dst, int selector);

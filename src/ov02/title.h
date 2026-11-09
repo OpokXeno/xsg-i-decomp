@@ -108,18 +108,22 @@ typedef struct TitleJpegRequest {
     u8 unmodeled_08[0x18];
 } TitleJpegRequest;
 
+/* The header of title_obj.xtx, an ordinary XTX texture set. */
 typedef struct TitleRecordHeader {
     u8 unmodeled_00[8];
-    u32 count;
-    u32 first;
+    u32 count; /* +0x08: number of upload entries */
+    u32 first; /* +0x0c: offset of the first upload entry */
 } TitleRecordHeader;
 
+/* One XTX upload entry: a GS image transfer of the menu label texture. */
 typedef struct TitleRecord {
-    u32 w0;
-    u32 w4;
-    u32 w8;
-    u32 w12;
-    u32 w16;
+    /* +0x00: low half the width in pixels (TRXREG RRW), high half the
+     * buffer width and pixel format (BITBLTBUF DBW | DPSM << 8). */
+    u32 widthAndBufferFormat;
+    u32 height;      /* +0x04: TRXREG RRH */
+    u32 vramAddress; /* +0x08: added to the title's GS word base */
+    u32 size;        /* +0x0c: length of the image data in quadwords */
+    u32 dataOffset;  /* +0x10: offset of the image data from the header */
 } TitleRecord;
 
 typedef struct TitleFrameCopy {

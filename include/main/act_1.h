@@ -105,6 +105,9 @@ typedef struct ActorAnimationState {
     unsigned short previousDataId; /* +0x60 */
 } ActorAnimationState;
 
+/* The payload of a skeleton's type-4 attribute record (196 bytes with its
+ * 4-byte header), so the file holds only jointId[0..39]: jointId[40] reads
+ * the 4 bytes after the record. */
 typedef struct ActorAccessoryJointTable {
     unsigned char unmodeled_00[0x20];
     int jointId[0x29];

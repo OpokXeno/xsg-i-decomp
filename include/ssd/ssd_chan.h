@@ -69,7 +69,7 @@ typedef struct SsdProgram {
     SsdVoiceRange voice_range;
     unsigned char synthesis_properties[6];
     SsdLfoParam lfo[4];
-    unsigned char unmodeled_lfo_tail[16];
+    char name[16]; /* +0x50: the program's name, which the driver never reads */
     SsdProgramSplit splits[1];
 } SsdProgram;
 

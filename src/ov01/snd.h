@@ -26,8 +26,8 @@ typedef enum SndSeType {
     SND_SE_TYPE_AT2 = 4,        /* player character "_AT2" */
     SND_SE_TYPE_SLOT_LAST = 5,  /* last per-slot bank */
     SND_SE_TYPE_CV = 23,        /* player character "_CV" */
-    SND_SE_TYPE_STED_BTST = 0x18, /* station-edit name from the btst table */
-    SND_SE_TYPE_STED_BTED = 0x19, /* station-edit name from the bted table */
+    SND_SE_TYPE_STED_BTST = 0x18, /* battle-start voice, btst table (entryPhase31) */
+    SND_SE_TYPE_STED_BTED = 0x19, /* battle-end voice, bted table (entryPhase51) */
     SND_SE_TYPE_EFFECT_FIRST = 0x1A /* from here up, seType - this names an effect */
 } SndSeType;
 

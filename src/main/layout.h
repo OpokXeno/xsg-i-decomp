@@ -33,17 +33,17 @@ typedef struct JThread JThread;
 
 /*
  * A Java object reference: the class-pointer header (unused here) followed
- * by an int field this TU reads as a map id (lw a1,4(s1) at
+ * by an int field this TU reads as a locator group number (lw a1,4(s1) at
  * 0x2f712c/0x2f7164/0x2f719c).
  */
 typedef struct LayoutMapIdObject {
     unsigned char unmodeled_00[4];
-    int map_id; /* +0x4 */
+    int locator_group; /* +0x4 */
 } LayoutMapIdObject;
 
 /*
  * Java_xeno_util_Layout_set__Ljava_lang_Object_I's call block: the object
- * carrying the map id, the Chr/Unit/Effect target object, and the int
+ * carrying the locator group, the Chr/Unit/Effect target object, and the int
  * argument (lw a1,-13260(gp)/8c500004/8c520008/8c510000 at
  * 0x2f7108-0x2f711c).
  */

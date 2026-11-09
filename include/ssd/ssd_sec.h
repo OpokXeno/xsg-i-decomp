@@ -3,7 +3,7 @@
 
 #include "ssd/ssd.h"
 
-/* "sdes" effect file signature and "sseq" signature of the effect sequence record. */
+/* "seds" effect file signature and "sseq" signature of the effect sequence record (file byte order). */
 #define SSD_EFFECT_DATA_SIGNATURE 0x73646573
 #define SSD_EFFECT_SEQUENCE_SIGNATURE 0x71657373
 
@@ -17,7 +17,7 @@
 /* Tracks below this index serve the effects played with SSD_EFFECT_FLAG_LOW_TRACKS. */
 #define SSD_EFFECT_LOW_TRACK_COUNT 24
 
-/* Header of a "sdes" effect file followed by its effect offset table. */
+/* Header of a "seds" effect file followed by its effect offset table. */
 struct SsdEffectData {
     unsigned int magic;
     unsigned char unmodeled_04[4];

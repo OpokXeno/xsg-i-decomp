@@ -35,7 +35,10 @@ typedef struct JntHairIdSource {
     unsigned short secondary_id; /* 0x0A */
     unsigned short additional_primary_count;   /* 0x0C */
     unsigned short additional_secondary_count; /* 0x0E */
-    int channel_offset;
+    /* +0x10: in version 2 and later, the byte size of the attribute block
+     * that starts here (the channels follow it); version 1 files start their
+     * channels at this offset. */
+    int attribute_size;
 } JntHairIdSource;
 
 typedef struct JntChainSlot {
@@ -138,7 +141,7 @@ struct JntWork {
     unsigned int animation_flags;  /* +0x810 */
     float clip_radius; /* 0x814 */
     JntInterruptElement *elements;
-    int channel_start_index;       /* +0x81c */
+    int channel_start_index;       /* +0x81c: the inherit channel (flag 0x8000), -1 until it is reached */
     JntProductionOwner *owner;     /* +0x820 */
     unsigned char unmodeled_824[0x0c];
     JntInterruptElement default_element; /* +0x830: default element storage */

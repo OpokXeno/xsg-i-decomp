@@ -196,18 +196,18 @@
 
 /* Icon textures and model bases of CardDispLight. */
 #define CARD_ATTACK_TEXTURE ((const char *)0x01C94050)  /* lui 0x00a09e08 */
-#define CARD_ELEMENT_TEXTURE ((const char *)0x01C9BB70) /* lui 0x00a09f1c */
+#define CARD_RARITY_TEXTURE ((const char *)0x01C9BB70) /* card_Rare.xtx (lui 0x00a09f1c) */
 #define CARD_DIGIT_MODEL 0x01C80000         /* digit models 0..9 (lui 0x00a09674 as a float) */
 #define CARD_NEED_MODEL 0x01C85000          /* requirement icons (float 0x4BE42800, lui 0x00a09c98) */
 #define CARD_ATTACK_MODEL 0x01C89400        /* attack type icons (float 0x4BE44A00, lui 0x00a09e0c) */
-#define CARD_MODEL_ELEMENT_50 0x01C90730    /* lui 0x00a09ec8 */
-#define CARD_MODEL_ELEMENT_52 0x01C90220    /* lui 0x00a09ee4 */
-#define CARD_MODEL_ELEMENT_55 0x01C8FD10    /* lui 0x00a09ef4 */
-#define CARD_MODEL_ELEMENT_NONE 0x01C8F800  /* lui 0x00a09ee0 */
-#define CARD_ELEMENT_50 0x50                /* element code (`addiu $2,$0,0x50`, 0x00a09ecc) */
-#define CARD_ELEMENT_52 0x52                /* element code (`addiu $2,$0,0x52`, 0x00a09ee8) */
-#define CARD_ELEMENT_55 0x55                /* element code (`addiu $2,$0,0x55`, 0x00a09ef8) */
-#define CARD_ELEMENT_4F 0x4F                /* compared in the original switch but never matches (`slti $3,0x51` bound, 0x00a09ed8) */
+#define CARD_MODEL_RARITY_P 0x01C90730      /* card_m_p.lex (lui 0x00a09ec8) */
+#define CARD_MODEL_RARITY_R 0x01C90220      /* card_m_r.lex (lui 0x00a09ee4) */
+#define CARD_MODEL_RARITY_U 0x01C8FD10      /* card_m_u.lex (lui 0x00a09ef4) */
+#define CARD_MODEL_RARITY_C 0x01C8F800      /* card_m_c.lex, every other letter (lui 0x00a09ee0) */
+#define CARD_RARITY_P 0x50                  /* rarity letter 'P' (`addiu $2,$0,0x50`, 0x00a09ecc) */
+#define CARD_RARITY_R 0x52                  /* rarity letter 'R' (`addiu $2,$0,0x52`, 0x00a09ee8) */
+#define CARD_RARITY_U 0x55                  /* rarity letter 'U' (`addiu $2,$0,0x55`, 0x00a09ef8) */
+#define CARD_RARITY_O 0x4F                  /* letter 'O', compared in the original switch but never matches (`slti $3,0x51` bound, 0x00a09ed8) */
 #define CARD_KIND_UNUSED_3 3                /* kind 3 is compared in the overlay switch but no card has it (`slti $3,0x3`, 0x00a09f6c) */
 #define CARD_NEED_ICON_ANY 6                /* requirement icon index of CARD_NEED_ANY, 0x40C00000 (0x00a09c58) */
 #define CARD_NEED_ICON_NONE 8               /* no requirement icon is drawn, 0x41000000 (0x00a09c68) */

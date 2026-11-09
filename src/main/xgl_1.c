@@ -285,7 +285,7 @@ extern XglMovieRenderState sRender;
 const char mpegGetPictureFailedMessage[];
 
 /* xglMpeg2InfoInit2 returns a pointer, which xglMpeg2InfoInit discards. */
-extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
+extern void *xglMpeg2InfoInit2(void *info, void *arena, int ring_size);
 
 extern int DIntr(void);
 extern int EIntr(void);
@@ -1152,10 +1152,10 @@ int xglMpeg2Close(XglMovieInfo *info)
 }
 
 /*
- * Lays out the movie buffers in arena, each 64-byte aligned, with the sound
- * ring last. Returns the aligned end of that ring.
+ * Lays out the movie buffers in arena, each 64-byte aligned, with the CD
+ * stream ring of ring_size bytes last. Returns the aligned end of that ring.
  */
-void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size)
+void *xglMpeg2InfoInit2(void *info, void *arena, int ring_size)
 {
     XglMovieInfo *movie;
     unsigned char *next;
@@ -1183,8 +1183,8 @@ void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size)
     movie->soundRead = 0;
     xglCdStreamParamInit((struct CdStreamParam *) movie);
     movie->ringBuffer = next;
-    movie->ringCapacity = audio_buffer_size;
-    return (void *) (((unsigned int) next + audio_buffer_size + 0x3F) & ~0x3F);
+    movie->ringCapacity = ring_size;
+    return (void *) (((unsigned int) next + ring_size + 0x3F) & ~0x3F);
 }
 
 void xglMpeg2InfoInit(void *info, void *arena)

@@ -14,9 +14,9 @@ static unsigned char mv2MpegContext[0xC0];
 
 /* Pad bit that skips a playing movie (PadData.half_2a). */
 #define MV2_PAD_SKIP_PRESSED 0x800
-/* Decoder arena and audio buffer size handed to xglMpeg2InfoInit2. */
+/* Decoder arena and CD stream ring size handed to xglMpeg2InfoInit2. */
 #define MV2_ARENA_BASE 0x01b9e000
-#define MV2_AUDIO_BUFFER_SIZE 0x80000
+#define MV2_CD_RING_SIZE 0x80000
 /* Retry policy: a failed decode is retried until the counter reaches the limit. */
 #define MV2_RETRY_LIMIT 2
 #define MV2_RETRY_SLEEP_CALLS 10
@@ -42,7 +42,7 @@ static Mv2Params mv2Params;
 extern void xglSleep(void);
 extern int xglMpeg2Play(unsigned char *mpegContext);
 extern int xglMpeg2Open(unsigned char *mpegContext, const char *filename);
-extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
+extern void *xglMpeg2InfoInit2(void *info, void *arena, int ring_size);
 extern void *memset(void *destination, int value, unsigned int count);
 extern char *strncpy(char *dest, const char *src, unsigned int n);
 extern void MOutputDebugStringWarn(const char *format, ...);
@@ -88,7 +88,7 @@ void MMv2Exec(void)
         } else {
             MOutputDebugStringWarn("MMv2Exec: Retrying...(%d/%d)", mv2Params.retryCount, 1);
             memset(mpegContext, 0, sizeof(mv2MpegContext));
-            xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_AUDIO_BUFFER_SIZE);
+            xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_CD_RING_SIZE);
             if (xglMpeg2Open(mpegContext, mv2Params.filename) != 0) {
                 MOutputDebugStringWarn("MMv2Exec: Failed to open '%s'", mv2Params.filename);
                 retryFailed = 1;
@@ -125,7 +125,7 @@ int MMv2Play(const char *filename)
     strncpy(params->filename, filename, sizeof(params->filename));
     params->filename[sizeof(params->filename) - 1] = '\0';
     params->retryCount = 0;
-    xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_AUDIO_BUFFER_SIZE);
+    xglMpeg2InfoInit2(mpegContext, (void *) MV2_ARENA_BASE, MV2_CD_RING_SIZE);
 
     if (xglMpeg2Open(mpegContext, params->filename) != 0) {
         MOutputDebugStringWarn("MMv2Play: Failed to open '%s'", params->filename);

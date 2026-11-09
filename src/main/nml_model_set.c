@@ -163,15 +163,15 @@ typedef union GifCommandData {
     } words;
 } GifCommandData;
 
-/* A block whose material flag 0x10 is set keeps its bounding-box corner
- * offsets at +0x70/+0x80, in the bytes a weighted block uses for its matrix
- * index list. */
+/* A block whose material flag 0x10 is set keeps its own bounding box, the
+ * maximum corner at +0x70 and the minimum at +0x80, in the bytes a weighted
+ * block uses for its matrix index list. */
 typedef union NmlModelBlockBounds {
     NmlModelBlock block;
     struct {
         unsigned char unmodeled_00[0x70];
-        Vector4 boxMinOffset; /* +0x70 */
-        Vector4 boxMaxOffset; /* +0x80 */
+        Vector4 boxMaxOffset; /* +0x70 */
+        Vector4 boxMinOffset; /* +0x80 */
     } bounds;
 } NmlModelBlockBounds;
 
@@ -2708,8 +2708,8 @@ static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
     if (model->sampleCount != 0) {
         weightedPosition = &s_inLayout.fields.center.v;
         _WeightToGlobalVec(weightedPosition,
-                           (float (*)[4])(modelBytes + model->weightOffset),
-                           (float (*)[4])(modelBytes + model->transformOffset));
+                           (float (*)[4])(modelBytes + model->skinMatrixOffset),
+                           (float (*)[4])(modelBytes + model->jointMatrixOffset));
         if ((s_inLayout.slots[0x230 / 4].i & 1) != 0) {
             s_inLayout.slots[0x1F4 / 4].f =
                 s_inLayout.slots[0x230 / 4].f - s_inLayout.slots[0x1F4 / 4].f;
@@ -2739,8 +2739,8 @@ static void nmlModelCalcSample(void *arg0, NmlParentBuf *parent)
         int sampleOffset = 0x7C0;
 
         _WeightToGlobalVec(&sample,
-                           (float (*)[4])(modelBytes + model->weightOffset + sampleOffset),
-                           (float (*)[4])(modelBytes + model->transformOffset + sampleOffset));
+                           (float (*)[4])(modelBytes + model->skinMatrixOffset + sampleOffset),
+                           (float (*)[4])(modelBytes + model->jointMatrixOffset + sampleOffset));
         _CurSetMatrix((f32 (*)[4])&s_inLayout.fields.place);
         _CurApplyMatrix(&sample, &sample);
         if (sample.y < 0.0f) {
@@ -3881,8 +3881,8 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
     Vector4 pointB;
     Vector4 pointC;
     Vector4 pointD;
-    Vector4 *worldMax;
     Vector4 *worldMin;
+    Vector4 *worldMax;
     StudioCamera *camera;
 
     groupIndex = 0;
@@ -3943,8 +3943,8 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
             NmlModelBlockBounds *entry = s_apBlock[index];
             LayoutStore *layout = s_apModelLayout[s_aBlockLayout[index]];
 
-            worldMax = &pointC;
-            worldMin = &pointD;
+            worldMin = &pointC;
+            worldMax = &pointD;
             if (layout->fields.render_status & NML_RENDER_FACE_MODEL) {
                 continue;
             }
@@ -3954,32 +3954,32 @@ static int nmlModelRenderProreal(LayoutStore *model, int frame)
                         continue;
                     }
                 } else if (entry->block.materialFlags & NML_BLOCK_MATERIAL_NAMED_PARTS) {
-                    Vector4 *minCorner = &pointB;
+                    Vector4 *maxCorner = &pointB;
                     float *matrixRow = layout->fields.weightedMatrices[entry->block.matrixIndices[0] - 1].matrix[3];
 
-                    Vu0AddVectorXYZ(&pointA, &entry->bounds.boxMaxOffset, matrixRow);
+                    Vu0AddVectorXYZ(&pointA, &entry->bounds.boxMinOffset, matrixRow);
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%2)\n\t"
                         "lqc2 vf2, 0(%3)\n\t"
                         "vadd.xyz vf2, vf2, vf3\n\t"
                         "sqc2 vf2, 0(%1)"
-                        : "=m"(*minCorner) : "r"(minCorner),
+                        : "=m"(*maxCorner) : "r"(maxCorner),
                             "r"(matrixRow),
-                            "r"(&entry->bounds.boxMinOffset) : "memory");
+                            "r"(&entry->bounds.boxMaxOffset) : "memory");
                     if (model->fields.proreal->bounds_max.x < pointA.x || pointA.y > model->fields.proreal->bounds_max.y ||
                         pointA.z > model->fields.proreal->bounds_max.z || pointB.x < model->fields.proreal->bounds_min.x ||
                         pointB.y < model->fields.proreal->bounds_min.y || pointB.z < model->fields.proreal->bounds_min.z) {
                         continue;
                     }
                 } else {
-                    Vu0AddVectorXYZ(worldMax, &layout->fields.model->boxMaxOffset, &layout->fields.place[3]);
+                    Vu0AddVectorXYZ(worldMin, &layout->fields.model->boxMinOffset, &layout->fields.place[3]);
                     __asm__ __volatile__(
                         "lqc2 vf3, 0(%2)\n\t"
                         "lqc2 vf2, 0(%3)\n\t"
                         "vadd.xyz vf2, vf2, vf3\n\t"
                         "sqc2 vf2, 0(%1)"
-                        : "=m"(*worldMin) : "r"(worldMin),"r"(&layout->fields.place[3]),
-                            "r"(&layout->fields.model->boxMinOffset) : "memory");
+                        : "=m"(*worldMax) : "r"(worldMax),"r"(&layout->fields.place[3]),
+                            "r"(&layout->fields.model->boxMaxOffset) : "memory");
                     if (model->fields.proreal->bounds_max.x < pointC.x || pointC.y > model->fields.proreal->bounds_max.y ||
                         pointC.z > model->fields.proreal->bounds_max.z || pointD.x < model->fields.proreal->bounds_min.x ||
                         pointD.y < model->fields.proreal->bounds_min.y || pointD.z < model->fields.proreal->bounds_min.z) {

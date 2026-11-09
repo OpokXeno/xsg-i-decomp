@@ -340,17 +340,14 @@ enum {
         MenuShopWork->modelId = (s16) MenuShopWork->itemId; \
     }
 
+/* One column of goods on sale: up to 20 ids, ending at the first 0, so a
+ * zero first id means the column is empty. */
 typedef struct ShopDataCategory {
-    unsigned short count;
-    unsigned char unmodeled_02[30];
-    unsigned short slots[4];
+    unsigned short ids[20];
 } ShopDataCategory;
 
+/* The A.G.W.S. units on sale, by unit id, 0 for an empty slot. */
 typedef union ShopDataTail {
-    struct {
-        unsigned short count;
-        unsigned char unmodeled_02[6];
-    };
     unsigned short agwsSlots[4];
 } ShopDataTail;
 
@@ -372,8 +369,9 @@ typedef struct MenuShopWeapon {
     unsigned short shopParameter2;
 } MenuShopWeapon;
 
-/* Nine 0x28-byte categories and the final eight-byte slot/count view share
- * the original 0x170-byte storage extent. */
+/* One 0x170-byte record of shopdata.bin: nine 20-id columns (items, weapons,
+ * accessories, ammo, A.G.W.S. weapons, accessories and ammo, frames and
+ * generators) and the four A.G.W.S. unit ids. */
 typedef struct {
     ShopDataCategory records[9];
     ShopDataTail tail;
@@ -3643,21 +3641,21 @@ void MenuShopInfoSet(void)
     if (MenuShopWork->mode == SHOP_MODE_BUY) {
         if (MenuShopWork->noCategories != 0)
             return;
-        if (ShopData.records[SHOP_CAT_ITEM].count != 0)
+        if (ShopData.records[SHOP_CAT_ITEM].ids[0] != 0)
             MenuShopWork->categoryMask = SHOP_CAT_MASK_ITEM;
-        if (ShopData.records[SHOP_CAT_CHAR_WEAPON].count != 0)
+        if (ShopData.records[SHOP_CAT_CHAR_WEAPON].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_WEAPON;
-        if (ShopData.records[SHOP_CAT_CHAR_ACCESSORY].count != 0)
+        if (ShopData.records[SHOP_CAT_CHAR_ACCESSORY].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_ACCESSORY;
-        if (ShopData.records[SHOP_CAT_CHAR_AMMO].count != 0)
+        if (ShopData.records[SHOP_CAT_CHAR_AMMO].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_CHAR_AMMO;
-        if (ShopData.records[SHOP_CAT_AGWS_WEAPON].count != 0)
+        if (ShopData.records[SHOP_CAT_AGWS_WEAPON].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_WEAPON;
-        if (ShopData.records[SHOP_CAT_AGWS_ACCESSORY].count != 0)
+        if (ShopData.records[SHOP_CAT_AGWS_ACCESSORY].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_ACCESSORY;
-        if (ShopData.records[SHOP_CAT_AGWS_AMMO].count != 0)
+        if (ShopData.records[SHOP_CAT_AGWS_AMMO].ids[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS_AMMO;
-        if (ShopData.tail.count != 0)
+        if (ShopData.tail.agwsSlots[0] != 0)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_AGWS;
         if (MenuScenarioNo >= SHOP_CARD_SCENARIO_FIRST)
             MenuShopWork->categoryMask |= SHOP_CAT_MASK_CARD;
@@ -4560,11 +4558,11 @@ void MenuShopMain(int shopType)
         unitCount = MenuShopWork->unitCount;
     }
 
-    if (unitCount != 0 && ShopData.records[SHOP_RECORD_FRAME].count != 0)
+    if (unitCount != 0 && ShopData.records[SHOP_RECORD_FRAME].ids[0] != 0)
         MenuShopWork->equipmentStatus = 1;
     else
         MenuShopWork->equipmentStatus = 0;
-    if (ShopData.tail.count != 0)
+    if (ShopData.tail.agwsSlots[0] != 0)
         MenuShopWork->modelBreakPending = 1;
     else
         MenuShopWork->modelBreakPending = 0;

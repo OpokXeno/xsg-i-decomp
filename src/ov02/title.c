@@ -408,13 +408,13 @@ int Title(void)
         for (recordIndex = 0; (int)header->count > recordIndex; record++, recordIndex++) {
             u32 width;
 
-            width = record->w0 & 0xffff;
-            TestEnv_10[4] = ((u64)((record->w8 + 0xE0000) >> 6) << 32) |
-                            ((u64)(record->w0 >> 16) << 48);
-            TestEnv_10[8] = width | ((u64)record->w4 << 32);
+            width = record->widthAndBufferFormat & 0xffff;
+            TestEnv_10[4] = ((u64)((record->vramAddress + 0xE0000) >> 6) << 32) |
+                            ((u64)(record->widthAndBufferFormat >> 16) << 48);
+            TestEnv_10[8] = width | ((u64)record->height << 32);
             sceVif1PkCnt(packet, 0);
             sceVif1PkAddDataN(packet, TestEnv_10, 24);
-            sceVif1PkRef(packet, (u8 *)header + record->w16, record->w12, 0, 0, 0);
+            sceVif1PkRef(packet, (u8 *)header + record->dataOffset, record->size, 0, 0, 0);
         }
 
         /* Menu entries: the selected entry is drawn highlighted; HDD install is skipped when no disk is usable. */

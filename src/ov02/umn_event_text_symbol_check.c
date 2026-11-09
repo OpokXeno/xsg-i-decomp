@@ -69,12 +69,12 @@ typedef struct UmnEventTextRecordBuf {
  * runtime header table. */
 typedef struct UmnMailListBody {
     unsigned char unmodeled_00[8];
-    unsigned char attach[3];
-    unsigned char kind;
-    unsigned short flags;
+    unsigned char reply_ids[3];
+    unsigned char attachment;
+    unsigned short scenario_limit;
     unsigned char plugin;
     unsigned char unmodeled_0f;
-    int data;
+    int cost;
     unsigned char unmodeled_14[0x4c];
     unsigned char text[1];
 } UmnMailListBody;
@@ -611,7 +611,7 @@ int UmnMailHeaderCreate(int work)
     UmnMailListBody *body;
     UmnMailHeader *header;
     unsigned char *subject;
-    unsigned char *title;
+    unsigned char *sender;
     int size;
     int slot;
     int level;
@@ -620,7 +620,7 @@ int UmnMailHeaderCreate(int work)
     UmnMailHeaderBuf = (UmnMailHeader *)aligned;
     memset(UmnMailHeaderBuf, 0, UMN_MAIL_HEADER_TABLE_SIZE);
     xglCdReadFile(mailHeaderListPath, list, 0, 0);
-    /* Each record starts with a size and mail_id word, then the body, subject and title text. */
+    /* Each record starts with a size and mail_id word, then the body, subject and sender text. */
     size = ((UmnMailList *)cursor)->size;
     while (size != 0) {
         cursor = cursor + 4;
@@ -630,17 +630,17 @@ int UmnMailHeaderCreate(int work)
         cursor = cursor + 4;
         body = (UmnMailListBody *)cursor;
         for (i = 0; i < 3; i++) {
-            header->name[i] = body->attach[i];
+            header->reply_ids[i] = body->reply_ids[i];
         }
-        header->scenario_limit = body->flags;
-        header->attach = body->kind;
+        header->scenario_limit = body->scenario_limit;
+        header->attach = body->attachment;
         slot = body->plugin >> 5;
         level = (body->plugin & 3) + 1;
         memset(header->kosmos_items, 0, 5);
         if (slot >= 1 && slot <= 4) {
             header->kosmos_items[slot - 1] = level;
         }
-        header->cost = body->data;
+        header->cost = body->cost;
         cursor = cursor + 96;
         subject = cursor;
         while (*cursor != 0) {
@@ -652,7 +652,7 @@ int UmnMailHeaderCreate(int work)
             }
         }
         cursor = cursor + 1;
-        title = cursor;
+        sender = cursor;
         while (*cursor != 0) {
             if (*cursor < 32) {
                 cursor = cursor + xglFontGetSPcodeSize(*cursor, cursor);
@@ -661,9 +661,9 @@ int UmnMailHeaderCreate(int work)
                 cursor = cursor + 1;
             }
         }
-        /* Copies the subject and title text, skipping 9 and 8 leading bytes of them. */
+        /* Copies the subject and sender text, skipping their "Subject: " and "Sender: " labels. */
         eMessageCpy(header->subject, subject + 9);
-        eMessageCpy(header->title, title + 8);
+        eMessageCpy(header->sender, sender + 8);
         record = record + size + 4;
         cursor = record;
         size = ((UmnMailList *)cursor)->size;

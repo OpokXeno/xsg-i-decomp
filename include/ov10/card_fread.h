@@ -23,7 +23,7 @@
 #define CARD_LIGHT_ATTRIBUTE 0x10   /* attribute icon (andi 0x10, 0x00a09bc0) */
 #define CARD_LIGHT_NEED 0x20        /* requirement icons (andi 0x20, 0x00a09d34) */
 #define CARD_LIGHT_ATTACK 0x40      /* attack type icon (andi 0x40, 0x00a09e90) */
-#define CARD_LIGHT_ELEMENT 0x80     /* element icon (andi 0x80, 0x00a09f14) */
+#define CARD_LIGHT_RARITY 0x80      /* rarity mark (andi 0x80, 0x00a09f14) */
 #define CARD_LIGHT_ALL 0xFF         /* every part lit */
 
 #define CARD_ICON_TEXTURE ((const char *)0x01C91000)    /* lui 0x00a096fc */

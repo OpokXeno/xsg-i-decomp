@@ -79,14 +79,16 @@ typedef struct BattleAccessoryPriceRecord {
     unsigned short associatedId;
 } BattleAccessoryPriceRecord;
 
+/* An A.G.W.S. frame record of batdat.bin: its price, the A.G.W.S. that can
+ * fit it and the stats it gives. */
 typedef struct BattleFramePriceRecord {
     BattleDataS32 price;
     unsigned char unmodeled_04[2];
     unsigned short equipMask;
-    unsigned char unmodeled_08[2];
-    unsigned short category;
-    unsigned char unmodeled_0c[2];
-    unsigned short associatedId;
+    short frameHp;
+    short physicalArmor;
+    short etherArmor;
+    short agility;              /* always 0 on the disc */
 } BattleFramePriceRecord;
 
 typedef struct BattleEnginePriceRecord {

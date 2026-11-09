@@ -4,9 +4,9 @@
 /* Mails of the mailbox: mail ids index the header table, the save record and the history tree. */
 #define UMN_MAIL_COUNT 128
 
-/* UmnHistoryNode.children, UmnMailHeader.name and UmnMailHeader.kosmos_items counts. */
+/* UmnHistoryNode.children, UmnMailHeader.reply_ids and UmnMailHeader.kosmos_items counts. */
 #define UMN_MAIL_HISTORY_CHILDREN 3
-#define UMN_MAIL_NAME_CHARS 3
+#define UMN_MAIL_REPLY_COUNT 3
 #define UMN_MAIL_KOSMOS_ITEMS 5
 
 /* Second byte of the save record: the attachment id (UmnMailHeader.attach) plus this flag once it is taken. */
@@ -24,9 +24,9 @@
  * of them, 0x4800 bytes, and fills them from the header.lst records).
  */
 typedef struct UmnMailHeader {
-    char title[0x40];                   /* +0x00 */
+    char sender[0x40];                  /* +0x00: the Sender line of header.lst */
     char subject[0x40];                 /* +0x40 */
-    unsigned char name[UMN_MAIL_NAME_CHARS];              /* +0x80: the three sender-name characters, 0 = unused */
+    unsigned char reply_ids[UMN_MAIL_REPLY_COUNT];        /* +0x80: the mails the player can send as a reply, 0 = unused */
     unsigned char unmodeled_83;
     unsigned short scenario_limit;      /* +0x84 */
     unsigned char attach;               /* +0x86: attachment id, 0 = none */

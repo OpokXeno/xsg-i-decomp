@@ -61,39 +61,49 @@ typedef struct {
     short menu_page[11];
 } UmnTextPageMap;
 
+/* The start of a batdat.bin unit record, as OV01's dataUnitInitGet returns it. */
 typedef struct {
-    unsigned short unit_type;
+    unsigned short max_hp;
     unsigned char unmodeled_02[0x16];
-    unsigned short text_type;
+    unsigned short weakness_flags;
 } UmnUnitInitRecord;
 
+/*
+ * A batdat.bin gain record, as OV01's dataGainGet returns it: the rewards of
+ * one enemy and its normal and rare drop items. Each item is a group (the
+ * menu text page of its table) and an id within it.
+ */
 typedef struct {
-    int unit_id;
-    unsigned short value;
-    unsigned char property_a;
-    unsigned char property_b;
-    unsigned char property_c;
+    int experience;
+    unsigned short money;
+    unsigned char tech_points;
+    unsigned char ether_points;
+    unsigned char skill_points;
     unsigned char unmodeled_09[4];
-    unsigned char name_page;
-    unsigned char description_page;
+    unsigned char item_group;
+    unsigned char rare_item_group;
     unsigned char unmodeled_0f;
-    unsigned char name_id;
-    unsigned char description_id;
-} UmnUnitTextRecord;
+    unsigned char item_id;
+    unsigned char rare_item_id;
+} UmnGainRecord;
 
+/*
+ * One U.M.N. database record of an enemy, the data of its analysis window.
+ * Both HP words hold the maximum HP, because the window shows current/max.
+ */
 typedef struct {
     char unit_name[0x20];
-    short unit_type;
-    short duplicate_unit_type;
-    short text_type;
+    short current_hp;
+    short max_hp;
+    short weakness_flags;
     unsigned char unmodeled_26[2];
-    unsigned int property_a;
-    unsigned int property_b;
-    unsigned int property_c;
-    int unit_id;
-    unsigned long long value;
-    char name[0x12];
-    char description[0x16];
+    unsigned int tech_points;
+    unsigned int ether_points;
+    unsigned int skill_points;
+    int experience;
+    unsigned long long money;
+    char item_name[0x12];
+    char rare_item_name[0x16];
 } UmnGunoRecord;
 
 extern UmnDataBase UmnDataBaseStateData[1];
@@ -198,8 +208,9 @@ extern void func_00A00070(void);
 extern void xglRenderClearDepth(void);
 extern void nmlModelInit(void);
 extern void func_A19750(int category, int item);
+/* OV01's dataUnitInitGet and dataGainGet. */
 extern UmnUnitInitRecord *func_A19270(int unit_id);
-extern UmnUnitTextRecord *func_A1A698(int unit_id);
+extern UmnGainRecord *func_A1A698(int unit_id);
 extern const char *const *func_A2C828(int unit_id);
 extern char *strcpy(char *destination, const char *source);
 extern void UmnMain(void);

@@ -751,26 +751,26 @@ void CardDispLight(Matrix4 *matrix, s16 cardId, s16 enabled, u8 light)
         nmlModelSetTexture(CARD_ATTACK_TEXTURE);
         nmlModelEntryCard(model);
     }
-    switch (definition->element) {
-    case CARD_ELEMENT_50:
-        model = CARD_MODEL_ELEMENT_50;
+    switch (definition->rarity) {
+    case CARD_RARITY_P:
+        model = CARD_MODEL_RARITY_P;
         break;
-    case CARD_ELEMENT_52:
-        model = CARD_MODEL_ELEMENT_52;
+    case CARD_RARITY_R:
+        model = CARD_MODEL_RARITY_R;
         break;
-    case CARD_ELEMENT_55:
-        model = CARD_MODEL_ELEMENT_55;
+    case CARD_RARITY_U:
+        model = CARD_MODEL_RARITY_U;
         break;
-    case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` */
+    case CARD_RARITY_O: /* never matched: the chain tests 0x50, then `slti 0x51` */
     default:
-        model = CARD_MODEL_ELEMENT_NONE;
+        model = CARD_MODEL_RARITY_C;
         break;
     }
     nmlModelSetPlace(matrix);
-    if (light & CARD_LIGHT_ELEMENT) {
+    if (light & CARD_LIGHT_RARITY) {
         nmlModelSetLight(&CCColor, &asDir);
     }
-    nmlModelSetTexture(CARD_ELEMENT_TEXTURE);
+    nmlModelSetTexture(CARD_RARITY_TEXTURE);
     nmlModelEntryCard(model);
     if (enabled > 0) {
         switch (definition->kind) {
@@ -1047,23 +1047,23 @@ void CardDisp(Matrix4 *matrix, s16 cardId, s16 owned, s16 selected)
             nmlModelSetTexture(CARD_ATTACK_TEXTURE);
             nmlModelEntryCard(model);
         }
-        switch (definition->element) {
-        case CARD_ELEMENT_50:
-            model = CARD_MODEL_ELEMENT_50;
+        switch (definition->rarity) {
+        case CARD_RARITY_P:
+            model = CARD_MODEL_RARITY_P;
             break;
-        case CARD_ELEMENT_52:
-            model = CARD_MODEL_ELEMENT_52;
+        case CARD_RARITY_R:
+            model = CARD_MODEL_RARITY_R;
             break;
-        case CARD_ELEMENT_55:
-            model = CARD_MODEL_ELEMENT_55;
+        case CARD_RARITY_U:
+            model = CARD_MODEL_RARITY_U;
             break;
-        case CARD_ELEMENT_4F: /* never matched: the chain tests 0x50, then `slti 0x51` */
+        case CARD_RARITY_O: /* never matched: the chain tests 0x50, then `slti 0x51` */
         default:
-            model = CARD_MODEL_ELEMENT_NONE;
+            model = CARD_MODEL_RARITY_C;
             break;
         }
         nmlModelSetPlace(matrix);
-        nmlModelSetTexture(CARD_ELEMENT_TEXTURE);
+        nmlModelSetTexture(CARD_RARITY_TEXTURE);
         nmlModelEntryCard(model);
     }
     QuadwordCopyMatrix(place, *matrix);

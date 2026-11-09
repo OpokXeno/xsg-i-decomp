@@ -102,12 +102,13 @@ struct HddSaveImage {
     unsigned char payloadStart; /* First byte; the transfer header gives size. */
 };
 
-/* The install image staged at the fixed work address: a size pair at +0x28
- * and +0x2c, and the 80-byte SYSTEM.CNF copy at +0x200. */
+/* The install image (data\hdd.res) staged at the fixed work address: the
+ * "PS2ICON3D" header with four (offset, size) pairs from +0x10, and the
+ * 80-byte SYSTEM.CNF copy at +0x200. The last pair, at +0x28, ends the file. */
 struct HddInstallImage {
     unsigned char unmodeled_00[0x28];
-    int bodySize;
-    int tableSize;
+    int lastEntryOffset;
+    int lastEntrySize;
     unsigned char unmodeled_30[0x1d0];
     unsigned char systemCnf[HDD_SYSTEM_CNF_SIZE];
 };
@@ -928,7 +929,7 @@ int xglHddInstall(int (*callback)(), int param)
     source = system_cnf;
     for (i = 0; i < HDD_SYSTEM_CNF_SIZE; i++)
         image->systemCnf[i] = source[i];
-    size = (image->bodySize + image->tableSize + HDD_SECTOR_SIZE - 1) & -HDD_SECTOR_SIZE;
+    size = (image->lastEntryOffset + image->lastEntrySize + HDD_SECTOR_SIZE - 1) & -HDD_SECTOR_SIZE;
 
     callback(HDD_INSTALL_STAGE_RESOURCE_READ, 0, param);
     /* Create the partition and extend it in 256M steps. */

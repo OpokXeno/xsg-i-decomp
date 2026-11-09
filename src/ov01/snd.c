@@ -89,8 +89,8 @@ void sndInit2(void)
     ctrlId = 0;
 }
 
-/* Station-edit condition codes: the words of a btst/bted record's condition
- * list, evaluated by dataSndStEdNumSub. */
+/* Start/end condition codes: the words of a btst (battle start) or bted
+ * (battle end) record's condition list, evaluated by dataSndStEdNumSub. */
 enum SndStEdCond {
     SND_STED_COND_NEVER = 0,
     SND_STED_COND_ALWAYS = 1,
@@ -164,7 +164,7 @@ typedef struct {
 } SndMonsEnt;
 
 /*
- * Evaluates one station-edit condition code for unit; nonzero means it holds.
+ * Evaluates one start/end condition code for unit; nonzero means it holds.
  * Codes 2 and 3 test side-0 unit ids, 4 and 5 the stat or ether learn table,
  * 7 calcIdol2Chk(unit). Code 6 needs unitIdChk(0, 2), scenario 10 or later and
  * a monster-set entry with init flag 0x2000. Code 8 tests flag 0x80 on side-0
@@ -274,8 +274,8 @@ extern char *strcpy(char *destination, const char *source);
 extern char *strcat(char *destination, const char *source);
 
 /*
- * Builds the station-edit sound name for unit from the btst table (type 0x18)
- * or the bted table (other types). Each record whose unitId is the unit's
+ * Builds the battle-start voice name for unit from the btst table (type 0x18)
+ * or the battle-end one from the bted table (other types). Each record whose unitId is the unit's
  * charaId copies its name and appends one digit: '0' plus the sum of the
  * dataSndStEdNum picks so far.
  */
@@ -329,8 +329,8 @@ static const char *enemyMidSeName[3];
 
 /*
  * Writes the sound-effect name for seType of unit into name, lowercased. Types
- * below 0x1A are the unit's base name plus a mid name (station-edit names for
- * 0x18 and 0x19 on player units); types 3 and up on units name the effect of
+ * below 0x1A are the unit's base name plus a mid name (battle start and end
+ * voice names for 0x18 and 0x19 on player units); types 3 and up on units name the effect of
  * the matching weapon or technique. Types 0x1A and up name the effect
  * seType - 0x1A directly.
  */

@@ -1879,7 +1879,7 @@
           }
         ],
         "source": "src/audio/ssd/ssd_trap.c",
-        "source_sha256": "88f3a71ee70341f2a4864e9614f01cab2a61fbe89a18108b25e712b5a1ad2e43"
+        "source_sha256": "0037359580112f6a919e27baf3ffe432206c1bd25bdb8f6583b3fba3b7542254"
       },
       {
         "fdr_filename": "ssd_chan.c",

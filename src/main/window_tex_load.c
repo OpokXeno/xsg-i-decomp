@@ -831,44 +831,44 @@ void UmnInterface(void)
     default_character = defaultCharacterBuffer[0];
     record = UmnGunoDataBaseTop;
 
-    /* One record per unit: type, properties, name and description. */
+    /* One record per enemy: HP, weakness, rewards and the names of its drop items. */
     for (unit_id = 0x22; unit_id < 0x3f; ++unit_id, ++record) {
         UmnUnitInitRecord *unit_init;
-        UmnUnitTextRecord *unit_text;
+        UmnGainRecord *gain;
         MenuTextEntry *text;
         short page;
         int text_id;
 
         memset(record, 0, sizeof(*record));
         unit_init = func_A19270(unit_id);
-        unit_text = func_A1A698(unit_id);
+        gain = func_A1A698(unit_id);
 
         strcpy(record->unit_name, *func_A2C828(unit_id));
-        record->unit_type = unit_init->unit_type;
-        record->duplicate_unit_type = unit_init->unit_type;
-        record->text_type = unit_init->text_type;
-        record->property_a = unit_text->property_a;
-        record->property_b = unit_text->property_b;
-        record->property_c = unit_text->property_c;
-        record->value = unit_text->value;
-        record->unit_id = unit_text->unit_id;
+        record->current_hp = unit_init->max_hp;
+        record->max_hp = unit_init->max_hp;
+        record->weakness_flags = unit_init->weakness_flags;
+        record->tech_points = gain->tech_points;
+        record->ether_points = gain->ether_points;
+        record->skill_points = gain->skill_points;
+        record->money = gain->money;
+        record->experience = gain->experience;
 
-        if (unit_text->name_id != 0) {
-            page = text_pages.menu_page[unit_text->name_page];
-            text_id = unit_text->name_id + ((int)page << 16);
+        if (gain->item_id != 0) {
+            page = text_pages.menu_page[gain->item_group];
+            text_id = gain->item_id + ((int)page << 16);
             text = MenuTextGet(text_id);
-            strcpy(record->name, text->name);
+            strcpy(record->item_name, text->name);
         } else {
-            record->name[0] = default_character;
+            record->item_name[0] = default_character;
         }
 
-        if (unit_text->description_id != 0) {
-            page = text_pages.menu_page[unit_text->description_page];
-            text_id = unit_text->description_id + ((int)page << 16);
+        if (gain->rare_item_id != 0) {
+            page = text_pages.menu_page[gain->rare_item_group];
+            text_id = gain->rare_item_id + ((int)page << 16);
             text = MenuTextGet(text_id);
-            strcpy(record->description, text->name);
+            strcpy(record->rare_item_name, text->name);
         } else {
-            record->description[0] = default_character;
+            record->rare_item_name[0] = default_character;
         }
     }
 

@@ -169,7 +169,7 @@ typedef struct CardDefinition {
                                     * (CGPCalcPowerPlus), CCC38ExecSub tests type 1 */
     u8 attackPower;                /* +0x14 */
     u8 basePower;                  /* +0x15 */
-    u8 element;                    /* +0x16: element code 0x50, 0x52 or 0x55 (asm 0x00a09ec4, 0x00a0a8a4) */
+    u8 rarity;                     /* +0x16: rarity letter 'C', 'U', 'R' or 'P', which picks the rarity mark (asm 0x00a09ec4, 0x00a0a8a4) */
     u8 identity;                   /* +0x17 */
     u32 nameOffset;
     u32 captionOffset;

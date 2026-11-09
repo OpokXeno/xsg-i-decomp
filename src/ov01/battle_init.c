@@ -4467,20 +4467,20 @@ int specHensinProc(void *arg0, int arg1, unsigned int *arg2)
 
 /* Window record eBattleWinOpen3 reads; field order follows the stack stores. */
 typedef struct SpecAnalyzeWin {
-    int width;
-    int height;
-    int color;
+    int x;
+    int y;
+    int style;
     const char *name;
-    unsigned short x;
-    unsigned short y;
-    unsigned short page;
-    int title;
-    int text;
-    int picture;
-    int sound;
-    unsigned long long model;
-    unsigned short f30;
-    unsigned short f32;
+    unsigned short current_hp;
+    unsigned short max_hp;
+    unsigned short weakness_flags;
+    int tech_points;
+    int ether_points;
+    int skill_points;
+    int experience;
+    unsigned long long money;
+    unsigned short item;        /* item group << 8 | item id */
+    unsigned short rare_item;   /* item group << 8 | item id */
 } SpecAnalyzeWin;
 
 extern void UmnDataBaseAnalisisSet(int charaId);
@@ -4498,20 +4498,20 @@ void specAnalyzeProc(BattleUnit *arg0)
 
     temp = dataGainGet(calcUPGet(arg0)->charaId);
     UmnDataBaseAnalisisSet(calcUPGet(arg0)->charaId);
-    w.width = 0x10;
-    w.height = 0x6C;
-    w.color = 0xFFFFFD;
+    w.x = 0x10;
+    w.y = 0x6C;
+    w.style = 0xFFFFFD;
     w.name = *dataEnemyNameGet(calcUPGet(arg0)->charaId);
-    w.x = calcUPGet(arg0)->currentHp;
-    w.y = ((unsigned short *)calcUPGet(arg0))[0];
-    w.page = calcUPGet(arg0)->conditions;
-    w.title = temp[0x6];
-    w.text = temp[0x7];
-    w.picture = temp[0x8];
-    w.model = ((unsigned short *)temp)[2];
-    w.sound = *(int *)temp;
-    w.f30 = temp[0x10] + (temp[0xD] << 8);
-    w.f32 = temp[0x11] + (temp[0xE] << 8);
+    w.current_hp = calcUPGet(arg0)->currentHp;
+    w.max_hp = ((unsigned short *)calcUPGet(arg0))[0];
+    w.weakness_flags = calcUPGet(arg0)->conditions;
+    w.tech_points = temp[0x6];
+    w.ether_points = temp[0x7];
+    w.skill_points = temp[0x8];
+    w.money = ((unsigned short *)temp)[2];
+    w.experience = *(int *)temp;
+    w.item = temp[0x10] + (temp[0xD] << 8);
+    w.rare_item = temp[0x11] + (temp[0xE] << 8);
     eBattleWinOpen3(&w);
 }
 

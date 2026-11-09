@@ -172,37 +172,39 @@ typedef union UmnPadInputPrefix {
         } buttons;
     } wide;
 } UmnPadInputPrefix;
+/* The enemy record UmnInterface fills in MAIN (UmnGunoRecord there). */
 struct UmnGunoDataBase {
-    unsigned char unmodeled_00[0x20];
-    short x;                                /* +0x20 */
-    short y;                                /* +0x22 */
-    short page;                             /* +0x24 */
+    char unit_name[0x20];                   /* +0x00 */
+    short current_hp;                       /* +0x20: the maximum HP */
+    short max_hp;                           /* +0x22 */
+    short weakness_flags;                   /* +0x24 */
     unsigned char unmodeled_26[0x28 - 0x26];
-    int title;                              /* +0x28 */
-    int text;                                /* +0x2C */
-    int picture;                            /* +0x30 */
-    int sound;                              /* +0x34 */
-    long model;                             /* +0x38 */
-    char name[0x52 - 0x40];                 /* +0x40 */
-    char reading[0x68 - 0x52];              /* +0x52 */
+    int tech_points;                        /* +0x28 */
+    int ether_points;                       /* +0x2C */
+    int skill_points;                       /* +0x30 */
+    int experience;                         /* +0x34 */
+    long money;                             /* +0x38 */
+    char item_name[0x52 - 0x40];            /* +0x40 */
+    char rare_item_name[0x68 - 0x52];       /* +0x52 */
 };
+/* The analysis window record eBattleWinOpen3 reads (BattleWinAnalysisParams in MAIN). */
 typedef struct UmnDataBaseWinParam {
-    int width;                              /* +0x00 */
-    int height;                             /* +0x04 */
-    int color;                              /* +0x08 */
-    UmnGunoDataBase *entry;                 /* +0x0C */
-    short x;                                /* +0x10 */
-    short y;                                /* +0x12 */
-    short page;                             /* +0x14 */
+    int x;                                  /* +0x00 */
+    int y;                                  /* +0x04 */
+    int style;                              /* +0x08 */
+    UmnGunoDataBase *entry;                 /* +0x0C: read as the name, the record's first field */
+    short current_hp;                       /* +0x10 */
+    short max_hp;                           /* +0x12 */
+    short weakness_flags;                   /* +0x14 */
     unsigned char unmodeled_16[0x18 - 0x16];
-    int title;                              /* +0x18 */
-    int text;                               /* +0x1C */
-    int picture;                            /* +0x20 */
-    int sound;                              /* +0x24 */
-    long model;                             /* +0x28 */
+    int tech_points;                        /* +0x18 */
+    int ether_points;                       /* +0x1C */
+    int skill_points;                       /* +0x20 */
+    int experience;                         /* +0x24 */
+    long money;                             /* +0x28 */
     unsigned char unmodeled_30[0x34 - 0x30];
-    char *name;                             /* +0x34 */
-    char *reading;                          /* +0x38 */
+    char *item_name;                        /* +0x34 */
+    char *rare_item_name;                   /* +0x38 */
 } UmnDataBaseWinParam;
 typedef struct UmnDataBaseAnalisisWork {
     unsigned char step;                     /* +0x00 */
@@ -735,20 +737,20 @@ void tskUmnDataBaseAnalisis(UmnObjectTask *task, void *data)
         break;
     case UMN_DB_ANALYSIS_OPEN:
         entry = UmnGunoDataBaseGet(UmnWork.entry);
-        param.width = 0x70;
-        param.height = 0x90;
-        param.color = 0xFFFFF0;
+        param.x = 0x70;
+        param.y = 0x90;
+        param.style = 0xFFFFF0;
         param.entry = entry;
-        param.x = entry->x;
-        param.y = entry->y;
-        param.page = entry->page;
-        param.title = entry->title;
-        param.text = entry->text;
-        param.picture = entry->picture;
-        param.sound = entry->sound;
-        param.model = entry->model;
-        param.name = entry->name;
-        param.reading = entry->reading;
+        param.current_hp = entry->current_hp;
+        param.max_hp = entry->max_hp;
+        param.weakness_flags = entry->weakness_flags;
+        param.tech_points = entry->tech_points;
+        param.ether_points = entry->ether_points;
+        param.skill_points = entry->skill_points;
+        param.experience = entry->experience;
+        param.money = entry->money;
+        param.item_name = entry->item_name;
+        param.rare_item_name = entry->rare_item_name;
         BW3BattleOrDataBase = 1;
         eBattleWinOpen3(&param);
         work->opened = 1;

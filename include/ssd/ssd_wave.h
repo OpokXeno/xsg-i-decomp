@@ -34,7 +34,7 @@ typedef struct SsdWaveSample {
     char name[16];
 } SsdWaveSample;
 
-/* Loaded wave bank (header of a "wds " file followed by its sample table). */
+/* Loaded wave bank, signature "swav" (SSD_WAVE_BANK_SIGNATURE), followed by its sample table. */
 struct SsdWaveBank {
     unsigned int signature;
     unsigned short bank_id;

@@ -33,9 +33,9 @@
 #define MOVIE_SEEK_ERROR_X 96
 #define MOVIE_SEEK_ERROR_Y 200
 
-/* Audio buffer handed to xglMpeg2InfoInit2, and the display buffer that
+/* CD stream ring size handed to xglMpeg2InfoInit2, and the display buffer that
  * follows the source data in GameMovieInit's allocation. */
-#define MOVIE_MPEG_AUDIO_BUFFER_SIZE 0x40000
+#define MOVIE_MPEG_CD_RING_SIZE 0x40000
 #define MOVIE_DISPLAY_BUFFER_SIZE 0x8000
 
 /* Byte-sized settings the Java class xeno.Movie writes through its
@@ -71,7 +71,7 @@ extern char *GameResourceGetFreeAddr(void);
 extern void nmlModelSendSignalMovieStart(void);
 extern void nmlModelSendSignalMovieFinish(int mode);
 extern void xglRenderClearDepth(void);
-extern void *xglMpeg2InfoInit2(void *info, void *arena, int audio_buffer_size);
+extern void *xglMpeg2InfoInit2(void *info, void *arena, int ring_size);
 extern int xglMpeg2Open(void *info, const char *name);
 extern int xglMpeg2Play(void *info);
 extern int xglMpeg2Close(void *info);
@@ -332,7 +332,7 @@ void GameMpeg2Play(char *name, int mode)
             } else {
                 caption_convert(text);
             }
-            xglMpeg2InfoInit2(&mpeg, text + ((size + 63) & ~63), MOVIE_MPEG_AUDIO_BUFFER_SIZE);
+            xglMpeg2InfoInit2(&mpeg, text + ((size + 63) & ~63), MOVIE_MPEG_CD_RING_SIZE);
             if (size == 0) {
                 text = 0;
             }

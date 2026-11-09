@@ -46,12 +46,17 @@ unsigned char *SsdSeqDeltaForGate(SsdSequence *sequence,
     return events;
 }
 
+/*
+ * 0x82: the next wait is the previous delta plus the signed byte that follows.
+ * The names of 0x82 and 0x83 look swapped against the 0x80/0x81 pair: this one
+ * adds to the delta, and 0x83 adds to the gate (the last note's duration).
+ */
 unsigned char *SsdSeqDeltaAddGate(SsdSequence *sequence, SsdTrack *track,
                                 unsigned char *events)
 {
-    int gate = (signed char)events[0] + track->delta;
-    track->delta = gate;
-    track->wait = gate;
+    int delta = (signed char)events[0] + track->delta;
+    track->delta = delta;
+    track->wait = delta;
     return events + 1;
 }
 
@@ -355,6 +360,11 @@ unsigned char *SsdSeqMasterFader(SsdSequence *sequence,
     return events + 2;
 }
 
+/*
+ * 0xA8 sets the low byte of the channel's bank id and 0xA9 the high byte, the
+ * reverse of what the MSB/LSB names suggest: BATTLE2.SMD selects bank 0x0201
+ * with a8 01 a9 02.
+ */
 unsigned char *SsdSeqBankMSB(SsdSequence *sequence, SsdTrack *track,
                            unsigned char *events)
 {

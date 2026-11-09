@@ -182,9 +182,12 @@ typedef struct PrintNumberInfo {
     unsigned short flags;   /* +0x12 */
 } PrintNumberInfo;
 
+/* One image of the window texture file, sent by endPrintWinTexLoad. */
 typedef struct WindowTexEntry {
-    unsigned int bufferWidthAndFormat; /* +0x00 */
-    unsigned int clutAddress;          /* +0x04 */
+    /* +0x00: low half the width in pixels (TRXREG RRW), high half the
+     * buffer width and pixel format (BITBLTBUF DBW | DPSM << 8). */
+    unsigned int widthAndBufferFormat;
+    unsigned int height;               /* +0x04: TRXREG RRH */
     unsigned int vramAddress;          /* +0x08 */
     int size;                          /* +0x0c */
     int dataOffset;                    /* +0x10 */
@@ -785,17 +788,17 @@ void endPrintWinTexLoad(XglPacket *packet)
     WindowTexDirectory *directory;
     WindowTexEntry *entry;
     unsigned int image;
-    unsigned int imageLow;
+    unsigned int width;
 
     i = 0;
     directory = WindowTexAddrGet(0);
     entry = (WindowTexEntry *)((unsigned char *)directory + directory->entryOffset);
     for (; i < directory->entryCount; i++, entry++) {
-        image = entry->bufferWidthAndFormat;
-        imageLow = image & 0xFFFF;
+        image = entry->widthAndBufferFormat;
+        width = image & 0xFFFF;
         ePrintEnv_0[4] = ((u64)((entry->vramAddress + WINDOW_TEX_VRAM_BASE) >> 6) << 32) |
                          ((u64)(image >> 16) << 48);
-        ePrintEnv_0[8] = imageLow | ((u64)entry->clutAddress << 32);
+        ePrintEnv_0[8] = width | ((u64)entry->height << 32);
         sceVif1PkCnt(packet, 0);
         sceVif1PkAddDataN(packet, ePrintEnv_0, 24);
         sceVif1PkRef(packet, (unsigned char *)directory + entry->dataOffset, entry->size, 0, 0, 0);
@@ -1845,7 +1848,7 @@ static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
     WindowTexDirectory *directory;
     WindowTexEntry *entry;
     unsigned int image;
-    unsigned int imageLow;
+    unsigned int width;
 
     i = 0;
     scratch = context->work.qwords;
@@ -1858,11 +1861,11 @@ static void FontTexChange(FontDrawCursor *context, WindowTexDirectory **window)
     directory = *window;
     entry = (WindowTexEntry *)((unsigned char *)directory + directory->entryOffset);
     for (; i < directory->entryCount; i++, entry++) {
-        image = entry->bufferWidthAndFormat;
-        imageLow = image & 0xFFFF;
+        image = entry->widthAndBufferFormat;
+        width = image & 0xFFFF;
         Env_3[4] = ((u64)((entry->vramAddress + WINDOW_TEX_VRAM_BASE) >> 6) << 32) |
                    ((u64)(image >> 16) << 48);
-        Env_3[8] = imageLow | ((u64)entry->clutAddress << 32);
+        Env_3[8] = width | ((u64)entry->height << 32);
         sceVif1PkCnt(context->packet, 0);
         sceVif1PkAddDataN(context->packet, Env_3, 24);
         sceVif1PkRef(context->packet, (unsigned char *)directory + entry->dataOffset, entry->size, 0, 0, 0);
