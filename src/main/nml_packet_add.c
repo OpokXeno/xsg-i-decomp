@@ -158,8 +158,8 @@ typedef struct NmlPartsWorkingScratch {
     NmlPartsScratchMatrix clip;
 } NmlPartsWorkingScratch;
 
-extern const u32 D_004AE5A0[];
-extern const u8 D_004AE5B0[];
+extern const u32 PacketSizeNewVu1MicroCode[];
+extern const u8 PacketDataNewVu1MicroCode[];
 extern GameLoopStateWords GameLoopState;
 extern const float inReflRotYStep;
 extern int g_aSubWindow[4];
@@ -179,18 +179,18 @@ extern const u8 NewVu1AddEnvGsKickWide[];
 extern const u8 NewVu1AddGsKickWide[];
 extern const u8 NewVu1TexEnvGsKickWide[];
 extern const u8 NewVu1DropGsKickWide[];
-extern const u8 D_004B19F0[];
-extern const u8 D_004B54B0[];
-extern const u8 D_004B9710[];
-extern const u8 D_004B6F80[];
-extern const u8 D_004B0A50[];
-extern const u8 D_004BD4A0[];
-extern const u32 D_004B0A40[];
-extern const u32 D_004B19E0[];
-extern const u32 D_004B54A0[];
-extern const u32 D_004B6F70[];
-extern const u32 D_004B9700[];
-extern const u32 D_004BD490[];
+extern const u8 PacketDataNewVu1EnvMicroCode[];
+extern const u8 PacketDataNewVu1ProMicroCode[];
+extern const u8 PacketDataNewVu1AddEnvMicroCode[];
+extern const u8 PacketDataNewVu1AddMicroCode[];
+extern const u8 PacketDataNewVu1TexEnvMicroCode[];
+extern const u8 PacketDataNewVu1DropMicroCode[];
+extern const u32 PacketSizeNewVu1TexEnvMicroCode[];
+extern const u32 PacketSizeNewVu1EnvMicroCode[];
+extern const u32 PacketSizeNewVu1ProMicroCode[];
+extern const u32 PacketSizeNewVu1AddMicroCode[];
+extern const u32 PacketSizeNewVu1AddEnvMicroCode[];
+extern const u32 PacketSizeNewVu1DropMicroCode[];
 extern const float alphaLimitHigh;
 extern const float alphaLimitLow;
 extern const float vectorLengthHigh;
@@ -857,7 +857,7 @@ void nmlPacketAddTransMicrocodeInit(void)
 
     selected.sdk = packet;
     s_pPacket = selected;
-    sceVif1PkRef(packet, D_004AE5B0, D_004AE5A0[0], 0, 0, 0);
+    sceVif1PkRef(packet, PacketDataNewVu1MicroCode, PacketSizeNewVu1MicroCode[0], 0, 0, 0);
     s_nProgType = NML_UCODE_PLAIN;
     s_nPixelTestType = -1;
     s_pCacheTexture = 0;
@@ -925,7 +925,7 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
         if (s_nProgType == NML_UCODE_PROREAL)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004B54B0, D_004B54A0[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1ProMicroCode, PacketSizeNewVu1ProMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_PROREAL;
         selected = s_pPacket;
         sceVif1PkCnt(selected.sdk, 0);
@@ -940,14 +940,14 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
         if (s_nProgType == NML_UCODE_ADD_ENV)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004B9710, D_004B9700[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1AddEnvMicroCode, PacketSizeNewVu1AddEnvMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_ADD_ENV;
         return;
     case NML_UCODE_ADD:
         if (s_nProgType == NML_UCODE_ADD)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004B6F80, D_004B6F70[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1AddMicroCode, PacketSizeNewVu1AddMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_ADD;
         selected = s_pPacket;
         sceVif1PkCnt(selected.sdk, 0);
@@ -962,28 +962,28 @@ void nmlPacketAddTransMicrocode(const NmlModelBlock *material,
         if (s_nProgType == NML_UCODE_TEX_ENV)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004B0A50, D_004B0A40[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1TexEnvMicroCode, PacketSizeNewVu1TexEnvMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_TEX_ENV;
         return;
     case NML_UCODE_DROP:
         if (s_nProgType == NML_UCODE_DROP)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004BD4A0, D_004BD490[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1DropMicroCode, PacketSizeNewVu1DropMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_DROP;
         return;
     case NML_UCODE_ENV:
         if (s_nProgType == NML_UCODE_ENV)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004B19F0, D_004B19E0[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1EnvMicroCode, PacketSizeNewVu1EnvMicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_ENV;
         return;
     case NML_UCODE_PLAIN:
         if (s_nProgType == NML_UCODE_PLAIN)
             return;
         selected = s_pPacket;
-        sceVif1PkRef(selected.sdk, D_004AE5B0, D_004AE5A0[0], 0, 0, 0);
+        sceVif1PkRef(selected.sdk, PacketDataNewVu1MicroCode, PacketSizeNewVu1MicroCode[0], 0, 0, 0);
         s_nProgType = NML_UCODE_PLAIN;
         return;
     default:
@@ -1075,7 +1075,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
 {
     NmlCurrentPacket selected;
     NmlPacketData128 material_tag;
-    NmlPacketData128 alpha_options;
+    NmlPacketData128 axis_symmetry;
     NmlPacketData128 *material_tag_data;
     const NmlProRealParam *proreal;
     float material_alpha;
@@ -1158,13 +1158,13 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
-    alpha_options.words[2] = 0;
-    if (model->fields.alphaOptions & 1)
-        alpha_options.lanes[2] = model->fields.alphaOptionsValue;
+    axis_symmetry.words[2] = 0;
+    if (model->fields.axisSymmetryFlag & 1)
+        axis_symmetry.lanes[2] = model->fields.axisSymmetry;
     selected = s_pPacket;
     sceVif1PkOpenUpkCode(selected.sdk, 0x3F9, VIF_UNPACK_V4_32, 1, 1);
     selected = s_pPacket;
-    sceVif1PkAddUpkData128N(selected.sdk, &alpha_options, 1);
+    sceVif1PkAddUpkData128N(selected.sdk, &axis_symmetry, 1);
     selected = s_pPacket;
     sceVif1PkCloseUpkCode(selected.sdk);
 
@@ -1186,7 +1186,7 @@ void nmlPacketAddBlockMaterial(NmlModelBlock *material,
         selected = s_pPacket;
         sceVif1PkAddUpkData128N(selected.sdk, proreal->block_material_data, 4);
     } else if (model->fields.render_status & NML_RENDER_DROP_PASS) {
-        model->fields.lightDirection[3][3] = (float)(0x80 - (int)(
+        model->fields.lightColorMatrix[3][3] = (float)(0x80 - (int)(
             model->fields.texMapSize * model->fields.transparency *
             model->fields.fogIntensity[view_index]));
         selected = s_pPacket;
@@ -1656,7 +1656,7 @@ int nmlPacketAddParts(const NmlModelBlock *block,
                     proreal->normal_transform);
             } else {
                 _CurMatrixMul33norm(matrices.normal.rows,
-                                    model->fields.lightColor);
+                                    model->fields.lightNormalMatrix);
             }
             _CurApplyMatrix(&matrices.reference_point.vector,
                             &camera->position.vector);
@@ -2211,31 +2211,34 @@ u8 *nmlPacketSetAttributeAlloc16N(u32 count)
 }
 
 /*
- * Sends the material's GIF tag to VU1 three times, each with different flags. The loop count
- * and end-of-packet bit are set first.
+ * Sends the material's GIF tag to VU1 three times, each with different PRIM
+ * bits (bits 15-25 of word 1). The block strip copy at 0x3f3 gets ABE from
+ * `alpha_blend`, FGE when the model has fog and TME when the material is
+ * textured. The highlight copy at 0x3f4 drops TME and adds ABE and CTXT, and
+ * the reflection copy at 0x3f2 sets TME and clears CTXT again.
  */
 void nmlPacketAddGifTag(NmlModelBlock *material,
-                        LayoutStore *model, int count)
+                        LayoutStore *model, int alpha_blend)
 {
     NmlPacketData128 giftag;
     NmlCurrentPacket *current_packet = &s_pPacket;
     u32 flags = model->fields.render_status;
-    u32 end_of_packet = (flags & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) != 0;
+    u32 fog = (flags & (NML_RENDER_GLOBAL_FOG | NML_RENDER_FOG)) != 0;
 
     if (flags & NML_RENDER_FOG_CANCEL)
-        end_of_packet = 0;
+        fog = 0;
 
     current_packet->sdk = xglPacketGetCurrent();
     sceVif1PkCnt(current_packet->sdk, 0);
     giftag.quad = material->gifTag;
-    giftag.words[1] |= (count << 21) | (end_of_packet << 20);
+    giftag.words[1] |= (alpha_blend << 21) | (fog << 20);
     if (material->materialFlags & 1) {
         giftag.words[1] |= 0x00080000;
     } else {
         giftag.words[1] &= ~0x00080000;
     }
     if (model->fields.render_status & NML_RENDER_TEXTURE_PASS) {
-        giftag.words[1] &= ~((count << 21) | 0x00080000);
+        giftag.words[1] &= ~((alpha_blend << 21) | 0x00080000);
     }
     if (model->fields.render_status & NML_RENDER_PROREAL) {
         giftag.words[1] |= 0x00080000;
@@ -2253,8 +2256,12 @@ void nmlPacketAddGifTag(NmlModelBlock *material,
     sceVif1PkCloseUpkCode(current_packet->sdk);
 }
 
-/* Sends a GIF tag with the end-of-packet bit `eop` and loop count `count` to VU1. */
-void nmlPacketAddGifTagStandard(int eop, int count)
+/*
+ * Sends the standard GIF tag to VU1: a Gouraud triangle strip with ST, RGBAQ
+ * and XYZF2 per vertex and EOP set (the microcode fills in NLOOP). `texture`
+ * sets the PRIM TME bit and `alpha_blend` the ABE bit.
+ */
+void nmlPacketAddGifTagStandard(int texture, int alpha_blend)
 {
     NmlPacketData128 gif_tag;
     NmlCurrentPacket selected;
@@ -2264,7 +2271,7 @@ void nmlPacketAddGifTagStandard(int eop, int count)
     sceVif1PkCnt(selected.sdk, 0);
 
     gif_tag.words[0] = NML_GIF_EOP;
-    gif_tag.words[1] = ((u32)eop << 0x13) | ((u32)count << 0x15) | 0x30064000;
+    gif_tag.words[1] = ((u32)texture << 0x13) | ((u32)alpha_blend << 0x15) | 0x30064000;
     gif_tag.words[2] = 0x412;
     gif_tag.words[3] = 0;
     selected = s_pPacket;

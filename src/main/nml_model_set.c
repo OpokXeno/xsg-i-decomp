@@ -716,8 +716,8 @@ void CLEAR_LAYOUT_MODEL(LayoutStore *arg0)
     xglStudioChange(0);
     xglStudioGetLight(&light);
     xglLightCalcMatrix(light);
-    QuadwordCopyMatrix(arg0->fields.lightDirection, &light->color_modifier_matrix);
-    QuadwordCopyMatrix(arg0->fields.lightColor, light->normal_matrix);
+    QuadwordCopyMatrix(arg0->fields.lightColorMatrix, &light->color_modifier_matrix);
+    QuadwordCopyMatrix(arg0->fields.lightNormalMatrix, light->normal_matrix);
     QuadwordCopyMatrix(s_inGblPlace, arg0->fields.place);
     QuadwordCopy(&s_inGblPos, &arg0->slots[0x1F0 / 4]);
     arg0->slots[0x88].f = 1.0f;
@@ -1864,10 +1864,10 @@ void nmlModelSetToumei(int enabled)
     }
 }
 
-void nmlModelSetLight(Matrix4 *direction, Matrix4 *color)
+void nmlModelSetLight(Matrix4 *colorMatrix, Matrix4 *normalMatrix)
 {
-    QuadwordCopyMatrix(&s_inLayout.fields.lightDirection, direction);
-    QuadwordCopyMatrix(&s_inLayout.fields.lightColor, color);
+    QuadwordCopyMatrix(&s_inLayout.fields.lightColorMatrix, colorMatrix);
+    QuadwordCopyMatrix(&s_inLayout.fields.lightNormalMatrix, normalMatrix);
     s_inLayout.fields.render_status |= NML_RENDER_LIGHT;
 }
 
@@ -3469,7 +3469,7 @@ void nmlModelEntry(NmlModel *model)
                 if ((s_inLayout.fields.render_status & NML_RENDER_TEXMAP_TEXTURE) != 0 && s_nParent == 0) {
                     nmlModelCalcEntryProjectMap(model, camera);
                 }
-                xglMatrixReverse(s_inLayout.fields.lightColor, s_inLayout.fields.lightColor);
+                xglMatrixReverse(s_inLayout.fields.lightNormalMatrix, s_inLayout.fields.lightNormalMatrix);
                 if (s_inMapHandle[0] != 0) {
                     s_inLayout.fields.weightedMatrices = (NmlWeightedMatrix *)((char *)model + model->weightedMatrixOffset);
                 } else {
@@ -3795,7 +3795,7 @@ void nmlModelEntryCard(NmlModel *model)
         LAYOUT_S32(0x228) = 0;
         s_inLayout.fields.viewportAlpha[s_inLayout.fields.window] = 0.0f;
         s_inLayout.fields.renderLevel |= 2;
-        xglMatrixReverse(s_inLayout.fields.lightColor, s_inLayout.fields.lightColor);
+        xglMatrixReverse(s_inLayout.fields.lightNormalMatrix, s_inLayout.fields.lightNormalMatrix);
         s_inLayout.fields.weightedMatrices = nmlPacketSetAttributeData64N(
             (char *)model + model->weightedMatrixOffset,
             (model->partCount + model->sampleCount) * 2);

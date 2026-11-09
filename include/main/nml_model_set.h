@@ -295,10 +295,12 @@ union LayoutStore {
     LayoutSlot slots[200];
     unsigned long long qwords[100];
     struct {
-        /* +0x0; row 3 w (+0x3c) carries the block material alpha the drop
-         * shadow path computes. */
-        Matrix4 lightDirection;
-        Matrix4 lightColor; /* +0x40; rows 0-2 are the normal light vectors */
+        /* +0x0: rows 0-2 are the colors of the three directional lights and
+         * row 3 the ambient color (VU1 0x3d1-0x3d4). Row 3 w (+0x3c) carries
+         * the drop shadow strength nmlPacketAddBlockMaterial computes for the
+         * drop pass. */
+        Matrix4 lightColorMatrix;
+        Matrix4 lightNormalMatrix; /* +0x40; rows 0-2 are the directions of the three lights */
         Matrix4 place; /* +0x80 */
         Matrix4 inversePlace; /* +0xc0 */
         Vector4 pointPosition[4]; /* +0x100 */
@@ -319,10 +321,17 @@ union LayoutStore {
         float reflTransparency; /* +0x224; nmlModelSetReflTransparency */
         float defaultBlockAlpha; /* +0x228 */
         float alphaLimit; /* +0x22c */
+        /*
+         * +0x230: the y mirror of nmlModelSetAxisSymmetry. Bit 0 of the word
+         * turns it on, and nmlPacketAddBlockMaterial then sends the float to
+         * lane z of VU1 0x3f9, where the skinned programs replace each vertex
+         * y with that value minus y. The setter multiplies its argument by
+         * 0.0f, so the float holds only that bit and the mirror is about y = 0.
+         */
         union {
-            u32 alphaOptions;
-            float alphaOptionsValue;
-        }; /* +0x230 */
+            u32 axisSymmetryFlag;
+            float axisSymmetry;
+        };
         unsigned int packetFilterFlags;
         int pixelAlpha;                     /* +0x238, full-width pixel-alpha word */
         void *currentMatrix;                /* +0x23c; the model matrix nmlModelSetMatrix stores */
@@ -416,7 +425,7 @@ void nmlModelSetStencil(int enabled);
 void nmlModelSetToumei(int enabled);
 void nmlModelSetAlpha(u64 alpha);
 void nmlModelSetTransparency(float transparency);
-void nmlModelSetLight(Matrix4 *direction, Matrix4 *color);
+void nmlModelSetLight(Matrix4 *colorMatrix, Matrix4 *normalMatrix);
 void nmlModelClear(void);
 void nmlModelSetWindow(u32 window);
 int nmlModelSetRenderLevel(int level);

@@ -26,7 +26,7 @@
 #define UMN_IF2_VERTEX_COUNT 6
 
 extern float xglFRand(void);
-extern void nmlModelSetLight(void *model, void *light);
+extern void nmlModelSetLight(void *colorMatrix, void *normalMatrix);
 extern void nmlModelSetTexture(const char *texture);
 extern void nmlModelSetPlace(const Vector4 *place);
 extern void nmlModelEntry(int entry);

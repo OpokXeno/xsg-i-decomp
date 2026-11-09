@@ -37,3 +37,22 @@ NewVu1TexEnvGsKick = 0x0;
 NewVu1TexEnvGsKickWide = 0x28;
 NewVu1DropGsKick = 0x0;
 NewVu1DropGsKickWide = 0x28;
+
+/* Original VU1 microcode packet labels in .vudata (EE addresses). Each
+ * PacketSize... word is the packet's quadword count for the DMA ref tag and
+ * PacketData... the VIF packet after it. The packets stay an uncredited blob;
+ * only the names are transported. */
+PROVIDE(PacketSizeNewVu1MicroCode = 0x4AE5A0);
+PROVIDE(PacketDataNewVu1MicroCode = 0x4AE5B0);
+PROVIDE(PacketSizeNewVu1TexEnvMicroCode = 0x4B0A40);
+PROVIDE(PacketDataNewVu1TexEnvMicroCode = 0x4B0A50);
+PROVIDE(PacketSizeNewVu1EnvMicroCode = 0x4B19E0);
+PROVIDE(PacketDataNewVu1EnvMicroCode = 0x4B19F0);
+PROVIDE(PacketSizeNewVu1ProMicroCode = 0x4B54A0);
+PROVIDE(PacketDataNewVu1ProMicroCode = 0x4B54B0);
+PROVIDE(PacketSizeNewVu1AddMicroCode = 0x4B6F70);
+PROVIDE(PacketDataNewVu1AddMicroCode = 0x4B6F80);
+PROVIDE(PacketSizeNewVu1AddEnvMicroCode = 0x4B9700);
+PROVIDE(PacketDataNewVu1AddEnvMicroCode = 0x4B9710);
+PROVIDE(PacketSizeNewVu1DropMicroCode = 0x4BD490);
+PROVIDE(PacketDataNewVu1DropMicroCode = 0x4BD4A0);

@@ -138,6 +138,6 @@ extern int CardPlayCntFld(CardGameWork *work, s16 cardId);
 
 /* nmlModelSet* setters as main/nml_model_set.h declares them (card_disp.c cannot include that header: it
  * declares nmlModelSetRenderLevel locally with a void return). */
-extern void nmlModelSetLight(Matrix4 *direction, Matrix4 *color);
+extern void nmlModelSetLight(Matrix4 *colorMatrix, Matrix4 *normalMatrix);
 
 #endif /* INCLUDE_OV10_CARD_FREAD_H */

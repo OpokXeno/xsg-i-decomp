@@ -153,7 +153,7 @@ extern void JNT_getRootTrans(void *translation);
 extern void ANM_update(void *slot);
 extern char *strstr(const char *haystack, const char *needle);
 static void ACT_updateMotionSub(Actor *actor, int pause);
-extern void nmlModelSetLight(void *light, void *colors);
+extern void nmlModelSetLight(void *colorMatrix, void *normalMatrix);
 extern void nmlModelSetShapeId(int shapeId, float weight);
 void ACT_setDrawEnv(Actor *actor);
 extern void nmlModelSetScale(void *scale);
