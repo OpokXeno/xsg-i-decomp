@@ -17,10 +17,10 @@ the A.G.W.S. Battle overlay adds its own thin wrapper layer on top
 ## Modules
 
 The library is split into one source file per subsystem. Most files are
-independent of each other. The few links between them are the ones you would
-expect: the CD module calls the ARX decompressor, the HDD module reads through
-the CD module, the render module drives the packet, font and DMA modules, and
-the studio module drives the camera and light modules.
+independent of each other. There are few links between them: the CD module
+calls the ARX decompressor, the HDD module reads through the CD module, the
+render module drives the packet, font and DMA modules, and the studio module
+drives the camera and light modules.
 
 | Module | File | Purpose |
 | --- | --- | --- |
@@ -48,9 +48,9 @@ the studio module drives the camera and light modules.
 
 ## How the parts fit together
 
-The game runs on the control thread and never talks to the hardware directly.
-It only fills queues and buffers: the current GPU packet, the text print
-queue, the file read queue and the sound command queue. The other system
+The game runs on the control thread. Instead of talking to the hardware
+directly, it only fills queues and buffers: the current GPU packet, the text
+print queue, the file read queue and the sound command queue. The other system
 threads empty them on their next turn. The render thread sends the packet,
 the queued text and the sound commands, and reads the controllers. The CD
 thread advances file reads and refills streams. The studio thread updates the
@@ -87,9 +87,9 @@ flowchart TB
     STM -->|camera matrices| GAME
 ```
 
-Because only one thread runs at a time (see [Threads](#threads)), none of
-these queues needs a lock. A producer and its consumer can never run at the
-same moment.
+Because only one thread runs at a time (see [Threads](#threads)), a producer
+and its consumer can never run at the same moment, and none of these queues
+needs a lock.
 
 ---
 
@@ -119,9 +119,8 @@ The array has room for 20 threads, but only the first four are ever used.
 | 3 | Control | `ControlEntry` | 64 KiB, `0x001E5000`–`0x001F5000` | 11 |
 
 The stacks are carved downward from `XGL_THREAD_STACK_TOP` (`0x001F8000`), in
-table order. The priorities do not decide the run order. They only matter for
-the EE kernel, and the rotation below wakes exactly one thread at a time
-anyway.
+table order. The rotation below wakes exactly one thread at a time, so the
+priorities do not decide the run order. They only matter for the EE kernel.
 
 ### The rotation
 
@@ -161,8 +160,8 @@ sequenceDiagram
 ### What this means for game code
 
 Only one thread runs at any moment, and each one gives up control on purpose.
-This is cooperative multitasking. It has three consequences that shape the
-rest of the engine.
+This is cooperative multitasking, and it has three consequences for the rest
+of the engine.
 
 - Shared data needs no locks. The game can append to a queue while the render
   thread is asleep, and the render thread empties it during its own turn.
@@ -241,8 +240,8 @@ store the callback and insert the new task after or before `entry`. When
 `entry` is 0 the new task becomes the only task of an empty list. Both return
 the new task, or 0 when the pool is full or the scheduler is null. Because the
 list order is the execution order, a task can be placed exactly before or
-after another one. A shadow drawn before its object, or a cursor drawn after
-its window, uses this.
+after another one. This is used to draw a shadow before its object, or a
+cursor after its window.
 
 The diagram below shows a scheduler with three active tasks and two free
 slots.
@@ -269,8 +268,8 @@ flowchart LR
 
 `xglTaskExecute(scheduler)` walks the active list from the head. Before it
 calls a task's callback, it stores the following task in `next_to_visit`. This
-is what makes it safe for a callback to remove itself or to add new tasks
-during the walk.
+makes it safe for a callback to remove itself or to add new tasks during the
+walk.
 
 There are two ways to remove a task:
 
@@ -321,7 +320,7 @@ File: `src/main/xgl_cd.c`
 
 All file access goes through this module. The game asks for a file by name,
 for example `data\matumoto\spline.dat`, and the module finds where the file
-really is: inside one of the disc archives, as a loose file on the disc, on
+is stored: inside one of the disc archives, as a loose file on the disc, on
 the hard disk after an install, or on a development PC. The read itself is
 done by the CD thread, a little on each turn, so the game keeps running while
 a file loads.
@@ -592,17 +591,16 @@ flowchart TD
 ```
 
 The table is copied to the first 64-byte-aligned address after `WorkEnd`
-before decoding starts. Expanding in place has one danger: the output can
-catch up with the input. When the output cursor reaches the read position,
+before decoding starts. When a file is expanded in place, the output can catch
+up with the input. When the output cursor reaches the read position,
 `xglArxExtract` copies the unread rest of the stream into the free space just
 after the table and continues reading from there.
 
 ### Read errors
 
-The module never gives up on a disc read. When `sceCdGetError` reports an
-error of level 2 or more, the callback receives `CD_EVENT_READ_ERROR` and the
-read is started again, forever. A dirty or scratched disc therefore makes the
-game wait, not crash.
+When `sceCdGetError` reports an error of level 2 or more on a disc read, the
+callback receives `CD_EVENT_READ_ERROR` and the read is started again, forever.
+A dirty or scratched disc therefore makes the game wait rather than crash.
 
 A host or HDD read that fails calls `hdd_error`. It closes the file and
 calls `xglHddErrorScreen` (see [The HDD error screen](#the-hdd-error-screen)),
@@ -631,7 +629,7 @@ following:
 6. Call `xglSleep()`.
 
 The power-off handler `xglCdPowerOffCB` only sets `power_off_pending`. The
-real work is done on the CD thread, where it cannot interrupt a file
+power-down itself is done on the CD thread, where it cannot interrupt a file
 operation half-way.
 
 ### Streaming
@@ -658,8 +656,8 @@ allocates IOP memory (`sceSifAllocIopHeap`, `sectors * 2048 + 128` bytes) and
 starts the drive's streaming mode with `sceCdStInit` and `sceCdStStart`. If
 the stream has a ring buffer, it is registered in `StrList` so the CD thread
 refills it. While a stream is open, `dispatch_state` is `STREAM` and ordinary
-reads return -3. Only one stream can be open at a time, which is why the
-sound and movie code never stream at the same moment.
+reads return -3. Only one stream can be open at a time, so the sound and movie
+code never stream at the same moment.
 
 The ring is filled by `StreamReadRingCoreNormal`. Each turn it computes the
 free space between the write and read positions and fills as many sectors as
@@ -1181,9 +1179,9 @@ syncs in `VSyncCount`. At the second sync it also checks whether the GIF or
 VIF1 DMA channel is still busy, and sets `sRender.frame_status` to 1 if the
 GPU has not finished the previous frame in time.
 
-`xglRenderSyncMove` waits as follows. It first waits for a sync of the even
-field (`sceGsSyncV` returns 0), probably so frames always start on the same
-interlace field. Then it waits until `VSyncCount` is at least 2. If the count
+`xglRenderSyncMove` first waits for a sync of the even field (`sceGsSyncV`
+returns 0), probably so frames always start on the same interlace field. Then
+it waits until `VSyncCount` is at least 2. If the count
 has reached 3 or more, the frame was late, and `frame_delta` is set to 1.
 `xglRenderSwapBase` adds `frame_delta` to `frame_count` and resets the
 per-frame values, so `frame_count` is the number of late frames since start.
@@ -1235,7 +1233,7 @@ while the 3D scene must not be drawn. The main menu's
 
 ### DMA
 
-`xgl_dma` wraps the DMA controller. It knows the ten channels of the EE, but
+`xgl_dma` wraps the DMA controller. It covers the ten channels of the EE, but
 its direct transfer functions only accept channels 0 to 2 (VIF0, VIF1 and
 GIF):
 
@@ -1482,11 +1480,12 @@ The queue is the buffer `fontPrintQueueBuffer` (`0x2860` bytes). It is divided
 into 16 **buckets** (`FontQueueSlot`), and each bucket is a chain of print
 records linked by 16-bit offsets. The buckets decide the drawing order.
 
-The third argument of `xglFontPrint` is not a color. Its bits 24 to 27 select
-the bucket, and its low 24 bits become the Z depth of the glyphs. With the
-depth test of the renderer (larger Z in front), a larger value draws on top.
-The HDD error screen, for example, prints with `0xFFFFFF`: bucket 0, front-most
-depth. The text color is set with a control code inside the string.
+The third argument of `xglFontPrint` gives the drawing order. Its bits 24 to 27
+select the bucket, and its low 24 bits become the Z depth of the glyphs. With
+the depth test of the renderer (larger Z in front), a larger value draws on
+top. The HDD error screen, for example, prints with `0xFFFFFF`: bucket 0,
+front-most depth. This argument is not a color. The text color is set with a
+control code inside the string.
 
 ```c
 xglFontPrint(48, 64, 0xFFFFFF, hddLoadErrorText);       /* bucket 0, in front */
@@ -1697,13 +1696,13 @@ and stop functions do nothing when the channel has no sequence loaded.
 ### Sound effects and the command queue
 
 Starting a sound effect is a message to the IOP. Sending one message per
-effect would cost a SIF call each time, so `xgl_sound` collects them. The
-queued functions do not talk to the driver. They call `xglMakeSePacket`, which
+effect would cost a SIF call each time, so `xgl_sound` collects them. Instead
+of talking to the driver, the queued functions call `xglMakeSePacket`, which
 appends a 32-byte `SePacket` (a command and four arguments) to
 `SoundWork.packets`. Once per frame, right after `xglRenderMove`, the render
-thread calls `xglSendSePacket()`, which sends the whole queue in one call
-(`SsdSendFuncPacket`) and empties it. All the sound effects of a frame
-therefore cost a single EE-to-IOP call.
+thread calls `xglSendSePacket()`, which sends the whole queue, with all the
+sound effects of the frame, in a single EE-to-IOP call (`SsdSendFuncPacket`)
+and empties it.
 
 | Function | Queued | Use |
 | --- | --- | --- |
@@ -1869,7 +1868,7 @@ stateDiagram-v2
 Once a port is ready, each frame `xglPadRead`:
 
 1. Reads the raw packet and decodes it according to the controller type. The
-   code knows the mouse, the NeGcon, a light-gun-like type (`0x60`), type
+   code handles the mouse, the NeGcon, a light-gun-like type (`0x60`), type
    `0xE0`, digital pads and analog pads.
 2. Applies `button_map` to the low 8 buttons.
 3. Turns a left stick pushed past the dead zone into direction bits, so menus
@@ -1897,7 +1896,7 @@ File: `src/main/xgl_flags.c`
 The story and event state is one large packed bit array of 64 KiB inside the
 save data, starting at `SaveData + 0x74`. A flag is addressed by its **bit
 offset** and its width in bits, so one byte can hold several small flags and
-a counter can span several bytes. Because the flags live in the save data,
+a counter can span several bytes. Because the flags are part of the save data,
 saving the game saves them too.
 
 ```c
@@ -2082,8 +2081,8 @@ decides when a movie plays is described in
 
 File: `src/main/xgl_jpeg.c`
 
-A software baseline JPEG encoder and decoder. The encoder makes the
-snapshots and the small pictures stored in save files. The decoder shows
+The file holds a software baseline JPEG encoder and decoder. The encoder makes
+the snapshots and the small pictures stored in save files. The decoder shows
 those pictures again, and also decodes title and ending images stored as
 JPEG. The pictures on the disc, and the limits of the decoder that they
 respect, are described in

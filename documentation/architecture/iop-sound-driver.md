@@ -44,9 +44,9 @@ SSD is a self-contained sound engine with a C interface: `SsdInit`,
 `SsdAddWaveData`, `SsdAddSequenceData`, `SsdStartSequence`,
 `SsdPlayEffectNormal`, `SsdInitVagStreamStereo` and many more. Its entry point
 `SsdStart` prints the version and registers these functions as an IOP library
-(`ssd_entry`, `RegisterLibraryEntries`). SSD has no thread of its own and knows
-nothing about the EE. It runs from a hardware timer and from interrupts, and
-it reports events through callbacks.
+(`ssd_entry`, `RegisterLibraryEntries`). SSD has no thread of its own and has
+no code that communicates with the EE. It runs from a hardware timer and from
+interrupts, and it reports events through callbacks.
 
 RSSD is the bridge to the EE. It owns the SIF RPC server that receives the
 EE's command packets, calls the SSD functions through the library imports,
@@ -423,14 +423,13 @@ loads later.
 0x200000 +------------------------------+
 ```
 
-The wave bank area is not filled at random. Each SWD header names a preferred
-address, and the game's banks use a few fixed ones: `0x8000` for the system
-sounds `REGIST`, `0x20000` for the common field and minigame banks, `0x60000`
-for the footsteps, `0x70000` for the enemy and NPC banks, `0xB0000` for the
-map environment, `0xD8000` for the battle music and `0x1E0000` for the
-resident `REGIST2`. The battle containers use `0x20000`, `0x48000`, `0x98000`
-and `0xA8000`. The full list per bank group is in
-[Sound files](../formats/sound.md#swd-wave-banks).
+Each SWD header names a preferred address for its wave bank, and the game's
+banks use a few fixed ones: `0x8000` for the system sounds `REGIST`, `0x20000`
+for the common field and minigame banks, `0x60000` for the footsteps,
+`0x70000` for the enemy and NPC banks, `0xB0000` for the map environment,
+`0xD8000` for the battle music and `0x1E0000` for the resident `REGIST2`. The
+battle containers use `0x20000`, `0x48000`, `0x98000` and `0xA8000`. The full
+list per bank group is in [Sound files](../formats/sound.md#swd-wave-banks).
 
 The allocators differ in where they place a block:
 
@@ -518,8 +517,8 @@ its tables in the SSD heap. The file layout is in
 1. Check the signature `swdm`. A wrong one is an error. Unlike the music and
    effect loaders, this function does not verify the checksum word of the
    file.
-2. If a bank with the same `bank_id` is already loaded, warn and return that id.
-   Nothing is loaded twice.
+2. If a bank with the same `bank_id` is already loaded, warn and return that id
+   without loading the bank again.
 3. Walk the chunk list and note the sample table (type 3) and the program
    table (type 4). The END chunk (type 0) marks the start of the body.
 4. Reserve sound RAM with `SsdSpuWaveMalloc`.
@@ -556,7 +555,7 @@ the bank is loaded.
 
 ## 8. Driver objects
 
-All driver state hangs off one global, `SsdWork` (`SsdGlobalWork` in
+All driver state is reached from one global, `SsdWork` (`SsdGlobalWork` in
 `include/ssd/ssd_init.h`). Its most important fields are:
 
 | Field | Meaning |
@@ -670,7 +669,7 @@ whose layout is in [Sound files](../formats/sound.md#smd-music-files):
    track's event stream, its MIDI channel and attributes. The patch chunk and
    the metadata chunk are remembered.
 8. `SsdInitSequence` applies the defaults and the header values, then
-   `SsdSetSeqReverb` programs the reverb cores the header's options select.
+   `SsdSetSeqReverb` programs the reverb cores that the header's options select.
 9. The output volume is set from `SsdWork.sequence_volume` and the sequence is
    linked at the front of `SsdWork.sequences`. The `file_id` is returned as the
    sequence id.
@@ -739,19 +738,19 @@ command event (first byte >= 0x80)
   returns the new stream position
 ```
 
-The two note formats behave differently. A music note carries its own
-velocity and does not set the wait. The wait comes from the delta commands
-`0x80` to `0x86` that follow it, so several notes can start together before
-one delta. An effect note has no velocity byte, always carries a 16-bit
-duration, and that duration is also the track's new wait. Before it keys on an
-effect note, `SsdEffectTrackSequence` looks ahead over the following commands
-with the length table `SsdSeqFuncLength` (`src/audio/ssd/ssd_data.c`), so that
-a following tie or slur can join the next note to this one.
+A music note carries its own velocity and does not set the wait. The wait
+comes from the delta commands `0x80` to `0x86` that follow it, so several
+notes can start together before one delta. An effect note has no velocity
+byte, always carries a 16-bit duration, and that duration is also the track's
+new wait. Before it keys on an effect note, `SsdEffectTrackSequence` looks
+ahead over the following commands with the length table `SsdSeqFuncLength`
+(`src/audio/ssd/ssd_data.c`), so that a following tie or slur can join the
+next note to this one.
 
-The byte order is mixed. The duration bytes of a music note are big-endian,
-but the 16-bit and 24-bit operands of the commands (Delta2, Delta3, Rest, Tie,
-Jump, If and the others) are little-endian. The bank id of WaveBankType
-(`0xAB`) is again stored high byte first.
+The duration bytes of a music note are big-endian, but the 16-bit and 24-bit
+operands of the commands (Delta2, Delta3, Rest, Tie, Jump, If and the others)
+are little-endian. The bank id of WaveBankType (`0xAB`) is again stored high
+byte first.
 
 A note event keys on the track's channel unless the track is muted. Commands
 set the delta time until the next event, change the octave, control flow,
@@ -795,7 +794,7 @@ reader of the files needs, is listed in
 | `0xF8` to `0xFE` | `SsdSeqAllReset`, `SsdSeqLabel`, `SsdSeqSMPTETime`, `...Frame`, `...Offset`, `SsdSeqSkip` | Reset, labels, SMPTE time, skip |
 
 Three commands read their operands in a way that is easy to get wrong, and
-the files on the disc show which reading is the real one:
+the files on the disc show which reading is correct:
 
 - `SsdSeqBankMSB` (`0xA8`) sets the low byte of the bank id and
   `SsdSeqBankLSB` (`0xA9`) the high byte. `BATTLE2.SMD` uses `a8 01 a9 02` to
@@ -858,8 +857,8 @@ faders (`0x48` to `0x4A`) and patch sets from the SMD's patch chunk (`0x50`,
 
 ## 10. MIDI devices, channels and voices
 
-The sequencer does not touch voices directly. Tracks send note events to
-channels, channels pick voices, and the voice manager writes the SPU2
+The sequencer works on voices only through channels: tracks send note events
+to channels, channels pick voices, and the voice manager writes the SPU2
 registers. This follows the MIDI model: a device is like a MIDI instrument,
 and each track drives one of its channels.
 
@@ -902,16 +901,16 @@ releases the channel's previous note. Then:
   the key, so a program can layer several samples. A channel with the
   random-key flag first replaces the key by a random one from its range. Each
   voice is searched in the overlap of the program's and the channel's voice
-  ranges. It takes the split's ADSR words, the channel's effects masked by
-  the split's, a volume of `sample volume × split volume / 127` and the
-  split's pan. The note is transposed by `60 - root_key`, so the root key
-  plays the sample at its base pitch. With the fixed-pitch flag every key
-  plays at that root pitch. In slur mode a program channel starts nothing.
-  The split's sample index is not checked against the bank's sample count.
-  On the disc, 141 splits in 26 loose banks and 554 splits in the battle
-  containers name a sample the bank does not have, probably leftovers of the
-  larger banks these were cut from. A note in such a range would read a record
-  behind the sample table.
+  ranges. It takes the split's ADSR words, the channel's effects masked by the
+  split's, a volume of `sample volume × split volume / 127` and the split's
+  pan. The note is transposed by `60 - root_key`, so the root key plays the
+  sample at its base pitch. With the fixed-pitch flag every key plays at that
+  root pitch. In slur mode a program channel starts nothing. The split's
+  sample index is not checked against the bank's sample count. On the disc,
+  141 splits in 26 loose banks and 554 splits in the battle containers name a
+  sample that the bank does not have, probably leftovers of the larger banks
+  that these were cut from. A note in such a range would read a record behind
+  the sample table.
 
 Both paths copy the channel's LFO set into the voice and link the voice into
 the channel's voice list.

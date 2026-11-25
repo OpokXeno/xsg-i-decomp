@@ -89,9 +89,9 @@ magic word marks the pack as relocated. Each entry is one motion, a curve set
 in FCV2 format. A file whose magic is "FCV" (`0x564346`) instead of "FPK" is
 treated as a pack with a single entry.
 
-The code knows two pack formats, chosen by the header's `format` word. Every
-pack on the disc uses format 3, except four small packs inside the script
-resource volumes.
+The code supports two pack formats, chosen by the header's `format` word.
+Every pack on the disc uses format 3, except four small packs inside the
+script resource volumes.
 
 - In **format 3** the entry offsets count from the start of the pack. A
   second table follows the entry table, one 32-bit **attribute slot** per
@@ -590,9 +590,9 @@ actor evaluation.
 
 ### The joint producer and its consumers
 
-The skeleton code does not hard-wire what happens to each joint. Each actor
-has a `JntProducer` (`Actor.jointProducer`) with up to eight consumers, set up
-by `ACT_initMotion`. A consumer is a function with an id and an argument:
+What happens to each joint is chosen per actor. Each actor has a `JntProducer`
+(`Actor.jointProducer`) with up to eight consumers, set up by
+`ACT_initMotion`. A consumer is a function with an id and an argument:
 
 - Id 0 is the main consumer. It evaluates the whole skeleton. For a normal
   actor it is `JNT_computeMatrix`. For a child attached to a parent it is one
@@ -764,8 +764,8 @@ and the model side is in
 
 `ACT_updateMotion(actor)` calls `ACT_updateMotionSub` for a root actor and then
 for each of its children (see [actors](actors.md#animating-parents-and-children)).
-`ACT_updateMotionSub(actor, pause)` is the place where the clock, the curves
-and the skeleton meet. It runs these steps:
+`ACT_updateMotionSub(actor, pause)` runs the clock, the curves and the
+skeleton in these steps:
 
 1. Count down `pauseCounter`, unless this is a paused update.
 2. Return if the actor has both flags `0x400` (no motion update) and `0x8`
@@ -865,7 +865,7 @@ Characters turn their upper body, head and eyes toward a point of interest:
 the camera, another character, a fixed point, or a target chosen by the field
 code. This is done by consumers that run as joint interrupts, so they add a
 rotation to the spine, head or eye joint right before its matrix is built.
-The motion keeps playing underneath, and the look-at only adds to it.
+The motion keeps playing underneath.
 
 ### Look modes
 
@@ -994,9 +994,9 @@ into sections. A special flag widens Jr.'s coat (`AdjustJrCoatWidth`).
 
 ### The chain solver
 
-`EXM_CalcExMotion(work, channel)` reads the extra joints as a little program
-of channel types. Type 3 (`EX_CHANNEL_CHAIN_BEGIN`) sets the chain's base
-matrix. Type 2 (`EX_CHANNEL_CHAIN_JOINT`) queues one joint. Type 4
+`EXM_CalcExMotion(work, channel)` reads the channel types of the extra joints
+as a sequence of commands. Type 3 (`EX_CHANNEL_CHAIN_BEGIN`) sets the chain's
+base matrix. Type 2 (`EX_CHANNEL_CHAIN_JOINT`) queues one joint. Type 4
 (`EX_CHANNEL_CHAIN_SOLVE`) simulates the queued chain. For each joint after
 the first, the solver:
 
@@ -1110,9 +1110,9 @@ How nml draws the parts is explained on the [nml page](nml.md).
 
 ## Undulate: ground height and walls
 
-"Undulation" is the uneven ground of a map. `src/main/Undulate.c` answers two
-questions for moving characters: how high is the ground under this point, and
-does this move cross a wall? It works on the collision mesh of the current
+"Undulation" is the uneven ground of a map. For moving characters,
+`src/main/Undulate.c` finds the height of the ground under a point and tests
+whether a move crosses a wall. It works on the collision mesh of the current
 map, a blob of triangles with attributes that `UnduInit(blob)` relocates and
 keeps in `CurrentColiHead`. `map_1.c` calls it when a map is loaded. The blob
 is the map's `.id` file, described in
@@ -1158,7 +1158,7 @@ along its own local axes. `GetMdlFileName`, `MotInit`, `MotCalc` and
 
 ## Test programs
 
-Two debug programs left in the game show the animation system in its
+Two debug programs left in the game use the animation system in its
 simplest form. Both build one actor by hand with `ACT_init`, `ACT_create`,
 `ACT_initMotion`, `ACT_loadMotion`, `ACT_loadResource`, `ACT_allocMatrix` and
 `ACT_setModelWrapper`, then loop on `ACT_setMotion`, `ACT_updateMotion` and
@@ -1169,9 +1169,8 @@ simplest form. Both build one actor by hand with `ACT_init`, `ACT_create`,
 motions. Up and down pick the character, which is reloaded unless SQUARE is
 held. Left and right change the motion, and START pauses. The pad moves the
 camera. It replaces consumer 0 with its own copy of the skeleton evaluator,
-`__JNT_computeMatrix`, through `JNT_addConsumer`, which shows how the
-consumer design lets a program change the evaluation without touching the
-actor code.
+`__JNT_computeMatrix`, through `JNT_addConsumer`, and so changes the
+evaluation without any change to the actor code.
 
 `WindTest` (`src/main/wind_test.c`) loads character id 2 (probably KOS-MOS)
 and lets the tester move a point wind or a directional wind with the pad.

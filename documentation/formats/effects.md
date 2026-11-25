@@ -164,8 +164,8 @@ are shown below.
 
 ## The name table (seffect.esp)
 
-`seffect.esp` is not a chunk file. It is a flat array of 3072 entries of 16
-bytes, one for each effect number from 0 to 0xBFF. Each entry is a
+`seffect.esp` is a flat array rather than a chunk file. It has 3072 entries of
+16 bytes, one for each effect number from 0 to 0xBFF. Each entry is a
 NUL-padded name without extension. 1631 entries are named and the others are
 all zero. `sresLoadCommonMemory` loads it once into `_loadEsdData` together
 with `esp/default.esp`. The buffer is 0xC800 bytes, but the file is only 0xC000
@@ -483,8 +483,8 @@ flowchart LR
 
 ### Image references
 
-Effect data never names an image. It stores a 16-bit reference whose low byte
-is the chunk id and whose high bits pick the type list.
+Effect data stores a 16-bit reference to an image and never its name. The low
+byte of the reference is the chunk id, and its high bits pick the type list.
 `svGetImageListItem(type, flags)` checks the bits in this order and returns the
 first used entry of that list whose id equals the low byte. The counts are the
 references in image animation records, and the number in brackets is how many
@@ -529,8 +529,8 @@ The data of a script chunk is one table of 16-bit little-endian words. Every
 reference inside it is a word index from the start of the table, not a byte
 offset and not a pointer. The value 0xFFFF, and in most places 0, means "none".
 `scGetImmAdrImmIdx2(base, table, i)` turns entry `i` of a table into an
-address: `base + 2 × table[i]`, or 0 for a null entry. Nothing is fixed up at
-load time, every lookup does this conversion.
+address: `base + 2 × table[i]`, or 0 for a null entry. Every lookup does this
+conversion, and nothing is fixed up at load time.
 
 The first eight words are the same in all 1403 tables (1051 `.esd` files and
 352 embedded copies).
@@ -547,8 +547,8 @@ The first eight words are the same in all 1403 tables (1051 `.esd` files and
 | 7 | 0 | Unknown, constant |
 
 `scCreateScript` starts the first task at `table[table[0]]`, which is always
-word 8. The program there is tiny. It starts schedulers, waits for them and
-ends. The schedulers point to the rest of the data.
+word 8. The short program there starts schedulers, waits for them and ends.
+The schedulers point to the rest of the data.
 
 The diagram below shows how the structures of a table point to each other.
 
@@ -748,8 +748,8 @@ up. The code 4096 (0x1000, in 90 tracks) leaves the offset unanchored, but
 `sefGetParentMatrix`, but none occurs in G0. When the G0 key list holds one
 constant key, `sefInitLineData` converts it once and scales it by
 `globalPositionScale` (0.1). Each random word `r` adds `random % r - r / 2` to
-that axis of the origin. G6 is null in 11 540 of the 11 915 global tables, the
-other nine entries are always present.
+that axis of the origin. G6 is null in 11 540 of the 11 915 global tables, and
+the other nine entries are always present.
 
 ### Image animation records
 
@@ -810,9 +810,9 @@ frame and every row after it never fire. The stride comes from
 | Special | 2 | frame, special table | 282 |
 | Alter | 18 | see [alter events](#alter-events) | 221 |
 
-The sound rows are rare. Only `ef10101`, `ef10104b`, `ef10105b` and `eve017`
-(and their copies in `cf_def.esp`) play a sound from data. The latch is -1 in
-all of them, and the ids are 28, 0x10008, 0x10009 and 0x3008A. `sdvPlaySound`
+Only `ef10101`, `ef10104b`, `ef10105b` and `eve017` (and their copies in
+`cf_def.esp`) play a sound from data. The latch is -1 in all of their sound
+rows, and the ids are 28, 0x10008, 0x10009 and 0x3008A. `sdvPlaySound`
 passes the id to `xglSoundEffectNormalID`, which takes the high 16 bits as the
 slot of a loaded effect bank and the low 16 bits as the sound in that bank. So
 0x3008A is sound 0x8A of bank slot 3, and 28 is sound 28 of bank slot 0.
@@ -969,7 +969,7 @@ Following every reference from word 8 reaches 84.7 % of all words of the 1051
 
 So the conversion tool wrote every track and candidate it had, and then left
 the defaults and the disabled parts out of the tables. A few tables also hold
-real errors. The game reads them as they are.
+errors, which the game reads as they are.
 
 - In 10 tracks of 7 files (`c_so03`, `c_ko07`, `shb00`, `ecm02`, `boss0143`,
   `item08`, `item09`) the 0x400 end of a key list is missing. The list runs

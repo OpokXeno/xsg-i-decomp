@@ -15,8 +15,7 @@ ARX-packed. How the engine uses them at run time (the print queue, the text
 windows, the U.M.N. screens) is described in [xgl.md](../libraries/xgl.md#text),
 [ui-windows.md](../libraries/ui-windows.md#text-fonts-and-encoding),
 [events.md](../scripting/events.md#message-text-and-the-mif2-interface) and
-[umn.md](../game/umn.md). This page explains what is in the files and how each
-byte is laid out.
+[umn.md](../game/umn.md).
 
 [← Back to the overview](../README.md) · [Files and resources](../architecture/files-and-resources.md)
 
@@ -290,13 +289,13 @@ copied into the output as plain text.
 | `gaiji(n)` | `AD` and `160 + n` | 0 |
 | `signal()`, `tips()` | nothing | 0 |
 
-`font` does not take a number. It wraps its text argument in style 1 and
-style 0, so the text in between is drawn with the proportional flag set and
-the wide ASCII flag cleared. The four uses are `/[font(A.G.W.S.)]` (three
-times in `ST0621`) and `/[font(KOS-MOS)]` (`ST1210`). In the English text the
-argument is plain ASCII, which the message queue already converts to EUC and
-measures as proportional, so the tag probably changes nothing visible there.
-It is probably a leftover of the Japanese script, where these names would be
+`font` takes text, not a number, and wraps it in style 1 and style 0, so the
+text in between is drawn with the proportional flag set and the wide ASCII
+flag cleared. The four uses are `/[font(A.G.W.S.)]` (three times in `ST0621`)
+and `/[font(KOS-MOS)]` (`ST1210`). In the English text the argument is plain
+ASCII, which the message queue already converts to EUC and measures as
+proportional, so the tag probably changes nothing visible there. It is
+probably a leftover of the Japanese script, where these names would be
 written in full-width characters.
 
 `code(n)` writes raw control bytes. Its six uses form two scaling commands in
@@ -314,8 +313,8 @@ while the queue's control flag is set, which happens after `19` with a
 non-zero operand.
 
 `MSG_convert` copies raw control bytes found in script text with its own
-operand table (`_copyCTRLCode`). That table knows codes 1 to 6, 8, 12 to 15,
-18 and 23 to 25 only, and for code 8 it reads the flag byte without copying it
+operand table (`_copyCTRLCode`). That table has only codes 1 to 6, 8, 12 to
+15, 18 and 23 to 25, and for code 8 it reads the flag byte without copying it
 and honours only flags 1, 2 and 4. The scene scripts contain no raw control
 byte other than newline and TAB, so these gaps have no effect on the shipped
 text.
@@ -577,13 +576,13 @@ The metrics were checked against the pixels of both fonts: for every slot with
 metrics (229 in font 0, 230 in font 1) the two bytes equal the first and last
 inked column of the cell. Three inked glyphs have the entry `00 13` in both
 fonts: slot 102 (`#86`, the em dash `D1E9`), slot 143 (`#6F`, `D1D2`, a long
-bar) and slot 144 (`#70`, `D1D3`, the underscore). Their ink really spans
-columns 0 to 19, so the stored values are their true edges, but a left edge
-of 0 is the engine's mark for a missing entry. Drawn proportionally they get
-the 5-pixel default box, so only the left 5 pixels of the 20-pixel bar are
-drawn. The em dash appears 12 times in the scene scripts as `#86#86#86` and
-the underscore is the target of ASCII `_`, so these characters probably show
-short on screen whenever the proportional style is on.
+bar) and slot 144 (`#70`, `D1D3`, the underscore). Their ink spans columns 0
+to 19, so the stored values are their true edges, but a left edge of 0 is the
+engine's mark for a missing entry. Drawn proportionally they get the 5-pixel
+default box, so only the left 5 pixels of the 20-pixel bar are drawn. The
+em dash appears 12 times in the scene scripts as `#86#86#86` and the
+underscore is the target of ASCII `_`, so these characters probably show short
+on screen whenever the proportional style is on.
 
 ```
 font0.tex at 0x78040
@@ -678,8 +677,8 @@ filled.
 
 ### Purpose and location
 
-The battle screen does not draw unit names with the kanji fonts. It has its
-own small bitmap font of 10 by 18 pixel cells, stored inside the battle
+The battle screen draws unit names with its own small bitmap font of 10 by 18
+pixel cells instead of the kanji fonts. The font is stored inside the battle
 status sheet `data\yamamoto\stat\stat.xtx` (237,696 bytes, unpacked). OV01
 loads the sheet with `dataXtxLoad` (`src/ov01/data_unit_org_get.c`) together
 with `manu.xtx` and `cur.xtx`. The table `xtxFile` sends it to
@@ -912,8 +911,8 @@ Database pages have zero replies, attachment, discount and cost.
 | `0x4` | 2 | u16 | `originX` | x of the picture in the page, in pixels |
 | `0x6` | 2 | u16 | `originY` | y of the picture in the page, in pixels |
 
-Slot 0 is special. Its picture is tiled across the whole render rectangle as
-the page background (`tyaUmlDispType3Sub0`), and slots 1 to 7 are drawn once
+The picture of slot 0 is tiled across the whole render rectangle as the page
+background (`tyaUmlDispType3Sub0`), and slots 1 to 7 are drawn once
 at their position when they overlap the visible part. In every page that has
 pictures, slot 0 is a 48 by 48 tile at (0, 0): all 245 database pages and 79
 of the 81 mails. Only 11 mails carry real pictures in slots 1 to 7:
@@ -1117,7 +1116,7 @@ line `//`, a TAB and the group letter, then one `NNNN.uml,` line per entry,
 then `-1,` (once `-1` without the comma). The groups are A to Z without Q
 and X, then `#` for titles that do not start with a letter. The last group
 has no separator. The 245 entries are the ids 9000 to 9244, each once, in
-ascending order, so the alphabetical order lives in the numbering of the
+ascending order, so the alphabetical order comes from the numbering of the
 database pages.
 
 ```

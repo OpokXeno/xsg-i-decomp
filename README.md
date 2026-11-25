@@ -43,23 +43,24 @@ game, the original toolchain, and a Python environment for the disassembler.
 Extract `SLUS_204.69`, `OV01.OVL`, `OV02.OVL`, `OV10.OVL`, `OV11.OVL`,
 `OV12.OVL` and the `IOP/` directory from your own disc image and put them in one
 folder. `config/originals.json` names the six files with their sizes and
-SHA-256; the build refuses anything else, so it tells you immediately if you
-have a different release. This project reproduces the NTSC-U release.
+SHA-256. The build stops with an error on any other file, so you find out
+immediately if you have a different release. This project reproduces the NTSC-U release.
 
 ### 2. The toolchain
 
-`config/toolchain-identity.json`: for every compiler and
-assembler it gives the version, the SHA-256 of each payload, and the provenance
-needed to obtain or rebuild it. Two of the tools are patched, and both patches
+For every compiler and assembler, `config/toolchain-identity.json` gives the
+version, the SHA-256 of each payload, and the provenance needed to obtain or
+rebuild it. Two of the tools are patched, and both patches
 are recorded there in full:
 
 | Tool | What the build uses it for                                                                                | Where it comes from |
 | --- |-----------------------------------------------------------------------------------------------------------| --- |
-| `ee-gcc2.96-realconv-lp7` | `cc1` for the game code (Monolith) and the C runtime (newlib/libgcc)                                      | the published `ee-gcc2.96` archive, with twenty-nine documented patches to `cc1` (six single bytes that restore the original decimal-literal rounding, two that restore the R5900 short-loop padding, five multi-byte alias-analysis patches, fsv1, fsv3 and fsv4 (`%lo`-addressed global scalars and struct-field accesses may be reordered in either direction, a non-small-data global's memory reference gets its type's alias set, and gcse load-PRE keeps a fixed scalar load across an in-struct store through a varying pointer), the two fsv5 (qisi) patches (a `char` sign-extended to 64 bits is `lb` plus a separate in-place `extendsidi2`, never one `extendqidi2_insn`), the three fsv6 patches (symbolic `sym(reg)` addresses are always legitimate and an address-taken variable gets alias set 0, instead of depending on host heap garbage), the four fsv7 patches (gcse load-PRE: a struct store through a pointer loaded from global `S` kills a later load of `S`), the two fsv8 patches (a small-data global with a non-zero initializer gets its type's alias set, as a non-small-data global does), the fsv9 patch (gcse load-PRE: a struct store through a pointer loaded from any global kills a later load of a global), the two fsv10 patches (gcse: a 32-bit union member store through a struct pointer is tested with `rtx_varies_p`), and the two fsv12 patches (after reload, an address load into a callee-saved register that follows a call in its block is split into `lui`/`addiu`)) |
-| `ee-gcc2.9-991111` | `cc1` for the SCE SDK scaffold objects only (out of recovery scope, INCLUDE_ASM of the original assembly. | the published `ee-gcc2.9-991111` archive, unmodified |
+| `ee-gcc2.96-realconv-lp7` | `cc1` for the game code (Monolith) and the C runtime (newlib/libgcc)                                      | the published `ee-gcc2.96` archive, with twenty-nine documented patches to `cc1`, listed below |
+| `ee-gcc2.9-991111` | `cc1` for the SCE SDK scaffold objects only (out of recovery scope, INCLUDE_ASM of the original assembly) | the published `ee-gcc2.9-991111` archive, unmodified |
 | `ee-as-la29-vsqrt` | assembler for every game and runtime object                                                               | GNU as 2.9-ee-991111 built from the pinned `ps2-ee-toolchain` commit with the recorded four-change diff (an overlap-safe `memmove`, the `vsqrt` opcode's bits 21-22, labels left before the hazard nops `append_insn` inserts, and `la` of a base register plus a 16-bit constant as one `addiu`) |
 | `ee-as-2.9-plain` | assembler for the SCE SDK objects                                                                         | the same commit, unpatched |
-| `ps2dev-binutils` | linker and objcopy of every image, and modern GAS for data objects and retail blobs                       | ps2dev binutils 2.45.1, the linker, objcopy and modern GAS |
+| `ps2dev-binutils` | linker and objcopy of every image, and modern GAS for data objects and retail blobs                       | ps2dev binutils 2.45.1 |
+
 
 Lay them out under one directory as `config/toolchain-identity.json`'s
 `tools.<id>.dir` / `.path` say. Then:
@@ -68,8 +69,8 @@ Lay them out under one directory as `config/toolchain-identity.json`'s
 python3 -B tools/tu/toolchain.py --check
 ```
 
-It prints where it looked and what it found, and refuses with the tool's name,
-both hashes and the recipe when something is missing or different.
+It prints where it looked and what it found. When a tool is missing or different,
+it stops with an error that gives the tool's name, both hashes and the recipe.
 
 ### 3. The disassembler
 
@@ -77,7 +78,7 @@ both hashes and the recipe when something is missing or different.
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
-### 4. Tell the build where those three are
+### 4. Paths to the originals, the toolchain and the disassembler
 
 By environment variable:
 

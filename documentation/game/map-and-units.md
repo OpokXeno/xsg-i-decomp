@@ -10,9 +10,8 @@ placed objects "uwamono", Japanese for "things placed on top".
 
 Maps and units are loaded and created by the scene scripts. The scripts run in
 the game's Java virtual machine (see [Java VM](../scripting/java-vm.md)) and
-control units through the `xeno.Unit` class. The engine side, described here,
-loads the data, runs the units every frame, draws them and does the collision
-tests.
+control units through the `xeno.Unit` class. The engine side loads the data,
+runs the units every frame, draws them and does the collision tests.
 
 [← Back to the overview](../README.md)
 
@@ -190,9 +189,10 @@ The event script path is an older scheme. `loadScriptCD` reads
 `<mapname>.arc` beside it, but `data\map\` holds only `.lex`, `.xtx` and `.id`
 files. On the retail disc the read fails, `SCRIPT_exec` finds no class to run,
 resets the field and creates only the player character. The debug map window
-therefore drops the player on the new map with no scene script. Real scene
-scripts live in `data\scene\` and are loaded through the scene resource list
-(see [Scripts and archives](../formats/scripts-and-archives.md#scene-resource-scripts-txt)).
+therefore drops the player on the new map with no scene script. The scripts
+that scenes run are in `data\scene\` and are loaded through the scene
+resource list (see
+[Scripts and archives](../formats/scripts-and-archives.md#scene-resource-scripts-txt)).
 
 The sequence below shows a map change requested by a script with
 `Runtime.setLocation` and a wait.
@@ -317,13 +317,13 @@ height tolerance (`0x10`), at or below the sample (`0x800`), within the
 triangle's vertical extent (`0x400`), or taken from a height table (`0x20`).
 `UnduGet(x, z)` and `UnduGet2` return a plain floor height.
 
-Undulation is listed under [Animation](../libraries/animation.md) in the page
-map, but it is collision code. Its users are the player, enemies, the camera,
-map units and the geometry helpers.
+Undulation is collision code, although its functions are also described under
+[Animation](../libraries/animation.md). Its users are the player, enemies, the
+camera, map units and the geometry helpers.
 
 ### Floor attributes
 
-The floor attribute is how map designers give meaning to the floor. The code
+Map designers give meaning to the floor with the floor attribute. The code
 tests these values and masks:
 
 | Test | Meaning | Used by |
@@ -582,7 +582,7 @@ use when they push into an object. An event door opens when its signal is 1.
 Scripts reach the byte through the argument area, probably with
 `Unit.setArgs`.
 
-The real setup waits one frame. The script needs that frame to write the
+The setup itself waits one frame. The script needs that frame to write the
 object's arguments with `Unit.setArgs` after creating it. On its first update
 `InitUwamono`:
 
@@ -727,8 +727,8 @@ same code with their own parameters (`SetContainerParam`). Ids `0x7000` and
 
 `MAP_updateUnitTrap` waits for the trap's signal byte. A shot writes 1, which
 fires the trap. `SendBrokenSignal` writes 2, which only breaks it. So the
-player sets traps off by shooting them, while an enemy that bumps into one
-merely destroys it.
+player sets traps off by shooting them, while an enemy that bumps into one only
+destroys it.
 
 - Signal 1 fires the trap. It plays the trap's sound, shakes the controller
   strongly (255 down to 32 over 90 frames, or 30 for a breakable), plays the
@@ -872,10 +872,10 @@ stateDiagram-v2
 
 An elevator is a unit that moves part of the map up and down. The script calls
 `Unit.initElevatorFunc()` on the unit. The native installs `tyaElevatorTask` as
-the unit's type update and remembers the address of the Java object's `py`
-field. The elevator's settings live in the unit's argument area, where the
-script writes them: the index of the map part to move, the speed, the current
-height and the target height.
+the unit's type update and stores the address of the Java object's `py` field.
+The script writes the elevator's settings into the unit's argument area: the
+index of the map part to move, the speed, the current height and the target
+height.
 
 `tyaElevatorTask` is a small state machine:
 

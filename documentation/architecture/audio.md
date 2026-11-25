@@ -70,7 +70,7 @@ flowchart TB
 The SPU2 has two cores with 24 voices each, so 48 voices in total, and 2 MB of
 its own sound RAM. A voice plays ADPCM sample data from that RAM. The SPU2
 cannot read EE memory, so every wave must first be copied into sound RAM by
-DMA. That is why loading a sound bank is a two-step job: read the file into EE
+DMA. Loading a sound bank therefore takes two steps: read the file into EE
 memory, then send it to the IOP, which moves the samples into sound RAM.
 
 ## 2. Start-up
@@ -240,9 +240,9 @@ table the xgl layer keeps. It is a 0x8A4-byte global with four parts.
 | `packet_count`, `packets[64]` | 4 + 0x800 bytes | The SE queue: up to 64 queued 32-byte command packets |
 
 A handle is the 16-bit id that the IOP driver returns when data is added.
-`0xFFFF` (`SOUND_HANDLE_NONE`) means the slot is empty. The xgl layer never
-keeps pointers to IOP data. It only remembers these ids and gives them back in
-later commands.
+`0xFFFF` (`SOUND_HANDLE_NONE`) means the slot is empty. The xgl layer keeps
+only these ids, never pointers to IOP data, and gives them back in later
+commands.
 
 The class diagram below shows the parts of `SoundWork` and their fields.
 
@@ -290,8 +290,8 @@ VAG, called "multi" in the code).
 An effect bank is a pair of files with the same name: an SWD file with the wave
 samples and an SED file with the effect programs. Bank `n` is used through
 sound IDs of the form `(n << 16) | index`. A sequence channel is a slot for one
-sequence (SMD) with its own wave bank. Most sequences the field loads are not
-music but map ambience: 103 of the 115 SMD files on the disc are short
+sequence (SMD) with its own wave bank. Most sequences that the field loads are
+map ambience, not music: 103 of the 115 SMD files on the disc are short
 environment sequences that hold one long looped note of the map's
 environment bank (see [section 8](#8-music-sequences)). The table below lists
 how the game assigns the sixteen effect banks.
@@ -314,11 +314,11 @@ channel used by `xglSoundSequenceNormal` and the battle and minigame music.
 `loadsmd` can fill several channels at once, one per name. The U.M.N. uses
 channel 4 for its own music.
 
-A bank goes through a simple life cycle. `xglSoundSendSwd` and
-`xglSoundSendSed` always free the old content first: they stop the effects of
-that bank (`SsdStopEffectFileID`), dispose the old effect data and wave bank,
-and only then add the new data. Sending a null pointer just empties the slot.
-The state diagram below shows the life of one effect bank.
+`xglSoundSendSwd` and `xglSoundSendSed` always free the old content of a bank
+first: they stop the effects of that bank (`SsdStopEffectFileID`), dispose the
+old effect data and wave bank, and only then add the new data. Sending a null
+pointer only empties the slot. The state diagram below shows the life of one
+effect bank.
 
 ```mermaid
 stateDiagram-v2
@@ -660,13 +660,13 @@ field's environment sequences name the bank id of the map's environment bank
 instead, which `loadse` has loaded into effect bank 3, and the battle jingles
 use the bank of the battle music.
 
-Most sequences are therefore not music. 103 of the 115 SMD files on the disc
-are environment sequences of about 200 bytes. They set tempo 180 and then 60
-and hold one long note per track, and the loop inside the sample keeps the
-ambience going. The real pieces of music are the battle music, the jingles,
-the U.M.N. music and a few environment files. Their metadata strings name
-Yasunori Mitsuda as the composer. The list is in
-[Sound files](../formats/sound.md#smd-music-files).
+Most sequences, 103 of the 115 SMD files on the disc, are environment
+sequences of about 200 bytes and therefore not music. They set tempo 180 and
+then 60 and hold one long note per track, and the loop inside the sample keeps
+the ambience going. The real pieces of music are the battle music, the
+jingles, the U.M.N. music and a few environment files. Their metadata strings
+name Yasunori Mitsuda as the composer. The list is in [Sound
+files](../formats/sound.md#smd-music-files).
 
 The functions are:
 
@@ -906,9 +906,9 @@ packet, which take 44 bytes with the sub-stream tag. `xglMpeg2Play` starts the
 stream after the first video frame with pitch `(rate << 12) / 48000`, and each
 frame sends a 4 KiB chunk whenever the ring holds more than 4 KiB and the
 driver has a free block. `xglMpeg2Close` stops and disposes the stream. The
-audio is fed to the VAG stream unchanged. It is SPU2 ADPCM at 48 kHz in two
-channels interleaved in 1 KiB blocks, the same layout as a `.vds` file, in
-all 108 movies on the disc. The player never reads the channel count or the
+audio is fed to the VAG stream unchanged. In all 108 movies on the disc it is
+SPU2 ADPCM at 48 kHz in two channels interleaved in 1 KiB blocks, the same
+layout as a `.vds` file. The player never reads the channel count or the
 interleave and relies on this layout (see
 [Movies, images and icons](../formats/movies-images-and-icons.md#25-the-audio-stream)).
 Movies are described in [Rendering](rendering.md) and
@@ -1018,9 +1018,8 @@ themselves (see
 
 ## 15. Quirks in the code
 
-The recovered code shows a few mismatches between the EE client and the IOP
-driver. They are harmless in the shipped game but matter when reading the
-source.
+The recovered code has a few mismatches between the EE client and the IOP
+driver. They are harmless in the shipped game.
 
 - `xglMakeSePacket` accepts a packet while `packet_count < 65`. The array has
   64 entries, so a 65th packet in one frame would be written past the end of

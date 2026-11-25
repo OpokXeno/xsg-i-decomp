@@ -82,9 +82,8 @@ made. The update and draw hooks are explained further down.
 ## The actor record
 
 The `Actor` structure is declared in `include/main/act_1.h`. It is large
-because it carries everything an animated object needs, from its Java script
-object to its shadow settings. The record is easier to read as a set of
-blocks.
+because it carries everything that an animated object needs, from its Java
+script object to its shadow settings. Its fields fall into blocks.
 
 The header holds the main `flags` word and the two callbacks. `update` is
 called once per frame by `ACT_update` and moves the actor. `draw` is an
@@ -126,9 +125,9 @@ actor stands on). The query is explained on the
 `light` at `+0x510` is a `StudioLight` (see [xgl](xgl.md)). It is used
 instead of the studio's light when the actor has its own light.
 
-From `+0x600` to `+0x67c` lie the look-at state: `look_point`,
-`look_eye_speed`, `lookState`, `look_eye_angle`, `look_speed`, `look_mode`,
-`look_eye_control` and `look_target`. The look-at system is explained on the
+The look-at state is at `+0x600` to `+0x67c`: `look_point`, `look_eye_speed`,
+`lookState`, `look_eye_angle`, `look_speed`, `look_mode`, `look_eye_control`
+and `look_target`. The look-at system is explained on the
 [animation page](animation.md#look-at-control-look).
 
 The attachment block holds `attachmentCount`, `attachmentIndex`, eight
@@ -365,8 +364,8 @@ tag with `RSRC_inactiveSource`.
 
 ## Creating an actor
 
-Creation happens in layers. A free slot is claimed first, then the kind of
-actor is set up, then the files are loaded and the motion system is prepared.
+A free slot is claimed first, then the kind of actor is set up, then the files
+are loaded and the motion system is prepared.
 
 ### Claiming a slot
 
@@ -491,12 +490,11 @@ sequenceDiagram
 
 ## The life of an actor
 
-An actor goes through a short list of states. The slot is free until
-`ACT_create` claims it. It then has an id but no files. Once its resources and
-matrices are loaded it is animated and drawn every frame. It can be hidden
-(flag `0x8`), which keeps it in the table but stops drawing it. Off-screen
-culling (flag `0x1000`) is decided again every frame. Finally `ACT_dispose`
-or a scene reset frees the slot.
+An actor's slot is free until `ACT_create` claims it. The actor then has an id
+but no files. Once its resources and matrices are loaded it is animated and
+drawn every frame. It can be hidden (flag `0x8`), which keeps it in the table
+but stops drawing it. Off-screen culling (flag `0x1000`) is decided again
+every frame. Finally `ACT_dispose` or a scene reset frees the slot.
 
 `ACT_dispose(self)` calls `ACT_dispose2(self, 0)`. `ACT_dispose2(self, quick)`
 releases the actor's matrix memory with `RSRC_inactiveSource`, detaches it from
@@ -630,11 +628,11 @@ sequenceDiagram
 
 `ACT_updateMotion(actor)` only works on a root actor, one without a parent. It
 advances the root's own motion and then the motion of each child in
-`children[]`. A child's own call to `ACT_updateMotion` returns at once. This
-order matters, because a child (a face, a weapon) reads its parent's joint
-matrices, so the parent must be finished first. When the root was culled this
-frame (flag `0x1000`), its children are not animated and get flag `0x1000`
-too. The per-actor motion step, `ACT_updateMotionSub`, is explained on the
+`children[]`. A child's own call to `ACT_updateMotion` returns at once. A
+child (a face, a weapon) reads its parent's joint matrices, so the parent must
+be finished first. When the root was culled this frame (flag `0x1000`), its
+children are not animated and get flag `0x1000` too. The per-actor motion
+step, `ACT_updateMotionSub`, is explained on the
 [animation page](animation.md#one-motion-step-act_updatemotionsub).
 
 ## Drawing
@@ -823,9 +821,9 @@ A character is built from several models. The body, the face and a held
 weapon are separate files with separate skeletons, so they are separate
 actors. A child actor follows one joint (or a run of joints) of its parent:
 the face follows the head, a weapon follows the hand. The link has two
-halves. The actor records (`parent`, `children[]`) tell the update and draw
-loops to handle the child right after its parent. The attachment entry and a
-joint consumer tell the child's skeleton where to read the parent's matrices.
+halves. The update and draw loops use the actor records (`parent`,
+`children[]`) to handle the child right after its parent. The child's skeleton
+uses the attachment entry and a joint consumer to read the parent's matrices.
 
 ### ACT_setParent and attachments
 
@@ -1015,17 +1013,16 @@ characters placed by events. Player control itself is described in
 
 ## Actors, Chr, Enemy and Unit
 
-These four names are easy to confuse. An Actor is an engine record in the
-`actor[]` table. A Chr is the Java class whose engine peer is an actor, so every
-Chr has an actor, but many actors (faces, weapons, menu models, battle units)
-have no Chr. An Enepc is a Java `Chr` subclass for field enemies. Its peer is
-an actor with the `ACT_updateEnemy` hook, the enemy parameter block at `+0xc0`
-and an `enepc` work entry. A Unit is a map object. Its peer is an entry in
-`MapUnit`, not an actor, and it is updated by `MAP_updateUnit`. Some map units
-are linked to an enemy actor: `MAP_updateUnitEnemy`
-(`src/main/init_uwamono_sys.c`) moves the linked enemy to the unit and hands it
-to `ACT_updateEnemy`. Units are explained in
-[maps and units](../game/map-and-units.md), and enemies in
+An Actor is an engine record in the `actor[]` table. A Chr is the Java class
+whose engine peer is an actor, so every Chr has an actor, but many actors
+(faces, weapons, menu models, battle units) have no Chr. An Enepc is a Java
+`Chr` subclass for field enemies. Its peer is an actor with the
+`ACT_updateEnemy` hook, the enemy parameter block at `+0xc0` and an `enepc`
+work entry. A Unit is a map object. Its peer is an entry in `MapUnit`, not an
+actor, and it is updated by `MAP_updateUnit`. Some map units are linked to an
+enemy actor: `MAP_updateUnitEnemy` (`src/main/init_uwamono_sys.c`) moves the
+linked enemy to the unit and hands it to `ACT_updateEnemy`. Units are
+explained in [maps and units](../game/map-and-units.md), and enemies in
 [field enemies](../game/field-enemies.md).
 
 The diagram below summarizes how these objects relate.
@@ -1070,15 +1067,15 @@ classDiagram
 
 ## Body contact: Check_Actor
 
-`Check_Actor(position, number)` in `src/main/check.c` answers the question
-"would an actor standing here touch another actor?". It returns the first
-actor that is in use, is not a face, is not hidden, has a non-zero
-`body_radius`, is within 1.0 of the position vertically, and whose horizontal
-distance is at most the sum of the two body radii. The actor with slot
-`number` (the one asking) is skipped. Players and enemies are also skipped
-while their `enepc` entry has `state_flags & 1`. Field enemy movement
-(`src/main/enemy_1.c`) and the geometry helpers in `src/main/get.c` use it to
-keep bodies from overlapping.
+`Check_Actor(position, number)` in `src/main/check.c` tests whether an actor
+standing at `position` would touch another actor. It returns the first actor
+that is in use, is not a face, is not hidden, has a non-zero `body_radius`, is
+within 1.0 of the position vertically, and whose horizontal distance is at
+most the sum of the two body radii. The actor with slot `number` (the one
+asking) is skipped. Players and enemies are also skipped while their `enepc`
+entry has `state_flags & 1`. Field enemy movement (`src/main/enemy_1.c`) and
+the geometry helpers in `src/main/get.c` use it to keep bodies from
+overlapping.
 
 ## Debug viewer
 

@@ -8,10 +8,10 @@ viewer, a battle configuration screen and many trace messages. Almost none of
 it can be used in the shipped game. The code is complete and compiled, but
 the entry points are not connected and the debug text is switched off.
 
-The leftovers are still useful. They show how the team tested single systems
-in isolation, which files they loaded from their development PCs, and how the
-work was split between programmers. The overlays and the title screen
-mentioned here are described in [title-and-boot.md](title-and-boot.md).
+The leftovers show how the team tested single systems in isolation, which
+files they loaded from their development PCs, and how the work was split
+between programmers. The overlays and the title screen mentioned here are
+described in [title-and-boot.md](title-and-boot.md).
 
 [← Back to the overview](../README.md)
 
@@ -36,8 +36,8 @@ void xglFontSetFlags(int flags)
 Some callers still ask for it. `src/main/tya.c` calls
 `xglFontSetFlags(xglFontGetFlags() | 3)`, but the mask removes bit 1 again.
 So every `xglFontDebugPrintf` call in the game does nothing. This mask is
-probably the switch the team used to build the release version, because the
-rest of the debug code was left in place.
+probably the switch that the team used to build the release version, because
+the rest of the debug code was left in place.
 
 Other debug output goes to places a player never sees:
 
@@ -633,13 +633,13 @@ probably come from the work on this North American version.
 
 ### Testing in isolation
 
-The launcher table and the test programs show the method. Each programmer had
-a function that started directly from the title screen, set up only the
-systems needed, and tested one feature in a loop: a window, a model, the hard
-disk, a battle, an effect. The battle test bench, the effect viewer and the
-event tools let designers tune data (battles, effects, lights, wind) without
-playing through the story. Two overlays of the launcher (80 and 99) were
-never shipped, so some test code was kept out of the release.
+The launcher table and the test programs show that each programmer had a
+function that started directly from the title screen, set up only the systems
+needed, and tested one feature in a loop: a window, a model, the hard disk, a
+battle, an effect. The battle test bench, the effect viewer and the event
+tools let designers tune data (battles, effects, lights, wind) without playing
+through the story. Two overlays of the launcher (80 and 99) were never
+shipped, so some test code was kept out of the release.
 
 ## Source files
 

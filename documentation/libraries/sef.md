@@ -302,9 +302,10 @@ counters clamp at 0x3FF.
 
 ## Positions and attachment
 
-Effect data does not store world positions. It stores **point codes** that name
-a place on the caster, the target or the weapon. `sefGetPoint` turns a code into
-a position, and `sefGetPosition` reads the code from the effect data first.
+Effect data stores **point codes** instead of world positions. A point code
+names a place on the caster, the target or the weapon. `sefGetPoint` turns a
+code into a position, and `sefGetPosition` reads the code from the effect data
+first.
 
 | Code | Place |
 | --- | --- |
@@ -504,17 +505,16 @@ flowchart LR
 
 ## Effect scripts
 
-Battle effects are not started directly. Each effect number has a small script
-in its data, and `sc_get.c` runs it. The script picks camera shots, waits for
-hits, starts several schedulers in a row, plays movies and fires missiles.
-This is a second script language of the game, much smaller than the Java
-scripts (see [java-vm.md](../scripting/java-vm.md)) and unrelated to them. It
-is a bytecode of 16-bit commands, and it is used mostly by battle effects (see
-[battle-effects.md](../game/battle-effects.md)). The script tables sit in the
-kind-5 chunks of the effect files and are described in
+Battle effects are started by scripts instead of directly. Each effect number
+has a small script in its data, and `sc_get.c` runs it. The script picks camera
+shots, waits for hits, starts several schedulers in a row, plays movies and
+fires missiles. This is a second script language of the game, much smaller than
+the Java scripts (see [java-vm.md](../scripting/java-vm.md)) and unrelated to
+them. It is a bytecode of 16-bit commands, and it is used mostly by battle
+effects (see [battle-effects.md](../game/battle-effects.md)). The script tables
+sit in the kind-5 chunks of the effect files and are described in
 [the effect script table](../formats/effects.md#the-effect-script-table). The
-interpreter is in
-`src/main/sc_get.c` and its wait checks are in
+interpreter is in `src/main/sc_get.c` and its wait checks are in
 `src/main/sc_wait_parse_script.c`.
 
 ### Script records and tasks
@@ -608,7 +608,6 @@ is 0). That folder is not on the disc.
 The shipped scripts use only nine of these commands: `EXIT`, `WAITEFT`,
 `EFFECT`, `EFFECT2`, `EFFECT3`, `FADEON`, `MISSILE`, `MISSILE3` and
 `WAITMISSILE`. No script branches, uses registers, prints or plays a movie.
-The rest of the language is never exercised by the data.
 
 The three effect commands create schedulers:
 
@@ -843,7 +842,7 @@ or the pause flag is active. During a battle, the battle loop `battleProc` in
 2. `sdvExecAlters`, the trail ribbons
 3. clearing of the one-frame signals `_hitFlag`, `_hitSignal` and `_seSignal`
 
-`sefExecScheduler` does the real work:
+`sefExecScheduler` runs these steps:
 
 1. It runs the shared steps first: `sdvExecAmbient` (map dimming),
    `sefInitBattlePrm`, `sdvClearSpecialWork` (screen filter slots) and
@@ -926,8 +925,8 @@ gets a light set copied from `_defLight`, a light direction from the actor
 toward the effect, and the light colour weighted by distance added to its
 ambient term. The actor is marked with `SEF_ACTOR_LIGHT_FLAG` (0x8000).
 `sefSetLightFlag` runs at the end of the frame. It keeps the flag on actors
-that received a light and clears it on the others. This is how a fire spell
-makes the characters near it glow.
+that received a light and clears it on the others. With these lights a fire
+spell makes the characters near it glow.
 
 ## Drawing
 
@@ -1201,8 +1200,7 @@ them. The [battle effects page](../game/battle-effects.md) describes each type.
 ## Modes and scene changes
 
 The effect system has two modes. `_sefBattleMode` is 1 in battle and 0 on the
-field. Both mode functions first free every effect, so no effect survives a
-mode switch.
+field. Both mode functions first free every effect.
 
 | Function | What it does |
 | --- | --- |

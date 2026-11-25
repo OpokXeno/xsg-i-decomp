@@ -7,8 +7,8 @@ computes its own geometry every frame and sends its own GS packets. They are
 small programs, unlike the data-driven effects of the generic effect engine
 sef.
 
-M effects do not run on their own. A sef effect script starts them with its
-"missile" command, they draw inside the sef draw passes, and they report their
+An M effect is always started by a sef effect script, with its "missile"
+command. M effects draw inside the sef draw passes, and they report their
 impact back to sef. The same overlay also contains the other battle visuals:
 the encounter transition, the fades, the 2D packet builder, the movie players
 used by cinematic techniques, and the small object system that drives the HUD
@@ -39,8 +39,8 @@ OV01:
 | Families | `src/ov01/m_ef_create_*.c` | One file per effect family, 14 in total |
 | Math | `src/main/m_math.c` | `MMath*` vectors, matrices, Hermite curves, random numbers |
 
-The pool lives in the main executable, so it exists even when OV01 code is not
-running. The families live in OV01, at the end of its text section
+The pool is in the main executable, so it exists even when OV01 code is not
+running. The families are in OV01, at the end of its text section
 (0x00A33F08 to 0x00A3AAC8). The `MMath*` library is explained in
 [Math](../libraries/math.md).
 
@@ -51,9 +51,9 @@ waits on that block, `scWaitMissileScript` in
 `src/main/sc_wait_parse_script.c` runs once per frame. The block holds a list
 of records, each with a start frame, a position and flags. When the frame
 counter reaches a record's frame, the function builds a `MissileSpawn` request
-and calls `MEfCreate`, which the main executable knows as `func_A33648`. A
-frame value of `MISSILE_END_FRAME` ends the block. The block is a 12-word
-header followed by six-word entries (layout in
+and calls `MEfCreate` (`func_A33648` in the main executable). A frame value of
+`MISSILE_END_FRAME` ends the block. The block is a 12-word header followed by
+six-word entries (layout in
 [missile blocks](../formats/effects.md#missile-blocks)). The shipped effect
 scripts hold 23 such blocks with 4 to 40 entries each.
 
@@ -71,8 +71,8 @@ Building the request takes several steps:
    `sefCaclAllTarget`.
 4. It scales the record position by 0.01 and stores it with w = 1.
 
-The request is 0x70 bytes. The layout below shows the fields the spawn side
-writes and the names that the MSP00 family uses for the same bytes.
+The request is 0x70 bytes. The layout below shows the fields that the spawn
+side writes and the names that the MSP00 family uses for the same bytes.
 
 ```
 MissileSpawn (sc_wait_parse_script.h)         MSP00Effect view (work +0x20)
@@ -249,9 +249,9 @@ stateDiagram-v2
 
 ## Frame timing
 
-The pool runs entirely on the draw side of the frame. Neither the battle loop
-nor `sefExecEffect` calls the M effect callbacks. Instead, the two halves run
-inside the sef draw passes in `src/main/sv_get_image_item.c`.
+The pool runs entirely on the draw side of the frame, in two halves inside the
+sef draw passes in `src/main/sv_get_image_item.c`. Neither the battle loop nor
+`sefExecEffect` calls the M effect callbacks.
 
 `MEfObjExec1st` runs at the end of `svDrawScheduler3D`, the sef 3D pass that
 `sefDrawEffect3D` starts. `xglRenderMove` calls `sefDrawEffect3D` before
@@ -276,8 +276,8 @@ fired them. This pass runs `exec2nd[0]` (draw packet) and `exec2nd[1]`
 (post).
 
 Because the post callback counts the frames, an effect's age is the number of
-frames that were drawn while the pool was enabled. Its timing is tied to the
-display, not to the battle update.
+frames that were drawn while the pool was enabled, not the number of battle
+updates.
 
 The flowchart below shows where the four callbacks run in one rendered frame.
 
@@ -303,7 +303,7 @@ flowchart TD
 
 ## The hit signal
 
-An M effect tells the rest of the game about its impact with one call:
+An M effect signals its impact to the rest of the game with one call to
 `sefHitEffect()` in `src/main/sef.c`. The function only sets the global flag
 `_hitFlag` to 1. The sef scheduler reads the flag on its next update in
 `sefExecEffect`. For a running effect, a set flag (or the other global signal
@@ -318,13 +318,13 @@ set. Without it the row is skipped and never fires (see
 both flags are cleared.
 
 The battle's own hit timing is separate. `scenarioBatExecMain` in
-`src/ov01/battle_init.c` watches each target through `sefIsHitActor`, which
-reports a per-actor counter that sef raises when one of its own effect
-elements with a hit-signal category reaches its frame, and through the attack
-motion. When a target is hit, the battle also calls `sefHitEffect()` itself,
-so the same reaction path runs. The complete battle side is described in
-[Attack playback](battle.md#attack-playback), and the sef side in
-[sef](../libraries/sef.md).
+`src/ov01/battle_init.c` watches each target through `sefIsHitActor` and
+through the attack motion. `sefIsHitActor` reports a per-actor counter that
+sef raises when one of its own effect elements with a hit-signal category
+reaches its frame. When a target is hit, the battle also calls
+`sefHitEffect()` itself, so the same reaction path runs. The complete battle
+side is described in [Attack playback](battle.md#attack-playback), and the sef
+side in [sef](../libraries/sef.md).
 
 The sequence diagram below shows an M effect impact.
 
@@ -406,10 +406,11 @@ and vertex data. The common register values are named in
 | `MEF_GS_ALPHA_1_ADDITIVE` | 0x48 | Additive blending: source × alpha + destination |
 | `MEF_GS_TEX1_1_LINEAR_FILTER` | 0x60 | Linear texture filtering |
 
-So the trails are drawn additively, are hidden behind closer geometry, and do
-not hide each other. The vertices are projected on the CPU with
-`MMathRotTransPersClip`, which also reports clipped points. The GS registers
-themselves are explained in [Rendering](../architecture/rendering.md).
+With these values the trails are drawn additively, are hidden behind closer
+geometry, and do not hide each other. The vertices are projected on the CPU
+with `MMathRotTransPersClip`, which also reports clipped points. The GS
+registers themselves are explained in
+[Rendering](../architecture/rendering.md).
 
 ## Effect families
 
@@ -544,10 +545,9 @@ name probably means a KOS-MOS beam weapon. The hit comes at frame 25.
 
 ## Other battle visuals
 
-Not every battle visual is an M effect. The HUD, the cursors, the fades and the
-encounter transition are battle objects (see
-[The battle object system](#the-battle-object-system)) that draw with the 2D
-packet builder in `src/ov01/gr_gp_init.c`.
+The HUD, the cursors, the fades and the encounter transition are battle
+objects (see [The battle object system](#the-battle-object-system)), not M
+effects. They draw with the 2D packet builder in `src/ov01/gr_gp_init.c`.
 
 `grGpInit` sets up a packet in the scratchpad at 0x70000000. Each primitive
 type has an open, put and close function: flat triangles and quads (`F2`,

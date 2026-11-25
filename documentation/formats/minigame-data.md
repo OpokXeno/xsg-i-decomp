@@ -74,11 +74,10 @@ the decoded sizes.
 | | | `.info` | 7 | 79,436 | yes, [text databases](#info-text-databases) |
 | | | `.fpk` | 7 | 1,683,412 | no, motion packs |
 
-The progress of two of the minigames lives in the normal save, not in these
-files. The Xeno Card block `CardSaveData` sits at `SaveData + 0x15090` and
+The progress of two of the minigames is stored in the normal save, not in
+these files. The Xeno Card block `CardSaveData` is at `SaveData + 0x15090` and
 the casino block `CasinoSaveWork` at `SaveData + 0x15190`. The
-[save data](../architecture/save-data.md#the-other-blocks) page describes
-both.
+[save data](../architecture/save-data.md#the-other-blocks) page describes both.
 
 The diagram below shows which overlay reads which kind of file. Solid arrows
 are files the overlay names in its code, dashed arrows are files that another
@@ -161,15 +160,15 @@ The tutorial and the computer decks bypass `CardFread()` and call
 `xglCdReadFile()` themselves. `InitCpuDeck()` in `src/ov10/card_enemy.c`
 names the full path `data\carddata\deckdata\deckdata.dat`.
 
-Because the addresses are fixed, the loads must not overlap. A check of all
-84 arena loads of `cgp.c` against the real file sizes finds exactly one
-overlap. `effect\atac_a.bin` is `0x13380` bytes long and is read to
-`0x01A01000`, but `effect\atac_b.bin` is read right after it to `0x01A14000`.
-The second file therefore overwrites the last `0x380` bytes of the first one.
-Those bytes are the end of the palette of the fifteenth and last frame of the
-`atac_a` strip, which the direct-attack effect does show (its frame index
-runs from 0 to 14). The last frame of that effect is probably drawn with 224
-wrong palette colours for one frame.
+Because the addresses are fixed, the loads must not overlap. Checked against
+the file sizes, the 84 arena loads of `cgp.c` have only one overlap in all.
+`effect\atac_a.bin` is `0x13380` bytes long and is read to `0x01A01000`, but
+`effect\atac_b.bin` is read right after it to `0x01A14000`. The second file
+therefore overwrites the last `0x380` bytes of the first one. Those bytes are
+the end of the palette of the fifteenth and last frame of the `atac_a` strip,
+which the direct-attack effect does show (its frame index runs from 0 to 14).
+The last frame of that effect is probably drawn with 224 wrong palette colours
+for one frame.
 
 The flowchart below shows the order in which the card game reads its files.
 
@@ -331,7 +330,7 @@ The first record, deck 1, is shown below.
 0070  01 01 03 03 03 03 03 00 00 00 00 00 00 00 00 00
 ```
 
-**The last eight decks are test decks.** The opponent pools of the
+**Test decks.** The last eight decks are test decks. The opponent pools of the
 exhibition and the tournament hold at most the first 40 decks
 (`CARD_ENEMY_POOL_ALL`), so decks 41 to 48 are never picked. Their names were
 never translated and describe tests: `４１）鉄壁` ("iron wall"),
@@ -365,9 +364,9 @@ stored decks. Nothing calls it.
 
 ### The .bin textures
 
-None of the 24 `.bin` files is a table. Every one is a single XTX texture or
-a run of XTX textures stored back to back, with the same header as the
-`.xtx` files. The name only tells which files the artists exported together.
+Each of the 24 `.bin` files is a single XTX texture or a run of XTX textures
+stored back to back, with the same header as the `.xtx` files, and none of
+them is a table. The name only tells which files the artists exported together.
 The table lists each file with its size, the number of XTX blocks it holds,
 the address the code loads it to and what the code draws with it.
 
@@ -390,7 +389,7 @@ the address the code loads it to and what the code draws with it.
 | `effect\*.bin` | 57,728 to 157,440 | 11 to 30 | see below | animated effect strips |
 
 `CardInfo0.bin`, `CardInfo1.bin`, `CardInfo2.bin` and `card_Rare.xtx` are
-packed without gaps. Each one starts exactly where the previous one ends
+packed without gaps. Each one starts where the previous one ends
 (`0x01C91000 + 0x3050 = 0x01C94050` and so on), so the four were probably
 laid out as one block.
 
@@ -516,8 +515,8 @@ is loaded by the code, from paths in `src/ov11/mini_g.c`.
 `RES_Load()` reads it to `0x01000000` (`CASINO_RES_BUFFER`) and points
 `ResData` at it. The code describes the file as `CasinoResourcePrefix` in
 `src/ov11/mini_g_private.h`. Its header comment calls the 256-entry extent of
-the sound table inferred. The file confirms it: the debug word that follows
-the table is the last word of the file.
+the sound table inferred. The file confirms the 256 entries, because the debug
+word that follows the table is the last word of the file.
 
 ```
 0x0000  +-------------------------------------------+
@@ -586,13 +585,13 @@ sounds 0 to 66 except 7. Entries 67 to 255 are zero. The ids used are:
 | 1 | 13 ids between `0x10001` and `0x1001C` | the game sounds of the slot machine, Nine Reel and poker |
 | 2 | `0x20009` | one sound, casino sound 47 |
 
-Two entries hold 0. Sound 7 is never played. Sound 52 (`0x34`) is the payout
-sound of Nine Reel, started and stopped by `NgGame_Paid()`, but its entry is
-0, where the payout of the slot machine (sound 39) holds `0x10004`. Nine Reel
-therefore requests sound id 0, effect 0 of bank 0, during its payout. Whether
-that effect is audible was not checked. Every request is also logged with
-`dprintf("Sound Req = SE_%.3d:Sound num = %x")`, the format that gives the table its
-`SE_` numbering.
+Two of the entries 0 to 66 hold 0, those of sounds 7 and 52 (`0x34`). Sound 7
+is never played. Sound 52 is the payout sound of Nine Reel, started and
+stopped by `NgGame_Paid()`. Nine Reel therefore requests sound id 0, effect 0
+of bank 0, during its payout, where the payout of the slot machine (sound 39)
+holds `0x10004`. Whether that effect is audible was not checked. Every request
+is also logged with `dprintf("Sound Req = SE_%.3d:Sound num = %x")`, the format
+that gives the table its `SE_` numbering.
 
 `debug_mode` is 0 on the disc, so the debug grants that `InitWork()` would
 make (see [debug leftovers](../game/minigames/network-casino.md#12-debug-leftovers))
@@ -635,15 +634,14 @@ use pages of 64 × 32, so the same bytes hold a picture of twice the width and
 twice the height. `sam.xtx` (4 uploads), `slot_1.xtx` (3 uploads) and `window.xtx` (1 upload,
 43,088 bytes) have other shapes.
 
-The palettes are not separate files. Each one is a 16 × 16 block of 32-bit
-words (256 colours) stored inside the same texture, in a corner the picture
-does not use. The sprite tables of `mini_g.c` give its position as a GS block
-address (`clut_base`). The checker found a 256-colour palette at the position
-of every `clut_base` the code uses, for example at `(240, 240)` for
-`BG.xtx`, `exchange1.xtx` and `exchange2.xtx` and at `(0, 224)` for all 92
-sketch parts.
+Each palette is a 16 × 16 block of 32-bit words (256 colours) stored inside
+the same texture, in a corner that the picture does not use. The sprite tables
+of `mini_g.c` give its position as a GS block address (`clut_base`). A
+256-colour palette was found at the position of every `clut_base` the code
+uses, for example at `(240, 240)` for `BG.xtx`, `exchange1.xtx` and
+`exchange2.xtx` and at `(0, 224)` for all 92 sketch parts.
 
-The sprite tables themselves are compiled into the overlay, not stored on
+The sprite tables are compiled into the overlay, not stored on
 the disc. Each `SpriteTex` (28 bytes) names a rectangle `u`, `v`, `w`, `h` in
 pixels of the 8-bit picture, the two block addresses `texture_base` and
 `clut_base` (relative to block `0x3800`, where the casino uploads its
@@ -788,16 +786,16 @@ starts at the first 16-byte boundary after the offset table, and every entry
 is padded with zeros to a multiple of `0x800` bytes. Where there is a gap
 between the offset table and the first entry, it is zero.
 
-The magic is checked in one place only. `_FindInPrepare` (`rg_filesys.c`), called by `RgFileSysRead`, tests that a
-prepared archive starts with `NLNK` (`RgLinkDataMatchDataName`) and reports
-"%s is not nlink data" otherwise. The magics `NBXX`, `NBGL` and `PTCL` are
-never read, so they only tell a human which kind of data a file holds.
+The magic is checked in one place only. `_FindInPrepare` (`rg_filesys.c`),
+called by `RgFileSysRead`, tests that a prepared archive starts with `NLNK`
+(`RgLinkDataMatchDataName`) and reports "%s is not nlink data" otherwise. The
+magics `NBXX`, `NBGL` and `PTCL` are never read.
 
 The two versions differ in one point. A version 2 container stores one more
 offset, the end of the last entry, which equals the file size. A version 1
 container stores only `num` offsets, so the word after the table is padding
 or already the first bytes of the first entry (`lex\0` or `XTX\0` in four
-`.rbg` files). This is why `RgLinkDataGetSize()` refuses archives older than
+`.rbg` files). This is why `RgLinkDataGetSize()` asserts on archives older than
 version 2 (`RG_LINKDATA_MIN_VERSION_FOR_SIZE`). The engine never needs the
 size of an entry in a version 1 container: it finds Bxx entries by index and
 the entries of the other containers by name (`RgLinkDataGet`).
@@ -822,7 +820,7 @@ flowchart TD
 
 ### NBXX picture archives
 
-A Bxx file is a picture archive. It always has exactly two entries. The first
+A Bxx file is a picture archive. It always has two entries. The first
 is named `xtxinfo` and holds the table of pictures. The second is named
 after the file with the extension `.xtx` (for example `top_red.xtx`) and is
 one XTX texture. `RgBxx` takes them as entry 0 and entry 1
@@ -870,18 +868,17 @@ the entry is padded with zeros to a multiple of `0x800`.
 | `0x58` | 4 | `pOwner` | filled at load time with the owning `RgBxx` | 0 in the file |
 | `0x5C` | 4 | | not read | 0 |
 
-`XrgBxxPs2Tex0()` (`src/ov12/xrg_bxx_ps2.c`) builds the `TEX0` register for
-a picture from `bpp`, the header width of that format, `height` and
+`XrgBxxPs2Tex0()` (`src/ov12/xrg_bxx_ps2.c`) builds the `TEX0` register for a
+picture from `bpp`, the header width of that format, `height` and
 `paletteBase`. The texture base is always block `0x3800`, so the drawing code
 selects a picture only through its texture coordinates (`x`, `y`, `width`,
 `height`). The two block addresses in the record are the GS addresses an
 artist's tool would compute. A GS block is 256 bytes, and the GS stores the
 pixels of a block and the blocks of a 8 KB page in a fixed swizzled order.
-The checker recomputed both addresses from the positions with the PSMT4,
-PSMT8 and PSMCT32 block tables of the GS and found no mismatch. The
-palettes are 16-colour strips of 8 × 2 words for the 4-bit pictures and
-16 × 16 squares for the 8-bit ones, parked inside the texture like the
-casino palettes.
+Recomputing both addresses from the positions with the PSMT4, PSMT8 and
+PSMCT32 block tables of the GS gave no mismatch. The palettes are 16-colour
+strips of 8 × 2 words for the 4-bit pictures and 16 × 16 squares for the 8-bit
+ones, parked inside the texture like the casino palettes.
 
 The archive `top_red.bxx` holds one 8-bit picture. Its `xtxinfo` entry
 starts at `0x70`:
@@ -945,14 +942,14 @@ title pictures leave large parts of their textures empty.
 first and returns a record that points into the archive. It only reads a file
 from the disc when the archive has no entry of that name.
 
-This shadows seven files. The disc also holds `top_b1h.bxx`, `top_base.bxx`,
-`top_cur_1e.bxx`, `top_cur_vh.bxx`, `top_red.bxx`, `top_title.bxx` and
-`top_ve.bxx` as separate files, but the title loads its pictures only while
-`title.npr` is prepared, so the copies inside the archive win. The separate
-files are older versions: their time stamps are 2001-12-21 and they are
-528,496 bytes long, while the archive copies were built on 2002-07-23. The
-archive also holds the two variants `top_base_ag02.bxx` and
-`top_base_vx01.bxx`, which exist nowhere else.
+The disc also holds seven of these archives as separate files: `top_b1h.bxx`,
+`top_base.bxx`, `top_cur_1e.bxx`, `top_cur_vh.bxx`, `top_red.bxx`,
+`top_title.bxx` and `top_ve.bxx`. The title loads its pictures only while
+`title.npr` is prepared, so the copies inside the archive shadow the separate
+files and are the ones used. The separate files are older versions: their time
+stamps are 2001-12-21 and they are 528,496 bytes long, while the archive
+copies were built on 2002-07-23. The archive also holds the two variants
+`top_base_ag02.bxx` and `top_base_vx01.bxx`, which exist nowhere else.
 
 The sequence below shows one picture read by the title while `title.npr` is
 prepared.
@@ -1038,11 +1035,11 @@ The colour of a picture is not in the file. `CreateRgPicFromBinary()` sets
 it to 128, 128, 128 with alpha 127. A record whose picture is missing from
 the Bxx is dropped.
 
-The format comes from a layout editor built into the engine. `RgPicDebug`
-lets a developer pick pictures from a Bxx, move them, change their blend mode
-and save the list with `RgPicListWrite()`, which writes exactly this layout
-and fills the rest of each record with zeros. The save goes to a development
-host (`XrgHostWrite`), whose functions are stubs in the release.
+The format comes from a layout editor built into the engine. `RgPicDebug` lets
+a developer pick pictures from a Bxx, move them, change their blend mode and
+save the list with `RgPicListWrite()`, which writes this layout and fills the
+rest of each record with zeros. The save goes to a development host
+(`XrgHostWrite`), whose functions are stubs in the release.
 
 The start of `wepsel.r2d` shows the shifted header and the first record:
 
@@ -1141,10 +1138,10 @@ a token would start ends the current **paragraph**. The files mark every `%`
 with the words "デリミタ消去禁止" ("delimiter, do not delete"), written as a
 `#` comment in most files. In `rg_robot_spec.info` the seven delimiter lines
 read `%  デリミタ。消去禁止` without a `#`, so the parser sees the words as a
-token. This does no harm, because `RgReadTextFindParagraph()` does not only
-look at the first tokens of each paragraph. It reads token after token,
-stepping over delimiters, until it meets the tag followed by the sub-tag
-(such as `character` `vx01`).
+token. This does no harm, because `RgReadTextFindParagraph()` reads token
+after token, not only the first tokens of each paragraph, and steps over
+delimiters until it meets the tag followed by the sub-tag (such as
+`character` `vx01`).
 
 The files differ in encoding and line ends. Most are EUC-JP, but
 `rg_weapon.info` is Shift-JIS and `rg_camera.info` uses NEC extension

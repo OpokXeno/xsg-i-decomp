@@ -1,17 +1,14 @@
 # Math helpers
 
-The game has no single math library. Vector, matrix and curve code is spread
-over several small libraries with different styles, which probably come from
-different programmers: the `xgl`
-system library's math file, the `MMath` helpers used by battle effects, the
-`MATRIX_` and `CUR_MATRIX_` helpers used by skeletons, the game-play geometry
-helpers of the field code, and a spline library used by cameras and scripts.
-They all share the same vector and matrix types and the same conventions,
-and most of them do their work on the VU0 vector unit.
+The game's vector, matrix and curve code is spread over several small
+libraries with different styles, which probably come from different
+programmers: the `xgl` system library's math file, the `MMath` helpers used by
+battle effects, the `MATRIX_` and `CUR_MATRIX_` helpers used by skeletons, the
+game-play geometry helpers of the field code, and a spline library used by
+cameras and scripts. They all share the same vector and matrix types and the
+same conventions, and most of them do their work on the VU0 vector unit.
 
-This page describes the conventions first, then the VU0 unit and the
-low-level macros that every library uses, then each library in turn. The
-system library that owns `xgl_2.c` is described in [xgl.md](xgl.md).
+The system library that owns `xgl_2.c` is described in [xgl.md](xgl.md).
 
 [← Back to the overview](../README.md)
 
@@ -82,8 +79,7 @@ groups in `vf28` to `vf31`, one column per register.
 
 A vector is transformed as `v' = M v`. In code this is a weighted sum of the
 four groups: `v' = v.x * m[0] + v.y * m[1] + v.z * m[2] + v.w * m[3]`.
-This is exactly what `xglVectorMulMat` does on VU0, one multiply-add per
-group.
+`xglVectorMulMat` does this on VU0, with one multiply-add per group.
 
 `xglMatrixMul(destination, left, right)` computes `left * right`. The
 right-hand matrix is applied to a vector first. The functions that add a
@@ -288,11 +284,10 @@ The sets overlap. The `xgl` matrix stack and the `CUR_MATRIX_` functions both
 use `vf28`, `vf29` and `vf30`, and the microprogram uses `vf24` to `vf27` as
 scratch, which covers the model library's view scale and translation. Even
 some `xgl` functions, such as `xglMatrixMul`, use `vf27` to `vf31` as scratch
-(see [Matrices](#matrices)). A
-library therefore cannot trust its registers after another library has run.
-The code appears to reload them where it needs them (for example with
-`CUR_MATRIX_Set` or `Vu0SetViewScaleTranslation`) and keeps its lasting
-matrices in memory.
+(see [Matrices](#matrices)). A library therefore cannot rely on the values in
+its registers after another library has run. The code appears to reload them
+where it needs them (for example with `CUR_MATRIX_Set` or
+`Vu0SetViewScaleTranslation`) and keeps its lasting matrices in memory.
 
 ## Quadword copies
 
@@ -402,8 +397,8 @@ the normal with `p0`. A point `q` is on the plane when
 `dot(normal, q) + w` is 0, and on the side the normal points to when it is
 positive. The camera uses it to build the six planes of the view volume.
 
-`xglVectorInner` stores each partial sum into the result as it builds it.
-This does not change the result, but it is how the original code behaves.
+`xglVectorInner` stores each partial sum into the result as it builds it,
+which does not change the result.
 
 ### Matrices
 
@@ -443,7 +438,7 @@ first with `xglMatrixStackSave`, or load a new one afterwards, as
 ### The matrix stack
 
 The **matrix stack** keeps a current matrix and a stack of saved matrices, as
-in classic OpenGL. Both live inside VU0: the current matrix in `vf28` to
+in classic OpenGL. Both are kept inside VU0: the current matrix in `vf28` to
 `vf31` and the stack in VU0 data memory (see
 [The resident VU0 microprogram](#the-resident-vu0-microprogram)). The EE
 functions are thin wrappers that pass their arguments and start a
@@ -668,8 +663,8 @@ computed volumes and pan values into integers.
 File: `src/main/m_math.c`
 
 `MMath` is a second vector and matrix library, written entirely in VU0 macro
-mode. It is used mainly by the battle overlay: the battle effects
-(`src/ov01/m_ef*.c`), the battle camera (`src/ov01/m_cam.c`), and by the
+mode. It is used mainly by the battle overlay, in the battle effects
+(`src/ov01/m_ef*.c`) and the battle camera (`src/ov01/m_cam.c`), and by the
 effect library (`src/main/sef.c`) and `src/main/sdv.c`. Battle itself is
 described in [battle.md](../game/battle.md) and its effects in
 [battle-effects.md](../game/battle-effects.md).
@@ -913,11 +908,12 @@ field loop in `src/main/game.c` and the effect library.
 
 File: `src/main/get.c`
 
-`get.c` collects the geometry questions that field characters and enemies
-ask: where is the player, can I see them, can I walk there, where is the
-ground. Its functions are named `Get_...` and `Check_...`. Field enemies are
-described in [field-enemies.md](../game/field-enemies.md) and the ground and
-map data in [map-and-units.md](../game/map-and-units.md).
+`get.c` holds the geometry tests of field characters and enemies: where the
+player is, whether the player can be seen, whether a point can be reached on
+foot and where the ground is. Its functions are named `Get_...` and
+`Check_...`. Field enemies are described in
+[field-enemies.md](../game/field-enemies.md) and the ground and map data in
+[map-and-units.md](../game/map-and-units.md).
 
 ### Angles and steps
 

@@ -247,12 +247,12 @@ passes the whole mask to `nmlModelSetPartsVisible` before each entry.
 Textures come in XTX texture sets. `nmlModelSetTexture(texture)` accepts a
 pointer only when it is in range, 16-byte aligned and starts with `XTX` (the
 code compares the third byte with the first). A set holds one or more upload
-rectangles, each with a size, a VRAM offset and its pixel data. The
-rectangles are always uploaded as 32-bit pixels, but they are pre-swizzled
-sheets: the converter packed the real textures, mostly 8-bit images with
-256-color palettes and a few 4-bit ones, so that the 32-bit upload leaves
-them in GS memory exactly where each block's `TEX0` reads them in its own
-format. No set holds mipmaps. The layout and the address arithmetic are in
+rectangles, each with a size, a VRAM offset and its pixel data. The rectangles
+are always uploaded as 32-bit pixels, but they are pre-swizzled sheets: the
+converter packed the textures themselves, mostly 8-bit images with 256-color
+palettes and a few 4-bit ones, so that the 32-bit upload leaves them in GS
+memory where each block's `TEX0` reads them in its own format. No set holds
+mipmaps. The layout and the address arithmetic are in
 [XTX texture sets](../formats/models-and-textures.md#xtx-texture-sets) and
 [How a model finds its texels](../formats/models-and-textures.md#how-a-model-finds-its-texels).
 
@@ -716,8 +716,8 @@ It is the lookup for the compressed normals of map blocks with material flag
 
 ### Entry points
 
-The name of an entry point describes its program. Names are built from the
-parts in the table, for example `NewVu1LightTexSpecEnvFaceStrip1` or
+The name of an entry point is built from the parts in the table, which
+describe its program. Examples are `NewVu1LightTexSpecEnvFaceStrip1` and
 `NewVu1AddVertcolTexStrip`.
 
 | Part | Meaning |
@@ -821,8 +821,9 @@ with `XTOP` and looks at its header (see
   list restore the current texture. The 9-quadword form (header word 2
   `0x4000`) also carries the material color, the specular color and the
   specular exponent, which the routine moves to its material register, to
-  `0x3CA` and to lane x of `0x3F0`. The routine calls the 5-quadword form `gsold`, the
-  older form. After the kick it stops again at its own start.
+  `0x3CA` and to lane x of `0x3F0`. The label of the routine's path for the
+  5-quadword form, the older one, is `gsold`. After the kick the routine stops
+  again at its own start.
 - A **vertex batch** makes the routine find the arrays at their multiples of
   the vertex count n, convert byte colors to floats in the map layout, apply
   the shape blend, and return to the strip loop of the entry point. Header
@@ -948,14 +949,14 @@ stretches the normals.
 
 ### Front and back faces
 
-The `Face` and `Back` entry points are short. They run `InitConstantParams`,
-turn on the face test (lane y of `0x3E3`), fill a table of two skip flags in
-the w lanes of `0x3F5` to `0x3F8`, and jump into the loop of the matching
-normal program. For each vertex the loop then calls `CalcFaceBackStrip`. It
-takes the dot product of the triangle's normal with the direction from the
-vertex to the camera, and its sign picks a flag from the table. The flag
-feeds the `ADC` bit like a clip failure. `Face` keeps the triangles that face
-the camera and `Back` keeps the others.
+The short `Face` and `Back` entry points run `InitConstantParams`, turn on the
+face test (lane y of `0x3E3`), fill a table of two skip flags in the w lanes
+of `0x3F5` to `0x3F8`, and jump into the loop of the matching normal program.
+For each vertex the loop then calls `CalcFaceBackStrip`. It takes the dot
+product of the triangle's normal with the direction from the vertex to the
+camera, and its sign picks a flag from the table. The flag feeds the `ADC` bit
+like a clip failure. `Face` keeps the triangles that face the camera and
+`Back` keeps the others.
 
 `PLAIN` reads the triangle normals from the batch's face normal array at
 `3n + 1`. These normals point into the surface: in 7880 of 7900 triangles
@@ -1210,13 +1211,12 @@ of them use the **flip buffer**, the spare full-screen buffer at page `0x150`
   that bends the scene behind it. With `GameLoopState.stealthMode` 2, the
   filter stays off while `SCRIPT_getCfTime()` is below 2.
 
-**Back clear.** A group with the `BACK_CLEAR` status is drawn in a different
-way. `nmlFilterBackClear` clears the flip buffer, the group's blocks are
-drawn into it at full opacity (the entry forces `transparency` to 1.0), and
-`nmlFilterSetFlatRender` puts the result over the frame with the model's
-transparency. The whole model then fades as one flat layer, probably so that
-its own parts do not show through each other. No setter in
-`nml_model_set.c` raises this bit.
+**Back clear.** For a group with the `BACK_CLEAR` status, `nmlFilterBackClear`
+clears the flip buffer, the group's blocks are drawn into it at full opacity
+(the entry forces `transparency` to 1.0), and `nmlFilterSetFlatRender` puts
+the result over the frame with the model's transparency. The whole model then
+fades as one flat layer, probably so that its own parts do not show through
+each other. No setter in `nml_model_set.c` raises this bit.
 
 The flowchart below shows where the filter passes sit inside one viewport.
 
@@ -1328,11 +1328,12 @@ transitions.
 
 The movie code uses the back buffer at the end of a movie.
 `nmlModelSendSignalMovieFinish(mode)` captures the last movie frame from
-`sRender.draw_buffer_base`. Depending on the mode, it holds it like a battle
-transition, freezes it for 0x26 frames, or cross-fades it into the scene over
-`nmlModelSetMpeg2CrossFadeTime` frames (30 by default). The functions also
-cancel the fades. `nmlModelSendSignalMovieStart` resets the back buffer and
-all four fades. `nmlModelSetBackBufferClear` resets the back buffer.
+`sRender.draw_buffer_base`. Depending on the mode, it holds that frame like a
+battle transition, freezes it for 0x26 frames, or cross-fades it into the
+scene over `nmlModelSetMpeg2CrossFadeTime` frames (30 by default). The
+functions also cancel the fades. `nmlModelSendSignalMovieStart` resets the
+back buffer and all four fades. `nmlModelSetBackBufferClear` resets the back
+buffer.
 
 The state diagram below shows the two modes.
 

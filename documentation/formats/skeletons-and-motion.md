@@ -42,9 +42,9 @@ carry the JNT and FPK files of their scene. The battle model packs in
 of their model. The 14 five-section party packs also embed a second skeleton,
 the face skeleton of the character, with the same joint counts as its field
 `*_face.jnt` (see
-[Battle model packs](game-tables.md#battle-model-packs-pc-and-wpn)). Those
-containers are not repeated here. The JNT, FPK and FCV data inside them has
-the same layout.
+[Battle model packs](game-tables.md#battle-model-packs-pc-and-wpn)). The table
+does not count these copies. The JNT, FPK and FCV data inside the containers
+has the same layout.
 
 The diagram below shows how the formats refer to each other. A skeleton and a
 curve set are matched by the skeleton name stored in both. A motion pack
@@ -85,8 +85,8 @@ formula.
 Packs are used in place. The loader reads a file into a buffer and never
 copies or parses it into other structures. Offsets inside the file become
 pointers the first time the code touches the pack, by adding the buffer
-address. A flag bit in the header records that this has been done. This is
-called relocation below. The general mechanism is described in
+address. A flag bit in the header records that this has been done. This step
+is called relocation. The general mechanism is described in
 [Files and resources](../architecture/files-and-resources.md#packs-used-in-place).
 
 ## Skeleton files (JNT)
@@ -225,8 +225,8 @@ The record sequences found on the disc are: name alone (350 files), name,
 accessories and end (206), name, limits and end (95), name and hair tags (46),
 name, accessories, hair tags and end (43), name, hair tags and end (11), and
 nine files with no name record at all (5 with only an end record, 4 with a
-limit record and an end record). Files without a terminator simply end the
-list at the block size.
+limit record and an end record). Files without a terminator end the list at
+the block size.
 
 #### The name record
 
@@ -435,8 +435,8 @@ type-2 extra floats:
 - The w component of every rest translation is 0, and `+0x08..+0x0D` and
   `+0x2C` are zero in every record. They are probably fields of the exporter's
   structure that the game never needed.
-- The body motions of one character do not match his skeleton. The four
-  skeletons of Matthews are named `MATEHWS` (`matehws.jnt`, `matehws1.jnt`,
+- The body motions of Matthews do not match his skeleton. His four skeletons
+  are named `MATEHWS` (`matehws.jnt`, `matehws1.jnt`,
   `matehws_face.jnt`, `matehws_h_face.jnt`), and his face packs
   (`FLSmatehws.fpk`) use the same spelling. His 86 body curve sets, in
   `data\motion\matehws_cf.fpk`, the shared sets `sit_m`, `sit_e`, `eat` and
@@ -551,8 +551,8 @@ the first curve set sits where a format-3 slot table would begin.
 `ANM_getEntry` reads the slot word after the entry table for every format.
 For a format-2 pack it gets the prefix word (1) for entry 0, and bytes of the
 first curve set for the other entries (`0x4346` from the `FC` of its magic for
-entry 1, its format 3 for entry 2, its frame count for entry 3). This shows
-that the slot table belongs to format 3 only. The curve sets inside format-2
+entry 1, its format 3 for entry 2, its frame count for entry 3). The slot
+table therefore belongs to format 3 only. The curve sets inside format-2
 packs are themselves format 3. Two of the four packs have range records
 (`idle.fpk` 5 and `shion.fpk` 1). In `idle.fpk` the words read for entries 12
 and 14 have a low half of 0, so those two entries pick up their reset range
@@ -616,9 +616,9 @@ data that is not a curve (the skeleton name, playback ranges) and then the
 curves, grouped by joint. For each joint, a channel record says which of the
 ten components (three translations, three rotations, three scales and a flag)
 have data, and one key header per component follows with either a constant
-or a run of spline keys. Curve sets never appear as separate files on the
-disc. They live inside motion packs, and the same layout without the
-attribute stream is used by the [camera packs](#camera-motion-packs-cam).
+or a run of spline keys. Curve sets are stored inside motion packs and never
+appear as separate files on the disc. The same layout without the attribute
+stream is used by the [camera packs](#camera-motion-packs-cam).
 
 The behaviour of the curve reader is described in
 [Animation](../libraries/animation.md#fcv2-curves). The older FCV format that
@@ -733,9 +733,9 @@ the pack (see [format 3](#format-3-the-entry-and-slot-tables)). A playback
 range (bit 7 set) replaces the clock limits with `first_frame / 30` and
 `last_frame / 30` and sets the clock speed to `speed / 32 / 30` seconds per
 tick. A reset range (bit 7 clear) sets the bounds a looping clock returns to.
-This is how one curve set can serve several motions: the pack lists it under
-several entries, each entry gets its own slot number, and each slot number
-selects its own range record.
+With these records one curve set can serve several motions: the pack lists it
+under several entries, each entry gets its own slot number, and each slot
+number selects its own range record.
 
 The motion packs of the field and the events do not use this. All 517 range
 records in standalone and volume packs have selector 0 (attribute id 0, reset
@@ -748,8 +748,8 @@ plays with attribute index 0. In 457 of them the range ends before
 `last_frame` and in 331 it starts after frame 0, so they probably mark the
 looping part of the motion.
 
-The battle packs do use it. In the packs of the party (`chao.bin`, `jr.bin`,
-`kosm.bin`, `momo.bin`, `shio.bin`, `virg.bin`, `zigg.bin`) and of
+The battle packs use playback ranges. In the packs of the party (`chao.bin`,
+`jr.bin`, `kosm.bin`, `momo.bin`, `shio.bin`, `virg.bin`, `zigg.bin`) and of
 `boss_016.bin`, entries 12 to 16 share one curve set and entries 17 to 21
 share another. Their slots are 1 to 5, and each of the two curve sets holds
 five playback ranges with ids 1 to 5. In `chao.bin` the 18-frame curve set is
@@ -805,8 +805,8 @@ The ten bits of `value_mask` name the components in the order their key
 headers follow: bits 0 to 2 are translation x, y and z, bits 3 to 5 the
 rotation angles about z, y and x (the order of `rotate` in the channel
 record, applied as Rz·Ry·Rx), bits 6 to 8 scale x, y and z, and bit 9 the
-flag curve. The skeleton side decides which bits are read. `JNT_getVal`
-reads, for a channel of the skeleton's type:
+flag curve. Which bits are read depends on the skeleton. `JNT_getVal` reads
+these components for each channel type of the skeleton:
 
 | JNT channel type | Components read | Mask usually seen |
 | --- | --- | --- |
@@ -975,10 +975,11 @@ The pack ends with an empty channel and the end record:
 ### Where they are
 
 The real-time cutscenes move the camera with small curve files of 8 curves.
-They are not separate files in the archive directory. All 307 of them are
-members of the [script resource volumes](#script-resource-volumes)
+All 307 of them are members of the
+[script resource volumes](#script-resource-volumes)
 `data\mtnpack\SCExxxxx.arc` of 27 event scripts, for example
-`c01s41C.cam` in `SCE01041.arc`. Their names follow the pattern
+`c01s41C.cam` in `SCE01041.arc`. None is a separate file in the archive
+directory. Their names follow the pattern
 `c<chapter>s<scene><cut>.cam` (`c03s27cut05.cam`, `c03s31acut02_holo.cam`),
 plus a few free names such as `inu_cam.cam` in `SCE02004D.arc`. They range
 from 68 to 4,864 bytes, 54,540 bytes in all.
@@ -1091,7 +1092,6 @@ volumes are ARX-packed and decode to 902 to 1,003,121 bytes (26.0 MB in all).
 keeps it as the script's `pdb`. Scripts then read members by name with
 `Toolkit.loadResource(String)`. The general PDB format is described in
 [Files and resources](../architecture/files-and-resources.md#pdb-volumes).
-Only the PDB volume on the disc is shown here.
 
 ### Layout
 
@@ -1358,7 +1358,7 @@ running script.
 The camera packs that are never named are probably cuts that were re-shot or
 dropped: `SCE03027.arc` keeps 31 unused cuts next to the 10 its script uses.
 
-The opposite also happens. `motFile` names battle motions for which the disc
+In the other direction, `motFile` names battle motions for which the disc
 has no file: `ag01`, `ag03`, `boss_006`, `boss_008`, `boss_022`, `boss_027`,
 `boss_028`, `boss_031`, `boss_032`, `cath`, `ceci`, `fema_003`, `fema_004`,
 `fema_006`, `fere_003`, `jr_sp8`, `kosm_wp6`, `shit` and `shit_sp1` to

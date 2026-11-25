@@ -8,14 +8,12 @@ IPU movie is a plain stream of compressed frames that the PS2's image
 decoding unit (the IPU) reads directly. Still pictures are baseline JPEG files
 that the game decodes in software with `xglJpegDecode`.
 
-This page describes how these files are laid out on the disc. Every
-statement was checked against all the files of each type and against the
-recovered code that reads them. The page also covers the two icon templates
-on the disc: `data\carddata.new`, which becomes the `icon.sys` and 3D icon of
-every memory card save, and `data\hdd.res`, the icon and description that the
-game writes into its hard disk partition. The players and decoders are
-described in [xgl](../libraries/xgl.md#movies), and this page links there for
-their behaviour.
+This page describes how these files are laid out on the disc. It also covers
+the two icon templates on the disc: `data\carddata.new`, which becomes the
+`icon.sys` and 3D icon of every memory card save, and `data\hdd.res`, the icon
+and description that the game writes into its hard disk partition. The
+behaviour of the players and decoders is described in
+[xgl](../libraries/xgl.md#movies).
 
 [← Back to the overview](../README.md) · Archives, paths and file types:
 [Files and resources](../architecture/files-and-resources.md)
@@ -59,11 +57,11 @@ and is described in [section 9](#9-casinores).
 
 Each kind of file has its own reader. The MPEG-2 movies go through Sony's
 `sceMpeg` library, which demultiplexes the stream and drives the IPU itself.
-The IPU movies skip that library. `xglMoviePlay` feeds them to the IPU by DMA
-and sends the decode commands directly. The JPEG pictures never touch the
-IPU. `xglJpegDecode` decodes them on the main CPU into a buffer that is then
-uploaded as a texture. The two icon files are not decoded at all. The game
-only copies them to a memory card or to the hard disk, and the console's own
+The IPU movies do not use that library: `xglMoviePlay` feeds them to the IPU
+by DMA and sends the decode commands directly. `xglJpegDecode` decodes the
+JPEG pictures on the main CPU, without the IPU, into a buffer that is then
+uploaded as a texture. The game does not decode the two icon files. It only
+copies them to a memory card or to the hard disk, and the console's own
 browser draws them.
 
 The diagram below shows which code reads each kind of file.
@@ -166,13 +164,13 @@ an optional presentation time stamp (PTS) and decoding time stamp (DTS) in
 90 kHz ticks. A stream id after the start code `00 00 01` tells the streams
 apart.
 
-All 108 files share the same structure. Every pack is exactly 16,384 bytes,
-which is eight 2048-byte sectors. The last pack of each file is 16,388 bytes,
-because it ends with the 4-byte program end code `00 00 01 B9`. Nothing
-follows that code, so the size of every file is a multiple of 16,384 plus 4.
-The files hold 395,921 packs in total. The first pack of each file also
-carries the single system header of the file, which announces the streams and
-the rate limits.
+All 108 files share the same structure. Every pack is 16,384 bytes, which is
+eight 2048-byte sectors, except the last pack of each file. That one is
+16,388 bytes, because it ends with the 4-byte program end code `00 00 01 B9`.
+Nothing follows that code, so the size of every file is a multiple of 16,384
+plus 4. The files hold 395,921 packs in total. The first pack of each file
+also carries the single system header of the file, which announces the streams
+and the rate limits.
 
 Three stream ids appear. Stream `E0` is the MPEG-2 video. Stream `BD`, MPEG's
 *private stream 1*, carries the audio inside Sony's own sub-stream format
@@ -396,7 +394,7 @@ detail, so they probably come from another encoder and another team.
 
 ### 2.5 The audio stream
 
-The audio travels in private stream 1. Sony's `sceMpeg` library splits that
+The audio is in private stream 1. Sony's `sceMpeg` library splits that
 stream into sub-streams by the first four bytes of each PES payload. The
 library keeps the rules in a table, `_strmap` at `0x004AD510` in
 `SLUS_204.69`, which the library function `_type2id` searches. Each entry is
@@ -422,7 +420,7 @@ probably the DVD audio formats. The game uses only types 0 and 3.
 `xglMpeg2Open` registers a callback for the video stream (`SCE_MPEG_STR_M2V`,
 type 0, channel 0) and one for ADPCM audio (`SCE_MPEG_STR_ADPCM`, type 3,
 channel 0) with `sceMpegAddStrCallback`. Every audio
-packet in all 108 files carries exactly the tag `FF A1 00 00`, ADPCM channel 0.
+packet in all 108 files carries the tag `FF A1 00 00`, ADPCM channel 0.
 
 The first audio packet of a file starts its payload with two small headers
 after the tag. `SShd` describes the sound and `SSbd` announces the sound body.
@@ -548,8 +546,8 @@ the line. A backslash in the text starts a further line of the same caption.
 The time stamp `m:s:f` means `((m × 60) + s) × 30 + f` frames. A stamp with
 one colon, `a:b`, gives `a × 60 + b` frames, which is probably a units slip,
 since the source comment calls it minutes and seconds. The list ends at the
-first entry that does not start with a digit. The example below is written
-for this page to show the syntax. It does not come from the disc.
+first entry that does not start with a digit. The example below shows the
+syntax and does not come from the disc.
 
 ```
 ; caption file for 1005.pss (example)
@@ -581,7 +579,7 @@ prints the current caption at (64, 317) after the font controls in
 
 ### 2.8 Variants and statistics
 
-The 108 files fall into two clear groups.
+The 108 files fall into two groups, the cutscenes and the battle movies.
 
 | Property | Cutscenes (103) | Battle movies (5) |
 | --- | --- | --- |
@@ -1057,9 +1055,9 @@ thumbnail of a new save, an unusable slot and broken data. The fourth picture
 of the same series, `otr_d.jpg`, is never loaded. The chapter pictures
 `im00.jpg` to `im03.jpg` are chosen by `Intermission(chapter)` in
 `src/main/game_over.c`, which writes the chapter number into the digits of
-the name. The density "72 × 1" of the four save-screen pictures is a real
-value in their JFIF headers, 72 horizontal and 1 vertical, and is probably a
-quirk of the tool that saved them.
+the name. The density "72 × 1" of the four save-screen pictures is written
+that way in their JFIF headers, 72 horizontal and 1 vertical, and is probably
+a quirk of the tool that saved them.
 
 The pictures come from at least three different encoders. The pictures with
 quality 80 use the IJG standard tables, two quantization tables in separate
@@ -1091,9 +1089,9 @@ outside the entropy-coded data. The table lists what each handler expects.
 `StartOfFrame` reads neither the sample precision nor the component count,
 so a 12-bit or greyscale picture would be decoded wrongly. There is no
 handler for progressive JPEG (`SOF2`), and only one luminance and one
-chrominance set of tables exist. Every
-picture on the disc meets these limits except in one detail, described in the
-next section.
+chrominance set of tables exist. Every picture on the disc meets these limits,
+except that `mnt_set.jpg` has two quantization tables in one `DQT` segment.
+The next section describes the effect.
 
 The diagram below shows the parse loop.
 
@@ -1144,12 +1142,12 @@ the overflow itself is harmless.
 The chrominance DC coefficient of every block is therefore scaled by 1
 instead of 3, and each AC coefficient uses the step of its neighbour. The
 average colour of every 8 × 8 block thus loses two thirds of its saturation.
-A decode of the file with the game's tables, made for this page with the same
-standard decoder for both versions, lowers the average chroma distance from
-neutral grey from 3.89 to 1.25. The bluish grey background becomes neutral
-grey and the button symbols lose most of their colour. The game decoder
-probably shows the picture in the same faded way, so the effect is visible
-but small on this mostly grey picture.
+Decoding the file with the game's tables lowers the average chroma distance
+from neutral grey from 3.89 to 1.25, with the same standard decoder used for
+both versions. The bluish grey background becomes neutral grey and the button
+symbols lose most of their colour. The game decoder probably shows the picture
+in the same faded way, so the effect is visible but small on this mostly grey
+picture.
 
 ### 4.4 The install pictures in `hddi.bin`
 
@@ -1217,9 +1215,8 @@ flowchart LR
 
 Both icon templates contain a 3D icon in the PS2's standard icon format, the
 format that the console's memory card browser draws. The format is the same
-in both files, so it is described once here. All values are little-endian.
-The icon is a model of `vertex count` vertices, drawn as triangles in vertex
-order. It has several *shapes*, which are complete sets of vertex positions,
+in both files. All values are little-endian. The icon is a model of
+`vertex count` vertices, drawn as triangles in vertex order. It has several *shapes*, which are complete sets of vertex positions,
 and an animation that blends between them.
 
 | Offset | Size | Field | `carddata.new` | `hdd.res` |
@@ -1327,9 +1324,9 @@ The `start` and `end` words count from offset `0x40`, the start of `icon.sys`.
 | `0x440` | 71,320 | `xenosaga.ico` | `0x00010000` |
 | `0x11AD8` | 40 | zero | |
 
-The code knows this header as `McSaveHeader` in `src/main/xgl_mc.c` and as
+This header is declared as `McSaveHeader` in `src/main/xgl_mc.c` and as
 `HddTransferInfo` and `HddSaveImage` in `src/main/xgl_hdd.c` and
-`include/main/xgl_hdd.h`. None of them reads the first word.
+`include/main/xgl_hdd.h`. No code that uses them reads the first word.
 
 ### 6.2 icon.sys
 
@@ -1430,7 +1427,7 @@ speed. The source calls this float `checksum`, but it is the speed of the
 icon animation. Each save folder therefore animates at its own speed.
 
 The memory card path writes `end - start - 40` bytes of icon, 71,320 bytes,
-which is exactly the icon without the 40 zero bytes. The HDD path
+which is the icon without the 40 zero bytes. The HDD path
 `xglHddMcCreate` in `src/main/xgl_hdd.c` uses the same buffer. It also calls
 `xglMcWriteMapName`, but it writes `end - start` bytes (71,360, including
 the 40 zero bytes) and does not change the animation speed. The HDD save path
@@ -1571,10 +1568,9 @@ flowchart LR
 
 ## 8. Save thumbnails
 
-The picture shown for each save in the save and load screen is not stored on
-the disc. `GameSnapShotSaveThumbnail` encodes it at run time with
-`xglJpegEncode`, 128 × 112 pixels at quality 30, and the save stores it in
-the save data. Only the three placeholders of
+The picture shown for each save in the save and load screen is made at run
+time. `GameSnapShotSaveThumbnail` encodes it with `xglJpegEncode`, 128 × 112
+pixels at quality 30, and the save stores it in the save data. Only the three placeholders of
 [section 4.1](#41-the-pictures) come from the disc. The thumbnails are
 described in
 [Save data: thumbnails and snapshots](../architecture/save-data.md#thumbnails-and-snapshots).

@@ -153,7 +153,7 @@ read. Later visits to the title screen load `OV02.OVL` from the disc.
 
 **OV01 is the resident overlay during play.** Battles can start at any moment
 from the field, and the main menus read the game data tables (techniques,
-weapons, items, character growth) through accessor functions that also live
+weapons, items, character growth) through accessor functions that are also
 in OV01. Field scripts use its camera and movie helpers too. So OV01 is kept
 loaded, every other overlay is swapped in for a while, and OV01 is loaded
 again afterwards.
@@ -231,7 +231,7 @@ buffers take the 4 MiB from `0x00C00000` to `0x01000000`.
 places its data at `WorkEnd` and moves the pointer past it. Nothing is freed
 one block at a time. Instead, a screen saves `WorkEnd` when it starts and puts
 it back when it ends, which releases everything the screen loaded. `Game()`
-in `src/main/game.c` does exactly this for a whole play session.
+in `src/main/game.c` does this for a whole play session.
 
 Script objects use their own heap, `xheap` (`src/main/xheap.c`). It is also a
 bump allocator, but it can save its position in frames and drop back to a
@@ -276,9 +276,9 @@ sequenceDiagram
 
 ## 5. The four system threads
 
-The game does not rely on pre-emptive multitasking. It runs four EE threads in
-a fixed **round-robin**. Each thread does one step of its work, then calls
-`xglSleep()`. That call wakes the next thread in the list and puts the caller
+The game does not rely on pre-emptive multitasking and instead runs four EE
+threads in a fixed **round-robin**. Each thread does one step of its work,
+then calls `xglSleep()`. That call wakes the next thread in the list and puts the caller
 to sleep. One full turn of the four threads makes one frame.
 
 | # | Thread | Entry point | Work in each turn |
@@ -293,7 +293,7 @@ thread has a 64 KiB stack and the other three have 4 KiB each.
 
 Because only one thread runs at a time and each one gives up control on
 purpose, the threads can share data without locks. It also makes game code
-simple to write. Inside a game loop, `xglSleep()` simply means "wait for the
+simple to write, since inside a game loop `xglSleep()` means "wait for the
 next frame". After the control thread, the turn goes back to the render
 thread and the cycle starts again. The thread code is described in
 [libraries/xgl.md](libraries/xgl.md#threads).
@@ -397,7 +397,7 @@ player touches a visible enemy, the enemy code raises a battle request in
 `Game_Data_Push`, calls the battle code in OV01 and waits until the battle is
 over. The game mode is set to "battle" during that call, but `Game()` never
 sees it, because control only comes back to the loop after the battle. Then
-the field state is restored and the place's script hears about the result. A
+the field state is restored and the place's script is told the result. A
 lost battle ends the session with a game over, except in battles that the
 story allows the party to lose. See
 [game/field.md](game/field.md#battles-started-from-the-field) and
@@ -486,8 +486,8 @@ flowchart TD
 
 ## 8. Game logic in Java
 
-Most story and event logic is not written in C. The main executable contains a
-small **Java virtual machine**:
+Most story and event logic is written in Java instead of C, and the main
+executable contains a small **Java virtual machine** to run it:
 
 | File | Role |
 | --- | --- |
@@ -499,22 +499,22 @@ small **Java virtual machine**:
 | `src/main/jni.c` | Bind and call native methods, heap marks, script threads |
 | `src/main/xheap.c` | The heap for Java objects |
 
-The compiled classes are not stored as separate `.class` files. They are
-packed into **script databases** with the extension `.evt`. Two of them are
+The compiled classes are not stored as separate `.class` files but packed into
+**script databases** with the extension `.evt`. Two of them are
 shared by the whole game (`data\system.evt` and `data\base.evt`), and every
 place and cutscene has its own. A place's script is a class that extends
 `xeno.Stage` and answers events such as talking to a character. A cutscene is
 a class that extends `xeno.Scene` and plays the scene from its `play()`
 method.
 
-The scripts run as script threads (`JThread`) inside the VM. These are not
-operating-system threads. They are records that hold a Java call stack, and
+The scripts run as script threads (`JThread`) inside the VM. A script thread
+is a record that holds a Java call stack, not an operating-system thread, and
 the VM runs them one after another on the control thread, once per frame. A
-script that waits (for a number of frames, a window or an animation) simply
+script that waits (for a number of frames, a window or an animation)
 returns control and resumes on a later frame.
 
-Scripts call the engine through **native methods**. Each native is a C function named after its Java method,
-for example:
+Scripts call the engine through **native methods**. Each native is a C function
+named after its Java method, for example:
 
 ```c
 /* Runtime.minigameExec(int) */
@@ -535,7 +535,7 @@ The main executable defines 401 native methods. By Java class:
 | `xeno.util.Toolkit`, `Format`, `Input`, `Spline`, `Layout` | 23 | Helpers, text formatting, controller input, curves, placing objects from the map layout data |
 | `xeno.vm.System`, `Thread`, `Math` | 13 | The VM's own system, thread and math classes |
 
-A native is a thin bridge. It reads its arguments from the Java call, then
+A native is a thin bridge that reads its arguments from the Java call, then
 calls ordinary engine code, which in turn uses `xgl` and the hardware. For
 example, `Runtime.execBattle(int, int)` saves part of the field state, sets
 the battle map and the monster set in OV01, runs the battle until it ends,

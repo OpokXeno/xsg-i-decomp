@@ -8,7 +8,7 @@ transfer Ether, and S.Pts extract Skills from accessories and raise a
 character's skill level. Equipment is bought in shops and fitted on the
 Characters and A.G.W.S. screens.
 
-All of this code lives in the main executable (`src/main/`), next to the
+All of this code is in the main executable (`src/main/`), next to the
 [main menu](main-menu.md) that hosts most of the screens. The battle data
 itself (unit tables, ether and technique tables, the stat calculation) is in
 overlay OV01, so OV01 must be loaded whenever these screens run. The battle
@@ -19,10 +19,10 @@ in [battle](battle.md).
 
 ## Where growth data lives
 
-Growth data sits in four places. The unit records, the player records and
+Growth data is stored in four places. The unit records, the player records and
 the inventory are arrays in main memory that are copied into the save data
-when the game is saved. The party data lives directly inside the save data,
-so it needs no copy.
+when the game is saved. The party data is stored directly inside the save
+data, so it needs no copy.
 
 ### Unit records
 
@@ -83,7 +83,7 @@ writes the level and wait adjustments of slot *n* at `+0x4C + n * 12` and
 ### Party data
 
 The **party data** (`PartyDataPrefix`, `include/main/party.h`) is a 0x188-byte
-block that lives directly inside the save data at `SaveData + 0x10078`.
+block stored directly inside the save data at `SaveData + 0x10078`.
 `PartyDataGet()` returns its address. It holds the party membership, the
 battle formation, the technique levels and the skill levels.
 
@@ -116,7 +116,7 @@ item tab (`SaveData + 0x10254`), five shop discount levels
 records of `plChaData`, the five inventory boxes and `moneyBox` into the
 `GameUserSave` area at `SaveData + 0x50`. `GamePopSaveDataUser()` copies them
 back after a load. The party data, the discount levels and the play time need
-no copy, because they already live inside `SaveData`. The layout of the save
+no copy, because they are already inside `SaveData`. The layout of the save
 data and the save screen are described in
 [save data](../architecture/save-data.md).
 
@@ -289,18 +289,18 @@ calls `SeisanDisp()` to draw it (see [battle](battle.md)).
    (`endPrintDirectFrameCopy`), loads font 1 and the menu window texture, and
    starts preloading the field resources (`GameResourcePreLoad`).
 
-`calcResult` is where growth really happens. It first adds the dropped items
-to the inventory boxes (`dataBoxInc`) and the money (`dataMoneyBoxInc`). Then
-every living unit of the party receives its share: experience, T.Pts, E.Pts
-and S.Pts of `monsGain`, each divided by the number of living units and
-raised by a percentage when the unit has the matching reward skill
-(`calcSkill` with bits 0x4000 experience, 0x2000 T.Pts, 0x1000 E.Pts and
-0x800 S.Pts). `calcResultSub` adds the shares to the player record and caps
-them at 9,999,999 and 9999. An A.G.W.S. passes its share to its pilot.
-`calcLvUp` then applies any level-up and the row records the level, maximum
-HP and maximum EP gained. Recruited members who did not fight get three
-quarters of the experience and no points. The battle side of these rules is
-described in [battle](battle.md).
+`calcResult` applies the growth. It first adds the dropped items to the
+inventory boxes (`dataBoxInc`) and the money (`dataMoneyBoxInc`). Then every
+living unit of the party receives its share: experience, T.Pts, E.Pts and
+S.Pts of `monsGain`, each divided by the number of living units and raised by
+a percentage when the unit has the matching reward skill (`calcSkill` with
+bits 0x4000 experience, 0x2000 T.Pts, 0x1000 E.Pts and 0x800 S.Pts).
+`calcResultSub` adds the shares to the player record and caps them at
+9,999,999 and 9999. An A.G.W.S. passes its share to its pilot. `calcLvUp` then
+applies any level-up and the row records the level, maximum HP and maximum EP
+gained. Recruited members who did not fight get three quarters of the
+experience and no points. The battle side of these rules is described in
+[battle](battle.md).
 
 Each `SeisanHissatuEntry` row (0x3C bytes) holds the character number, the
 gains in experience, T.Pts, E.Pts and S.Pts, levels, HP and EP, and
@@ -437,11 +437,11 @@ and bases 10, 8, 10, 9, 10, 8, 20, 20 in column order.
 | `MenuParaUpCheck(chr, i)` | -2 at the ceiling, -1 when T.Pts are short, 0 when allowed |
 | `MenuParaUp(chr, i)` | one step: HP +10, EP +2, others +1 (`ParaPointTbl = {10, 2, 1, ...}`), HP and EP clamped to the ceiling, cost subtracted from T.Pts |
 
-The ceiling is the most unusual rule. A parameter can never be raised above
-the highest value that any recruited main character currently has for it. A
-character who already holds the best value of a parameter cannot raise that
-parameter at all. The cost grows with the current value, so each step costs a
-little more than the last.
+Because of the ceiling, a parameter can never be raised above the highest
+value that any recruited main character currently has for it. A character who
+already holds the best value of a parameter cannot raise that parameter at
+all. The cost grows with the current value, so each step costs a little more
+than the last.
 
 The flowchart below shows one "Use T.Pts" purchase.
 
@@ -590,7 +590,7 @@ A character knows an ether when its bit is set in `learnedEther` of its
 player record. To be usable in battle an ether must also be **set** in one
 of the 12 `etherId` slots of the unit record. The Wt (`capCost`) of all set
 ethers may total at most 12 (`ETHER_CAP_MAX`), tracked in `capUsed` (+0x17).
-The help text insists on this step: "Set Ether. Caution: You must complete
+The help text warns about this step: "Set Ether. Caution: You must complete
 this step in order to utilize any Ether skill."
 
 `data\endou\ether\etree.bin` defines how ethers evolve. It holds one 4-byte
@@ -842,8 +842,7 @@ subtracts the cost from S.Pts (never below 0) and, while the skill level is
 below 5, also from the counter. When the counter reaches 0 the level rises
 by one with the decide sound, and the counter is reloaded from
 `next_level_points` with the overflow carried over. At level 5 the counter
-stays 0. The S.Pts spent on extraction are therefore also the experience of
-the skill level.
+stays 0. The S.Pts spent on extraction therefore also raise the skill level.
 
 The flowchart below shows one extraction.
 
@@ -958,8 +957,8 @@ of characters 1 to 11 or of A.G.W.S. 17 to 32 to their recalculated maximum
 
 ### Party membership
 
-`src/main/party.c` manages who is in the party. The masks of the party data
-work together:
+`src/main/party.c` manages who is in the party. It uses these masks and fields
+of the party data:
 
 - `friend_mask` holds the recruited main characters (ids 1 to 7, never 4).
   `PartyFriendOn`, `PartyFriendOff` and `PartyFriendCheck` change and test it.

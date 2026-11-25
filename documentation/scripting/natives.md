@@ -1,12 +1,13 @@
 # Native methods
 
-The Java scripts of Xenosaga Episode I cannot touch the engine directly. Every
-effect they have on the game, from moving a character to starting a battle,
-goes through a **native method**: a method that a library class such as
-`xeno.Chr` declares with the `native` keyword and that the main executable
-implements as a C function. The executable has 401 of them, spread over 21
-Java classes. This page explains how a native is called, how Java objects are
-tied to engine objects, and what each class's natives do.
+Every effect that the Java scripts of Xenosaga Episode I have on the game,
+from moving a character to starting a battle, goes through a **native
+method**, because the scripts have no direct access to the engine. A native
+method is declared with the `native` keyword by a library class such as
+`xeno.Chr` and implemented as a C function by the main executable. The
+executable has 401 of them, spread over 21 Java classes. This page explains
+how a native is called, how Java objects are tied to engine objects, and what
+each class's natives do.
 
 How the VM loads classes, runs bytecode and schedules script threads is
 explained on the [Java virtual machine](java-vm.md) page.
@@ -46,9 +47,9 @@ The C functions live in one source file per Java class:
 | `xeno.Scene` | 2 | `src/main/scene_2.c` | Starting a method on an event scene |
 
 `runtime.c` contains one more function with a native-style name,
-`Java_xeno_util_Runtime_jump_sub`. It is not in the table. It is the shared
-helper that performs a map or event jump after the jump natives have stopped
-the script.
+`Java_xeno_util_Runtime_jump_sub`, which is not in the table. This shared
+helper performs a map or event jump after the jump natives have stopped the
+script.
 
 The counts above are table rows. The declarations in the library classes of
 `data\system.evt` differ by three in each direction. `Chr.invalidate()`,
@@ -261,12 +262,11 @@ classDiagram
 
 ### Native-backed objects
 
-Some Java objects are not separate Java objects at all. The native allocates
-or picks an engine record and writes the class's `classPointer` into the
-record's first word. From then on the VM treats the record as an instance of
-that Java class, and the script can call its natives with it. The record must
-have room for the header word at offset 0, which these engine structures have
-by design.
+For some Java classes no separate Java object exists. The native allocates or
+picks an engine record and writes the class's `classPointer` into the record's
+first word. From then on the VM treats the record as an instance of that Java
+class, and the script can call its natives with it. The record must have room
+for the header word at offset 0, which these engine structures have by design.
 
 | Java class | Created by | Engine record |
 | --- | --- | --- |
@@ -279,13 +279,13 @@ by design.
 | `xeno.util.Spline` | `Spline.create` | A spline record from `xmalloc` |
 | `xeno.vm.Thread` | `Thread.create` | The `JThread` itself |
 
-The records behind `Window`, `Menu`, `Camera` and `PlayControl` live in engine
-pools, not in the VM heap. Their lifetime is controlled by the engine, not by
-the heap marks. For example, `SCRIPT_exec` calls `TWSYS_init` and
-`TCAMERA_init` before it starts a new map script, which resets all windows and
-event cameras. The static `Vector4f` and the shared `String` of
-`Format.toString` are overwritten by the next call, so a script must copy the
-values it wants to keep.
+The records behind `Window`, `Menu`, `Camera` and `PlayControl` are in engine
+pools, not in the VM heap, so the engine controls their lifetime and the heap
+marks do not. For example, `SCRIPT_exec` calls `TWSYS_init` and `TCAMERA_init`
+before it starts a new map script, which resets all windows and event cameras.
+The static `Vector4f` and the shared `String` of `Format.toString` are
+overwritten by the next call, so a script must copy the values it wants to
+keep.
 
 The diagram below contrasts the two kinds of objects. A peer-based object is a
 real Java object in the VM heap that points to its engine object. A
@@ -395,9 +395,9 @@ math helpers are described in [Math](../libraries/math.md).
 
 ## xeno.util.Runtime
 
-`xeno.util.Runtime` is the script's view of the whole game. Its natives read
-and write the save data, move the player between maps and events, and run
-other parts of the game such as battles and minigames. All of them are static.
+The natives of `xeno.util.Runtime` cover the whole game. They read and write
+the save data, move the player between maps and events, and run other parts of
+the game such as battles and minigames. All of them are static.
 
 ### Flags, registers and game state
 
@@ -410,7 +410,7 @@ other parts of the game such as battles and minigames. All of them are static.
 | `setMenuLock()` | Blocks the main menu for 62 frames through `SCRIPT_sceneChangeTimeSet` |
 | `setEventTimer(String, int)` | Starts a timer task (`setEventTimerTaskEntry`, `src/main/disp_on.c`) that counts the frames down and then calls the named method of the map script through `CallMethod` |
 
-`VMRegister` lives outside the VM heap, so its values survive scene changes and
+`VMRegister` is outside the VM heap, so its values survive scene changes and
 VM resets. It is probably the way scripts pass small values from one scene to
 the next.
 
@@ -493,9 +493,9 @@ systems are described in [Character growth](../game/character-growth.md) and
 
 ### Running other parts of the game
 
-Some natives run a complete screen and return only when it has ended. The
-script thread sees one long native call, while the screen's own loop calls
-`xglSleep` every frame.
+Some natives run a complete screen and return only when it has ended. For
+the script thread this is one long native call, while the screen's own loop
+calls `xglSleep` every frame.
 
 | Method | What it does |
 | --- | --- |
@@ -532,18 +532,17 @@ The minigames themselves are described in
 (through the subclass `xeno.Enepc`) field enemies. Its peer is an `Actor` (see
 [Actors](../libraries/actors.md)). The 98 natives fall into a few groups.
 
-Movement, rotation and scaling do not change the actor at once. They fill one
-channel of the actor's sequence record `actSequence[actor->number]` with a
-handler (`SEQ_moveXZ`, `SEQ_moveChr`, `SEQ_moveSPL`, `SEQ_rotate`,
-`SEQ_rotateSPL`, `SEQ_scale`, `SEQ_scaleSPL` or `SEQ_motion`) and a target, and
-the actor update then interpolates over the following frames. Rates given in
-units per second are divided by 30, because the sequences step once per frame.
-Move targets are absolute map coordinates, unless bit 0 of the object's
-`algorithm` field is set, in which case they are relative to the current
-position.
-The channels are independent, so a character can move, turn and play a motion
-at the same time. The handlers are described in
-[Scenes and time charts](scenes-and-timecharts.md).
+The movement, rotation and scaling natives fill one channel of the actor's
+sequence record `actSequence[actor->number]` with a handler (`SEQ_moveXZ`,
+`SEQ_moveChr`, `SEQ_moveSPL`, `SEQ_rotate`, `SEQ_rotateSPL`, `SEQ_scale`,
+`SEQ_scaleSPL` or `SEQ_motion`) and a target. The actor does not change at
+once, because the actor update interpolates over the following frames. Rates
+given in units per second are divided by 30, because the sequences step once
+per frame. Move targets are absolute map coordinates, unless bit 0 of the
+object's `algorithm` field is set, in which case they are relative to the
+current position. The channels are independent, so a character can move, turn
+and play a motion at the same time. The handlers are described in [Scenes and
+time charts](scenes-and-timecharts.md).
 
 Most of these natives end with a `boolean wait`. When it is true the actor is
 marked busy (actor flag `0x2`) until the channel finishes. If the caller is the
@@ -639,7 +638,7 @@ The third group sets fog and clipping: `setFog(int, ...)`, `resetFog(int)` and
 
 ## xeno.Effect
 
-A `Effect` object stands for one effect of the sef library (see
+An `Effect` object stands for one effect of the sef library (see
 [Effects](../libraries/sef.md)). Its peer comes from `Toolkit.getPeer`, which
 loads the effect data for the object's `id` and creates the effect at the
 object's position.
@@ -711,8 +710,7 @@ No script on the disc calls `Movie.start` or `Movie.stop`, and the folder
 `data\movie\full\` does not exist on the disc, so this full-screen IPU player
 is unused in the released game (see
 [Files and paths that nothing uses](../formats/movies-images-and-icons.md#10-files-and-paths-that-nothing-uses)).
-`Runtime.mpeg2` is the other way to play a movie from a script, and it is
-the one the scripts use.
+The scripts use the other way to play a movie from a script, `Runtime.mpeg2`.
 
 ## xeno.Sound
 
@@ -800,19 +798,18 @@ All `Toolkit` methods are static.
 | `loadResource(String)` | Returns the address of a file inside the resource volume of the current script (`XTK_findFile`), or 0 |
 | `call(Object, String)` | Empty, and declared by no class |
 
-`loadResource(String)` is how a story event reaches its own data files. They
-are not inside the `.evt` class volume but in a separate resource volume,
+A story event reaches its own data files with `loadResource(String)`. The
+files are in a resource volume separate from the `.evt` class volume,
 `data\mtnpack\NAME.arc`, which `loadScriptCD2` loads next to the classes. The
 77 volumes on the disc hold the event's camera curves (`.cam`), its face
-motion packs (`.fpk`) and a few build leftovers. Camera curves reach the
-event player through the Java wrapper `PlayControl.loadCamera(String)`. The
-matching `PlayControl.loadTimeChart(String)` exists, but no retail script
-calls it.
-Both formats are described in
-[Resource volumes](../formats/scripts-and-archives.md#resource-volumes-arc)
-and [Camera curves](../formats/scripts-and-archives.md#camera-curves-cam).
-The resource system itself is described in
-[Files and resources](../architecture/files-and-resources.md).
+motion packs (`.fpk`) and a few build leftovers. Camera curves reach the event
+player through the Java wrapper `PlayControl.loadCamera(String)`. The matching
+`PlayControl.loadTimeChart(String)` exists, but no retail script calls it.
+Both formats are described in [Resource
+volumes](../formats/scripts-and-archives.md#resource-volumes-arc) and [Camera
+curves](../formats/scripts-and-archives.md#camera-curves-cam). The resource
+system itself is described in [Files and
+resources](../architecture/files-and-resources.md).
 
 ## xeno.util.Format
 

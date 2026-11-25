@@ -8,9 +8,9 @@ of the game data on the PlayStation 2 hard disk. Apart from `ControlEntry`
 itself, all of these screens live in the overlay OV02 (`src/ov02/`), which
 they share with the U.M.N. screens described in [umn.md](umn.md).
 
-The title screen is also the dispatcher of the whole game. It returns a small
+The title screen also selects what the game runs next. It returns a small
 encoded value that tells the control thread which overlay to load and which
-function to call next. The same mechanism starts the field game and, during
+function to call. The same mechanism starts the field game and, during
 development, started the test programs described in
 [debug-tools.md](debug-tools.md).
 
@@ -20,7 +20,7 @@ development, started the test programs described in
 
 The executable starts at `0x00200008` in the C runtime start-up code (see
 [runtime-libraries.md](../architecture/runtime-libraries.md)), which calls
-`main()` in `src/main/control_entry.c`. `main()` does very little by itself:
+`main()` in `src/main/control_entry.c`. `main()` does the following:
 
 1. It stores `argc` and `argv` in `main_param_argc` and `main_param_argv`.
    Some debug loaders read file names from these start-up options.
@@ -52,9 +52,8 @@ packets, render, font, movies and debug menus.
 
 One of the threads that `xglThreadInitial()` creates is the control thread.
 Its entry point in the thread table `asSystemThreadList` is `ControlEntry`.
-That function is the body of the whole game. It never returns, and every
-screen of the game runs inside it, either directly or through a function it
-calls.
+That function never returns, and every screen of the game runs inside it,
+either directly or through a function that it calls.
 
 `ControlEntry` first gives the other threads one turn with `xglSleep()`. Then
 it loads the resident sound banks: the sound effect bank `REGIST` with
@@ -100,10 +99,10 @@ sequenceDiagram
 ## 2. OV02 is already in memory at boot
 
 All overlays of the game are loaded into the same slot at `0x00A00000` (see
-[the overview](../README.md#2-overlays)). OV02 is special. Its code and data
-are linked into the main executable `SLUS_204.69` as a third loadable segment,
-so the console's ELF loader places OV02 in the overlay slot together with the
-main program. `readelf -l` shows the layout:
+[the overview](../README.md#2-overlays)). Unlike the other overlays, OV02 has
+its code and data linked into the main executable `SLUS_204.69` as a third
+loadable segment, so the console's ELF loader places OV02 in the overlay slot
+together with the main program. `readelf -l` shows the layout:
 
 | Segment | Address | File size | Content |
 | --- | --- | --- | --- |
@@ -173,9 +172,10 @@ flowchart TD
     J --> D
 ```
 
-The title return value packs two things into one word. The function address
-fits in 24 bits because all code of the game lies below `0x01000000`. The
-overlay number takes the top byte. The diagram below shows the layout.
+The title return value packs a function address and an overlay number into one
+word. The address fits in 24 bits because all code of the game lies below
+`0x01000000`. The overlay number takes the top byte. The diagram below shows
+the layout.
 
 ```mermaid
 flowchart LR
@@ -333,9 +333,9 @@ movie with START, the second one is skipped too.
    decoded frame as a textured rectangle, and give the other threads a turn.
 4. Close the movie and return 1 when the player skipped it.
 
-The two random number calls do not use their results. They advance both
-random generators once per frame, so the random state when the game starts
-probably depends on how long the player watched the logos.
+The results of the two random number calls are not used. The calls advance
+both random generators once per frame, so the random state when the game
+starts probably depends on how long the player watched the logos.
 
 ## 6. The title screen
 
@@ -348,8 +348,7 @@ described in section 3.
 
 `Title()` first copies the current frame with `copyframe()`, a small GS
 transfer packet that copies the display buffer, so the previous picture stays
-visible while the title loads. Then it collects what it needs to know about
-saves and the hard disk:
+visible while the title loads. Then it checks the saves and the hard disk:
 
 1. `xglMcRequest(0 and 1, MC_REQUEST_DIRECTORY)` count the game's saves on
    both memory cards. `xglHddMcExist` counts the saves on the HDD.
@@ -526,7 +525,7 @@ save always starts from a clean state:
 4. `xglFontLoad(1, 0)` and `WindowTexLoad(0, 0)` load the font and the window
    textures that the field and menus need.
 
-OV02 only knows a small view of `GameLoopState`, declared as
+OV02 uses only a small view of `GameLoopState`, declared as
 `Ov02GameLoopState` in `include/ov02/title_game_init.h`:
 
 | Offset | Field in OV02 | Field in `game.c` | Use |

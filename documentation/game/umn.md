@@ -13,9 +13,9 @@ in short comic dialogues.
 All U.M.N. screens are in the overlay OV02 (`src/ov02/`), which they share
 with the boot and title screens described in
 [title-and-boot.md](title-and-boot.md). During play the overlay slot normally
-holds OV01, so opening the U.M.N. means swapping overlays and back. A few
-helpers that must work while OV01 is loaded live in the main executable, in
-`src/main/window_tex_load.c`.
+holds OV01, so opening the U.M.N. means loading OV02 over it and loading OV01
+again afterwards. A few helpers that must work while OV01 is loaded live in
+the main executable, in `src/main/window_tex_load.c`.
 
 [← Back to the overview](../README.md)
 
@@ -222,8 +222,8 @@ state the callback runs the worker twice in the same frame (once to set up,
 once to run). In the RUN state it runs the worker once. In the END state it
 removes the task with `xglTaskWaitRemove`. When `UmnWork.mode` becomes
 `UMN_MODE_NONE`, every task switches to END, so leaving the U.M.N. cleans up
-all windows. A worker can also end its own task, which they do when the mode
-no longer matches their screen.
+all windows. A worker can also end its own task, which it does when the mode
+no longer matches its screen.
 
 Each screen creates its tasks in its first step. For example `UmnMail` creates
 seven tasks (`tskUmnMailPas`, `tskUmnMailInfo`, `tskUmnMailFolder`,
@@ -618,10 +618,10 @@ The five bytes `kosmos_items` in the save block are shop discount levels.
 price rate of each price class as `1.0 - level × 0.1`, with a minimum of 0.5
 (see [main-menu.md](main-menu.md)). A mail header can name one class (1 to 4)
 and a level step (1 to 4). The first time the mail is read, the step is added
-to that class. The reply cost is the money side of this system. A mail that
-asks for an investment can be answered only when the player has the amount,
-and sending the reply takes it. The field name `kosmos_items` in the OV02
-declarations does not match this use.
+to that class. The reply cost is the investment amount. A mail that asks for
+an investment can be answered only when the player has the amount, and sending
+the reply takes it. The field name `kosmos_items` in the OV02 declarations
+does not match this use.
 
 ### KOS-MOS specials
 
@@ -731,8 +731,8 @@ field. That is the `GAME_FLAG_ON_EVENT_SYMBOL` bit of `GameLoopState.flags`,
 which `src/main/game.c` sets while the player is on such a map symbol (it also
 shows the symbol effect `evsEffe`). Elsewhere Circle plays the buzzer.
 
-Starting a simulation crosses several layers. The diagram below shows the
-steps.
+The diagram below shows the steps of starting a simulation and the layers that
+it crosses.
 
 ```mermaid
 sequenceDiagram

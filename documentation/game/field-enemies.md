@@ -39,7 +39,7 @@ and NPC", because the same records and update function serve both. The
 actor's id (`inUseId`) tells them apart. Ids `0x4000` to `0x4F22` are enemies, and only they react to trap
 damage and use the enemy collision layer of the map. Other ids are NPCs.
 
-An enemy is therefore made of three pieces of data:
+An enemy is made of three pieces of data:
 
 - the **actor** in `actor[]`, with position, rotation, motion, model and
   flags,
@@ -93,7 +93,7 @@ classDiagram
 The player is actor 0 and also has an enemy work record, `enepc[0]`. The ladder
 code keeps its state there, at the offset that enemies call `encount_lock`
 (`+0x3830`). So when enemy code checks that the player's `encount_lock` is 0,
-it really checks that the player is not on a ladder (see
+the test means that the player is not on a ladder (see
 [Ladders](map-and-units.md#ladders)).
 
 ## The enemy work record
@@ -388,7 +388,7 @@ Alerted enemies (`ENEMY_STATE_FLAG_ALERT_RAISE`) advance the spline faster.
 
 ### Seeing and hearing the player
 
-An enemy notices the player in two ways.
+An enemy notices the player by sight and by hearing.
 
 **Sight.** If `sight_distance` is not zero, `ACT_updateEnemy` tests every frame
 whether the player is inside a view cone in front of the enemy
@@ -481,10 +481,10 @@ switches to the walk motion.
 
 ### Homing graphs
 
-After a chase an enemy has to find its way back. Each enemy has a small graph
-of up to 64 positions with up to four links each. The script gives it as the
-enemy's homing values, four floats per node: the position and the index of
-the node it links to (-1 for none). `Enemy_Init` adds each node with
+Each enemy has a small graph that it uses to find its way back after a chase.
+The graph has up to 64 positions with up to four links each. The script gives
+it as the enemy's homing values, four floats per node: the position and the
+index of the node it links to (-1 for none). `Enemy_Init` adds each node with
 `Homing_Add`, which links the two nodes in both directions.
 `Refresh_Homing` rebuilds all links from the stored link targets.
 
@@ -546,10 +546,9 @@ after another, each for its own length, and then returns to the route.
 
 ### The whole state machine
 
-All transitions of the enemy AI fit in one picture. An enemy starts in the
-init action and settles into the pause. From there the move kind decides
-whether it stands, patrols, wanders, flees or pursues along its route. A
-sighting or a noise leads to the found action and the chase, or to the
+An enemy starts in the init action and settles into the pause. From there the
+move kind decides whether it stands, patrols, wanders, flees or pursues along
+its route. A sighting or a noise leads to the found action and the chase, or to the
 tentacle attack. A chase that fails ends in a threat, and the homing search
 started with it brings the enemy back along its homing graph. Trap damage can
 interrupt any of these actions (see [Trap damage](#trap-damage)), and each
@@ -630,12 +629,12 @@ it was found in `ACT_updateEnemy`. The player's move code stops the looping expl
 and electric sounds once no enemy is burning or electrified any more
 (`Check_EnemyBurn`, `Check_EnemyElec`).
 
-The ailment bits matter when the battle starts. If the player touches an enemy
-while it is stunned, electrified or sealed, `Check_Encount` turns the bits
-into the encounter's trigger flags (stunned 2, electrified 1, sealed 4). The
-battle shows a matching encounter effect for each set bit (`encountEffDisp`
-in `src/ov01/entry_first_init.c`, effects `0xA42` to `0xA44`). Then
-`calcCfEncount` in `src/ov01/calc.c` rewards the trap with a first strike.
+If the player touches an enemy while it is stunned, electrified or sealed,
+`Check_Encount` turns the ailment bits into the encounter's trigger flags
+(stunned 2, electrified 1, sealed 4), which the battle reads. The battle shows
+a matching encounter effect for each set bit (`encountEffDisp` in
+`src/ov01/entry_first_init.c`, effects `0xA42` to `0xA44`). Then
+`calcCfEncount` in `src/ov01/calc.c` gives the party a first strike.
 For an electrified enemy it sets the wait count of every party member to 0
 and calls `menuTimeSet(1)`. For a stunned enemy it sets the wait counts to 0
 and adds one boost to each party member. The seal bit has no effect there, but
@@ -682,9 +681,9 @@ queue.
 | 16–18 | `Enemy_Command_Sac_Turn` | Turn around X, Y or Z, at once or over frames |
 | 19 | `Map_Command_Ladder` | Set the direction, height and bottom exit of a ladder |
 
-The last command has nothing to do with the enemy. It fills the ladder tables
-of the map (see [Ladders](map-and-units.md#ladders)) and probably uses the
-enemy queue only because it is a convenient way to pass four numbers to the
+The last command does not affect the enemy. It fills the ladder tables of the
+map (see [Ladders](map-and-units.md#ladders)) and is probably in the enemy
+queue only because that is a convenient way to pass four numbers to the
 engine.
 
 The freeze states hand the enemy to the script:
@@ -727,13 +726,14 @@ bank of an actor. Sounds are numbered from the bank start:
 | 7 | Threat |
 
 `EnemySound(actor, index, play, ignore_type)` plays one at the enemy's
-position on channel `number + 1`, unless the enemy is hidden. The two bank
-types sound different:
+position on channel `number + 1`, unless the enemy is hidden. The walk and run
+sounds work differently in the two bank types:
 
 - For NPC banks, `Sound_FootStep` plays step sounds in time with the walk and
   run animations during the route and chase actions, using the frame
-  thresholds in the `FootStep` table. `EnemySound` refuses the plain walk and run sounds for these banks
-  unless the caller asks it to ignore the type.
+  thresholds in the `FootStep` table. `EnemySound` does not play the plain
+  walk and run sounds for these banks unless the caller asks it to ignore the
+  type.
 - For enemy banks, `ACT_updateEnemy` loops the walk sound (offset 2) during
   the route action, once the scene has run for three frames, and the run sound
   (offset 4) during the chase. It stops each loop when the action ends.
@@ -790,8 +790,8 @@ the battle code was identified.
 
 ### The encounter record
 
-The request lives in `GameLoopState` (see [field](field.md#gameloopstate)).
-The 16-byte record at `+0x29F90`:
+The request is stored in `GameLoopState` (see
+[field](field.md#gameloopstate)). Its 16-byte record is at `+0x29F90`:
 
 ```
 GameLoopState + 0x29F90  encounter record
@@ -879,11 +879,9 @@ sequenceDiagram
 
 ## Debug features
 
-The enemy code contains several development aids.
-
-The main one is the variable `FLAG_FRAME_60`, defined in
-`src/main/Undulate.c`. The enemy page of the pause menu
-(`src/main/pause_menu_page_enemy.c`) cycles it through three values with
+The enemy code contains several development aids. The main one is the variable
+`FLAG_FRAME_60`, defined in `src/main/Undulate.c`. The enemy page of the pause
+menu (`src/main/pause_menu_page_enemy.c`) cycles it through three values with
 START and gives a strong vibration each time:
 
 | Value | Page text | Effect |

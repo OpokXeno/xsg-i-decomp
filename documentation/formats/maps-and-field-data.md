@@ -6,7 +6,7 @@ A field map of Xenosaga Episode I is a set of up to three files in
 floors the characters walk on, the floors the camera rides on, the special
 ground layers that enemies, NPCs, the camera, footsteps and floor lights read,
 and the named points where scripts place the player, characters, effects and
-event triggers. Around the maps sit three smaller families of field data: the
+event triggers. There are also three smaller families of field data: the
 enemy behaviour presets and spline weights in `data\matumoto\`, the item box
 and event item tables in `data\karakama\`, and the battle stages in
 `data\yamamoto\map\`, which the battle AI file of a field map selects.
@@ -38,7 +38,7 @@ and [Battle system](../game/battle.md).
 
 ## The formats at a glance
 
-Every file of this family lives in archive group 00 of the disc (see
+Every file of this family is in archive group 00 of the disc (see
 [Files and resources](../architecture/files-and-resources.md) for groups and
 ARX packing). "Packed" means stored with ARX compression. The CD layer
 unpacks such files while it reads them, so the code always sees the plain
@@ -82,7 +82,7 @@ flowchart LR
 ## The map directory
 
 `data\map\` holds 704 files with 250 distinct base names. There are no
-subdirectories. The code knows two more map directories, `data\map\test\` and
+subdirectories. The code names two more map directories, `data\map\test\` and
 `data\map\check\`, which `MAP_getPath` returns when the debug variable
 `UseTestPath` selects them (set by the debug menu in `game_debug_menu.c` and by
 `karakama_test.c`). Neither directory exists on the disc.
@@ -194,7 +194,7 @@ When a scene is read from a scene archive (`.a`, see
 files are not read from `data\map\`. `next_arc_size` takes the next entry of
 the open archive instead, in the fixed order `.lex`, `.xtx`, `.id` and then the
 think file, but the think entry only when the map has a think number. The
-`.id` is stored in the archive unpacked, exactly as in `data\map\`. Archive
+`.id` is stored in the archive unpacked, as in `data\map\`. Archive
 entries are padded to 64 bytes and `next_arc_size` copies the padded size, so
 the copy of `MC_VOK01.id` (52,524 bytes) in `cf0010.a` is 52,544 bytes long.
 Entries 50 to 53 of `cf0010.a` are the `people01` preset followed by
@@ -278,7 +278,7 @@ sequenceDiagram
 A map `.lex` is an ordinary model file and a map `.xtx` an ordinary texture
 file. Their general layout is described in
 [Models and textures](models-and-textures.md). The map code reads only a few
-header fields of the model, and some facts hold for map files in particular.
+header fields of the model.
 
 Of the 248 map models, 246 are ARX-packed and two are stored plain
 (`MC_KUK11.lex` and `MC_TST01.lex`). Of the 247 texture files, 184 are packed.
@@ -286,8 +286,8 @@ Of the 248 map models, 246 are ARX-packed and two are stored plain
 
 ### The model header fields the map code reads
 
-The map code reads three fields of the `.lex` header. The artist field is
-shown as well because it names the people who built the maps.
+The map code reads three fields of the `.lex` header. The table also has the
+artist field, which names the people who built the maps.
 
 | Offset | Size | Type | Field | Meaning for a map | Values seen |
 | --- | --- | --- | --- | --- | --- |
@@ -370,10 +370,10 @@ table pointers and the four pointers of each mesh header are relocated. The
 vertex, normal and neighbour numbers inside a triangle stay offsets relative
 to their own tables.
 
-`UnduInit` knows three file types. Type 0 has five table pointers and type 1
+`UnduInit` handles three file types. Type 0 has five table pointers and type 1
 has the header without groups and records. Only type 2 occurs on the disc
-(all 209 files), and `UnduDataGetHeader` refuses any file whose type byte is
-not 0x82, so only type 2 supports lookups by list.
+(all 209 files), and `UnduDataGetHeader` returns 0 for any file whose type
+byte is not 0x82, so only type 2 supports lookups by list.
 
 ### The overall layout
 
@@ -507,9 +507,10 @@ A triangle (`UnduTriangle`) is 24 bytes.
 | 0x16 | 2 | u16 | | Not read | see below |
 
 The height of the floor at (x, z) is `(planeOffset - nx * x - nz * z) / ny`.
-The plane offset matches `normal · vertex A` in every triangle whose normal is a number. A point is
-inside a triangle when the three edge orientations in the x/z plane are all
-zero or negative, so a triangle must run clockwise seen from above.
+The plane offset matches `normal · vertex A` in every triangle whose normal
+is a number. A point is inside a triangle when the three edge orientations in
+the x/z plane are all zero or negative, so a triangle must run clockwise seen
+from above.
 
 The neighbour links were checked in both directions. Of the 612,363 edges,
 456,835 have a neighbour that links back across the same edge and 155,528
@@ -911,7 +912,7 @@ flowchart TD
 
 A preset file is a 4-byte count followed by `count` records of 0x50 bytes,
 so its size is `4 + 80 * count`. All 80 `MC_*.dat` files and `people01.dat`
-follow this exactly.
+follow this layout.
 
 ```
 preset file
@@ -1255,7 +1256,7 @@ data file of the shipped game reaches them.
   wall triangles in `MC_UZU02.id`) and every 0x2300 value in records 0, 4
   and 5.
 
-The reverse also happens. The scene scripts ask for three presets that do
+The scene scripts also ask for three presets that do
 not exist: `loadene MC_VOK18` in `cf0180` and `cf0189`, `MC_VOK19` in
 `cf0190` and `cf0199` and `MC_VOK20` in `cf0200` and `cf0209`. The read finds
 no file, so the table loaded before probably stays in place. The map loaders

@@ -23,16 +23,16 @@ rules it implements are on the [A.G.W.S. Battle](agws-battle.md) page.
 The engine has two layers on top of the main executable. The **rg** layer
 (`rg_*.c`, "robot game") holds the game logic and the generic engine services.
 The **xrg** layer (`xrg_*.c` and `init_xrg_input.c`) is the platform layer. It
-wraps the parts of the main executable the engine needs: the
-[xgl system library](../../libraries/xgl.md), the [nml model
-library](../../libraries/nml.md), the [actor library](../../libraries/actors.md)
-`ACT_*`, Sony's VIF1 packet helpers `sceVif1Pk*` and the newlib runtime. The
-names suggest the code was written to be portable: the "x" layer is the only
-place that should know about Xenosaga.
+wraps the parts of the main executable the engine needs: the [xgl system
+library](../../libraries/xgl.md), the [nml model
+library](../../libraries/nml.md), the [actor
+library](../../libraries/actors.md) `ACT_*`, Sony's VIF1 packet helpers
+`sceVif1Pk*` and the newlib runtime. The names suggest the code was written to
+be portable: the "x" layer is the only place that should depend on Xenosaga.
 
 The separation is mostly kept. The xrg files make nearly all calls into the
-main executable. A few rg files reach down directly: `rg_draw.c` sets the
-studio, camera windows and sub-windows through `xglStudio*`, `xglCamera*` and
+main executable. A few rg files call it directly: `rg_draw.c` sets the studio,
+camera windows and sub-windows through `xglStudio*`, `xglCamera*` and
 `nmlModel*`, `rg_select_robot.c` creates its preview actor with `ACT_*`, and
 `rg_enemy.c` and `rg_piclist.c` call `xglFontDebugPrintf` in their debug
 dumps. The diagram below shows the layers and the main services of each.
@@ -76,8 +76,7 @@ flowchart TB
 
 ## Object style in C
 
-Almost every module follows the same pattern, which makes the code easy to
-read once it is known.
+Almost every module follows the same pattern.
 
 - **Create and dispose.** `CreateRgX(...)` allocates the object from an RgHeap,
   calls a private `_InitX` and returns it. `DisposeRgX(p)` calls `_DestructX`
@@ -128,7 +127,7 @@ RgCharMgr *InstanceOfRgCharMgr(void)
 Time is a fixed step. `RgGetFrameTime` returns `RG_FRAME_TIME`, 1/30 of a
 second, and every `PassTime` function receives it as `deltaTime`. Each object
 type also has a `Disp` function that queues its drawing. The words "pass time"
-(advance the simulation) and "disp" (draw) run through the whole engine.
+(advance the simulation) and "disp" (draw) are used throughout the engine.
 
 ## Start-up and shutdown
 
@@ -457,7 +456,7 @@ objects. `RgBattleMgrDisp` runs `_DispBattle`: the split-screen divider, the
 players, the characters, the target markers, the life display and the weapon
 displays.
 
-The result check is simple. If the first player's robot is dead the result is
+In the result check, if the first player's robot is dead the result is
 `KNOCKOUT | PLAYER2_WINS`, else if the second is dead it is `KNOCKOUT |
 PLAYER1_WINS`, else if the timer reached zero it is `TIME_OVER` with the
 winner chosen by lost life (`RgBattleMgrGetPlayerDamage`). The battle loop in
@@ -472,13 +471,12 @@ While the game is paused the simulation calls are skipped but drawing
 continues. The battle itself is drawn only from the second frame on, probably
 so that the first frame does not show a scene that is still being set up.
 
-Drawing is deferred. The `Disp` calls do not draw anything. They only add
-requests to queues: 2D rectangles to an `XrgPaint2D`, sprites to the particle
-driver, and objects to the `RgDraw` queue. `_EndOfFrame` then flushes the
-shared painter and the particle driver into `RgDraw`, runs `RgDrawJob`, which
-draws everything in priority order for each studio, and calls `XrgSleep`
-(`xglSleep`) to wait for the next frame. The sequence diagram below shows one
-frame.
+Drawing is deferred. The `Disp` calls only add requests to queues: 2D
+rectangles to an `XrgPaint2D`, sprites to the particle driver, and objects to
+the `RgDraw` queue. `_EndOfFrame` then flushes the shared painter and the
+particle driver into `RgDraw`, runs `RgDrawJob`, which draws everything in
+priority order for each studio, and calls `XrgSleep` (`xglSleep`) to wait for
+the next frame. The sequence diagram below shows one frame.
 
 ```mermaid
 sequenceDiagram
@@ -519,7 +517,7 @@ obstacles ahead, the actor from an `XrgActorEssence` and a sound object.
 the robot is doing (advancing, rolling, attacking, seeing the target, locked
 on, dashing).
 
-A **robot control** is the brain of a robot. The base `RgRobotControl`
+A **robot control** chooses the commands of a robot. The base `RgRobotControl`
 (`src/ov12/rg_robot_control.h`) has `robot`, `destructMethod` and `jobMethod`.
 Three kinds exist:
 
@@ -532,12 +530,13 @@ Three kinds exist:
 - `CreateRgEnemyControl` makes an `RgEnemyControl` (0xB0 bytes), the CPU AI
   described [below](#the-cpu-ai).
 
-Both real controls talk to the robot only through the same public commands:
-`RgRobotAccelarate`, `RgRobotAccelarateRotate`, `RgRobotBreak`,
-`RgRobotDash`, `RgRobotDashContinue`, `RgRobotShot`, `RgRobotTargetting` and
-`RgRobotDropWeapon`. The robot queues them and decides later whether its
-current state accepts them. The weapons, shot threads and shots are driven by
-the robot, never by the control. The flowchart below shows this chain.
+The input control and the enemy control drive the robot only through the same
+public commands: `RgRobotAccelarate`, `RgRobotAccelarateRotate`,
+`RgRobotBreak`, `RgRobotDash`, `RgRobotDashContinue`, `RgRobotShot`,
+`RgRobotTargetting` and `RgRobotDropWeapon`. The robot queues them and decides
+later whether its current state accepts them. The weapons, shot threads and
+shots are driven by the robot, never by the control. The flowchart below shows
+this chain.
 
 ```mermaid
 flowchart LR
@@ -823,9 +822,9 @@ of up to 16 `RgGameColiArg` pairs. `RgGameCollisionJob` runs
 geometry of group 2. A hit calls `hitCallback1` with the first geometry and
 `hitCallback2` with the second. The `miss` callbacks run for members that hit
 nothing. The battle registers no miss callbacks. Pairs without callbacks still
-matter, because the event flags they set are read later. The eye ball's flag
-tells the robot that a wall blocks its view of the target, and the advance
-ball's flag stops a dash at an obstacle.
+set event flags, which are read later. The eye ball's flag tells the robot
+that a wall blocks its view of the target, and the advance ball's flag stops a
+dash at an obstacle.
 
 ## Collision handlers
 
@@ -873,12 +872,12 @@ page](agws-battle.md#the-cpu-opponent)), three **jobs** and a few timers
 
 Durations come from `_EnemyTime`, which draws a random number of frames in a
 range, halves it once per level and subtracts the level. A level 3 CPU
-therefore waits about an eighth as long as a level 0 CPU before it changes
-its mind. The
-CPU uses the same robot commands as a human, so it obeys the same physics,
-statuses and gauges. A debug tool, `_dbgThinkTool`, can display and edit the
-profile bits on screen with labelled rows. It is unreachable in the release
-build because its pad helpers `_GetPadEdge` and `_GetPadRelease` return 0.
+therefore waits about an eighth as long as a level 0 CPU before its next
+decision. The CPU uses the same robot commands as a human, so it obeys the
+same physics, statuses and gauges. A debug tool, `_dbgThinkTool`, can display
+and edit the profile bits on screen with labelled rows. It is unreachable in
+the release build because its pad helpers `_GetPadEdge` and `_GetPadRelease`
+return 0.
 
 ## Cameras
 

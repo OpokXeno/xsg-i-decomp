@@ -147,23 +147,23 @@ scene command `loadene` later fills with another preset, and the largest
 preset, `people01.dat` (11,364 bytes), still fits in it (see
 [Field enemy presets](../formats/maps-and-field-data.md#loading)).
 
-Nothing is ever freed block by block. A part of the game that wants to
-release its memory saves `WorkEnd` when it starts and writes the saved value
-back when it ends. `Game()` in `src/main/game.c` does this for a whole play
-session: it stores `WorkEnd` in `GameLoopState.saved_work_end` before it
-builds anything, and restores it when the game loop is left. Everything the field placed in the work area is
-then gone at once.
+Nothing is ever freed block by block. A part of the game that wants to release
+its memory saves `WorkEnd` when it starts and writes the saved value back when
+it ends. `Game()` in `src/main/game.c` does this for a whole play session: it
+stores `WorkEnd` in `GameLoopState.saved_work_end` before it builds anything,
+and restores it when the game loop is left. This releases everything that the
+field placed in the work area at once.
 
 `WorkEnd` is also used as scratch space without being moved. Several readers
 put temporary data at `WorkEnd` and leave the pointer where it was, so the
-next user simply overwrites it. `xglCdInitial` reads `SYSTEM.CNF` there before
+next user overwrites it. `xglCdInitial` reads `SYSTEM.CNF` there before
 copying 80 bytes of it to `system_cnf`. `ControlEntry` loads the `REGIST`
 sound banks there, and `GameCFSoundReload` loads the field's common effect
 bank there, before they are sent to the IOP. `xglArxExtract` copies its
 30-word decode table to the first 64-byte boundary after `WorkEnd`, and
-`xglCdGetFilePos` reads 16-byte file headers there. The rule for any code
-that runs while others use the work area is therefore simple: data at
-`WorkEnd` is only valid until the next load.
+`xglCdGetFilePos` reads 16-byte file headers there. For any code that runs
+while others use the work area, data at `WorkEnd` is therefore only valid
+until the next load.
 
 The work area fills in a fixed order. During start-up, `xglCdInitial` loads
 the directories of the disc archives at `WorkEnd` and moves the pointer past
@@ -243,7 +243,7 @@ covers all of upper memory. `GameResourceInit` marks every slot free, gives
 slot 0 the whole range and calls `GameResourceReset(0)`. It also clears the
 first word of the six fixed player buffers (see below) so that the next
 player load cannot mistake old data for valid data, and installs the read
-callback `GameResourceReadFileCallback`, which simply calls `xglSleep()`.
+callback `GameResourceReadFileCallback`, which only calls `xglSleep()`.
 
 Memory is taken from the table in three ways:
 
@@ -304,8 +304,8 @@ because the reload flag in `GameResourceWorkReloadTable[0]` is written by
 Before it reads anything, `GameCfPlayerLoadResource(0)` checks the first word
 of each fixed buffer for its file tag (`lex`, `XTX`, `JNT`, `FPK`) and
 compares the character id and costume with the last load. When all of them
-match, the files are still valid and nothing is read. This check is what lets
-other screens overwrite the player block freely: they only have to call
+match, the files are still valid and nothing is read. Because of this check,
+other screens can overwrite the player block freely and only have to call
 `GameCfPlayerLoadResource` when they end.
 
 `GameResourceGetFreeAddr()` returns the address of the first free slot, but
@@ -414,8 +414,8 @@ The U.M.N. screens are described in [umn.md](../game/umn.md).
 
 ## Minigames and the battle overlay
 
-The minigame overlays take upper memory without asking. Before one starts,
-`MainMenu()` saves the field and frees the actors:
+The minigame overlays use upper memory without allocating it from the resource
+table. Before one starts, `MainMenu()` saves the field and frees the actors:
 
 1. `Game_Data_Push()` copies the `actor` array into
    `GameLoopState.saved_actors`, purges the field sound banks, saves the game
@@ -564,8 +564,8 @@ Memory is reclaimed in frames. `xheap_push()` saves the current `freeBlock`
 and the current Java thread (`jthreadCurrent`) on a frame stack that grows
 down from the end of the heap. `xheap_pop()` restores both, which drops every
 block allocated since the matching push, and then calls `reloadConstString`
-and `reloadClassEntry` so that the string and class caches forget entries
-that lived above the restored point. `xheap_init` empties the whole heap.
+and `reloadClassEntry` so that the string and class caches drop entries that
+were above the restored point. `xheap_init` empties the whole heap.
 `xheap_info` and `infoMemory` total the live blocks per category for the
 debug display.
 
@@ -614,14 +614,14 @@ The main user is the actor matrix heap. `ACT_matrixInit` in
 and deleting an actor calls `RSRC_inactiveSource` so its matrices can be
 reused. `JS_init` (`src/main/js_init.c`) takes its class and primitive tables
 from an arena too. `RSRC_loadFile` reads a file with `sceOpen` into an arena
-and files it under its name. Its only caller, a script tool in
+and stores it under its name. Its only caller, a script tool in
 `src/main/script.c`, uses an arena (`rcFile`) that no recovered code creates,
 so file loading is probably a development feature. Actors are described in
 [actors.md](../libraries/actors.md).
 
 ### The OV12 heaps
 
-The A.G.W.S. Battle overlay brings its own allocator, `RgHeap`, in
+The A.G.W.S. Battle overlay has its own allocator, `RgHeap`, in
 `src/ov12/rg_heap.c`. `xrg_sysinit.c` creates two heaps over upper memory: a
 1 MiB "code" heap at `0x01000000` and a 15 MiB data heap at `0x01100000`.
 Every block carries a 0x40-byte `RgHeapBlock` header with links (`pre`,
@@ -694,15 +694,14 @@ The EE allocates IOP memory directly in one place. `xglCdStreamOpen` in
 `xglCdStreamClose` frees it with `sceSifFreeIopHeap`. Streams are described in
 [xgl.md](../libraries/xgl.md#streaming).
 
-Sound data takes a detour through EE memory. A wave bank or sequence is read
-into a temporary EE buffer (often at `WorkEnd` or at
-`GameResourceGetFreeAddr()`) and then sent to the IOP, which places it in its
-own memory or in the 2 MiB of SPU2 sound memory. The SSD driver manages both
-with its own allocators. On the EE side, the field only steers where wave
-banks go: `GameCFSoundReload` and `GameCFSoundPurge` in `src/main/game.c`
-switch the sound segment allocation modes (`SsdSetSegmentAllocMode(0x70000,
-0x10000)` or `(0xA8000, 0x10000)`). The details are in
-[audio.md](audio.md#segment-allocation-modes) and
+A wave bank or sequence is first read into a temporary EE buffer (often at
+`WorkEnd` or at `GameResourceGetFreeAddr()`) and then sent to the IOP, which
+places it in its own memory or in the 2 MiB of SPU2 sound memory. The SSD
+driver manages both with its own allocators. On the EE side, the field only
+steers where wave banks go: `GameCFSoundReload` and `GameCFSoundPurge` in
+`src/main/game.c` switch the sound segment allocation modes
+(`SsdSetSegmentAllocMode(0x70000, 0x10000)` or `(0xA8000, 0x10000)`). The
+details are in [audio.md](audio.md#segment-allocation-modes) and
 [iop-sound-driver.md](iop-sound-driver.md).
 
 A copy of the SSD memory manager (`SsdInitMemoryManager`,

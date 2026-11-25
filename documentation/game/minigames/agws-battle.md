@@ -138,18 +138,19 @@ flowchart TD
 
 ## Hard mode
 
-Hard mode is real and the code confirms how it is unlocked. `RgTitleGetResult`
-turns the 1P Game choice into `RG_TITLE_RESULT_ONE_PLAYER_LEVEL_SELECT` only
-when two conditions hold at the moment the menu finishes its fade-out:
+The code confirms that hard mode exists and how it is unlocked.
+`RgTitleGetResult` turns the 1P Game choice into
+`RG_TITLE_RESULT_ONE_PLAYER_LEVEL_SELECT` only when two conditions hold at the
+moment the menu finishes its fade-out:
 
 1. `XrgPadIsSelectLevelLR()` is true, which means L1 and R1 are both held on
    the controller.
 2. `XrgEventGetLevel()` returns 2 or more. This needs story flag `0x12D`, as
    [the event level](#the-event-level) section explains.
 
-So the player holds L1 and R1, presses Circle on 1P Game, and keeps holding the
-two buttons for the 1.5 seconds of the decide and fade-out phases. Without the
-story flag the same input simply starts a normal game. The wiki describes the
+So the player holds L1 and R1, presses Circle on 1P Game, and keeps holding
+the two buttons for the 1.5 seconds of the decide and fade-out phases. Without
+the story flag the same input starts a normal game. The wiki describes the
 button combination but not the story requirement.
 
 In hard mode `_VsCpuGame(1)` changes three things. It logs the warning "This
@@ -224,13 +225,13 @@ Character ids 6 to 24 also exist (`hg00`, `rf01`, `glg00`, `bd00`, and so on).
 They use model ids in the `0x36xx` range and have no folder, so they are
 probably the weapon and prop models attached to the robots.
 
-The statistics of each robot are not in the code. They come from the text file
-`rg_robot_spec.info`, one paragraph per robot named `character <name>`, as
-described on the [engine page](agws-battle-engine.md#text-databases). The
-file itself is described in
-[.info text databases](../../formats/minigame-data.md#info-text-databases). A spec
-sets the top speeds, dash speed and dash time, turning speed, weight, engine
-power, resistances, life (100 when absent), stagger time, body-attack damage,
+The statistics of each robot come from the text file `rg_robot_spec.info`, not
+from the code. The file has one paragraph per robot named `character <name>`,
+as described on the [engine page](agws-battle-engine.md#text-databases). The
+file itself is described in [.info text
+databases](../../formats/minigame-data.md#info-text-databases). A spec sets
+the top speeds, dash speed and dash time, turning speed, weight, engine power,
+resistances, life (100 when absent), stagger time, body-attack damage,
 auto-homing behaviour and the bare-hand weapon (`sude`, "UNARMED" by default).
 
 ## Choosing a robot and its weapons
@@ -267,8 +268,9 @@ pictures come from `select.bxx` and the layouts `agwsseltop.r2d`,
 of `select.bxx` on the screen
 ([r2d picture lists](../../formats/minigame-data.md#r2d-picture-lists)).
 
-The selection ends in one of two results. 1 means a robot and weapons were
-chosen. 2 means the player cancelled. The state diagram below shows the screen.
+The selection ends with result 1 when a robot and weapons were chosen, and
+with result 2 when the player cancelled. The state diagram below shows the
+screen.
 
 ```mermaid
 stateDiagram-v2
@@ -292,8 +294,7 @@ Every robot has three weapon slots, the **equip types** of
 back (2). A weapon occupies one or more of eight **mount positions** (left
 hand, elbow and shoulder, right hand, elbow and shoulder, back left and back
 right). Two weapons conflict when their position masks overlap
-(`RgEquipCheckConfrict`). This is why some combinations are refused on the
-selection screen.
+(`RgEquipCheckConfrict`), and the selection screen refuses such combinations.
 
 All weapons are defined in the text database `rg_weapon.info`, which holds 40
 records ([.info text databases](../../formats/minigame-data.md#info-text-databases)). Each entry is a
@@ -556,7 +557,7 @@ Objects of the background can be breakable. Each one has a hardness: a shot
 that deals more damage than the remaining hardness destroys it with a hit
 effect, a weaker shot wears it down, and a robot that rams it hard enough
 (kinetic energy of at least 288000) breaks it too. Objects between the camera
-and the robot fade out for half a second so they never hide the action.
+and the robot fade out for half a second so that they do not hide the action.
 
 ## VS mode
 
@@ -575,12 +576,12 @@ camera with Select. When the match is decided, GAME OVER is shown.
 ## The CPU opponent
 
 The CPU drives its robot through an **enemy control** (`RgEnemyControl`,
-`src/ov12/rg_enemy.c`). It calls exactly the same robot commands as a human
-player: accelerate, rotate, brake, dash, long dash, shoot and jump. Its
-behaviour is set by the profile word `enemyType`. Bits 0 and 1 are the
-thinking level. A debug tool left in the code labels the four levels "saru ika"
-(worse than a monkey), "hito nami" (average human), "kikai teki" (machine-like)
-and "kami" (god). The higher bits switch behaviours on:
+`src/ov12/rg_enemy.c`). It calls the same robot commands as a human player:
+accelerate, rotate, brake, dash, long dash, shoot and jump. Its behaviour is
+set by the profile word `enemyType`. Bits 0 and 1 are the thinking level. A
+debug tool left in the code labels the four levels "saru ika" (worse than a
+monkey), "hito nami" (average human), "kikai teki" (machine-like) and "kami"
+(god). The higher bits switch behaviours on:
 
 | Bit | Name | Behaviour |
 | --- | --- | --- |

@@ -1,8 +1,8 @@
 # Models and textures
 
-Every 3D object in the game, from Shion and KOS-MOS to the rooms of the Woglinde, the Xeno Card table and the `!` marker above an enemy, is a `.lex` model file. Its colors come from a `.xtx` texture set. A model holds ready-made data for the vector unit VU1: its vertices are already packed as VIF commands that the renderer sends to VU1 without touching them. A texture set holds ready-made image uploads for the Graphics Synthesizer (GS): rectangles of 32-bit pixels that land at fixed addresses of video memory, where the model's texture registers find them as 8-bit, 4-bit or 32-bit textures with their palettes.
+Every 3D object in the game is a `.lex` model file, from Shion and KOS-MOS to the rooms of the Woglinde, the Xeno Card table and the `!` marker above an enemy. Its colors come from a `.xtx` texture set. A model holds ready-made data for the vector unit VU1: its vertices are already packed as VIF commands that the renderer sends to VU1 without touching them. A texture set holds ready-made image uploads for the Graphics Synthesizer (GS): rectangles of 32-bit pixels that land at fixed addresses of video memory, where the model's texture registers find them as 8-bit, 4-bit or 32-bit textures with their palettes.
 
-The two formats are tied together by video memory addresses, not by names or ids. A model block says "read 8-bit texels from block 0 of the texture area with the palette at block 992", and the texture set of the same name is built so that its upload puts exactly those texels and that palette there. The renderer that draws them is the `nml` library, described in [nml](../libraries/nml.md). The GS memory layout and the texture area are described in [Rendering](../architecture/rendering.md#video-memory).
+The two formats are tied together by video memory addresses, not by names or ids. A block of a model may, for example, select 8-bit texels from block 0 of the texture area with the palette at block 992. The texture set of the same name is built so that its upload puts those texels and that palette there. The renderer that draws them is the `nml` library, described in [nml](../libraries/nml.md). The GS memory layout and the texture area are described in [Rendering](../architecture/rendering.md#video-memory).
 
 [← Back to the overview](../README.md) · [Files and resources](../architecture/files-and-resources.md)
 
@@ -286,7 +286,7 @@ The four bytes at +0x16C drive **shape blending** (morphing between the base mes
 | 05 00 01 02, 06 00 01 02 | `MC_EVE28`, `MC_KAS20` | Automatic triangle wave, period 128 or 256 |
 | 06 00 01 03, 07 00 01 03, 07 07 01 03, 08 00 01 03 | `MC_BTL01` | Automatic, period 256 to 1024, one block with mode 7 |
 
-Modes 7 and 25 do not exist in the code, which handles only modes 0 and 1. For them `nmlModelLexBlockDoit` still counts a shape entry but leaves its part and weight unset.
+The code handles only modes 0 and 1. For modes 7 and 25 `nmlModelLexBlockDoit` still counts a shape entry but leaves its part and weight unset.
 
 ### The VIF stream
 
@@ -346,7 +346,7 @@ The rest of the input buffer holds per-vertex arrays at fixed multiples of `n`. 
 | 4n+1 to 6n | joint references and weights (skinned blocks only) | not used |
 | 6n+1 and up | morph targets (only when header word 3 is 1) | morph targets |
 
-The float layout uploads the header, the positions and the normals with one `UNPACK V4-32` of `2n + 1` quadwords. The map layout uploads the header and positions as `n + 1` quadwords, then the t coordinates as `V1-32` (one float per vertex, copied to every lane), then sets `STMASK 0xC0C0C0C0` and writes a byte per vertex with a masked `V1-8`. The mask protects lane w, so the byte lands in x, y and z while t stays in w. That byte is an index into the 114-entry normal table `s_aNormalTbl` that the CPU uploads to VU1 address `0x350`. It is present only in blocks with `materialFlags & 0x10000`, values run from 0 to 113 plus 255 (94 vertices, probably "no normal"), and index 113 (straight up, (0, 1, 0)) is the most common at 507 690 vertices, followed by index 0 (straight down) at 181 591. The table is a lookup for compressed normals. The map layout thus stores a vertex in 16 + 4 + 1 + 4 bytes instead of 48.
+The float layout uploads the header, the positions and the normals with one `UNPACK V4-32` of `2n + 1` quadwords. The map layout uploads the header and positions as `n + 1` quadwords, then the t coordinates as `V1-32` (one float per vertex, copied to every lane), then sets `STMASK 0xC0C0C0C0` and writes a byte per vertex with a masked `V1-8`. The mask protects lane w, so the byte lands in x, y and z while t stays in w. That byte is an index into the 114-entry normal table `s_aNormalTbl` that the CPU uploads to VU1 address `0x350`. It is present only in blocks with `materialFlags & 0x10000`, values run from 0 to 113 plus 255 (94 vertices, probably "no normal"), and index 113 (straight up, (0, 1, 0)) is the most common at 507 690 vertices, followed by index 0 (straight down) at 181 591. With these compressed normals the map layout stores a vertex in 16 + 4 + 1 + 4 bytes instead of 48.
 
 The colors are vertex colors in the PS2 convention, where 128 means full brightness and the GS doubles the modulated texel. The character blocks sampled have (128, 128, 128, 128) nearly everywhere, while maps carry baked lighting in their colors.
 
@@ -374,7 +374,7 @@ VU1 input buffer (quadwords)
 
 ### Skin references and weights
 
-Skinned blocks (block flags with bit 0) carry the joint data at `4n + 1`. A joint reference is not an index but a VU1 address written as an integer: `0x2E0`, `0x2E4`, `0x2E8` and so on. `nmlPacketAddParts` uploads the block's matrices to the bone area at `0x2DC` in the order of `matrixIndices`, four quadwords each, so the matrix of `matrixIndices[k + 1]` sits at `0x2E0 + 4k`. The program can therefore load the matrix directly from the address in the vertex.
+Skinned blocks (block flags with bit 0) carry the joint data at `4n + 1`. A joint reference is a VU1 address written as an integer, not an index: `0x2E0`, `0x2E4`, `0x2E8` and so on. `nmlPacketAddParts` uploads the block's matrices to the bone area at `0x2DC` in the order of `matrixIndices`, four quadwords each, so the matrix of `matrixIndices[k + 1]` sits at `0x2E0 + 4k`. The program can therefore load the matrix directly from the address in the vertex.
 
 | Block flags | Quadwords | Layout per vertex |
 | --- | --- | --- |
@@ -406,11 +406,11 @@ A material batch starts like a vertex batch, but its header is `0x8003, 0x4000, 
 | 4 | The same `TEX0_1` with `TBP0` and `CBP` both lowered by `0xE00` blocks |
 | 5 to 8 | Only in the 9-quadword form (36 143 batches): material color, 0, second color, and the material tag (3, 3, 3, 3). The program takes the material color times the multiply color as its new material color, stores the second color at `0x3CA` as the specular color and lane x of the tag at `0x3F0` as the specular exponent |
 
-The 5-quadword form (5 285 batches, header word 2 = 0) sends the same three values as separate one-quadword `UNPACK`s to `0x3C8`, `0x3CA` and `0x3F0` under `STMASK 0xFCFCFCFC`, which lets only lane x through. Those addresses are the first and third material quadwords and the material tag, so this form patches the first lane of each in place. The programs call their path for this form `gsold`, so it is the older of the two. Its three `UNPACK`s count from `TOPS` like all others, so they reach those addresses only when the batch sits in the first buffer. In the second buffer they land `0x16E` quadwords higher, which wraps past the end of VU1 memory to `0x136`, `0x138` and `0x15E`, inside the output area of the first buffer. The 9-quadword form avoids this, because the program copies the values itself.
+The 5-quadword form (5 285 batches, header word 2 = 0) sends the same three values as separate one-quadword `UNPACK`s to `0x3C8`, `0x3CA` and `0x3F0` under `STMASK 0xFCFCFCFC`, which lets only lane x through. Those addresses are the first and third material quadwords and the material tag, so this form patches the first lane of each in place. The path for this form is named `gsold` in the programs, so it is the older of the two. Its three `UNPACK`s count from `TOPS` like all others, so they reach those addresses only when the batch sits in the first buffer. In the second buffer they land `0x16E` quadwords higher, which wraps past the end of VU1 memory to `0x136`, `0x138` and `0x15E`, inside the output area of the first buffer. The 9-quadword form avoids this, because the program copies the values itself.
 
-The second `TEX0` (address 4) is outside the GIF tag's NLOOP, so it is never kicked as it stands. It differs from the first only in its base pointers: 41 428 times out of 41 428, both are `0xE00` blocks (112 pages, one full-screen buffer) lower, at `0x2A00`, which is the start of the flip buffer (see [Video memory](../architecture/rendering.md#video-memory)). Because the stream is sent unchanged, the CPU cannot rebase these registers the way it rebases the block header's. `nmlPacketAddScreen` puts pi into the w lane of the screen offset when the texture area base is not `0x3800`, and the program kicks the second copy whenever that lane is not 0. The in-stream registers always use `PSMT8` except in 45 batches (`PSMCT32`) and 15 (`PSMT4`), and match the block header's `TEX0` in every field other than the bases in 41 391 of the 41 428 batches.
+The second `TEX0` (address 4) is outside the GIF tag's NLOOP, so it is never kicked as it stands. It differs from the first only in its base pointers: in every batch of the 41 428, both are `0xE00` blocks (112 pages, one full-screen buffer) lower, at `0x2A00`, which is the start of the flip buffer (see [Video memory](../architecture/rendering.md#video-memory)). Because the stream is sent unchanged, the CPU cannot rebase these registers the way it rebases the block header's. `nmlPacketAddScreen` puts pi into the w lane of the screen offset when the texture area base is not `0x3800`, and the program kicks the second copy whenever that lane is not 0. The in-stream registers always use `PSMT8` except in 45 batches (`PSMCT32`) and 15 (`PSMT4`), and match the block header's `TEX0` in every field other than the bases in 41 391 of the 41 428 batches.
 
-The sequence below shows what one block costs in packet order, from the CPU uploads to the strips.
+The sequence below shows what is sent for one block in packet order, from the CPU uploads to the strips.
 
 ```mermaid
 sequenceDiagram
@@ -538,15 +538,15 @@ A material batch from `map\MC_KAS35.lex`, block `sdoa01`:
 
 The 248 maps are the largest models: up to 935 parts and 940 blocks (`MC_EVE36`) and 1 884 624 bytes (`MC_DYU04B`). Every map block has `materialFlags & 0x10` and the compact layout, and 383 map blocks also have block flag `0x400`. Map parts have real placements in array A (rotated in 170 maps, translations only in 67), and maps have no skin joints. The map microcode slots and the per-part visibility (`nmlModelSetPartsVisible` on blocks with `NML_BLOCK_MATERIAL_NAMED_PARTS`) apply only to them and to the `muobj` objects that share the layout.
 
-`map\MC_GUN08.lex` is a special case. It is not in the map name table of `src/main/map_1.c`, has no `.xtx`, carries its textures as an [embedded texture set](#embedded-texture-sets) and dates from 2001-07-04. It is probably an early test map that no code can reach.
+`map\MC_GUN08.lex` is not in the map name table of `src/main/map_1.c`, has no `.xtx`, carries its textures as an [embedded texture set](#embedded-texture-sets) and dates from 2001-07-04. It is probably an early test map that no code can reach.
 
 #### The MagicCarpetCome trailer
 
-1152 files end with the 16 bytes `MagicCarpetCome\0`, and exactly these files have +0x3F set to 1. `nmlModelLexDataCheck` uses the pair as an integrity check: when +0x3F is set and there is no embedded texture set, it looks for the string right after the last block's data, skipping `blockCount * 16` bytes when +0xA0 is nonzero. In 1150 files the trailer is exactly there and is the last thing in the file. In `obj\aobj000\acc_037` and `acc_064` it follows the embedded texture set instead, which the check never looks at. The 165 files without the trailer are exactly the older ones: every file dated before August 2001 and 100 of the 129 files from August, while every file from September 2001 on has it. The phrase means "magic carpet, come", and its purpose beyond the check is unknown.
+1152 files end with the 16 bytes `MagicCarpetCome\0`, and exactly these files have +0x3F set to 1. `nmlModelLexDataCheck` uses the pair as an integrity check: when +0x3F is set and there is no embedded texture set, it looks for the string right after the last block's data, skipping `blockCount * 16` bytes when +0xA0 is nonzero. In 1150 files the trailer is at that place and is the last thing in the file. In `obj\aobj000\acc_037` and `acc_064` it follows the embedded texture set instead, which the check never looks at. The 165 files without the trailer are the older ones: every file dated before August 2001 and 100 of the 129 files from August, while every file from September 2001 on has it. The phrase means "magic carpet, come", and its purpose beyond the check is unknown.
 
 #### The block sphere table
 
-In 13 maps the word at +0xA0 is the offset of a table placed right after the last block's data, with 16 bytes per block: x, y, z and the negated block radius. The radius equals the block's `clipBounds` radius and the center is the block center moved by its part's translation. No code reads the table, `nmlModelLexDataCheck` only skips it. It is probably a culling aid that an earlier renderer used.
+In 13 maps the word at +0xA0 is the offset of a table placed right after the last block's data, with 16 bytes per block: x, y, z and the negated block radius. The radius equals the block's `clipBounds` radius and the center is the block center moved by its part's translation. No code reads the table. `nmlModelLexDataCheck` only skips it. It is probably a culling aid that an earlier renderer used.
 
 #### Early files with merged uploads
 
@@ -661,13 +661,13 @@ For each entry `xglPacketTextureTrans` adds `FLUSHE`, then a `DIRECT` block with
 
 ### How a model finds its texels
 
-The XTX rectangles are always uploaded as 32-bit pixels, but very few textures are 32-bit. The converter packed the real textures, mostly 8-bit indexed images with 256-color palettes, into the rectangle so that a plain 32-bit upload lays them out in GS memory exactly as the GS expects to read them in their own format. The model's `TEX0` then reads the same memory as `PSMT8`, `PSMT4` or `PSMCT32`.
+The XTX rectangles are always uploaded as 32-bit pixels, but very few textures are 32-bit. The converter packed the textures, mostly 8-bit indexed images with 256-color palettes, into the rectangle so that a plain 32-bit upload lays them out in GS memory exactly as the GS expects to read them in their own format. The model's `TEX0` then reads the same memory as `PSMT8`, `PSMT4` or `PSMCT32`.
 
-This works because GS memory is organized in 8 KiB **pages** of 32 **blocks** of 256 bytes, and each pixel format arranges its pixels differently inside a block and a page. A `PSMCT32` page covers 64 x 32 pixels and a `PSMT8` page covers 128 x 64 pixels, with the same number of bytes. A 512 x 128 rectangle in `PSMCT32` with buffer width 8 fills 8 x 4 = 32 pages, which as `PSMT8` with buffer width 16 are a 1024 x 256 image. KOS-MOS's `TEX0` asks for exactly that: `PSMT8`, `TBW` 16, `TW` 10, `TH` 8, base 0. The palettes sit in the same sheet as 16 x 16 rectangles of 32-bit colors (8 x 2 for `PSMT4`), at the block given by `CBP`, in the `CSM1` arrangement, where palette index `i` is found at position `i` with bits 3 and 4 swapped.
+This works because GS memory is organized in 8 KiB **pages** of 32 **blocks** of 256 bytes, and each pixel format arranges its pixels differently inside a block and a page. A `PSMCT32` page covers 64 x 32 pixels and a `PSMT8` page covers 128 x 64 pixels, with the same number of bytes. A 512 x 128 rectangle in `PSMCT32` with buffer width 8 fills 8 x 4 = 32 pages, which as `PSMT8` with buffer width 16 are a 1024 x 256 image. KOS-MOS's `TEX0` selects this image: `PSMT8`, `TBW` 16, `TW` 10, `TH` 8, base 0. The palettes sit in the same sheet as 16 x 16 rectangles of 32-bit colors (8 x 2 for `PSMT4`), at the block given by `CBP`, in the `CSM1` arrangement, where palette index `i` is found at position `i` with bits 3 and 4 swapped.
 
 A sheet holds many textures and many palettes. Each block picks its window with `CLAMP`: `REGION_REPEAT` keeps a power-of-two window by masking (`u = (u & MINU) | MAXU`) so that the texture can tile, and `REGION_CLAMP` clamps to a rectangle. `kosmos_kubi` uses u 768 to 895 and v 128 to 255 with the palette at block 992. The block headers of KOS-MOS use 13 such windows with 12 different palettes.
 
-The parser checks this for every textured block of every model. For each block it takes the `TEX0` window and palette, finds the GS blocks they cover under the GS block arrangement of their format, and tests that the model's texture set uploads all of them. 45 677 blocks are covered by the set of the same name, 605 face blocks by the body's set, 102 blocks by an embedded set and 64 by a set whose name is a prefix of the model name. Only two blocks are not: the `PSMT4` block of `carddata\name` and the block `gun01_r` of `enemy\utma\utma_001`. The palettes are covered in every case except `carddata\name`. A decoder that writes the rectangles into a model of GS memory and reads them back as `PSMT8` through the `CSM1` palette produces clean images for the windows of KOS-MOS's sheet, which confirms the arrangement.
+The parser checks this for every textured block of every model. For each block it takes the `TEX0` window and palette, finds the GS blocks they cover under the GS block arrangement of their format, and tests that the model's texture set uploads all of them. 45 677 blocks are covered by the set of the same name, 605 face blocks by the body's set, 102 blocks by an embedded set and 64 by a set whose name is a prefix of the model name. Only two blocks are not covered: the `PSMT4` block of `carddata\name` and the block `gun01_r` of `enemy\utma\utma_001`. The palettes are covered in every case except `carddata\name`. A decoder that writes the rectangles into a model of GS memory and reads them back as `PSMT8` through the `CSM1` palette produces clean images for the windows of KOS-MOS's sheet, which confirms the arrangement.
 
 The diagram below follows one texel from the file to the screen.
 
@@ -715,7 +715,7 @@ A list line starts with the quoted image path (only the part after the last back
 
 ## Embedded texture sets
 
-Seven models carry a texture set inside the `.lex` at `textureSetOffset` (+0x6C): `map\MC_GUN08`, the four `matumoto` markers, and `obj\aobj000\acc_037` and `acc_064`. It is not an XTX set but a different format, `NmlTextureResourceSet` in `src/main/nml_packet_add.h`, uploaded by `nmlPacketTextureTrans` instead of `xglPacketTextureTrans`. `nmlPacketAddTexture` takes it whenever `textureSetOffset - 1 <= 0x7FFFFE`, and the layout's XTX set otherwise.
+Seven models carry a texture set inside the `.lex` at `textureSetOffset` (+0x6C): `map\MC_GUN08`, the four `matumoto` markers, and `obj\aobj000\acc_037` and `acc_064`. Its format is `NmlTextureResourceSet` in `src/main/nml_packet_add.h`. It differs from XTX, and the set is uploaded by `nmlPacketTextureTrans` instead of `xglPacketTextureTrans`. `nmlPacketAddTexture` takes it whenever `textureSetOffset - 1 <= 0x7FFFFE`, and the layout's XTX set otherwise.
 
 | Offset | Size | Type | Field | Meaning |
 | --- | --- | --- | --- | --- |
@@ -751,7 +751,7 @@ Unlike the XTX rectangles, these images are uploaded in their own format, unswiz
 
 ## Leftovers and unused files
 
-Some files have no reader that the code or the executables' strings show. Model ids and texture numbers are built from tables and format strings, so a file of a numbered family (`mobj_NNN`, `acc_NNN`, `MU_NNN`, `fmNNNN`, the casino sheets) may be used only by scene or map data that this search does not cover. The named files below are not in any name table, path string or format string of `SLUS_204.69` and the overlays, and their names do not occur in the 568 scene scripts (`.txt`), the 569 `.evt` archives or the 88 `.dat` tables either. The 112 scene archives (`.a`) were not searched.
+For some files, neither the code nor the strings of the executables show a reader. Model ids and texture numbers are built from tables and format strings, so a file of a numbered family (`mobj_NNN`, `acc_NNN`, `MU_NNN`, `fmNNNN`, the casino sheets) may be used only by scene or map data that this search does not cover. The named files below are not in any name table, path string or format string of `SLUS_204.69` and the overlays, and their names do not occur in the 568 scene scripts (`.txt`), the 569 `.evt` archives or the 88 `.dat` tables either. The 112 scene archives (`.a`) were not searched.
 
 | File | Notes |
 | --- | --- |
@@ -764,7 +764,7 @@ Some files have no reader that the code or the executables' strings show. Model 
 
 The stand-ins `char\dummy` and `enemy\dummy` are copies of Shion and `obj\dummy` carries the name `/acc_003`. They are reachable: `RES_GetMdlFileNameSub` turns a model id whose list index is 0 into `data\` plus the category directory plus `dummy` (and `_face` for a face), so `char\dummy_face` is the face of the character stand-in.
 
-The reverse also exists: the code names files that the disc does not have.
+The code also names files that the disc does not have.
 
 | Name in the code | Where |
 | --- | --- |

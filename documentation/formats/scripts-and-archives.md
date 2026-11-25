@@ -6,9 +6,9 @@ file that lists the models, motions, sounds, effects and map a scene needs and
 names the Java script that runs the scene. A scene archive (`cfNNNN.a`) holds
 copies of exactly those files in load order, so that a field scene loads with
 one long DVD read instead of many seeks. The Java scripts are compiled Java
-class files stored in FL00 volumes (`.evt`), a small read-only file system the
-game also uses for a fourth kind of file: the resource volumes (`.arc`) that
-carry the camera curves and motion packs of the story events.
+class files stored in FL00 volumes (`.evt`). FL00 is a small read-only file
+system that the game also uses for a fourth kind of file: the resource volumes
+(`.arc`) that carry the camera curves and motion packs of the story events.
 
 All layouts below hold for every one of the 569 `.evt`, 77 `.arc`, 568 scene
 `.txt` and 112 `.a` files of the North American disc, parsed and checked
@@ -244,18 +244,18 @@ no 64-bit arithmetic and no interface method calls.
 | 10 | `Methodref` | 51,759 |
 | 12 | `NameAndType` | 100,191 |
 
-The `Utf8` constants differ from standard Java in one point. A standard
-`Utf8` constant stores its length and its bytes, without a terminator. In the
-Xenosaga volumes 242,954 of the 242,956 `Utf8` constants end with a NUL byte
-that is counted in the length. `readConstantPool` passes `length - 1` to
-`loadConstString`, which keeps a pointer into the loaded class image instead
-of copying the text, and `checkClass` in `src/main/jni.c` compares class names
-with `memcmp(name, wanted, length - 1)`. The NUL makes every constant a C
-string in place. The native `Toolkit.loadResource(String)` hands the string
-bytes straight to `XTK_findFile`, which treats them as a C string, and
-`Window.print(String)` passes the same bytes with their length to
-`MSG_print2` without a copy. The tool that built the volumes probably
-appended the NUL to every string when it converted the compiler output.
+The `Utf8` constants differ from standard Java in one point, the terminator. A
+standard `Utf8` constant stores its length and its bytes, without a
+terminator. In the Xenosaga volumes 242,954 of the 242,956 `Utf8` constants
+end with a NUL byte that is counted in the length. `readConstantPool` passes
+`length - 1` to `loadConstString`, which keeps a pointer into the loaded class
+image instead of copying the text, and `checkClass` in `src/main/jni.c`
+compares class names with `memcmp(name, wanted, length - 1)`. The NUL makes
+every constant a C string in place. The native `Toolkit.loadResource(String)`
+hands the string bytes straight to `XTK_findFile`, which treats them as a C
+string, and `Window.print(String)` passes the same bytes with their length to
+`MSG_print2` without a copy. The tool that built the volumes probably appended
+the NUL to every string when it converted the compiler output.
 
 The two exceptions are empty string literals (`""`) with length 0, one in
 `ST0210.evt` and one in `ST2230.evt`. For them `readConstantPool` passes
@@ -304,14 +304,14 @@ The stub `xeno/XenoConstants` at offset `0x7A74` of `data\system.evt`:
 00007a84: 0000 0000 0000 0000                      ........
 ```
 
-The code copes with the stubs without a special case. `readConstantPool`
-sets an empty pool when the count is 0. `checkClass` cannot find a class name
-in an empty pool and returns 0, so `JNI_loadClassLibrary` skips the stubs and
+The code has no special case for the stubs. `readConstantPool` sets an empty
+pool when the count is 0. `checkClass` cannot find a class name in an empty
+pool and returns 0, so `JNI_loadClassLibrary` skips the stubs and
 `JNI_searchClasses` never takes one for a scene class. When a class lists a
 stubbed interface, `processClass` in `src/main/find_native_method.c` loads it
 as an empty class. It also accepts an interface that exists in no volume at
-all (`getClass` returns 0 and the loop skips it), which happens 655 times:
-the scene classes reference the interfaces `JNT_Human` (124 constants in 96
+all (`getClass` returns 0 and the loop skips it), which happens 655 times: the
+scene classes reference the interfaces `JNT_Human` (124 constants in 96
 volumes) and `JNT_Accesories` (42 constants in 40 volumes) in the default
 package, which exist only as `xeno/plan/JNT_Human` and
 `xeno/plan/JNT_Accesories` stubs, and one interface per map,
@@ -329,8 +329,8 @@ volume.
 ### Attributes and debug data
 
 The classes carry six attribute types. The VM reads two of them, `Code` and
-`ConstantValue`. `readAttributes` skips the others by their length, so they
-are compiler debug data that ships on the disc unused.
+`ConstantValue`. `readAttributes` skips the others by their length. They are
+compiler debug data that ships on the disc unused.
 
 | Attribute | Attached to | Count | Bytes | Read by the VM |
 | --- | --- | --- | --- | --- |
@@ -345,11 +345,10 @@ Every `Code` attribute has an empty exception table, and there are no
 `Exceptions` or `LocalVariableTable` attributes. The line number tables alone
 take 2.7 MB, 19 percent of all `.evt` bytes.
 
-The `SourceFile` attribute names the Java source file of each class, and it
-shows how many scene scripts were made. In 158 scene volumes the classes
-carry a name different from the volume, and in every one of them the source
-file is named after the volume: `ST0239.evt` holds the class `ST0231`
-compiled from `ST0239.java`. The variant scripts were therefore made by
+The `SourceFile` attribute names the Java source file of each class. In 158
+scene volumes the classes carry a name different from the volume, and in every
+one of them the source file is named after the volume: `ST0239.evt` holds the
+class `ST0231` compiled from `ST0239.java`. The variant scripts were therefore made by
 copying a source file and leaving the class name as it was. Sixteen SCE
 volumes also contain the classes `STool` and `STool$Lightwork`, compiled from
 a shared `STool.java`, a helper class of 158 methods (camera history, fades,
@@ -418,7 +417,7 @@ and `Unit`.
 
 ### Dialogue and other strings
 
-The story text lives in the `String` constants of the scene classes. Each
+The story text is in the `String` constants of the scene classes. Each
 literal is a `String` constant pointing to a `Utf8` constant that holds the
 bytes and the trailing NUL. The 567 scene volumes hold 44,603 `String`
 constants with 1,156,151 bytes of text, 12,223 different strings once
@@ -456,14 +455,13 @@ offset `0x20B6`:
 0x20B9  "/[label(John Bell)]" 00
 ```
 
-Where the loaded strings go shows what they are. Of the literals loaded by
-`ldc` and `ldc_w` in the scene volumes, 24,031 go to `System.println` (debug
-output, which prints nothing in the retail game), 18,036 are stored into
-string arrays (mostly speeches for `Window.print`), 9,128 go to
-`Menu.addItem`, 1,555 straight to `Window.print`, 1,016 to `Chr.talkto` and
-417 to `Menu.addQuery`. The text tags inside the strings (`/[label(...)]`,
-`/[waitkey(n)]` and others) and their counts are described in
-[Text, fonts and U.M.N. data](text-and-fonts.md).
+Of the literals loaded by `ldc` and `ldc_w` in the scene volumes, 24,031 go to
+`System.println` (debug output, which prints nothing in the retail game),
+18,036 are stored into string arrays (mostly speeches for `Window.print`),
+9,128 go to `Menu.addItem`, 1,555 straight to `Window.print`, 1,016 to
+`Chr.talkto` and 417 to `Menu.addQuery`. The text tags inside the strings
+(`/[label(...)]`, `/[waitkey(n)]` and others) and their counts are described
+in [Text, fonts and U.M.N. data](text-and-fonts.md).
 
 ## The library volumes
 
@@ -742,8 +740,8 @@ Shift-JIS, unlike the EUC-JP of the class files (see
 A script is a list of lines. The first line is `#scn` in all files and is
 skipped. After each line, `next_line` moves to the end of the line, skips all
 spaces, tabs and line ends, and skips every line that then starts with `;`.
-So a comment needs `;` as its first non-blank character, and blank lines are
-free. A line is:
+A comment therefore needs `;` as its first non-blank character, and blank
+lines are skipped. A line is:
 
 ```
 [slot] command [arguments]
@@ -937,7 +935,7 @@ in `arcfileaddr`. While it is set, every loader in `RES_loadFileSub`,
 `RES_loadFileSubMap` and the sound commands calls `next_arc_size(address)`
 instead of opening a file. The function copies the next entry to `address`,
 or expands it with `xglArxExtract` when it starts with `ARX\0`, and returns
-its size. The archive carries no names, only the order connects an entry to
+its size. The archive stores no names, so only the order connects an entry to
 a command. When a scene has no `.a` file, the same loaders read the named
 files one by one.
 
@@ -1128,7 +1126,7 @@ entry counter `arcno` is a `u8`, which limits an archive to 255 entries.
   source file names show that 158 scene scripts were made by copying another
   script.
 - **Constant interfaces.** 669 stub classes keep only their header. Their
-  constants live on inside the classes that used them.
+  constants remain as copies in the classes that used them.
 - **Unused natives.** 115 natives of the table are never called by a script,
   three table rows have no declaration, and three declarations have no
   table row.

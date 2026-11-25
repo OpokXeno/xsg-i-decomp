@@ -1,16 +1,16 @@
 # Runtime libraries
 
-Not all code in `SLUS_204.69` was written by the game's developers. About 855
-of its 4526 functions come from libraries that were linked into the
+About 855 of the 4526 functions in `SLUS_204.69` were not written by the
+game's developers. They come from libraries that were linked into the
 executable: the startup code `crt0`, the EE kernel interface and the Sony
 PlayStation 2 SDK (release 2.4.x), the C library newlib (1.8.x), the math
 library fdlibm, and the GCC runtime library with its software floating
 point. Together they take about 179 KiB of the 1.2 MiB of code.
 
-The project does not turn these libraries into C. They are kept as the
-original assembly, and only the game's own code is recovered. This page shows
-where the libraries sit in the executable, how the game starts through them,
-and which parts of them the game uses.
+The project keeps these libraries as the original assembly and does not turn
+them into C. Only the game's own code is recovered. This page shows where the
+libraries sit in the executable, how the game starts through them, and which
+parts of them the game uses.
 
 [← Back to the overview](../README.md)
 
@@ -325,8 +325,8 @@ single-precision FPU without soft-float calls:
 | `fmodf` | 2 |
 | `acos`, `pow`, `asinf`, `sqrtf` | 1 each |
 
-Vector and matrix math does not use this library. It runs on the VU0
-coprocessor through the macros and functions described in
+Vector and matrix math does not use this library and runs on the VU0
+coprocessor, through the macros and functions described in
 [math.md](../libraries/math.md).
 
 ## The GCC runtime (libgcc)
@@ -417,8 +417,8 @@ is not clear from the code. The HDD functions are described in
 The recovered game source calls the library functions with their usual C
 prototypes, declared locally or in the project's headers. Because the
 library code is kept as original assembly, a game function that calls
-`sprintf` or `atan2f` links against exactly the same library code as the
-original executable. The compiler contract for the game code (GCC 2.96 for
+`sprintf` or `atan2f` links against the same library code as the original
+executable. The compiler contract for the game code (GCC 2.96 for
 the EE) is the one that produced these calls, so argument passing, the
 promotion of `float` to `double` in variable argument lists and the soft-float
 calls come out the same way.

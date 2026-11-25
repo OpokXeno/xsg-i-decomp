@@ -1,46 +1,46 @@
 # The Java virtual machine
 
-Most of the story, the event scenes and the behaviour of each map in
-Xenosaga Episode I are not written in C. They are Java programs. The main
-executable contains a small Java virtual machine (VM) that loads standard Java
-class files from the disc, interprets their bytecode and lets them drive the
-engine through **native methods**: C functions that a Java class declares and
-the VM calls by name.
+Most of the story, the event scenes and the behaviour of each map in Xenosaga
+Episode I are Java programs rather than C code. The main executable contains a
+small Java virtual machine (VM) that loads standard Java class files from the
+disc, interprets their bytecode and lets them drive the engine through
+**native methods**: C functions that a Java class declares and the VM calls by
+name.
 
-The VM is a compact, game-specific design. It has its own class loader, an
-interning table for names, a bump heap without a garbage collector, cooperative
-script threads that advance once per game frame, and a mechanism that lets a
-native method suspend its Java caller until a motion, a window or a number of
-frames has finished. The code lives in `src/main/`, mostly in `init_vm.c`,
-`init_class_db.c`, `find_native_method.c`, `jni.c`, `jthread.c` and `xheap.c`.
-The catalogue of native methods has its own page,
-[Native methods](natives.md).
+The VM is compact and specific to this game. It has its own class loader, an
+interning table for names, a bump heap without a garbage collector,
+cooperative script threads that advance once per game frame, and a mechanism
+that lets a native method suspend its Java caller until a motion, a window or
+a number of frames has finished. The code is in `src/main/`, mostly in
+`init_vm.c`, `init_class_db.c`, `find_native_method.c`, `jni.c`, `jthread.c`
+and `xheap.c`. The catalogue of native methods has its own page, [Native
+methods](natives.md).
 
 [← Back to the overview](../README.md)
 
 ## Why Java
 
-The source does not state the reason, but the design makes the benefits clear.
-Event logic changes far more often than engine code. Writing it in Java probably let
-the planners compile and test scripts without rebuilding the executable. Each
-map and each event scene is its own small archive of classes that is loaded
-when needed and dropped afterwards, so only the scripts of the current place
-use memory. Java bytecode is also compact and the class file format is simple
-to parse, which suits a console with 32 MiB of main memory.
+The source does not state the reason, but the benefits are clear from the
+design. Event logic changes far more often than engine code. Writing it in
+Java probably let the planners compile and test scripts without rebuilding the
+executable. Each map and each event scene is its own small archive of classes
+that is loaded when needed and dropped afterwards, so only the scripts of the
+current place use memory. Java bytecode is also compact and the class file
+format is simple to parse, which suits a console with 32 MiB of main memory.
 
 The scripts were compiled with an ordinary Java compiler. The class files on
 the disc carry version 45.3 (the format of JDK 1.0 and 1.1), a `SourceFile`
-attribute such as `ST0010.java` and line number tables. One detail shows that
-they were post-processed before they were packed: the UTF-8 constants on the
-disc include a terminating NUL byte inside their declared length (242,954 of
-the 242,956). The loader relies on this and uses the bytes in place as C
+attribute such as `ST0010.java` and line number tables. The UTF-8 constants on
+the disc include a terminating NUL byte inside their declared length (242,954
+of the 242,956), which shows that the class files were post-processed before
+they were packed. The loader relies on this and uses the bytes in place as C
 strings. A standard `javac` does not do that, so a conversion tool probably
 ran over the class files. The two exceptions are empty string literals (`""`)
 in `ST0210.evt` and `ST2230.evt`. Their length is 0, so the loader measures
 them with `strlen` and probably reads the next constant's tag byte, which
 turns each into the one-character string `0x01`. Every file format detail of
-the script volumes is described in
-[Scripts and scene archives](../formats/scripts-and-archives.md#java-class-files).
+the script volumes is described in [Scripts and scene
+archives](../formats/scripts-and-archives.md#java-class-files).
 
 The VM implements only what the scripts need. There are no `long` or `double`
 operations, no exceptions, no monitors and no garbage collection. One script
@@ -199,10 +199,10 @@ names are never copied.
 
 ## The xheap object heap
 
-Every structure the VM creates lives in one heap managed by `src/main/xheap.c`:
-class records, constant pools, method and field tables, objects, arrays,
-strings and the script threads themselves. The heap is a bump allocator with
-**mark frames** instead of a garbage collector.
+Every structure that the VM creates is in one heap managed by
+`src/main/xheap.c`: class records, constant pools, method and field tables,
+objects, arrays, strings and the script threads themselves. The heap is a bump
+allocator with **mark frames** instead of a garbage collector.
 
 `xheap_init(keep, heap, size)` clears the heap and resets it to empty. With
 `keep` set to zero it first installs a new memory range, otherwise it clears
@@ -239,15 +239,15 @@ which unlink every interned string and every cached class that lived above the
 mark. `JNI_pushFrame` is `xheap_push`, and `JNI_popFrame` is `xheap_pop`
 followed by `xheap_current_clear`, which zeroes the free space.
 
-This is how scripts are unloaded. `SCRIPT_init` pushes two marks right after
-it has created the fixed threads, and only then loads the library classes that
-the natives need. Each time new scripts are loaded, `script.c` pops the top
-mark and pushes it again, which drops every class, object and thread of the
-previous scene at once. It then calls `JNI_loadNativeClass` again, so those
-library classes are parsed again from the `system.evt` image together with
-every new scene, and their static fields start fresh. Only what `initVM` loads
-before the marks (the primitive classes, `Object`, `String` and `StringBuffer`)
-survives a scene change.
+Scripts are unloaded with these marks. `SCRIPT_init` pushes two marks right
+after it has created the fixed threads, and only then loads the library
+classes that the natives need. Each time new scripts are loaded, `script.c`
+pops the top mark and pushes it again, which drops every class, object and
+thread of the previous scene at once. It then calls `JNI_loadNativeClass`
+again, so those library classes are parsed again from the `system.evt` image
+together with every new scene, and their static fields start fresh. Only what
+`initVM` loads before the marks (the primitive classes, `Object`, `String` and
+`StringBuffer`) survives a scene change.
 
 Threads that were created above the mark are still reachable from the tail of
 the thread list after a pop, but their memory has just been zeroed. The list
@@ -312,7 +312,7 @@ argument read its bytes and length through this record.
 
 ## The class database
 
-The VM does not know file names. It searches a small table of loaded archives,
+Instead of using file names, the VM searches a small table of loaded archives,
 `classDB[8]` in `src/main/init_class_db.c`. Each slot holds the address of a
 PDB image or zero. `initClassDB` clears the table and `JNI_loadClassDB(slot,
 image)` in `jni.c` fills one slot. A negative slot number picks the first free
@@ -386,12 +386,12 @@ table. A `ConstantValue` attribute sets the initial value of a static field
 through `setFieldValue`. `Exceptions`, `LineNumberTable`, `SourceFile` and all
 other attributes are skipped. (The attribute name string for `Exceptions` is
 misspelled `Exceotions` in `init_vm.c`, which changes nothing because the
-default case skips it too.) The skipped data is not small. The line number
-tables alone take 2.7 MB, 19 percent of all `.evt` bytes on the disc, and
-together with the `SourceFile`, `InnerClasses` and `Synthetic` attributes
-about 2.8 MB of the script volumes is compiler debug data that the game loads
-with the classes but never reads (see
-[Attributes and debug data](../formats/scripts-and-archives.md#attributes-and-debug-data)).
+default case skips it too.) Of the skipped data, the line number tables alone
+take 2.7 MB, 19 percent of all `.evt` bytes on the disc, and together with the
+`SourceFile`, `InnerClasses` and `Synthetic` attributes about 2.8 MB of the
+script volumes is compiler debug data that the game loads with the classes but
+never reads (see [Attributes and debug
+data](../formats/scripts-and-archives.md#attributes-and-debug-data)).
 
 The diagram below shows the whole path from a class name to a class record.
 
@@ -457,9 +457,9 @@ initialized the first time it is named.
 | 11, initialized | If the class has a `<clinit>()V` static initializer, run it on the VM's private thread `initVMThread` |
 
 Instance fields of a subclass always come after the fields of its super class.
-This is what lets natives find a field such as `peer` with the offset taken
-from the base class `xeno.Chr` even when the object is a script subclass of
-`Chr`. The first field starts at offset 4 at least, after the object header.
+Natives can therefore find a field such as `peer` with the offset taken from
+the base class `xeno.Chr` even when the object is a script subclass of `Chr`.
+The first field starts at offset 4 at least, after the object header.
 
 The diagram below shows the states a class goes through.
 
@@ -508,9 +508,9 @@ DispatchTable
 `buildDispatchMethodTable` fills `methods[]` with virtual methods. As
 recovered, its loops do not advance their method pointers, so only the first
 entry receives an index. This has no visible effect because the interpreter
-never uses the table for calls (see
-[Method calls and field access](#method-calls-and-field-access)). The table's
-real job is to give every object a way back to its class.
+never uses the table for calls (see [Method calls and field
+access](#method-calls-and-field-access)). In practice the table gives every
+object a way back to its class.
 
 `instanceOf(from, to)` answers the `instanceof` question. It accepts the same
 class, compatible arrays, any interface in the class's interface list and any
@@ -633,8 +633,8 @@ then checks the thread flags:
 When the loop ends, the frame's slots are released by lowering `stack_offset`
 again, and the frame's `pc` is reset to 0. A return instruction writes its
 value to `*result` and sets `DONE` when it returns from the outermost frame
-(`frame_depth` 0) or `FRAME_RETURNED` otherwise. That is why `DONE` means "the
-whole call has finished" everywhere else in the game.
+(`frame_depth` 0) or `FRAME_RETURNED` otherwise. Everywhere else in the game,
+`DONE` therefore means "the whole call has finished".
 
 The flowchart below shows one call of `virtualMachine`.
 
@@ -763,8 +763,8 @@ use, stores the class pointer in the constant pool and changes the tag to
 
 ## Script threads
 
-A **script thread** is a `JThread`, declared in `include/main/jni.h`. It is not
-an operating system thread. It is a record that holds the Java call stack of
+A **script thread** is a `JThread`, declared in `include/main/jni.h`. It is a
+record, not an operating system thread, and it holds the Java call stack of
 one script activity: its frames, its slots, the method it runs, the object it
 belongs to and the state of any wait. All script threads run on the game's
 main thread, one after the other.
@@ -996,7 +996,7 @@ A few natives run a whole screen before they return: `Runtime.enterShop` runs
 the shop menu, `Runtime.mailExec` runs the U.M.N. mail screen,
 `Runtime.minigameExec` runs a minigame overlay and `Runtime.execBattle` runs a
 complete battle. These natives contain their own loops that call `xglSleep`,
-so the script thread simply sees one long native call. `Runtime.setPartyData`
+so for the script thread each is one long native call. `Runtime.setPartyData`
 also calls `xglSleep` twice when it has to reload a character model.
 
 `jthreadResetFunc` holds work that must not run while the interpreter is
@@ -1172,8 +1172,8 @@ flowchart LR
 
 Each map and each event scene has its own archive. Loading and running it is
 the job of `script.c` and is described in full on the [Events](events.md) and
-[Scenes and time charts](scenes-and-timecharts.md) pages. The VM side of it is
-short.
+[Scenes and time charts](scenes-and-timecharts.md) pages. The VM side has
+these steps:
 
 1. A loader reads the archive into the inactive `scriptDB` slot:
    `SCRIPT_load` on map changes (`MapGetName(map) + ".evt"`, from the loader
@@ -1239,7 +1239,7 @@ sequenceDiagram
 
 ## Debug helpers
 
-Several pieces of debug code in the executable look into the VM. They are
+Several pieces of debug code in the executable inspect the VM. They are
 covered on the [Debug tools](../game/debug-tools.md) page.
 
 - `DB_evtMonitor` in `script.c` prints the class and method of the current
@@ -1254,20 +1254,20 @@ covered on the [Debug tools](../game/debug-tools.md) page.
   resemble the quick opcodes of Sun's reference VM.
 - `JTHREAD_defaultStage` prints `Class.method` on the debug font each frame.
 
-The executable also contains a second, unrelated script language. The "JS"
-interpreter in `src/main/js_init.c` and `src/main/js_class_light_get_peer.c`
-reads text files of statements ending in `;`, with `//` and `#` comments. Its
-only class is `light`, with the methods `setColor` and `setDirection2`. It is
-used by the debug light editor, which saves and loads `lgtNN.rc` files. It has
-nothing to do with the Java VM apart from the name.
+The executable also contains a second script language, which has nothing to do
+with the Java VM apart from the name. The "JS" interpreter in
+`src/main/js_init.c` and `src/main/js_class_light_get_peer.c` reads text files
+of statements ending in `;`, with `//` and `#` comments. Its only class is
+`light`, with the methods `setColor` and `setDirection2`. It is used by the
+debug light editor, which saves and loads `lgtNN.rc` files.
 
 ## Limits and quirks
 
-The VM is small and trusts its scripts. These are the main limits found in the
-recovered code:
+The VM is small and relies on its scripts to be correct. These are the main
+limits found in the recovered code:
 
 - No `long` or `double` support, no `i2b`, no `multianewarray`, no exceptions,
-  no monitors. Missing opcodes are silently skipped, which changes the
+  no monitors. Missing opcodes are skipped without a warning, which changes the
   meaning of one float compare in `ST1480$Mapunits.idle`.
 - No null checks, bounds checks or cast checks. A bad script would corrupt
   memory instead of failing.

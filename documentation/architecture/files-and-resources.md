@@ -135,9 +135,9 @@ is not a single free sector between two files in any of the three groups,
 and the last file ends exactly at the end of the last piece. The only unused
 space is the padding inside the last sector of each file.
 
-The order of the files on the disc is not the order of the directory. The
-data is laid out in the order the game reads it, which keeps the drive's
-seeks short:
+The files are stored on the disc in the order in which the game reads them,
+which differs from the order of the directory and keeps the drive's seeks
+short:
 
 - Group 00 starts with what the boot needs: the font `font1.tex`, the window
   texture `endou\cfwin.xtx`, the resident sound banks `REGIST.SWD`,
@@ -245,16 +245,16 @@ by the CD thread and are described in [xgl.md](../libraries/xgl.md#the-cd-thread
 
 ## Packed files (ARX)
 
-Most models, textures and motion packs are stored packed. The
-packed bit in a directory record says so, and the data itself starts with the
-ARX header: the word `"ARX\0"` (`0x00585241`), the unpacked size, the packed
-size, a zero flags word and a table of 30 frequent 32-bit words. The coded
-stream replaces each frequent word by a 3- to 9-bit code and stores every
+Most models, textures and motion packs are stored packed. The packed bit is
+set in the directory record of such a file, and the data itself starts with
+the ARX header: the word `"ARX\0"` (`0x00585241`), the unpacked size, the
+packed size, a zero flags word and a table of 30 frequent 32-bit words. The
+coded stream replaces each frequent word by a 3- to 9-bit code and stores every
 other word as a 33-bit literal (a flag bit plus the word). This probably
 suits model and texture data, where the same words repeat often.
 
-The real files show how the packer chose the table. The 30 entries are the
-30 most frequent 32-bit words of the unpacked file, the most frequent first.
+In the real files, the 30 entries of the table are the 30 most frequent
+32-bit words of the unpacked file, the most frequent first.
 Words with the same count are ordered by their first appearance in the file.
 The first entries get the shortest codes, so the most common words cost the
 fewest bits. A sample of 40 packed files of group 00 follows this rule
@@ -286,12 +286,12 @@ entry of a scene archive.
 
 ## The field resource system
 
-The field game does not read model files one by one from game logic. A
-scene describes the resources it needs in a small text script, and the
-resource system in `src/main/res_get_path.c` loads them into the resource
-table `GameResource[128]`. How that table manages memory is described in
-[memory.md](memory.md#the-resource-table). This section describes what goes
-into it.
+A scene of the field game describes the resources it needs in a small text
+script, so game logic does not read model files one by one. The resource
+system in `src/main/res_get_path.c` loads the resources of the script into
+the resource table `GameResource[128]`. How that table manages memory is
+described in [memory.md](memory.md#the-resource-table). This section describes
+what goes into it.
 
 ### Resource types
 
@@ -663,9 +663,9 @@ load while the current one still runs. `loadScriptCD2` reads the class
 volume into the slot's class image buffer and looks in it for the class
 `xeno/Scene` or `xeno/Stage` with `JNI_searchClasses`. It then loads the
 motion pack and the resource volume from `data\mtnpack\` through
-`RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_FILE, ...)`, so they live in the
-resource table. It tries this for every script, but only event scripts have
-these files (see [PDB volumes](#pdb-volumes)), and the motion pack becomes
+`RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_FILE, ...)`, so they are stored in
+the resource table. It tries this for every script, but only event scripts
+have these files (see [PDB volumes](#pdb-volumes)), and the motion pack becomes
 bank 1 of every actor. The older `loadScriptCD` reads the motion pack and the
 volume to fixed addresses at `0x05000000` and above, which exist only on a
 128 MiB development machine. The map loader in `src/main/disp_on.c` still
@@ -708,7 +708,7 @@ feature only. The arena itself is described in
 ## File types
 
 The byte layout of every file type on the disc is described in ten formats
-pages, each written from the real files and the code that reads them:
+pages:
 
 - [Models and textures](../formats/models-and-textures.md): the `.lex`
   models, the `.xtx` texture sets and the texture sets embedded in a few

@@ -140,16 +140,17 @@ without any copy.
 | 7 | `CASINO_TEST_MODE` | `test_mode()` | inside `test_mode()` |
 
 `GameModeChange()` switches between them. It stores the new value and resets
-the state the new game must start with. The menu forgets the bet level,
+the state the new game must start with. For the menu it clears the bet level,
 Poker resets its round (`PoInitWork`) and the Nine Reel game runs
-`init_ninegame()`. The slot machine gets stopped reels, reel set 0, no
-double pay and no bonus. When it is entered from the menu, its line stakes
-are also cleared and the help screen is shown, but when it is entered from
-the Nine Reel game the stakes are kept. Each init routine of games 0 to 5 runs only the first time the
-game is entered in a casino visit, guarded by `Gwork.modes.initialized`. It
-mostly reads the game's textures from the CD into fixed buffers. Only the
-menu returns a value that matters. When the player leaves through the menu,
-`menu_mode()` returns 1 and `MiniG_Main()` passes it on to `TanakaTest()`.
+`init_ninegame()`. The slot machine gets stopped reels, reel set 0, no double
+pay and no bonus. When it is entered from the menu, its line stakes are also
+cleared and the help screen is shown, but when it is entered from the Nine
+Reel game the stakes are kept. Each init routine of games 0 to 5 runs only the
+first time the game is entered in a casino visit, guarded by
+`Gwork.modes.initialized`. It mostly reads the game's textures from the CD
+into fixed buffers. Only the menu's return value is used. When the player
+leaves through the menu, `menu_mode()` returns 1 and `MiniG_Main()` passes it
+on to `TanakaTest()`.
 
 The diagram below shows how the games connect.
 
@@ -177,8 +178,7 @@ stateDiagram-v2
 `MiniG_Init()` calls `InitWork()`, which clears the work flags and calls
 `RES_Load()`. That function reads `data\tanaka\CASINO.res` to `0x01000000`
 (`CASINO_RES_BUFFER`) and points `ResData` at it. The file holds the numbers
-that tune the casino, so they are data rather than code. Its start is
-described by `struct CasinoResourcePrefix`.
+that tune the casino. Its start is described by `struct CasinoResourcePrefix`.
 
 ```
 0x01000000  CasinoResourcePrefix
@@ -211,10 +211,9 @@ The coins and the bought prizes are part of the normal save. A
 and `coin_balance`. The [save data](../../architecture/save-data.md) page
 shows where this lies in the whole save block.
 
-All coin income goes through `AddCoin()`. The balance cannot go over
-9,999,999 (`CASINO_COIN_MAX`). The part of a win above that limit is not
-lost. It is converted to money at 8 G per coin and added with
-`dataMoneyBoxInc()`.
+All coin income goes through `AddCoin()`. The balance cannot go over 9,999,999
+(`CASINO_COIN_MAX`). The part of a win above that limit is converted to money
+at 8 G per coin and added with `dataMoneyBoxInc()`.
 
 ### Music
 
@@ -508,30 +507,30 @@ flowchart TD
 
 ### A hidden royal flush
 
-`PoCardFlip()` keeps a counter, `status_96`. It counts the rounds in a row
-in which the player throws away all five cards, and resets when fewer are
+`PoCardFlip()` keeps a counter, `status_96`. It counts the rounds in a row in
+which the player throws away all five cards, and resets when fewer are
 replaced. Once the counter reaches 32, it sets `Gwork.poker_deal.bonus_mode`.
-In that mode `PoShuffleCard()` does not draw at random. It gives the cards
-0, 9, 10, 11 and 12 in slot order, which are the Ace, 10, Jack, Queen and
-King of spades, the one royal flush the game recognizes. The same fixed
-cards are dealt in the double-up game, where each one is higher than the one
-before, so "higher" always wins. The flag is checked again at every
-replacement, so the mode ends with the first round in which the player keeps
-a card. Leaving Poker clears the flag but not the counter, which lives in the
-overlay's data and starts again from 0 only when OV11 is loaded anew. The
-mode appears to be a hidden feature or a test aid.
+In that mode `PoShuffleCard()` does not draw at random. It gives the cards 0,
+9, 10, 11 and 12 in slot order, which are the Ace, 10, Jack, Queen and King of
+spades, the one royal flush the game recognizes. The same fixed cards are
+dealt in the double-up game, where each one is higher than the one before, so
+"higher" always wins. The flag is checked again at every replacement, so the
+mode ends with the first round in which the player keeps a card. Leaving Poker
+clears the flag but not the counter, which is in the overlay's data and starts
+again from 0 only when OV11 is loaded anew. The mode appears to be a hidden
+feature or a test aid.
 
 ## 8. Coin exchange
 
 `coin_main()` sells coins for money. It shows four offers with their texts
 from `CASINO.res` (`RES_Coin_Info`) and an EXIT row, on the texture
-`exchange2.xtx`. Up and Down move the cursor over the five rows. Circle, or
-R1 held down (it repeats), buys one offer. The purchase takes
-`RES_Coin_Rate(n)` G with `dataMoneyBoxDec()` and adds 10, 100, 500 or 1000
-coins with `AddCoin()`. When the balance is already at the maximum, the money
-is given back and a refusal sound plays. The prices themselves are data.
-`CASINO.res` sets them to 100, 950, 4500 and 8000 G, so larger offers are
-slightly cheaper per coin. Circle on EXIT or Cross returns to the menu.
+`exchange2.xtx`. Up and Down move the cursor over the five rows. Circle, or R1
+held down (it repeats), buys one offer. The purchase takes `RES_Coin_Rate(n)`
+G with `dataMoneyBoxDec()` and adds 10, 100, 500 or 1000 coins with
+`AddCoin()`. When the balance is already at the maximum, the money is given
+back and a refusal sound plays. `CASINO.res` sets the prices to 100, 950, 4500
+and 8000 G, so larger offers are slightly cheaper per coin. Circle on EXIT or
+Cross returns to the menu.
 
 ## 9. Prize exchange
 

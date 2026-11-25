@@ -39,8 +39,8 @@ and the driver use the data at run time is described in
 All sound files sit in the archives as plain files. None of them is
 ARX-packed (the archive packing is described in
 [Files and resources](../architecture/files-and-resources.md)). The banks and
-sequences live in archive group 00. The voice and music streams of the
-cutscenes live in groups 10 and 20 next to the cutscenes that play them, and
+sequences are in archive group 00. The voice and music streams of the
+cutscenes are in groups 10 and 20 next to the cutscenes that play them, and
 the game over voice is in group 00.
 
 | Type | Extension | Magic | Directory | Files | Bytes | Read by |
@@ -56,12 +56,12 @@ The two lower-case names are `Minislot.sed` and `Minislot.swd`, the effects of
 the Network Casino. The casino overlay names them with these exact paths
 (`miniSlotSedPath`, `miniSlotSwdPath` in `src/ov11/mini_g.c`).
 
-The files work together through numeric ids, not through names. A wave bank
+The files refer to each other by numeric id rather than by name. A wave bank
 carries a bank id. An effect file names the bank id whose samples it plays and
 carries its own file id, which must equal that bank id. A music file names a
 bank id too, and its events can switch to other banks. A battle container is
-only a wrapper around effect and wave bank pairs. The streams stand apart:
-they are raw ADPCM and need no bank. The diagram below shows these links.
+only a wrapper around effect and wave bank pairs. The streams are raw ADPCM
+and need no bank. The diagram below shows these links.
 
 ```mermaid
 flowchart LR
@@ -479,9 +479,9 @@ and a shift of 12 or less.
 The flags control looping on the SPU2. The loop start flag stores the packet
 address as the voice's loop address. At a packet with the end flag the voice
 jumps to that loop address. If the repeat flag is set as well it keeps
-playing, otherwise the voice is released and goes silent. This is why a
-one-shot sample ends with `0x01` and a looping one with `0x03`. The packet of
-zero bytes in front of each sample has flags 0. The SPU2 itself is described
+playing, otherwise the voice is released and goes silent. A one-shot sample
+therefore ends with `0x01` and a looping one with `0x03`. The packet of zero
+bytes in front of each sample has flags 0. The SPU2 itself is described
 in [The IOP sound driver](../architecture/iop-sound-driver.md#sound-ram).
 
 ## SED effect files
@@ -602,11 +602,10 @@ effect note (first byte < 0x80)
   before the next event. The velocity is the track's current velocity.
 ```
 
-This differs from the music note in three ways. The effect note has no
-velocity byte, its duration is always two little-endian bytes, and it also
-sets the track's wait, while a music note leaves the wait to the delta
-commands. The upper nibble of the first byte is 0 in all 4,716 notes of the
-loose files. Before a note sounds, the routine looks ahead over the following
+Unlike a music note, an effect note has no velocity byte and its duration is
+always two little-endian bytes. It also sets the track's wait, while a music
+note leaves the wait to the delta commands. The upper nibble of the first
+byte is 0 in all 4,716 notes of the loose files. Before a note sounds, the routine looks ahead over the following
 commands to decide on slurs and ties, using the length table
 `SsdSeqFuncLength` in `src/audio/ssd/ssd_data.c`.
 
@@ -616,8 +615,8 @@ The commands used most in effect tracks are `0x90` Stop (7,929 times),
 sample with WaveChange (an index into the bank's sample table) or picks a
 program with ProgramChange.
 
-A third way reaches samples outside the effect's own bank. WaveBankType
-(`0xAB`) takes three bytes: a sample index, then a bank id stored high byte
+A third command, WaveBankType (`0xAB`), reaches samples outside the effect's
+own bank. It takes three bytes: a sample index, then a bank id stored high byte
 first (`SsdSeqWaveBankType` computes `events[1] << 8 | events[2]`). The
 channel then looks the bank up by id among all loaded wave banks
 (`SsdSetChannelWave`). The command occurs 83 times, and every operand names
@@ -635,8 +634,8 @@ An effect that names an enemy bank this way plays only while that enemy's
 bank is loaded. `REGIST.SWD`, `REGIST2.SWD` and, in the field, `REGISTCF.SWD`
 are always present.
 
-This is the only multi-byte command operand that is not little-endian (see
-[Event operand sizes](#event-operand-sizes)).
+The bank id of WaveBankType is the only multi-byte command operand that is
+not little-endian (see [Event operand sizes](#event-operand-sizes)).
 
 The flowchart below follows an effect id from the EE to the sample it plays.
 
@@ -701,11 +700,12 @@ into IOP memory and creates a sequence with one MIDI device. The playback is
 described in [The IOP sound driver](../architecture/iop-sound-driver.md#9-the-sequencer)
 and [Audio](../architecture/audio.md#8-music-sequences).
 
-Most of the 115 files are not music in the usual sense. 103 of the 110 files
-in `data\sound\smd\` are short environment sequences of about 200 bytes,
-named `ENV_<map>.SMD`, that play long looped ambience samples from the map's
+Most of the 115 files are environment sequences rather than music. They are
+103 of the 110 files in `data\sound\smd\`, short sequences of about 200 bytes
+named `ENV_<map>.SMD` that play long looped ambience samples from the map's
 environment wave bank. Their comment strings call them "base noise"
-(ベースノイズ) or give the map name. The real pieces of music are few.
+(ベースノイズ) or give the map name. The table below lists the few pieces
+of music.
 
 | Files | Title in the file | Composer string | Tracks |
 | --- | --- | --- | --- |
@@ -865,9 +865,9 @@ DeltaForAfterDelta (`0x81`, 17,867 times), Delta1 (`0x84`, 12,994),
 VolumeAbsolute (`0xE0`, 8,601), DeltaForGate (`0x80`, 4,849) and
 PanpotAbsolute (`0xE8`, 4,616).
 
-The bank commands work against their names. `SsdSeqBankMSB` (`0xA8`) sets the
-low byte of the channel's 16-bit bank id and `SsdSeqBankLSB` (`0xA9`) the high
-byte. `BATTLE2.SMD` uses `a8 01 a9 02` to select bank `0x0201`, which is the
+`SsdSeqBankMSB` (`0xA8`) sets the low byte of the channel's 16-bit bank id and
+`SsdSeqBankLSB` (`0xA9`) the high byte, the reverse of what their names say.
+`BATTLE2.SMD` uses `a8 01 a9 02` to select bank `0x0201`, which is the
 id of `BATTLE2.SWD`. In the files the bank commands always select the bank the
 header already names, except in the jingles, which also select `0x0001`, a
 bank id that no file on the disc has.
@@ -1272,10 +1272,10 @@ to another bank. An effect track can name any bank directly with
 WaveBankType, as `REGIST.SED` does for `REGIST2.SWD` (see
 [Effect tracks](#effect-tracks)).
 
-The ids are not chosen at random. The low byte of the id groups the banks:
-38 of the 41 banks at `0xB0000` have a low byte of `02` or `03` (`0x1F03` for
-`ENV_DYU01`, `0x3302` for `ENV_ELS01`), the footstep banks use `D4` to `DA`
-(110 banks) or `04` to `0A` (68), and the enemy and NPC banks values such as `30`, `31`, `0C` and `40`.
+The low byte of the id groups the banks: 38 of the 41 banks at `0xB0000` have
+a low byte of `02` or `03` (`0x1F03` for `ENV_DYU01`, `0x3302` for
+`ENV_ELS01`), the footstep banks use `D4` to `DA` (110 banks) or `04` to `0A`
+(68), and the enemy and NPC banks values such as `30`, `31`, `0C` and `40`.
 The high byte then numbers the banks within a group. The environment
 sequences of a map use the id of the map's
 environment bank, which the `loadse` command has loaded into effect bank 3.
@@ -1327,7 +1327,8 @@ are named by the scene scripts, so both copies are used.
 
 Names that the scripts use but that are not on the disc: the effect banks
 `BOSS001C`, `BOSS005C`, `ENV_DRL`, `NPC_W`, `UTMA012C`, `UTSO007C` and the
-music `ENV_DRL` and `ENV_KUK01`. Loading them fails quietly.
+music `ENV_DRL` and `ENV_KUK01`. Loading them fails, and the commands then
+send nothing to the driver.
 
 Battle containers: 533 of the 535 names can be built from the name tables of
 `src/ov01/snd.c` and the effect names in `seffect.esp`. `drl00.bin` and

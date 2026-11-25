@@ -1,7 +1,7 @@
 # Save data
 
-Everything that Xenosaga Episode I keeps between play sessions lives in one
-block of memory, `SaveData`, defined in `src/main/xgl_mc.c`. It is
+Everything that Xenosaga Episode I keeps between play sessions is stored in
+one block of memory, `SaveData`, defined in `src/main/xgl_mc.c`. It is
 `0x163B0` bytes (about 89 KiB) long and sits at `0x004917B0` in the data
 segment of the main executable. A save file on a memory card or on the hard
 disk is a plain copy of this block, protected by a checksum. Loading a game
@@ -28,9 +28,9 @@ screen reads the block through two partial views, `FileSaveRecord` and
 the screen needs.
 
 Because the whole block is written and read as one piece, a field only has
-to be inside `SaveData` to be saved. No list of saved variables exists. This
-makes saving simple, but the offsets are spread over many files, and the map
-below was rebuilt from them.
+to be inside `SaveData` to be saved. No list of saved variables exists, which
+makes saving simple, but the offsets are spread over many files. The map below
+collects them.
 
 ```
 SaveData (0x163B0 bytes at 0x004917B0)
@@ -133,11 +133,12 @@ clock (day, hour, minute, second, see [xgl.md](../libraries/xgl.md#clock)).
 The one at `0x60` is the date and time of the last save, read with
 `xglClockRead` just before the checksum is computed.
 
-The one at `0x68` (`SAVE_PLAY_TIME`) is the total play time. The game does
-not count frames for it. `PartyTimeUpDate` in `src/main/party.c` reads the
-real-time clock, converts the reading and the previous reading
-(`_CountTime`) to seconds with `xglClockDayTime2UInt`, and adds the
-difference to the record. `PartyTimePauseStart` updates the record when the
+The one at `0x68` (`SAVE_PLAY_TIME`) is the total play time. The game
+measures it with the real-time clock and does not count frames.
+`PartyTimeUpDate` in `src/main/party.c` reads the clock, converts the reading
+and the previous reading (`_CountTime`) to seconds with
+`xglClockDayTime2UInt`, and adds the difference to the record.
+`PartyTimePauseStart` updates the record when the
 game is paused, and `PartyTimePauseEnd` takes a new reference reading, so
 the time spent in a pause is not counted. `PartyTimeLimitCheck` clamps the
 record at day 5, 3:59:59. `PartyTimeDispChange` folds the days into the hour
@@ -371,7 +372,7 @@ player loads a slot, the save screen reads the file into its staging buffer
 `FileVersionCheck`. If the load was not cancelled, `MenuFileMain` returns 1,
 and the title screen sets `GameLoopState.kindDetail` to 1.
 
-At this point only the parts that live inside `SaveData` are current. The
+At this point only the parts that are kept inside `SaveData` are current. The
 copied parts are restored later. When `Game()` in `src/main/game.c` starts
 and finds `kindDetail` set, it calls `GamePopSaveDataUser` to copy the event
 id, the position, the records, the boxes and the money back and to apply the
@@ -632,7 +633,7 @@ flowchart LR
   `FileObjectEntryView`). The value comes from `0x15088`, where
   `GamePushSaveDataUser` stores `moneyBox`.
 - `FileVersionCheck` is empty, so the version converter is dead code. A save
-  with another version is simply shown as corrupt.
+  with another version is shown as corrupt.
 - The leader shown in a slot is read from a byte inside the third unit
   record, not from the party state's `leader_battle_id`.
 - The third minigame block at `0x15290` is cleared at a new game but no

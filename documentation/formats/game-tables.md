@@ -1,6 +1,6 @@
 # Game data tables
 
-The battle and growth rules of Xenosaga Episode I live in a small set of
+The battle and growth rules of Xenosaga Episode I are stored in a small set of
 binary tables on the disc. `data\yamamoto\batdat.bin` holds every unit,
 technique, weapon, item, accessory, ether and battle reward of the game in 18
 sections. The files in `data\endou` hold the rules of the main menu screens:
@@ -156,8 +156,8 @@ menu, the shops and the U.M.N. read them in place through the getters of
 The file starts with a 0x50-byte header: a section count, the file size and
 one offset per section. Each offset counts from the start of the file. The 18
 sections follow back to back in header order, with no padding, and each is an
-array of fixed-size records. The code never uses the count or the size
-fields. It reads the offset of a section and indexes records from there.
+array of fixed-size records. The code reads the offset of a section and
+indexes records from there. It never uses the count or the size fields.
 
 ```
 batdat.bin (0xE0D0 bytes)
@@ -506,8 +506,8 @@ An accessory record (0x10 bytes) covers the character accessories (ids 1 to
 A.G.W.S. treat every accessory as category 2. Accessory 6, Neo Armor, is
 `d0 07 00 00 00 08 00 92 00 00 00 00 1e 00 39 00`: 2,000 credits, mask
 0x9200 (chaos, character 4 and Jr.), category 0, P.Def 30 and skill 57. The skill
-level and cost of an accessory are not here but in
-[skilldat.bin](#skill-learning-skilldatbin).
+level and cost of an accessory are stored in
+[skilldat.bin](#skill-learning-skilldatbin) instead.
 
 ### Skill records
 
@@ -971,11 +971,11 @@ entry is "Woglinde" / "Lab" for map 16 (`MC_VOK01`). The two Elsa rooms
 000042: 10 00 00 00                          map_id 16, unknown 0
 ```
 
-The entries 32 to 36 are not save rooms. They are "Woglinde Escape", "Elsa
-Rescue", "Elsa Respite", "Kukai Dock" and "Episode 1 End" on the test maps 3,
-1, 4, 2 and 10 (`MC_TST03`, `MC_TST01`, `MC_TST04`, `MC_TST02`, `MC_TST10`).
-They are probably the labels of the saves the game offers between chapters
-and at the end. The save file itself is described in
+The entries 32 to 36 are "Woglinde Escape", "Elsa Rescue", "Elsa Respite",
+"Kukai Dock" and "Episode 1 End" on the test maps 3, 1, 4, 2 and 10
+(`MC_TST03`, `MC_TST01`, `MC_TST04`, `MC_TST02`, `MC_TST10`). They are not
+save rooms and are probably the labels of the saves the game offers between
+chapters and at the end. The save file itself is described in
 [Save data](../architecture/save-data.md).
 
 ## Enemy AI programs (think files)
@@ -1233,8 +1233,8 @@ The command register 0x11 takes the values 0 to 8 in the files. The
 
 ### How a program is chosen
 
-The choice of a program has two levels. The field map chooses the file, and
-the encounter chooses the monster set inside it.
+The field map determines the think file, and the encounter determines the
+monster set inside it.
 
 1. When a field map loads, `RES_loadFileSubMap` (`src/main/res_get_path.c`)
    asks `dataThinkNameGet` for the think file of the map. `thinkMapGet`

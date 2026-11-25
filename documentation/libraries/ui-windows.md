@@ -8,9 +8,9 @@ the shops use the **e-widgets** instead. These are small immediate-mode
 widgets named `eWindow`, `eCursol`, `eMessage`, `eNumber` and so on, and they
 draw through the **endPrint** command layer.
 
-Both toolkits end in the same place. Every letter, frame and sprite becomes a
-record in the print queue of the `xglFont` module, and the render thread turns
-that queue into GS primitives once per frame. Each record carries an order
+Both toolkits end in the print queue of the `xglFont` module. Every letter,
+frame and sprite becomes a record in that queue, and the render thread turns
+it into GS primitives once per frame. Each record carries an order
 key. The key picks one of 16 buckets and a GS depth, and together they decide
 what appears in front.
 
@@ -176,10 +176,10 @@ from 0 to 15 and each bucket's records in the order they were queued. All the
 records share one drawing cursor, so a style string in one record still
 applies to the next record unless that record resets it.
 
-The depth is the second sorting tool. The font engine sets the GS depth test
+The depth also decides what is in front. The font engine sets the GS depth test
 to GREATER (TEST value 0x7000D) and endPrint sets GEQUAL (0x5000D), so a
 glyph or sprite with a larger depth wins where two of them overlap. Almost all
-UI keys live in bucket 0, and the low 24 bits do the real layering. A typical
+UI keys are in bucket 0, and the low 24 bits decide the layering. A typical
 pattern is a window at depth `d`, its shading at `d + 1` and its text at
 `d + 2`. The TWSYS widgets use `EW_ORDER_FRAME` (0x00FFFFF0), `EW_ORDER_MASK`
 (0x00FFFFF1) and `EW_ORDER_TEXT` (0x00FFFFFF), the highest depths in bucket 0.
@@ -198,7 +198,7 @@ Dialogue text arrives as **message script**: EUC text with tags written as
 `/[name(argument)]`. The parser is the MIF2 message interface in
 `src/main/msg_init.c`, documented with the event system in
 [events.md](../scripting/events.md#message-text-and-the-mif2-interface). This
-section covers the part the windows see.
+section covers the part that the windows use.
 
 ### Message tags
 
@@ -233,7 +233,7 @@ byte workspace. `MBUF_create2()` hands out a plain buffer, and
 `MBUF_dispose()` clears `active`. A text window owns up to two buffers in
 `messageBuffer[2]` and frees them when it closes.
 
-A `MsgQueue` is the reading side. It points at a converted text and keeps a
+A `MsgQueue` reads a converted text. It points at the text and keeps a
 `head` and `tail`, the number of characters and the pixel `width` of the
 current line, the wrap `limit` and the `last` code popped.
 `MSG_queuePop(queue, out, n)` copies up to n characters into a line buffer. It
@@ -254,7 +254,7 @@ Each slot is 0x5B0 bytes and holds one window, menu or slider. The same record
 is read through different views for each kind, which the header
 `include/main/twsys_init.h` merges into one structure with unions.
 
-The `kindAndGroup` halfword says what a slot is.
+The `kindAndGroup` halfword holds the kind, the group and the index of a slot.
 
 | Bits | Meaning |
 | --- | --- |
@@ -566,9 +566,9 @@ the box's opening fade.
 
 Next it pops text, but only when the window is open and not waiting. A
 conversation window uses `TWIN_popCF`, which pops **two characters per
-frame**, giving the typewriter effect. A scene window uses `TWIN_popScene`,
-which pops 24 characters at a time in a loop until the queue is empty or a
-tag stops it, so the whole line appears at once. Both functions react to the
+frame** and so gives the typewriter effect. A scene window uses
+`TWIN_popScene`, which pops 24 characters at a time in a loop until the queue
+is empty or a tag stops it, so the whole line appears at once. Both functions react to the
 popped `last` code.
 
 | Popped | New state |
@@ -685,8 +685,8 @@ Java object to the VM.
 | `setLocation(int x, int y)` | clears `FOLLOW_OWNER` and sets `x` and `y` |
 | `setName(String)` | empty |
 
-Every command is text. `clear`, `close`, `waitkey` and `wait` do not act at
-once. They append a tag to the same queue as the dialogue, so the window
+Every command is text. `clear`, `close`, `waitkey` and `wait` append a tag to
+the same queue as the dialogue instead of acting at once, so the window
 reaches them in order, after the text before them has appeared.
 
 ### Waiting for a window
@@ -892,7 +892,7 @@ with `STRING_h2zEUC` and prints it right-aligned with `xglFontPrintf`, padding
 
 ## The endPrint layer
 
-The e-widgets do not draw by themselves. They describe primitives to the
+Instead of drawing by themselves, the e-widgets describe primitives to the
 **endPrint** layer in `src/main/end_print.c` and `include/main/end_print.h`,
 which draws them later on the render thread.
 
@@ -924,10 +924,10 @@ an info structure that describes the primitive.
 | 21, 22 | `BACK_SPRITE`, `BACK_SPRITE_RECT` | quads textured from that buffer |
 | 100 + n | `END_PRINT_EXT_*` | queue a font callback right away |
 
-The primitives are built in a few ways. `PrintWindow` draws a 3-pixel border
-from `win_uv[0..7]` and fills the inside with tiles of up to 128 pixels.
-`PrintFrame` draws only the border. `PrintNumber` builds digits from `num_uv`
-sprites, with the style in the low nibble and right alignment at bit 0x10.
+`PrintWindow` draws a 3-pixel border from `win_uv[0..7]` and fills the inside
+with tiles of up to 128 pixels. `PrintFrame` draws only the border.
+`PrintNumber` builds digits from `num_uv` sprites, with the style in the low
+nibble and right alignment at bit 0x10.
 `PrintTagFont` is a sprite-letter font from `tag_uv`, where a leading `\x01`
 right-aligns the text and code 3 sets a custom advance. `PrintRibbon` is a
 Gouraud-shaded triangle strip whose point list ends with a zero-depth entry,
@@ -974,7 +974,7 @@ order, resets the queue with `endPrintInit`, uploads the kanji texture again
 and resets the message icon sprites with `eMessageSpriteReset`.
 
 Because the drawing happens later, the info structures must stay valid until
-the render thread has used them. This is why the widgets keep separate
+the render thread has used them. The widgets therefore keep separate
 "render" copies of their state: `ESprite` has render coordinates, `eNumber`
 has `render[4]` and `eWindow` has its own `primitive`.
 
@@ -1026,7 +1026,7 @@ For example, sprite 0x0609 is entry 9 of the window table and 0x0704 is entry
 
 ### Window textures
 
-The UI art lives in three `.xtx` files in `data\endou\`, named in
+The UI art is in three `.xtx` files in `data\endou\`, named in
 `src/main/open_close_main.c`. `WindowTexLoad(buffer, request)` in
 `src/main/window_tex_load.c` loads one of them.
 
@@ -1101,7 +1101,7 @@ copy. While it is visible it queues `END_PRINT_CMD_WINDOW` in grey at alpha
 to 8. The style (`cursol->width`) is an entry of the cursor UV table, and the
 animation frame cycles as `(t >> 1) % 8` for style 0 and `(t >> 2) % 4` for
 the others. It queues `END_PRINT_CMD_SPRITE`. `eCursolSet(cursol, style)` sets
-it up, and `eCursolModeChange` refuses to start `SHOW` or `RUN` while the
+it up, and `eCursolModeChange` does not start `SHOW` or `RUN` while the
 cursor is already showing or running.
 
 ### eMessage
@@ -1345,7 +1345,7 @@ flowchart TD
 
 ### Battle windows (eBattleWin)
 
-Four ready-made windows serve the battle code and the U.M.N. database. Each
+The battle code and the U.M.N. database use four ready-made windows. Each
 has an `Open`, a `Main` and a `Close` function. Each `Main` returns 0 when
 inactive, 1 while animating and 2 when ready, and queues the endPrint flush.
 
@@ -1365,8 +1365,8 @@ code decides on input itself. In `menuResultEth`, Circle plays `SE_DECIDE` or
 
 ### Main menu example
 
-The main menu's command window shows how the parts fit.
-`TopMenuWinMain` in `src/main/menu_top_command_check.c` uses a WindowDX with
+For the main menu's command window, `TopMenuWinMain` in
+`src/main/menu_top_command_check.c` uses a WindowDX with
 `close_callback = MenuSelectWindow`. It opens it without animation (state
 `OPEN`, one `WindowDXMain` call, state `READY`) and slides it with
 `MoveSlide`. `MenuInfoWindow` is another callback. It switches to the

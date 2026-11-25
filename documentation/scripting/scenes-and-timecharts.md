@@ -108,16 +108,16 @@ classDiagram
 
 ## Starting and stopping script methods
 
-A Scene does not run `play()` directly. `SCENE_start(vm, scene, mode,
-name)` attaches a method to the thread that belongs to the scene object
+A Scene runs `play()` on a VM thread. `SCENE_start(vm, scene, mode, name)`
+attaches a method to the thread that belongs to the scene object
 (`JTHREAD_get(scene)`). Mode 8 takes the name as a C string. Mode 1 takes a
 Java string, which is what the native `Scene.start(int, Object)` passes.
 `SCRIPT_exec2` calls it with mode 8 and the name `play`. `SCENE_start` stores
-the method in `thread->method`, sets the update hook to
-`JTHREAD_defaultScene` and sets the runnable flag (`0x10`). When the scene
-starts itself from its own thread it also sets a start-self bit. From then on
-`JTHREAD_cntl` calls the hook every frame and the hook resumes `play()` until
-the method returns. `Scene.stop()` does nothing.
+the method in `thread->method`, sets the update hook to `JTHREAD_defaultScene`
+and sets the runnable flag (`0x10`). When the scene starts itself from its own
+thread it also sets a start-self bit. From then on `JTHREAD_cntl` calls the
+hook every frame and the hook resumes `play()` until the method returns.
+`Scene.stop()` does nothing.
 
 A Stage can run a long method in the background with `Stage.start(1,
 "name")`. The native reads the Stage's `peer` field, finds the thread of the
@@ -547,8 +547,7 @@ The handlers are:
 | `SEQ_setMotion`, `SEQ_setPositionRAND`, `SEQ_moveNPC_XZ`, `SEQ_setRotY2Player` | `ACT_updateNPC` | idle behaviour of NPCs: a random idle motion, a short random walk, turning to the player |
 
 `nearDir(from, to)` returns the signed shortest turn from one angle to
-another, so rotations never take the long way round. The talk check uses it
-too.
+another. Rotations use it, and so does the talk check.
 
 In the move natives, the target point is relative to the actor's position
 when bit 0 of the `Chr` field `algorithm` is set, and absolute otherwise. The
@@ -557,8 +556,8 @@ speed forms store the speed divided by 30 as the step per frame.
 ### Waiting for an actor
 
 Most actor natives end with a `boolean wait` argument. With `wait` true the
-native sets the actor's busy flag (`CHR_ACTOR_BUSY`, `0x2`). What happens to
-the calling thread depends on the thread:
+native sets the actor's busy flag (`CHR_ACTOR_BUSY`, `0x2`). Whether the
+calling thread waits depends on the thread:
 
 - On a character's own thread (kind 1), the native marks the thread as
   waiting. `JTHREAD_defaultChr` does not resume a character thread while its
@@ -663,14 +662,14 @@ weight schemes and the evaluation) is described in
 
 ## Keeping everything in sync
 
-A cutscene has no single master timeline. It uses three clocks that the
-script ties together.
+A cutscene uses three clocks that the script ties together, and it has no
+single master timeline.
 
 The first clock is the **script thread**. `play()` runs its statements in
 order and blocks on waits: a window waiting for a button, a number of frames
 (`System.sleep`), an actor finishing its move, or another thread finishing
-(see [events.md](events.md#synchronising-text-voices-and-actions)). This is
-how dialogue, camera cuts and simple movements follow each other.
+(see [events.md](events.md#synchronising-text-voices-and-actions)). These
+waits keep dialogue, camera cuts and simple movements in order.
 
 The second clock is the **PlayControl time**. Everything that must stay
 frame-exact with a pre-made animation follows `playControl.currentTime`:

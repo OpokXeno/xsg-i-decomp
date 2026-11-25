@@ -49,12 +49,12 @@ minigame. It first restores the field camera and light
 (`GameStateRestoreCameraLight`), then calls `Game_Data_Push()` from
 `src/main/game.c`. That function saves the actor array, purges the field
 sounds, saves the game state and the active effects, and remembers hidden
-model parts. `ACT_init()` then clears the actors and `MenuCfTaikiPush()`
-saves and clears the eight final-packet render callbacks
+model parts. `ACT_init()` then clears the actors and `MenuCfTaikiPush()` saves
+and clears the eight final-packet render callbacks
 (`sRender.final_packet_callback`), so no field drawing hook runs during the
-minigame. Only then does `xglCdLoadOverlay(10)` load
-OV10 over the battle overlay, and `func_00A00338()` (the overlay entry,
-`CardGameRoot()`) runs the card game until it returns.
+minigame. After that `xglCdLoadOverlay(10)` loads OV10 over the battle
+overlay, and `func_00A00338()` (the overlay entry, `CardGameRoot()`) runs the
+card game until it returns.
 
 On the way back the order is reversed. `MenuCfTaikiPop()` restores the render
 callbacks,
@@ -67,15 +67,15 @@ saved map unit serial numbers, the game state and the actors with their
 motion. The memory handling behind this is explained in
 [memory](../../architecture/memory.md).
 
-A second way in exists. The Java native `Runtime.minigameExec(int)`
-(`Java_xeno_util_Runtime_minigameExec__I` in `src/main/runtime.c`) runs the
-same switch for numbers 12, 13 and 14. It sets `RUNTIME_GAME_FLAG_MINIGAME`,
-stops vibration, pushes the game data, loads the overlay, calls the entry,
-reloads OV01 and pops the data again. For Xeno Card it also clears the depth
-buffer after the game. Event scripts can therefore open the card game
-directly, without the passport. The [Java VM](../../scripting/java-vm.md) and
-the [native catalogue](../../scripting/natives.md) describe how scripts call
-natives.
+The Java native `Runtime.minigameExec(int)`
+(`Java_xeno_util_Runtime_minigameExec__I` in `src/main/runtime.c`) is a second
+way in. It runs the same switch for numbers 12, 13 and 14. It sets
+`RUNTIME_GAME_FLAG_MINIGAME`, stops vibration, pushes the game data, loads the
+overlay, calls the entry, reloads OV01 and pops the data again. For Xeno Card
+it also clears the depth buffer after the game. Event scripts can therefore
+open the card game directly, without the passport. The [Java
+VM](../../scripting/java-vm.md) and the [native
+catalogue](../../scripting/natives.md) describe how scripts call natives.
 
 The diagram below shows the entry and exit sequence from the main menu.
 
@@ -100,14 +100,14 @@ sequenceDiagram
     Note over Game: GameResourceLoad(current event),<br/>GameStateRestore, actors and motions back
 ```
 
-`CardGameRoot()` itself lives in `src/ov10/calc_vert_out_vec_edge.c`. It
-clears the frame, sets up the studio camera with its eye at `(0, 0, 5.8)` and
-a default light (`yNewRenderInit`), starts the global fade, loads the sound
-effect bank `"Minicard"` and calls `CardMainInit()` with the static work area
-`proc_0`. Then it calls `CardMainProc(&proc_0)` and `xglSleep()` in a loop, which
-runs one step of the game per frame and gives the other threads their time
-(see [xgl](../../libraries/xgl.md) for `xglSleep`). When `CardMainProc()`
-returns 0 the root function unloads the sound banks and returns to the menu.
+`CardGameRoot()` is in `src/ov10/calc_vert_out_vec_edge.c`. It clears the
+frame, sets up the studio camera with its eye at `(0, 0, 5.8)` and a default
+light (`yNewRenderInit`), starts the global fade, loads the sound effect bank
+`"Minicard"` and calls `CardMainInit()` with the static work area `proc_0`.
+Then it calls `CardMainProc(&proc_0)` and `xglSleep()` in a loop, which runs
+one step of the game per frame and gives the other threads their time (see
+[xgl](../../libraries/xgl.md) for `xglSleep`). When `CardMainProc()` returns 0
+the root function unloads the sound banks and returns to the menu.
 
 ## 2. Code layout of OV10
 
@@ -138,11 +138,11 @@ work area `proc_0` sits in the BSS at `0x00A4FA10`.
 
 ## 3. The card game work area
 
-Everything the card game knows during a session lives in one structure,
-`CardGameWork` (`include/ov10/cgp.h`, `0x71A0` bytes). `CardGameRoot()` keeps
-it as the static `proc_0` and passes a pointer to every function. It holds the
-loaded card definitions, the current mode, both sides of the match, the
-command system, the cursor, messages, the effect table and the model slots.
+The whole state of a card game session is in one structure, `CardGameWork`
+(`include/ov10/cgp.h`, `0x71A0` bytes). `CardGameRoot()` keeps it as the
+static `proc_0` and passes a pointer to every function. It holds the loaded
+card definitions, the current mode, both sides of the match, the command
+system, the cursor, messages, the effect table and the model slots.
 
 The most important fields are these.
 
@@ -586,17 +586,17 @@ requirements and refuses a card whose identity already stands on the side
 `CardPlayChkCost()` checks that a free slot exists, a standby slot for a
 battle card and a situation slot for the other kinds.
 
-Regular battle cards always go to the standby area and situation cards to
-the situation area. Two kinds are special. Gnosis ("G") cards may be placed
-outside the standby area, but the player must first discard the number of
-battle cards the card asks for. Weapon ("W") cards are not placed alone.
-They are equipped to a compatible battle card on the battlefield or in
-standby. `CGPWeaponEquipChk()` holds the rules. Mech weapons go only to Mech
-cards (with Lv1 and Lv10 KOS-MOS, Durandal and Zohar Emulator as exceptions),
-the Third Armament only to Lv10 KOS-MOS, and Human weapons to Human or
-Realian cards except the Ziggy cards and Albedo. `CGPequipSub()` then puts the
-weapon on top of the stack, pays its costs and sends a previous weapon to the
-junk pile.
+Regular battle cards always go to the standby area and situation cards to the
+situation area. The two exceptions are Gnosis ("G") and weapon ("W") cards.
+Gnosis cards may be placed outside the standby area, but the player must first
+discard the number of battle cards that the card asks for. Weapon cards are
+not placed alone. They are equipped to a compatible battle card on the
+battlefield or in standby. `CGPWeaponEquipChk()` holds the rules. Mech weapons
+go only to Mech cards (with Lv1 and Lv10 KOS-MOS, Durandal and Zohar Emulator
+as exceptions), the Third Armament only to Lv10 KOS-MOS, and Human weapons to
+Human or Realian cards except the Ziggy cards and Albedo. `CGPequipSub()` then
+puts the weapon on top of the stack, pays its costs and sends a previous
+weapon to the junk pile.
 
 Paying for a card happens in `CGPCommFinishSub()`. The reserve cost moves
 that many cards from the top of the deck to the lost pile
@@ -730,12 +730,12 @@ a standby card to zero), `CCU055ExecSub` (discard a situation card),
 `CCU058ExecSub` and `CCU061ExecSub` (down a card), `CCU062ExecSub` (return a
 card to the hand) and `CCC31ExecSub` (deal damage).
 
-Some effects do not apply at once. They are stored in
-`work->commandQueue[side]`, 40 entries per side with four values each.
-`CPCSearchCommWk()` finds a free entry and `CardPlayCommandExecute()` runs
-the entries whose phase has come. This is how effects such as "at the end of
-the turn" or "in the next battle phase" work. Situation cards run their
-effects through `CGPCFPlayCommOperation()` in `cgp.c`.
+Effects that do not apply at once are stored in `work->commandQueue[side]`, 40
+entries per side with four values each. `CPCSearchCommWk()` finds a free entry
+and `CardPlayCommandExecute()` runs the entries whose phase has come. This is
+how effects such as "at the end of the turn" or "in the next battle phase"
+work. Situation cards run their effects through `CGPCFPlayCommOperation()` in
+`cgp.c`.
 
 ## 9. The computer opponent
 
@@ -791,16 +791,16 @@ between actions so the player can follow the moves.
 - **Adjust** (`CardEnemyEnd`, `CC_Kara_EndFase`) discards the first hand card
   whose class is 0 or 1 until the hand fits the limit.
 
-The most interesting routine is `TodomeHyouka()` (*todome* means "finishing
-blow", *hyouka* means "evaluation"). It simulates the attacks of the
-battlefield cards (`GetFriendAttack` records which attacks down a target or
-are hand, spread, homing or splash attacks), then scores the resulting board.
-A move that would leave the opponent with fewer than two cards in the deck
-scores 1000 more (`TODOME_DECK_OUT_SCORE` is 1001). `CC_Kara_TodomeMove()`
-tries swapping each battle card with the other slots and keeps the swap with
-the best score. `GetShoukin()` and `GetPrice()` read a reward and a price
-value per card from the `CardDat` table, which the evaluation uses to judge
-which enemy cards are worth destroying.
+`TodomeHyouka()` (*todome* means "finishing blow", *hyouka* means
+"evaluation") simulates the attacks of the battlefield cards
+(`GetFriendAttack` records which attacks down a target or are hand, spread,
+homing or splash attacks), then scores the resulting board. A move that would
+leave the opponent with fewer than two cards in the deck scores 1000 more
+(`TODOME_DECK_OUT_SCORE` is 1001). `CC_Kara_TodomeMove()` tries swapping each
+battle card with the other slots and keeps the swap with the best score.
+`GetShoukin()` and `GetPrice()` read a reward and a price value per card from
+the `CardDat` table, which the evaluation uses to judge which enemy cards are
+worth destroying.
 
 The flowchart below shows how the computer plays its own turn.
 

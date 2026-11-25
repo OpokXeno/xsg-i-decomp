@@ -120,7 +120,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Battle unit (`BattleUnit`)**: One combatant in a battle: a party member, an enemy or an A.G.W.S. The unit table holds eight units, with slots 0 to 2 for the party and slots 3 to 7 for the enemies. See [Battle system: battle units](game/battle.md#battle-units).
 
-**`battleProc`**: The main function of a battle in OV01. It does not return until the battle is over, so it replaces the field loop for the whole battle. The main executable knows it only by its address (`func_A22668`). See [Battle system: the battle loop](game/battle.md#the-battle-loop) and [The field game: battles started from the field](game/field.md#battles-started-from-the-field).
+**`battleProc`**: The main function of a battle in OV01. It does not return until the battle is over, so it replaces the field loop for the whole battle. The main executable refers to it only by its address (`func_A22668`). See [Battle system: the battle loop](game/battle.md#the-battle-loop) and [The field game: battles started from the field](game/field.md#battles-started-from-the-field).
 
 **Block**: One drawable piece of an nml model with a single material, usually one mesh of one part. Blocks are the unit that nml sorts, clips, hides and draws. See [nml: blocks](libraries/nml.md#blocks) and [Models and textures: blocks](formats/models-and-textures.md#blocks).
 
@@ -230,7 +230,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Data boxes**: See **Inventory boxes**.
 
-**Debug print gate**: The reason debug text never appears. `xglFontSetFlags` always clears `FONT_STATE_DEBUG_PRINT`, so `xglFontDebugPrintf` never draws. See [Debug tools: why the debug code is invisible](game/debug-tools.md#1-why-the-debug-code-is-invisible).
+**Debug print gate**: The mask in `xglFontSetFlags` that always clears `FONT_STATE_DEBUG_PRINT`. Because of it `xglFontDebugPrintf` never draws and debug text never appears. See [Debug tools: why the debug code is invisible](game/debug-tools.md#1-why-the-debug-code-is-invisible).
 
 **DECI2**: The debug link of a development kit to the host PC. The output of `printf` reaches it through `sceTtyWrite`, so on a retail console, where no debugger is connected, that output probably goes nowhere. See [Runtime libraries: printf and the debug output](architecture/runtime-libraries.md#printf-and-the-debug-output).
 
@@ -324,7 +324,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Environment sequence**: A short `ENV_<map>.SMD` music sequence, loaded by `loadsmd`, that loops one long note of the map's environment bank. 103 of the 115 SMD files are environment sequences. See [Audio: music sequences](architecture/audio.md#8-music-sequences).
 
-**EOB callbacks**: The Stage methods `EOB_Always`, `EOB` and `EOB_Escape` that the field calls after a battle against a field enemy, so the script hears about the result. See [Events and cutscenes: calling Stage methods from C](scripting/events.md#calling-stage-methods-from-c).
+**EOB callbacks**: The Stage methods `EOB_Always`, `EOB` and `EOB_Escape` that the field calls after a battle against a field enemy, to pass the result to the script. See [Events and cutscenes: calling Stage methods from C](scripting/events.md#calling-stage-methods-from-c).
 
 **eRibbon and eTagFont**: A shaded ribbon widget and a widget for text made of sprite letters. See [User interface and windows: sprites, ribbons, lines and tag fonts](libraries/ui-windows.md#sprites-ribbons-lines-and-tag-fonts).
 
@@ -414,9 +414,9 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **`gameEntrySelection` and `logoEntrySelection`**: Linker symbols whose values are title selection values: `0x01245C58` for `Game()` with OV01 and `0x02A007F8` for the logo screen with OV02. See [Boot and title screen: the control loop and the title return value](game/title-and-boot.md#3-the-control-loop-and-the-title-return-value).
 
-**`GameLoopState`**: The `0x2A030`-byte global record that holds the state of the whole play session, such as the game mode (`kind`), the game flags, the current event ID and the encounter record. It is not declared once. Each source file declares its own view that names only the bytes it uses, so one offset can carry different names in different files. See [The field game: GameLoopState](game/field.md#gameloopstate) and [Overview: the field game loop](README.md#the-field-game-loop).
+**`GameLoopState`**: The `0x2A030`-byte global record that holds the state of the whole play session, such as the game mode (`kind`), the game flags, the current event ID and the encounter record. It has no single declaration: each source file declares its own view that names only the bytes it uses, so one offset can carry different names in different files. See [The field game: GameLoopState](game/field.md#gameloopstate) and [Overview: the field game loop](README.md#the-field-game-loop).
 
-**`GameResourceWorkAlloc`**: The function with which a screen that runs on top of the field, such as the main menu or the U.M.N., borrows several MiB of the resource area. If the borrowed memory overwrites the scene resources, `GameResourceWorkReload` reloads the scene when the screen closes. See [Memory management: borrowing the resource area](architecture/memory.md#borrowing-the-resource-area).
+**`GameResourceWorkAlloc`**: The function that lends several MiB of the resource area to a screen that runs on top of the field, such as the main menu or the U.M.N. If the borrowed memory overwrites the scene resources, `GameResourceWorkReload` reloads the scene when the screen closes. See [Memory management: borrowing the resource area](architecture/memory.md#borrowing-the-resource-area).
 
 **`GameUserSave`**: The view of the save data at `SaveData+0x50` that holds the game's own variables. `GamePushSaveDataUser` copies them in and `GamePopSaveDataUser` copies them back, field by field in the same order. See [Save data: the game user block](architecture/save-data.md#the-game-user-block).
 
@@ -530,7 +530,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **`jthreadResetFunc`**: A one-shot function pointer that `JTHREAD_cntl` calls once after its walk over the script threads. The jump natives use it to put off the scene change until the walk has finished. See [Events and cutscenes: script threads](scripting/events.md#script-threads) and [Java VM: running once per frame](scripting/java-vm.md#running-once-per-frame).
 
-**Jump native**: One of the script natives that change the current scene: `Runtime.jumpCF`, `Runtime.jumpEvent` and `Runtime.evsExit`. They do not jump at once. They defer the shared `jump_sub` through `jthreadResetFunc`. See [Events and cutscenes: event IDs and the jump natives](scripting/events.md#event-ids-and-the-jump-natives).
+**Jump native**: One of the script natives that change the current scene: `Runtime.jumpCF`, `Runtime.jumpEvent` and `Runtime.evsExit`. Instead of jumping at once, they defer the shared `jump_sub` through `jthreadResetFunc`. See [Events and cutscenes: event IDs and the jump natives](scripting/events.md#event-ids-and-the-jump-natives).
 
 ## K
 
@@ -554,7 +554,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Ladder (Hashigo)**: The ladder code of the field. Ladders are marked in the collision mesh, not placed as units, and the ladder state lives in the player's enemy work record at `+0x3830`. See [Maps and units: ladders](game/map-and-units.md#ladders).
 
-**Layout store (`s_inLayout`)**: The `0x320`-byte record of per-model settings that the nml setters fill before `nmlModelEntry`. At entry it is copied into the packet, so each registered model keeps its own settings, and then it is reset. See [nml: the layout store](libraries/nml.md#the-layout-store).
+**Layout store (`s_inLayout`)**: The `0x320`-byte record of per-model settings that the nml setters fill before `nmlModelEntry`. At entry it is copied into the packet and then reset, so each registered model keeps its own settings. See [nml: the layout store](libraries/nml.md#the-layout-store).
 
 **Level-99 target**: The value of the parameter table that a character's growth counter reaches at level 99. `calcLvUp` moves each stat towards it one level at a time. See [Game data tables: experience and level-99 targets](formats/game-tables.md#experience-and-level-99-targets).
 
@@ -622,7 +622,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **MapUnit**: One of the 64 map unit records (`0x300` bytes each) for the objects of a map, with a kind-specific work area at `+0x1A0`. See [Maps and units: the MapUnit array](game/map-and-units.md#the-mapunit-array).
 
-**Material batch**: A batch in the VIF stream of a LEX block that carries a small GIF packet in A+D mode instead of vertices. The VU1 program kicks its `CLAMP_1` and `TEX0_1` to the GS for the strips that follow, taking the second `TEX0_1` copy when the textures sit in the flip buffer. See [Models and textures: material batches](formats/models-and-textures.md#material-batches) and [nml: how a program runs](libraries/nml.md#how-a-program-runs).
+**Material batch**: A batch in the VIF stream of a LEX block that carries a small GIF packet in A+D mode instead of vertices. The VU1 program kicks its `CLAMP_1` and `TEX0_1` to the GS for the strips that follow. It sends the second `TEX0_1` copy instead when the textures are in the flip buffer. See [Models and textures: material batches](formats/models-and-textures.md#material-batches) and [nml: how a program runs](libraries/nml.md#how-a-program-runs).
 
 **Material tag**: The VU1 quadword at `0x3F0` that holds a block's specular exponent, highlight scale, the flag that renormalizes normals and the shape target kind. See [nml: VU1 memory](libraries/nml.md#vu1-memory).
 
@@ -670,7 +670,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Monitor screen**: The map unit `0x6025`, which shows pictures or an IPU movie on a screen inside the map. See [Maps and units: monitor screens](game/map-and-units.md#monitor-screens).
 
-**Monster set**: The group of monsters that a battle loads. `Check_Encount` picks it at random from the up to eight `monster_set_numbers` of the field enemy and stores it in the encounter record. See [Field enemies: the encounter record](game/field-enemies.md#the-encounter-record), [Battle system: encounter data](game/battle.md#encounter-data) and [Game data tables: the monster set table](formats/game-tables.md#monster-set-table).
+**Monster set**: The group of monsters that a battle loads. `Check_Encount` picks it at random from the `monster_set_numbers` of the field enemy, of which there are up to eight, and stores it in the encounter record. See [Field enemies: the encounter record](game/field-enemies.md#the-encounter-record), [Battle system: encounter data](game/battle.md#encounter-data) and [Game data tables: the monster set table](formats/game-tables.md#monster-set-table).
 
 **Motion blend**: The mix of the previous and the current pose over `blendDuration` (8 frames) when a motion changes. See [Animation: blending between motions](libraries/animation.md#blending-between-motions).
 
@@ -766,11 +766,11 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Picture list (`.r2d`)**: An A.G.W.S. Battle file with a `0x40`-byte header and `0x100`-byte records that place named Bxx pictures on the selection screens. See [Minigame data files: .r2d picture lists](formats/minigame-data.md#r2d-picture-lists).
 
-**Play time**: The `XglClock` at `SaveData+0x68` that counts the time played. The game does not count frames for it but adds up readings of the real-time clock. See [Character growth: play time](game/character-growth.md#play-time) and [Save data: dates and play time](architecture/save-data.md#dates-and-play-time).
+**Play time**: The `XglClock` at `SaveData+0x68` that counts the time played. The game adds up readings of the real-time clock for it instead of counting frames. See [Character growth: play time](game/character-growth.md#play-time) and [Save data: dates and play time](architecture/save-data.md#dates-and-play-time).
 
 **PlayControl**: The global time chart player of events. It has a 30 frames per second clock, can drive a camera from a camera motion pack and calls time chart observers. Scripts control it through 12 natives. See [Scenes, stages and time charts: PlayControl and the time chart player](scripting/scenes-and-timecharts.md#playcontrol-and-the-time-chart-player).
 
-**Player block**: The `0x12A000`-byte block at `0x01000000`, slot 0 of the resource table, with the party leader's model, texture, joints, face and motion pack at fixed addresses. Other screens may overwrite it freely, because `GameCfPlayerLoadResource` checks the buffers when they end and reads the files again only when they no longer match. See [Memory management: the resource table](architecture/memory.md#the-resource-table).
+**Player block**: The `0x12A000`-byte block at `0x01000000`, slot 0 of the resource table, with the party leader's model, texture, joints, face and motion pack at fixed addresses. Other screens may overwrite it freely, because `GameCfPlayerLoadResource` checks the buffers when those screens end and reads the files again only when the buffers no longer match. See [Memory management: the resource table](architecture/memory.md#the-resource-table).
 
 **Player record (`plChaData`)**: The `0xA8`-byte record of what a character has earned and learned: experience, the three point pools and the bitmaps of learned ethers and skills. See [Character growth: player records](game/character-growth.md#player-records).
 
@@ -788,7 +788,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **`processClass` states**: The link states a Java class passes through before it can be used: 4 when its members are resolved, 6 when its constants are resolved and 11 when it is initialized. `loadClass` always asks for state 11. See [Java VM: linking and initialization](scripting/java-vm.md#linking-and-initialization).
 
-**Procurator**: The 3D guide model of the U.M.N., with id `0x1D`. In English it's name is Bunnie, and the event texts calls it `UKUN`. See [U.M.N.: the procurator and the manzai windows](game/umn.md#5-the-procurator-and-the-manzai-windows).
+**Procurator**: The 3D guide model of the U.M.N., with id `0x1D`. In English its name is Bunnie, and the event texts call it `UKUN`. See [U.M.N.: the procurator and the manzai windows](game/umn.md#5-the-procurator-and-the-manzai-windows).
 
 **Program (SWD)**: An instrument of an SWD wave bank, with an ADSR envelope, a voice range, four LFO slots, a 16-byte name and its key splits. See [Sound files: programs](formats/sound.md#programs).
 
@@ -806,7 +806,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 ## Q
 
-**Quadword copy**: A 16-byte copy with the EE instructions `lq` and `sq`, which move a `Vector4` in two instructions. The original code wrote these copies as inline assembly, kept as macros in `include/quadword.h`, and both addresses must be 16-byte aligned. See [Math helpers: quadword copies](libraries/math.md#quadword-copies).
+**Quadword copy**: A 16-byte copy with the EE instructions `lq` and `sq`, which move a `Vector4` in two instructions. In the original code these copies are inline assembly, which the source keeps as macros in `include/quadword.h`. Both addresses must be 16-byte aligned. See [Math helpers: quadword copies](libraries/math.md#quadword-copies).
 
 ## R
 
@@ -814,7 +814,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Range record**: A type-2 attribute of a curve set (`FcvPlaybackRange`). It gives the frame range and speed of playback, or a reset range, for one attribute id. See [Skeletons and motion: range records and attribute slots](formats/skeletons-and-motion.md#range-records-and-attribute-slots).
 
-**Rarity letter**: The byte of `card.dat`. It holds C, U, R or P and selects the rarity mark of the card. See [Minigame data files: card.dat](formats/minigame-data.md#carddat).
+**Rarity letter**: The byte of `card.dat` that holds C, U, R or P and selects the rarity mark of the card. See [Minigame data files: card.dat](formats/minigame-data.md#carddat).
 
 **Reaction effect**: An effect created automatically on the first hit, through `sefCreateReactionEffect`. See [sef: effect numbers](libraries/sef.md#effect-numbers).
 
@@ -958,7 +958,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Soft-float**: The libgcc routines (`dpadd`, `dpmul`, `dptofp` and others) that carry out `double` arithmetic, because the EE's FPU handles only single precision. See [Runtime libraries: soft-float](architecture/runtime-libraries.md#soft-float).
 
-**Sony SDK**: The PlayStation 2 libraries of release 2.4.x linked into the executable, used by only a few game files, almost always inside xgl. See [Runtime libraries: the Sony libraries](architecture/runtime-libraries.md#the-sony-libraries) and [Overview: layers](README.md#9-layers).
+**Sony SDK**: The PlayStation 2 libraries of release 2.4.x linked into the executable. Only a few game files use them, almost always inside xgl. See [Runtime libraries: the Sony libraries](architecture/runtime-libraries.md#the-sony-libraries) and [Overview: layers](README.md#9-layers).
 
 **Sound file checksum**: The header word at `+0x04` of the SWD, SED and SMD files. It makes all the 32-bit words of the file add up to zero. See [Sound files: the common header](formats/sound.md#the-common-header).
 
@@ -966,7 +966,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **`SoundWork`**: The `0x8A4`-byte global that holds the EE side of sound. It keeps only the 16-bit handles that the IOP driver returns for loaded data, never pointers into IOP memory. See [Audio: SoundWork](architecture/audio.md#4-soundwork).
 
-**Spawn list**: The up to five entries of a monster set, each with a unit id, a position, an attack script and a damage script. See [Game data tables: spawn lists](formats/game-tables.md#spawn-lists).
+**Spawn list**: The entries of a monster set, at most five, each with a unit id, a position, an attack script and a damage script. See [Game data tables: spawn lists](formats/game-tables.md#spawn-lists).
 
 **Special table**: The keys of a screen filter in an effect script table. See [Effect data: special tables](formats/effects.md#special-tables).
 
@@ -998,7 +998,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Studio thread**: System thread 2, with the entry point `xglStudioEntry`. On each turn it updates the cameras of every studio, unless the field game has taken over the camera update. See [Overview: the four system threads](README.md#5-the-four-system-threads) and [xgl: studios](libraries/xgl.md#studios).
 
-**Sub-stream tag**: The 4 bytes that start each private-stream-1 payload of a PSS movie. `FF A1 00 00` marks ADPCM channel 0, which is how the MPEG library routes the audio. See [Movies, images and icons: the audio stream](formats/movies-images-and-icons.md#25-the-audio-stream).
+**Sub-stream tag**: The 4 bytes that start each private-stream-1 payload of a PSS movie. `FF A1 00 00` marks ADPCM channel 0, and the MPEG library routes the audio by this tag. See [Movies, images and icons: the audio stream](formats/movies-images-and-icons.md#25-the-audio-stream).
 
 **Sub-window**: One of the extra views 1 to 3 that nml can draw as smaller rectangles on screen, each with the active camera of the studio of the same number. View 0 is the main view. See [nml: sub-windows](libraries/nml.md#sub-windows).
 
@@ -1122,7 +1122,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Update hook**: The `Actor.update` callback that `ACT_update` runs every frame. It decides how the actor moves and usually ends by advancing its motion. Scripts choose it with `Chr.start`. See [Actors: update hooks](libraries/actors.md#update-hooks).
 
-**Upload rectangle**: One GS upload of an XTX texture set, in the CT32 format, carrying part of a pre-swizzled 8-bit or 4-bit texture atlas. See [Models and textures: XTX texture sets](formats/models-and-textures.md#xtx-texture-sets).
+**Upload rectangle**: One GS upload of an XTX texture set, in the CT32 format. It carries part of a pre-swizzled 8-bit or 4-bit texture atlas. See [Models and textures: XTX texture sets](formats/models-and-textures.md#xtx-texture-sets).
 
 **Use T.Pts**: The menu command that raises one of the eight basic parameters of a character with T.Pts. See [Character growth: Use T.Pts](game/character-growth.md#use-tpts).
 
@@ -1134,7 +1134,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Value mask**: The 10-bit field of a curve set channel that says which components (translation, rotation, scale and flag) have a key header. See [Skeletons and motion: channel records](formats/skeletons-and-motion.md#channel-records).
 
-**Vertex batch**: One UNPACK set plus one MSCNT run of the VU1 program over at most one VU buffer of vertices. See [Models and textures: vertex batches](formats/models-and-textures.md#vertex-batches).
+**Vertex batch**: One UNPACK set that loads at most one VU buffer of vertices, with the MSCNT that runs the VU1 program over them. See [Models and textures: vertex batches](formats/models-and-textures.md#vertex-batches).
 
 **`virtualMachine`**: The bytecode interpreter of the Java VM, a `switch` loop that runs one method. See [Java VM: the interpreter](scripting/java-vm.md#the-interpreter).
 
@@ -1184,7 +1184,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **xgl**: The system library of the engine (`xgl*` functions): threads, tasks, file reads, rendering, sound, controllers and math. Every other part of the game is built on it. See [xgl](libraries/xgl.md) and [Overview: layers](README.md#9-layers).
 
-**`xglSleep`**: The call that ends a system thread's turn. It wakes the next thread in the round-robin and puts the caller to sleep. Inside a game loop it simply means "wait for the next frame". See [Overview: the four system threads](README.md#5-the-four-system-threads) and [xgl: threads](libraries/xgl.md#threads).
+**`xglSleep`**: The call that ends a system thread's turn. It wakes the next thread in the round-robin and puts the caller to sleep. Inside a game loop it means "wait for the next frame". See [Overview: the four system threads](README.md#5-the-four-system-threads) and [xgl: threads](libraries/xgl.md#threads).
 
 **xheap**: The 256 KiB object heap of the Java VM in `src/main/xheap.c`. It is a bump allocator with mark frames instead of a garbage collector: `xfree` only marks a block as free, and its space is never reused. See [Java VM: the xheap object heap](scripting/java-vm.md#the-xheap-object-heap) and [Memory management: xheap, the Java heap](architecture/memory.md#xheap-the-java-heap).
 

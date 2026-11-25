@@ -19,8 +19,8 @@ runs. The code is mainly in `src/main/xgl_render.c`, `src/main/xgl_packet.c`,
 
 ## The hardware path
 
-The PS2 has no single "GPU". Drawing goes through a chain of units. The **EE**
-(Emotion Engine) is the main CPU that runs the game code. The **DMA
+Drawing on the PS2 goes through a chain of units instead of a single "GPU".
+The **EE** (Emotion Engine) is the main CPU that runs the game code. The **DMA
 controller** copies data from main memory to the other units without the CPU.
 **VIF1** is the interface in front of vector unit 1. It reads a stream of
 VIFcodes and data, unpacks vertex data into VU1 memory and starts VU1
@@ -37,8 +37,8 @@ the following data straight to the GIF. PATH3 is the GIF's own DMA channel,
 which sends GS packets from main memory without VIF1.
 
 The game uses all three paths. The model library `nml` uploads vertex data and
-matrices with `UNPACK` VIFcodes and calls VU1 programs with `MSCAL`. Even its GS
-register changes travel through VU1. `nmlPacketAddGsFlush` unpacks a list of
+matrices with `UNPACK` VIFcodes and calls VU1 programs with `MSCAL`. Its GS
+register changes also go through VU1. `nmlPacketAddGsFlush` unpacks a list of
 queued register writes into VU1 memory and calls the `GsKick` entry of the
 current microcode, which kicks it to the GIF (see
 [nml.md](../libraries/nml.md#vu1-microcode)). The `nml` filters use the same
@@ -283,10 +283,10 @@ pages. `xglRenderSwapBase` swaps the pair +0x10/+0x12 and the pair
 The names describe the state between two swaps, while the game builds the
 next packet. During that time `display_buffer_base` is the buffer on screen
 and `draw_buffer_base` is the buffer that the previous packet is drawing into.
-The new packet draws into `display_buffer_base`. This looks backwards, but the
-packet only starts after the next swap, and the swap turns the displayed
-buffer into the draw buffer. That is why `nmlModelFlush` and the filters set
-the GS `FRAME` register to `sRender.display_buffer_base`.
+The new packet draws into `display_buffer_base`, because the packet only
+starts after the next swap, and the swap turns the displayed buffer into the
+draw buffer. `nmlModelFlush` and the filters therefore set the GS `FRAME`
+register to `sRender.display_buffer_base`.
 
 The sequence below follows two frames with the buffers A (page `0x70`) and B
 (page `0xE0`).
@@ -360,8 +360,8 @@ read circuit 2 on or off through `PMODE`, which shows or hides the picture.
 **ClearEnv** (`GsClearPacket`) is a full-screen sprite with five A+D writes: a
 `TEST_1` value, the color, two corners and a final `TEST_1` that restores the
 depth test to `GEQUAL`. `xglRenderClearEnvMove` sends it over GIF DMA right
-after each swap, before the new packet starts. So every frame begins with this
-sprite. Its Z is 0. The first `TEST_1` value selects what it clears.
+after each swap, before the new packet starts, so every frame begins with this
+sprite. Its Z is 0, and the first `TEST_1` value selects what it clears.
 
 | Function | TEST value | Effect |
 | --- | --- | --- |
@@ -447,8 +447,8 @@ must come after the models. The slots are fixed by convention:
 ## Frame pacing
 
 The game runs at 30 frames per second, one frame for every two vertical syncs
-of the NTSC display. Pacing is done by the render thread, so every other
-thread simply follows it.
+of the NTSC display. Pacing is done by the render thread, and every other
+thread follows it.
 
 `xglRenderInit` installs `xglRenderVSyncCallback` with `sceGsSyncVCallback`.
 The callback increments `VSyncCount` on each vertical sync. When the count
@@ -699,7 +699,7 @@ flowchart LR
 Two tests keep hidden models out of the draw passes: a view test against
 each camera window and an occlusion test against hand-placed boxes. Both run
 in `nmlModelEntry`, on the control thread, while the model is registered.
-The clip functions live in `src/main/face_point.c`.
+The clip functions are in `src/main/face_point.c`.
 
 The **view test** uses the camera's clip matrices. `_ModelCalcClipInit` loads
 them into the VU0 registers `vf12` to `vf19`, and `_ModelCalcClip` tests a

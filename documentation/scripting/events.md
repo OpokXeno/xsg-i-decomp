@@ -5,7 +5,7 @@ A script decides what happens when the player talks to someone, walks into a
 trigger area, wins a battle or reaches a story point. It also plays the
 cutscenes. The C code in `src/main/script.c` loads these scripts, starts them
 in the right mode, gives them threads to run on and cleans up when they end.
-Around it sit the triggers in the field code, the message system that turns
+Events also use the triggers in the field code, the message system that turns
 script text into window text (`src/main/msg_init.c`), and the jump natives in
 `src/main/runtime.c` that move the game from one scene to the next.
 
@@ -22,13 +22,12 @@ end of this page.
 ## Overview
 
 The game has two kinds of top-level script, and both are Java classes compiled
-into an event file (`.evt`). A **Stage** script is a class that extends
-`xeno/Stage`. It is the script of a field area. It stays loaded while the
-player walks around and it answers the field triggers: talking to a
-character, touching one, stepping on a trigger area, or the end of a battle. A
-**Scene** script is a class that extends `xeno/Scene`. It is a cutscene. It
-takes over the game, runs its `play()` method from start to end and then gives
-control back.
+into an event file (`.evt`). A **Stage** script is the script of a field area,
+a class that extends `xeno/Stage`. It stays loaded while the player walks
+around and reacts to the field triggers: talking to a character, touching one,
+stepping on a trigger area, or the end of a battle. A **Scene** script is a
+cutscene, a class that extends `xeno/Scene`. It takes over the game, runs its
+`play()` method from start to end and then gives control back.
 
 Both kinds are loaded the same way. Every place in the game has an **event
 ID**, stored in `GameLoopState.current_event_id`. The jump natives of the
@@ -94,17 +93,16 @@ by class in
 
 The place scripts come in two kinds. A field stage is `data\scene\STnnnn.evt`
 (386 files) and a story event is `data\scene\SCEnnnnn.evt` (181 files). Only
-story events can have companion files, and they sit in `data\mtnpack\` with
-the same base name. Of the 181 events, 77 have both an `.fpk` and an `.arc`
-file, 30 have only the `.fpk` file and 74 have neither. No stage has one.
-The `.fpk` file is an additional motion pack that `ACT_initExMotion`
-installs for the actors of the scene. The `.arc` file is a PDB volume,
-ARX-packed on the disc, that holds the event's camera curves (`.cam`) and
-face motion packs, plus a few build leftovers (see
-[Resource volumes](../formats/scripts-and-archives.md#resource-volumes-arc)).
-Scripts find their data files in it by name with
-`Toolkit.loadResource(String)`, which calls `XTK_findFile` and then
-`PDB_findFile` on the current PDB.
+story events can have companion files, which are in `data\mtnpack\` with the
+same base name. Of the 181 events, 77 have both an `.fpk` and an `.arc` file,
+30 have only the `.fpk` file and 74 have neither. No stage has one. The `.fpk`
+file is an additional motion pack that `ACT_initExMotion` installs for the
+actors of the scene. The `.arc` file is a PDB volume, ARX-packed on the disc,
+that holds the event's camera curves (`.cam`) and face motion packs, plus a
+few build leftovers (see [Resource
+volumes](../formats/scripts-and-archives.md#resource-volumes-arc)). Scripts
+find their data files in it by name with `Toolkit.loadResource(String)`, which
+calls `XTK_findFile` and then `PDB_findFile` on the current PDB.
 
 Each place volume holds exactly one main class, a subclass of `xeno/Stage`
 or `xeno/Scene`, plus its inner classes. In 158 volumes the main class is not
@@ -142,15 +140,15 @@ and reports which one matched. `skip_count` 0 means a Scene and 1 means a
 Stage. When nothing matches, `active` is 0 and the script is treated as "no
 script".
 
-There are three loaders. `loadScriptCD2` is the one the game uses. It reads
-the class image from the path in the `script` command, then reads the `.fpk`
-and `.arc` files from the `mtnpack\` folder with the same base name through
+Of the three loaders, the game uses `loadScriptCD2`. It reads the class image
+from the path in the `script` command, then reads the `.fpk` and `.arc` files
+from the `mtnpack\` folder with the same base name through
 `RES_loadFile(RES_LOAD_ANY_BLOCK, RES_TYPE_FILE, ...)`. `loadScriptCD` reads
 the same three files next to a map path (`MAP_getPath()`) into the fixed
 addresses stored in the entry. `loadScript` reads them from the host file
 system with `sceOpen` and is used by the debug menu. The fixed addresses
-(`0x05000000`, `0x06100000`, `0x06500000`, `0x06900000`) lie above the 32 MB of
-a retail console, so these two loaders probably only worked on a 128 MB
+(`0x05000000`, `0x06100000`, `0x06500000`, `0x06900000`) lie above the 32 MB
+of a retail console, so these two loaders probably only worked on a 128 MB
 development kit. The disc also has no `.evt`, `.fpk` or `.arc` file in
 `data\map\`, the folder that `MAP_getPath()` gives, so `loadScriptCD` (used by
 `SCRIPT_load` in `src/main/disp_on.c`) would find nothing there.
@@ -261,9 +259,10 @@ The script has three jump natives:
 
 Each native stores its arguments in `args_jump`, sets `jthreadResetFunc` and
 blocks its thread. `jumpCF` and `jumpEvent` also call
-`SCRIPT_talkIgnoreSet()`, so that no talk can start in the meantime. The jump itself is `Java_xeno_util_Runtime_jump_sub`, run
-from `JTHREAD_cntl`. `Game()` also calls it directly at the start of a session
-with the saved event ID. It works in this order:
+`SCRIPT_talkIgnoreSet()`, so that no talk can start in the meantime. The jump
+itself is `Java_xeno_util_Runtime_jump_sub`, run from `JTHREAD_cntl`. `Game()`
+also calls it directly at the start of a session with the saved event ID. It
+works in this order:
 
 1. Stop U.M.N. capture (`tyaCaptureEnd`), the voice stream
    (`xglSoundStreamStop(0)`), any movie (`GameMovieStop`) and the defocus
@@ -828,17 +827,17 @@ as text tags and send them the same way:
 Script text can contain tags of the form `/[name(args);name2(args)]`.
 `MSG_convert` copies plain characters, keeps two-byte (EUC) characters
 together and copies control bytes below 32 with their operands. Its operand
-table `_copyCTRLCode` knows only part of the font control codes, and for code
-8 it reads the flag byte without copying it, but the scripts contain no raw
-control byte other than newline and TAB, so this never matters. When it
+table `_copyCTRLCode` covers only part of the font control codes, and for code
+8 it reads the flag byte without copying it. The scripts are not affected,
+because they contain no raw control byte other than newline and TAB. When it
 meets `/[`, it finds the closing bracket, splits the inside at `,`, `(`, `)`
 and `;` and looks each name up in the table `mfunc[]`. `MSG_setArgs` turns
 each argument into a number (decimal, or hexadecimal with `0x`, a leading `$`
 is skipped) or keeps it as text. A name with no table row is copied as text,
 so the slip `/[closelear()]` in `ST2160` prints the word "closelear" in the
-window. Each row's handler writes the binary form, and
-[MIF2 message tags](../formats/text-and-fonts.md#mif2-message-tags) counts how
-often the scripts use each tag:
+window. Each row's handler writes the binary form, and [MIF2 message
+tags](../formats/text-and-fonts.md#mif2-message-tags) counts how often the
+scripts use each tag:
 
 | Tag | Output | Meaning |
 | --- | --- | --- |
@@ -912,8 +911,8 @@ prints into a window, usually ending the text with
 `/[waitkey(64)]/[close()]`, and then calls `System.waitFor(window)`. That native sets the thread's wait
 kind to the component wait (`JTHREAD_WAIT_COMPONENT`). The thread sleeps
 until the window's state is 2, which happens when the player has pressed a
-button and the window has closed. So text and script flow stay in step
-without any timer.
+button and the window has closed. No timer is needed to keep text and script
+in step.
 
 The other waits come from the same mechanism:
 
@@ -974,7 +973,7 @@ cutscene. The movie player belongs to [field.md](../game/field.md).
 
 ## Battles started by events
 
-There are three ways an event leads into a battle.
+An event can lead into a battle in three ways.
 
 `Runtime.execBattle(int, int)` runs a scripted battle inside the current
 script. It saves the field state (`GameStateSave`), runs the battle in OV01,
@@ -999,17 +998,17 @@ the two event VMs. Battles are described in
 
 The files `src/main/sc_get.c` and `src/main/sc_wait_parse_script.c` contain a
 second, much smaller script language. It is a bytecode for effect sequences
-and has nothing to do with the Java scripts. Each effect number of the effect
-system can have such a script, which starts sub-effects, movies and missiles
-in a timed order. Events reach it only indirectly, when a Java script or the
-field starts an effect. The language, its records, commands and wait modes
-are described with the effect system in
+and is unrelated to the Java scripts. Each effect number of the effect system
+can have such a script, which starts sub-effects, movies and missiles in a
+timed order. Events reach it only indirectly, when a Java script or the field
+starts an effect. The language, its records, commands and wait modes are
+described with the effect system in
 [sef.md](../libraries/sef.md#effect-scripts), and its use in battle in
 [battle-effects.md](../game/battle-effects.md). The scripts are stored in the
 `.esd` effect files. The language can also branch, use registers and play
-movies, but the shipped scripts use only nine of its commands and never do
-any of these (see
-[The effect script table](../formats/effects.md#the-effect-script-table)).
+movies, but the shipped scripts use only nine of its commands and never do any
+of these (see [The effect script
+table](../formats/effects.md#the-effect-script-table)).
 
 ## Debug tools for events
 

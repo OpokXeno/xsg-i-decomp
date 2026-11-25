@@ -36,16 +36,16 @@ returns 15 into `mini_game_no`. From here the Driller Game takes a different
 path from the overlay minigames ([Xeno Card](xeno-card.md),
 [Network Casino](network-casino.md), [A.G.W.S. Battle](agws-battle.md)).
 
-When the menu closes, `MainMenu()` in `src/main/window_tex_load.c` treats 15
-specially. It does not call `Game_Data_Push()` and loads no overlay. It sets
-the global `MenuDrillCall` to 1 and then restores the field exactly as after
-any other menu visit (`GameResourceWorkReload()`,
+When the menu closes with the number 15, `MainMenu()` in
+`src/main/window_tex_load.c` does not call `Game_Data_Push()` and loads no
+overlay. It sets the global `MenuDrillCall` to 1 and then restores the field
+as after any other menu visit (`GameResourceWorkReload()`,
 `GameCfPlayerLoadResource(1)`, `MenuGameDataPop()`). Control returns to the
 field loop.
 
-The field loop does the rest. `GameModeCfMain()` in `src/main/game.c`, which
-opened the menu, checks `MenuDrillCall` after `MainMenu()` returns. When it
-is set, the function stores a *return point*: the current event id goes into
+`GameModeCfMain()` in `src/main/game.c`, which opened the menu, checks
+`MenuDrillCall` after `MainMenu()` returns. When it is set, the function
+stores a *return point*: the current event id goes into
 `GameLoopState.user_word` and the 16-byte position of the controlled actor
 into `GameLoopState.user_longs[0..1]`. Then it calls the native behind
 `Runtime.jumpCF(int, int)` (`Java_xeno_util_Runtime_jumpCF__II`) with the
@@ -53,9 +53,8 @@ arguments `0xA0` and `1`. That schedules a jump to event `0xA0` (160) at
 entrance 1. The jump itself (`Java_xeno_util_Runtime_jump_sub` in
 `src/main/runtime.c`) stops streams, sound sequences and movies, resets the
 field systems and the scripts and loads the resources of the new event with
-`GameResourceLoad()`. While `MenuDrillCall` is set,
-`GameCFSoundMenuReload()` also skips resuming the field music, since the
-jump is about to replace it.
+`GameResourceLoad()`. While `MenuDrillCall` is set, `GameCFSoundMenuReload()`
+also skips resuming the field music, since the jump is about to replace it.
 
 Event 160 is the drill map. Its scene resource script
 `data\scene\cf0160.txt` loads the map `MC_VOK16` and the enemy preset
@@ -137,12 +136,12 @@ these.
 | `save` | `DrillSave`, the unit's argument area at `+0x1A0` |
 | `cameraYaw`, `cameraPitch` | camera angles saved during a drop |
 
-The `save` member is the key to the design. Offset `0x1A0` of every map unit
-record is its *argument area*, the bytes that the Java natives
-`Unit.setArgs()` and `Unit.getArgs()` (`src/main/unit.c`) write and read, 1 to
-4 bytes at a time at any offset. For the drill this area is a `DrillSave`
-record. The map script therefore configures the drill, starts it, reads its
-results and stops it by writing and reading these fields.
+The `save` member is at offset `0x1A0`, which in every map unit record is the
+*argument area*, the bytes that the Java natives `Unit.setArgs()` and
+`Unit.getArgs()` (`src/main/unit.c`) write and read, 1 to 4 bytes at a time at
+any offset. For the drill this area is a `DrillSave` record. The map script
+therefore configures the drill, starts it, reads its results and stops it by
+writing and reading these fields.
 
 | `DrillSave` field | Set by | Meaning |
 | --- | --- | --- |
@@ -241,12 +240,12 @@ angles are restored and the phase becomes *return*.
 for hits. Then the drill rises to `y = 4.5` at `riseSpeed`, slides back along
 X at `xReturnSpeed` and finally along Z at `zReturnSpeed`, with sounds and
 effects for each leg. At home it becomes *standby* again and `returnCount`
-grows by one. What happens next depends on `returnLimit`. With −1 there is
-no limit and the drill calls `drill_stanby` (the spelling is the original's).
-Otherwise, when `returnCount` exceeds `returnLimit`, the run ends. The drill
-goes back to power off, `DRILL_GAME_RUNNING` is cleared, `DRILL_GAME_ENDED`
-set, the camera state becomes 4 and the script method `drill_end` is called.
-If drops are left it calls `drill_stanby`.
+grows by one. With a `returnLimit` of −1 there is no limit and the drill calls
+`drill_stanby` (the spelling is the original's). Otherwise, when `returnCount`
+exceeds `returnLimit`, the run ends. The drill goes back to power off,
+`DRILL_GAME_RUNNING` is cleared, `DRILL_GAME_ENDED` set, the camera state
+becomes 4 and the script method `drill_end` is called. If drops are left it
+calls `drill_stanby`.
 
 The state diagram below shows the phases and the events that move between
 them.
@@ -310,12 +309,12 @@ hides the field radar while the drill is in use. See the
 ## 5. Camera
 
 The drill takes over the studio camera of the map
-(`xglStudioGetActiveCamera()`). It never moves the camera freely. It only
-changes two angles, and `DrillCalcCameraPos()` computes the camera position
-from them. The camera circles a fixed point near `(0.7, 0.5, -17.9)`. The
-yaw angle lifts it (height changes by `sin(yaw) * 20`) and the pitch angle
-turns it around the vertical axis on a circle whose radius is
-`cos(yaw) * 15`. Finally the X position is shifted by −1.2.
+(`xglStudioGetActiveCamera()`). It only changes two angles, and
+`DrillCalcCameraPos()` computes the camera position from them. The camera
+circles a fixed point near `(0.7, 0.5, -17.9)`. The yaw angle lifts it (height
+changes by `sin(yaw) * 20`) and the pitch angle turns it around the vertical
+axis on a circle whose radius is `cos(yaw) * 15`. Finally the X position is
+shifted by −1.2.
 
 `DrillCameraControlFunc()` reads the left stick, minus the pad's dead zones,
 and changes pitch and yaw by small steps. Yaw is kept between −1.5708 and

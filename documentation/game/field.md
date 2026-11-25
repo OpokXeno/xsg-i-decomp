@@ -4,7 +4,7 @@ The field is the part of Xenosaga Episode I where the player walks through
 maps, talks to people, opens item boxes, saves at save points and runs into
 enemies. All of it runs inside one function, `Game()` in `src/main/game.c`.
 Free field control, scripted events, the pause screen and even battles are
-modes of that one loop. The battle code lives in the OV01 overlay, which stays
+modes of that one loop. The battle code is in the OV01 overlay, which stays
 loaded during play, and the field calls it like a normal function.
 
 The source code calls field play "CF". The maps and the objects placed on them
@@ -32,23 +32,23 @@ The source code calls field play "CF". The maps and the objects placed on them
 | `src/main/vibration.c` | Controller vibration |
 | `src/main/game_snap_shot.c` | Screenshot helpers |
 
-`src/main/pp_init.c` sounds like player code but is not. It holds a small
-particle helper (`ppInit`, `ppMove`, `ppCheckWall`) used only by the test
-files `colli_test.c`, `hair_test.c` and `wind_test.c`.
+Despite its name, `src/main/pp_init.c` is not player code. It holds a small
+particle helper (`ppInit`, `ppMove`, `ppCheckWall`) that is used only by the
+test files `colli_test.c`, `hair_test.c` and `wind_test.c`.
 
 ## What "CF" means
 
 The abbreviation appears all over the field code: `GameModeCfMain`,
 `InitCfSystem`, `GameCFSoundReload`, `CfCameraDefine`, `sefInitEffectCf`,
-`Runtime.jumpCF` and `Stage.setCFBG`. The code never spells it out, but the
-script ids show what it covers.
+`Runtime.jumpCF` and `Stage.setCFBG`. The code never spells it out. The script
+ids show that it covers the field side of the game, as opposed to events
+("ev") and battles.
 
 Every scene of the game has a 32-bit id, kept in
 `GameLoopState.current_event_id`. Ids below `SCRIPT_ID_EVENT_BASE`
 (`0x10000000`) are field scenes, and the debug menu names their script files
 `cfNNNN`. Ids from `0x10000000` up are event scenes (cutscenes), named
-`evNNNN`. "CF" is therefore the field side of the game, as opposed to events
-("ev") and battles.
+`evNNNN`.
 
 Two game modes carry the name. **CF main** is free field control, where the
 player moves. **CF event** is the field running under a script, for a cutscene
@@ -58,11 +58,11 @@ actors and units, so an event can start and end without loading anything.
 ## GameLoopState
 
 `GameLoopState` is a single global record of `0x2A030` bytes that holds the
-state of the whole play session. It is not declared once. Each source file
-declares a "view" struct that names only the bytes it uses, so the same offset
-can carry different names in different files. For example, `game.c` calls the
-byte at `+0xC1` `move_mode`, while `game_camera.c` calls it `camera_flags`,
-which is what it really holds.
+state of the whole play session. Instead of sharing one declaration, each
+source file declares a "view" struct that names only the bytes it uses, so the
+same offset can have different names in different files. For example, `game.c`
+calls the byte at `+0xC1` `move_mode`, while `game_camera.c` calls it
+`camera_flags`, which matches its contents.
 
 The most important fields are shown below, with the name used in `game.c`
 where one exists.
@@ -242,8 +242,8 @@ which runs the title screen again.
 | 8 | `GAME_MODE_DEBUG_MENU` | `GameModeDebugMenu` | Debug menu |
 
 The switch in `Game()` has no case for `GAME_MODE_BATTLE`. A battle runs from
-start to end inside one call of `GameModeCfMain`, so the loop never sees that
-value. Other code reads it to know that a battle is in progress.
+start to end inside one call of `GameModeCfMain`, so the switch never reads
+that value. Other code reads it to know that a battle is in progress.
 
 The modes change in these places:
 
@@ -289,12 +289,11 @@ combination that returns to the title screen.
 
 ### CF main: free field control
 
-`GameModeCfMain` is the heart of field play. Each frame it does these steps in
-order.
+In each frame of field play `GameModeCfMain` does these steps in order.
 
 **Pause and main menu.** It clears `GAME_FLAG_PAUSE` and adds one to the
-script's field timer (`SCRIPT_incCfTime`). START and TRIANGLE are only honoured
-when nothing blocks them: no talk point lock, look-at, item hold or script end
+script's field timer (`SCRIPT_incCfTime`). START and TRIANGLE only work when
+nothing blocks them: no talk point lock, look-at, item hold or script end
 flag, no open window, no scene change timer, no script entered, the player not
 on a ladder, the CD queue idle, talking not ignored and `status` at zero.
 
@@ -352,10 +351,10 @@ only counts down the enemies' stiff and effect timers and calls
 
 ### CF event mode
 
-`GameModeCfEvent` is much shorter. It clears the pause flag, checks the
-soft-reset combination, then updates windows, script threads, the time chart
-player (`PLAY_ctrl`), the event camera, actors and map units. There is no
-player control, no talk check and no camera callback. The script moves
+`GameModeCfEvent` is a much shorter handler. It clears the pause flag, checks
+the soft-reset combination, then updates windows, script threads, the time
+chart player (`PLAY_ctrl`), the event camera, actors and map units. There is
+no player control, no talk check and no camera callback, and the script moves
 everything. Time charts are described in
 [Scenes and time charts](../scripting/scenes-and-timecharts.md).
 
@@ -394,8 +393,8 @@ does the following:
 4. If the result is a loss (2) and bit `0x40` of the encounter's event flags is
    clear, it sets `GAME_FLAG_QUIT | GAME_FLAG_GAME_OVER` and returns. The loop
    ends and `Game()` shows the game over screen. With bit `0x40` set, a lost
-   battle simply returns to the field, which probably serves scripted battles
-   that the story lets the party lose.
+   battle returns to the field, probably for scripted battles that the story
+   lets the party lose.
 5. Otherwise `Game_Data_Pop()` restores the field. The script method
    `EOB_Always` is called with the enemy's script id. A win (1) then calls
    `Enemy_After_Battle(1)` and the script method `EOB`. An escape (3) calls
@@ -679,14 +678,14 @@ read again. The leader's sound bank is loaded into bank 2.
 
 ## Talking, item boxes and symbols
 
-Three checks give meaning to the CIRCLE button and to walking into things.
+Three checks handle the CIRCLE button and walking into things.
 
 `checkTalkPoint()` runs on CIRCLE when input is free and the CD queue is idle.
 
 - On a save symbol or an EVS symbol it saves the field state and opens the
   save screen (`MenuFileMain(0)`). EVS is the story's virtual reality space.
   The EVS symbol is probably the save point used inside it, since it behaves
-  exactly like a save symbol here.
+  like a save symbol here.
 - On a return symbol it calls the script method `evsExit`, which leaves the
   EVS.
 - On a shop symbol it opens the shop (`MenuShopMain`) with the symbol's shop
@@ -717,7 +716,7 @@ stored in `GameLoopState.camera_callback` and run by the mode handlers when
 studio camera 0 is in its game state (state 4). Event scenes use other camera
 code (`TCAMERA_update`, see [Events](../scripting/events.md)).
 
-The camera is driven by data. Each map has up to 33 camera definitions,
+The camera is driven by the camera definitions of the map, up to 33 of them, in
 `CfCameraDefine[33]` (`struct CfCameraDefinition` in `include/main/maptbl.h`).
 Their main fields are:
 
@@ -952,7 +951,7 @@ these movies. The movie decoder belongs to [xgl](../libraries/xgl.md).
 | `Vibration_Set_Weak(duration)` | Runs the small motor for `duration` frames |
 | `Vibration_Set_Strong(start, end, duration)` | Runs the large motor, ramping linearly from `start` to `end` over `duration` frames |
 
-The state lives at `GameLoopState + 0x2A000`. `VibrationEngine()` runs at the
+The state is kept at `GameLoopState + 0x2A000`. `VibrationEngine()` runs at the
 start of every `GameDrawSync` and writes the motor levels to the pad. The
 options screen can turn vibration off.
 

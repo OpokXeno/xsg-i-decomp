@@ -1,16 +1,16 @@
 # Battle system
 
-The battle system is the turn-based combat of Xenosaga Episode I. It lives in
-the overlay OV01, which is linked at 0x00A00000 and stays loaded during normal
+The battle system is the turn-based combat of Xenosaga Episode I. It is in the
+overlay OV01, which is linked at 0x00A00000 and stays loaded during normal
 play. A battle starts when the player touches an enemy on the field or when an
 event script calls the `execBattle` native. OV01 then runs its own blocking
 loop, `battleProc`, until the battle is won, lost or escaped, and hands a
 result code back to the field.
 
-OV01 holds more than the battle itself. It also contains the game-data tables
-and accessors (`batdat.bin`, character records, item, ether and technique
-names) that the main menus read, the battle camera that field scripts drive,
-the movie players and the M effects (see [Battle effects](battle-effects.md)).
+Besides the battle itself, OV01 contains the game-data tables and accessors
+(`batdat.bin`, character records, item, ether and technique names) that the
+main menus read, the battle camera that field scripts drive, the movie players
+and the M effects (see [Battle effects](battle-effects.md)).
 This is probably why OV01 stays resident instead of being loaded only for
 battles.
 
@@ -62,8 +62,8 @@ result screen), `nusumu` (steal), `syoukan` (summon), `hensin` (transform),
 ## How a battle starts
 
 There are two ways into a battle. Both end in the same function,
-`battleProc` in `src/ov01/entry_first_init.c`. The main executable knows it
-only by address (`func_A22668`).
+`battleProc` in `src/ov01/entry_first_init.c`. The main executable refers to
+it only by address (`func_A22668`).
 
 The first way is a field encounter. `Check_Encount` in
 `src/main/set_motion.c` runs when the player touches a field enemy. It fills
@@ -150,7 +150,7 @@ happens once, long before any battle.
 
 ## Encounter data
 
-All battle parameters that cross from the field into OV01 live in one small
+All battle parameters that pass from the field to OV01 are in one small
 record inside `GameLoopState`, at offset 0x29F90. The field calls it
 `encount` (`EncountRecord` in `src/main/set_motion.c`). OV01 reads the same
 bytes through its own getters in `src/ov01/battle_init.c`.
@@ -200,7 +200,7 @@ entry is non-zero (`thinkInit`, see [Enemy AI](#enemy-ai-and-the-think-vm)).
 
 ## The battle loop
 
-`battleProc` is the main function of a battle. It never returns until the
+`battleProc` is the main function of a battle. It does not return until the
 battle is over, so it replaces the field main loop for the whole battle. It
 first prints a start message and seeds the random generator by calling
 `rnd(0)` (clock seconds × 100) times. `rnd(max)` in `src/ov01/calc.c` returns
@@ -314,11 +314,11 @@ The first phases build the battle:
 - `entryPhase45` waits until no enemy is hidden, shows the encounter effects
   and resets `frameCnt`.
 
-The battle itself is one phase. `entryPhase50` calls `battleMain()` every
-frame until it returns 0. `battleMain` runs `battleCtrl`, `battleExec` and
-`battleEndChk` (see [Battle control](#battle-control)). On a win, the phase
-loads the victory voice (sound 0x19) of a party member, stops the battle music
-and plays the victory jingle, except after the last boss.
+The battle itself is one phase, `entryPhase50`, which calls `battleMain()`
+every frame until it returns 0. `battleMain` runs `battleCtrl`, `battleExec`
+and `battleEndChk` (see [Battle control](#battle-control)). On a win, the
+phase loads the victory voice (sound 0x19) of a party member, stops the battle
+music and plays the victory jingle, except after the last boss.
 
 The closing phases are these:
 
@@ -397,7 +397,7 @@ acting this turn), 0x10 (the unit is in the action stock), 0x20 (controlled by
 the AI), 0x400 (boosted), 0x1000 (a follow-up attack is open) and 0x2000 (the
 last hit was critical).
 
-The numbers of a unit live in `CalcUnitParam` (`include/ov01/calc.h`). The
+The numbers of a unit are in `CalcUnitParam` (`include/ov01/calc.h`). The
 battle reaches it with `calcUPGet(unit)`, which reads the pointer at +0x84 of
 the battle actor record. Its important fields are listed below.
 
@@ -502,9 +502,9 @@ loops over all units, and `calcWctDec` lowers the wait count of each able unit
 by 1, or by 2 with a 30% chance. A unit that reaches 0 and is not already in
 the stock (flag 0x10) is added. The loop repeats until the stock is full.
 
-`actStockPick` serves the next actor. It serves the boost slots first, then
-the stock in order, and calls `actStockMake` again when the stock is empty.
-This is why a Boost lets a unit act at once.
+`actStockPick` serves the next actor. It serves the boost slots first, so a
+Boost lets a unit act at once. Then it serves the stock in order, and calls
+`actStockMake` again when the stock is empty.
 
 After a unit acts, `calcTurnEnd` resets it. It clears the per-turn flags
 (0x6418), computes a new wait count with `calcWct`, stores it in `waitCount`
@@ -548,9 +548,9 @@ The AP costs used by the input code are listed below.
 
 `battleMain` runs three functions every frame: `battleCtrl` decides who acts
 and what they do, `battleExec` carries the decisions out, and `battleEndChk`
-checks for the end of the battle. They talk through the global record
-`batCtrl`. Its field `field00` is the control state, `field04` is the
-execution phase and `field08` is the phase to resume after a wait.
+checks for the end of the battle. They share the global record `batCtrl`. Its
+field `field00` is the control state, `field04` is the execution phase and
+`field08` is the phase to resume after a wait.
 
 `battleCtrl` first handles two inputs that work at any time. L1 or L2 cycles
 the help display (`battleCtrlHelp`). R1 or R2 opens the boost selection
@@ -590,8 +590,8 @@ stateDiagram-v2
 
 ## Battle execution phases
 
-`battleExec` runs the commands that the control queued. The decisions travel
-in two steps. `battleCtrlMan` and `battleCtrlThink` push entries into the
+`battleExec` runs the commands that the control queued. A command reaches its
+unit in two steps. `battleCtrlMan` and `battleCtrlThink` push entries into the
 global command FIFO `fifoCmd` (`cmdList`), where each entry is a unit and a
 20-byte command. `battleExecNorm` later moves each entry into the unit's own
 command queue with `unitCmdSet`, and the unit runs it from its update
@@ -687,15 +687,15 @@ Subweapon Attack. Each press costs 2 AP, so a three-press Tech Attack costs
 Attack and 4 AP for an upgraded one, so the two-press sequences are probably
 the upgraded form.
 
-`keyCmdGet` also ends the turn on its own. It ends the turn when the unit has
-fewer than 2 AP (3 for an A.G.W.S.) or when a follow-up chance has run out. It
-returns nothing while R1 or R2 is held, because those buttons open the boost
-selection. After a choice, ✕ ends the turn.
+`keyCmdGet` also ends the turn on its own when the unit has fewer than 2 AP (3
+for an A.G.W.S.) or when a follow-up chance has run out. It returns nothing
+while R1 or R2 is held, because those buttons open the boost selection. After
+a choice, ✕ ends the turn.
 
 `keyCmdChk` checks if a command is allowed. It refuses when a seal status
 blocks attacks (three masks in category 0 for characters and three in
 category 4 for A.G.W.S.), when the AP is too low and when `calcAtkChk` fails.
-`calcAtkChk` carries the row rule. A party member whose position is not on
+`calcAtkChk` applies the row rule. A party member whose position is not on
 line 0 or 1 can only use techniques of range class 2. A target that stands
 behind a living ally on a lower line number (`calcLineChk`) can only be hit
 by range class 2. This matches the official rule that the back row cannot use
@@ -920,10 +920,10 @@ sequenceDiagram
 
 All hit and damage rules are in `src/ov01/calc.c`. The entry point is
 `calcHitDmg(user, cmd, hit)`. It first calls `calcHit`. A result of 0 is a
-miss and prints "DMG: EVA". On a hit it calls `calcDmg`. Two special cases
-follow. When cfEvent bit 0x01 is set, a party attack on an enemy deals 0. The
-debug option "PL ICHIGEKI" (one-hit kill) sets the damage to the target's
-maximum HP.
+miss and prints "DMG: EVA". On a hit it calls `calcDmg`. It then applies two
+special cases: a party attack on an enemy deals 0 when cfEvent bit 0x01 is
+set, and the debug option "PL ICHIGEKI" (one-hit kill) sets the damage to the
+target's maximum HP.
 
 `calcHit` works from the technique's `effectType`:
 
@@ -1253,8 +1253,8 @@ pointer to a name and its description: `dataEthNameGet`, `dataItmNameGet`,
 
 The main menus call many of these functions directly, for example
 `dataUnitOrgGet`, `dataPlChaGet`, `dataTecGet`, `dataItmGet`,
-`calcTotalParaMenu`, `calcUseItemMenu` and `calcUseEtherMenu`. This is why
-the main menu needs OV01 loaded (see [Main menu](main-menu.md)).
+`calcTotalParaMenu`, `calcUseItemMenu` and `calcUseEtherMenu`. The main menu
+therefore needs OV01 loaded (see [Main menu](main-menu.md)).
 
 The other battle files are under `data\yamamoto\`: `mot\` (motions),
 `map\` (stages), `think\` (think data), `stat\` (`cur.xtx`, `manu.xtx`,

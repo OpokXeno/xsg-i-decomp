@@ -7,13 +7,14 @@ function call, `MainMenu()` in `src/main/window_tex_load.c`. That function has
 its own frame loop, so the field game stays frozen while the menu is open and
 continues from the same frame when the menu closes.
 
-The menu is also a launcher. Using a passport item starts a minigame overlay,
-the U.M.N. row loads the U.M.N. overlay, and two flags set inside the menu make
-the field jump to the Driller Game scene or to a U.M.N. Simulation scene after
-the menu has closed. The growth screens it opens (Ether, Tech Attacks, Skills,
-Characters, Battle Formation and A.G.W.S.) are described in
-[Character growth](character-growth.md). Shops, the battle result screen and
-the save screen are separate screens, but they reuse the same building blocks.
+The menu also launches other parts of the game. Using a passport item starts a
+minigame overlay, the U.M.N. row loads the U.M.N. overlay, and two flags set
+inside the menu make the field jump to the Driller Game scene or to a U.M.N.
+Simulation scene after the menu has closed. The growth screens it opens
+(Ether, Tech Attacks, Skills, Characters, Battle Formation and A.G.W.S.) are
+described in [Character growth](character-growth.md). Shops, the battle result
+screen and the save screen are separate screens, but they reuse the same
+building blocks.
 
 [← Back to the overview](../README.md)
 
@@ -21,8 +22,8 @@ the save screen are separate screens, but they reuse the same building blocks.
 
 The field game polls the controller once per frame in `GameModeCfMain`
 (`src/main/game.c`, see [the field page](field.md)). Before it looks at START
-or TRIANGLE it checks that nothing else owns the player. The menu can only
-open when all of these hold:
+or TRIANGLE it checks that the player is free. The menu can only open when all
+of these hold:
 
 - none of the field flags `GAME_FLAG_NO_TALK_POINT`, `GAME_FLAG_ACTOR_LOOK_AT`,
   `GAME_FLAG_ACTOR_HOLD` or `GAME_FLAG_SCRIPT_END` is set,
@@ -41,13 +42,14 @@ zero. START opens the pause screen instead, which belongs to the field mode
 (see [the field page](field.md)).
 
 When TRIANGLE is pressed the field sets `GameLoopState.status` to
-`GAME_STATUS_LOCK_LONG` (a non-zero status fails the last check above, so the field ignores these buttons until it is cleared), saves the
-camera and lights (`GameStateSaveCameraLight`), tells the model library that a
-menu starts (`nmlModelSendMenuStart`, see [nml](../libraries/nml.md)), turns
-culling off (`xglCullingIgnore`) and calls `MainMenu()`. When `MainMenu()`
-returns, the same calls are undone in reverse order. The field then checks
-three results of the menu: the global exit flag `GAME_FLAG_EXIT`, the U.M.N.
-Simulation request `UmnSimulationNo` and the Driller Game request
+`GAME_STATUS_LOCK_LONG`, saves the camera and lights
+(`GameStateSaveCameraLight`), tells the model library that a menu starts
+(`nmlModelSendMenuStart`, see [nml](../libraries/nml.md)), turns culling off
+(`xglCullingIgnore`) and calls `MainMenu()`. A non-zero status fails the last
+check above, so the field ignores these buttons until it is cleared. When
+`MainMenu()` returns, the same calls are undone in reverse order. The field
+then checks three results of the menu: the global exit flag `GAME_FLAG_EXIT`,
+the U.M.N. Simulation request `UmnSimulationNo` and the Driller Game request
 `MenuDrillCall`. The last two are explained in
 [Minigames, Driller Game and U.M.N. Simulation](#minigames-driller-game-and-umn-simulation).
 
@@ -72,9 +74,9 @@ flowchart TD
 
 ## One menu session step by step
 
-`MainMenu()` does everything in a fixed order. It first freezes the picture
-of the field, then builds its own world, runs its loop and finally restores
-the field.
+`MainMenu()` works in a fixed order. It first freezes the picture of the
+field, then sets up its own memory, tasks and textures, runs its loop and
+finally restores the field.
 
 1. **Freeze the field picture.** `endPrintDirectFrameCopy` copies the current
    frame into the back texture of the print layer (see
@@ -175,8 +177,8 @@ of `src/main/menu_model.c`, which `MenuModelMemorySet(state)` cuts into
 regions for character and A.G.W.S. models (see [Menu models](#menu-models)).
 The remaining 0x80000 bytes are a bump area. `MainMenuWorkEnd` always points
 at the first free byte, and each consumer takes its block from there and
-moves the pointer forward. Nothing is ever freed one block at a time. The
-whole area is simply forgotten when the menu closes.
+moves the pointer forward. No block is ever freed on its own. The whole area
+is dropped when the menu closes.
 
 `MainMenu()` carves the long-lived blocks first. Each screen then carves its
 own window and list blocks from the current `MainMenuWorkEnd` in its init
@@ -425,10 +427,9 @@ page. The menu only fills in their position, size, style, text and callback.
 
 Windows move with `MoveSlide(current, target, rate)`, which moves a short
 coordinate toward its target by the remaining distance divided by `rate`
-each frame. A widget therefore never animates itself directly. It only
-changes its target positions according to the screen state, and
-`MoveSlide` produces the ease-out motion. `MoveSlide2` moves by a fixed step
-instead.
+each frame. A widget therefore only changes its target positions according to
+the screen state, and `MoveSlide` produces the ease-out motion. `MoveSlide2`
+moves by a fixed step instead.
 
 ### Task lists
 
@@ -509,10 +510,10 @@ grids (up and down move by two, left and right by one).
 number that grows as the story advances. The table `scenarioRangeTable` lists
 five ranges of event flags (500, 400 down to 300, 197 down to 100, and 56
 down to 1). The function scans them from the top and returns the number of
-the first set flag, so the scenario number is simply the highest story flag
-that is set, or 0 when none is. The menu uses it to lock commands,
-to fix the leader and to change names. For example `MenuCharNameGet` returns
-"Ziggurat 8" for Ziggy before scenario 108.
+the first set flag, so the scenario number is the highest story flag that is
+set, or 0 when none is. The menu uses it to lock commands, to fix the leader
+and to change names. For example `MenuCharNameGet` returns "Ziggurat 8" for
+Ziggy before scenario 108.
 
 `MenuEquipStealMaskCheck()` tests event flag 0x3F9. While it is set the
 weapon, ammunition and accessory lists are hidden, and the shop of type 6
@@ -665,9 +666,9 @@ Back") and the choice is written back to that save byte for the current tab.
 battle and on whom. The item must have use flag 0x8000. Its attribute bits
 then choose the target. Bits in 0x1E43 make it a SINGLE item (one character)
 or an ALL item (the whole party, use state 0x10), and bit 0x2000 makes it an
-AGWS item. Item 36 is special. It is ALL only while the player stands on a
-save or event symbol (`GameLoopState.flags & 0x20400000`) and is otherwise
-blocked with the text "This item can only be used at save points."
+AGWS item. Item 36 is ALL only while the player stands on a save or event
+symbol (`GameLoopState.flags & 0x20400000`) and is otherwise blocked with the
+text "This item can only be used at save points."
 
 When the player confirms a target, the item is refused (buzzer) if it would
 have no effect:
@@ -814,9 +815,9 @@ runs as level 6.
 6. The model pool is reset (`MenuModelMemoryInit`) and the level returns to
    the top menu.
 
-The overlay swap is the reason the menu depends on OV01. All the data
-accessors the menu calls (`dataUnitOrgGet`, `dataPlChaGet`, `dataWpnGet`,
-`dataEthGet`, `calcTotalParaMenu` and many more) are OV01 code, so OV01 must
+The swap back is needed because the menu depends on OV01. All the data
+accessors that the menu calls are OV01 code (`dataUnitOrgGet`, `dataPlChaGet`,
+`dataWpnGet`, `dataEthGet`, `calcTotalParaMenu` and many more), so OV01 must
 be loaded whenever menu code runs. See [memory](../architecture/memory.md) for
 the overlay area.
 
@@ -919,8 +920,8 @@ matches `party->leader_battle_id`, so it swaps the field model
 (`ACT_setModelWrapper`) and resets its motion.
 
 The two requests also affect the sound. The U.M.N. calls
-`GameCFSoundMenuPurge(1)`, which purges the effect banks and also stops the
-music sequences that are playing, remembering them in a bit mask.
+`GameCFSoundMenuPurge(1)`, which purges the effect banks, stops the music
+sequences that are playing and remembers them in a bit mask.
 `GameCFSoundMenuReload()` (called by OV02 when the U.M.N. closes) reloads the
 map and enemy effects and restarts those sequences only when
 `UmnSimulationNo` and `MenuDrillCall` are both zero, probably because a scene
