@@ -4,8 +4,9 @@
 effects in battle, hit sparks, character auras, death effects, the glowing save
 and shop symbols on the field map, traps, and the effects that event scripts
 place in a scene. An effect is a small particle system. Its shapes, textures,
-timing and motion all come from data files, and a tiny script language decides
-when each part starts, which sound plays and where the camera goes.
+timing and motion all come from data files. In battle a tiny script language
+decides when the parts of an effect start, and timelines in the same data play
+sounds and choose the camera shot.
 
 The same code also runs the screen-wide effects: the full-screen filter layers
 called "defocus" (blur, tint, waves, after-images), the screen mask that goes
@@ -505,12 +506,15 @@ flowchart LR
 
 ## Effect scripts
 
-Battle effects are started by scripts instead of directly. Each effect number
-has a small script in its data, and `sc_get.c` runs it. The script picks camera
-shots, waits for hits, starts several schedulers in a row, plays movies and
-fires missiles. This is a second script language of the game, much smaller than
-the Java scripts (see [java-vm.md](../scripting/java-vm.md)) and unrelated to
-them. It is a bytecode of 16-bit commands, and it is used mostly by battle
+Most battle effects are started by scripts instead of directly. Each effect
+number has a small script in its data, and `sc_get.c` runs it. The script starts
+schedulers, waits for them, fires missiles and can play movies. The camera shots
+and the waits for hits belong to the [timelines](#timelines-in-sdv) of the
+schedulers it starts. The idle and status auras of the units have no running
+script (see [detached effects](#detached-effects)). This is a second script
+language of the game, much smaller than the Java scripts (see
+[java-vm.md](../scripting/java-vm.md)) and unrelated to them. It is a bytecode
+of 16-bit commands, and it is used mostly by battle
 effects (see [battle-effects.md](../game/battle-effects.md)). The script tables
 sit in the kind-5 chunks of the effect files and are described in
 [the effect script table](../formats/effects.md#the-effect-script-table). The
@@ -618,7 +622,8 @@ The three effect commands create schedulers:
   (`srsGetEffect2Idx`), so one script can serve related effects.
 - `EFFECT3` creates a first scheduler only for task 0, then a second one for
   every task, delayed by `count × task index` frames. With one task per target,
-  this staggers the impacts.
+  this staggers the impacts. Task 0 also dims the map and freezes the camera as
+  `EFFECT` does.
 
 The wait handlers are in `sc_wait_parse_script.c`. `WAITCNT` counts frames,
 `WAITEVE` waits until another task of the same script has ended, `WAITEFT` waits
@@ -942,8 +947,9 @@ before `sefInitEffect` has run (`_initialize`) and while the U.M.N. flag
    they are drawn later with the other models. The pass also counts the 2D
    particles and ends with `MEfObjExec1st`.
 2. **Main pass.** `sefDrawEffect` runs inside `nmlModelFlush`, after the opaque
-   models. When `s_nEffectWrite` is 0 it runs after the alpha groups of the main
-   viewport, when it is 1 it runs right after `nmlModelFlushSub(0)`. Scripts
+   models and the shadow passes of the main view. When `s_nEffectWrite` is 0 it
+   runs before the alpha groups of the main view. When it is 1, the default, it
+   runs right after `nmlModelFlushSub(0)`, so after the alpha groups. Scripts
    switch this with `Stage.setEffectRender(int)`. The pass updates the inverse
    view matrix (`sefCalcInvView`) and runs `svDrawScheduler` with `_draw3D = 0`.
    Quad particles (render type 4) are projected with VU0 by `sefDrawParticle` or
@@ -981,7 +987,7 @@ sequenceDiagram
     E->>N: model particles, nmlModelEntryEffect
     E->>E: MEfObjExec1st, count 2D particles
     R->>N: nmlModelFlush()
-    N->>E: sefDrawEffect() after opaque or alpha groups
+    N->>E: sefDrawEffect() before or after the alpha groups
     E->>E: per group: upload textures, draw quads, alters, missiles
     R->>R: final packet callbacks in index order
     R->>E: sefDrawEffect2D() (slot 2 in battle, slot 5 on the field)
@@ -1029,11 +1035,11 @@ in `src/ov01/m_cam.c`.
 
 ### Ambient dimming
 
-Large battle effects dim the map while they play. The script command `EFFECT`
-calls `sdvSetAmbState(1, number)` for task 0, and `WAITEFT` calls it with
-state 2 when the effect is gone. The request only applies to battle image
-effects (category 14) and effect 2853, and never to effects 2300 to 2481. The
-`FADEON` task flag forces it through `sdvSetAmbState2`.
+Large battle effects dim the map while they play. The script commands `EFFECT`
+and `EFFECT3` call `sdvSetAmbState(1, number)` for task 0, and `WAITEFT` calls
+it with state 2 when the effect is gone. The request only applies to battle
+image effects (category 14) and effect 2853, and never to effects 2300 to 2481.
+The `FADEON` task flag forces it through `sdvSetAmbState2`.
 
 `sdvExecAmbient` runs each frame. State 1 counts up to 20 frames and blends the
 ambient light of studio light set 2 and the battle map colour (`mapMulSet`)

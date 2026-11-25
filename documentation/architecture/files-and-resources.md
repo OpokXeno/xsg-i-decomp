@@ -61,9 +61,10 @@ The code also supports a set of single-layer discs. Each disc then carries
 calls `GameDiskChange(n)` in `src/main/game_disk_change.c`. It redraws a
 "change disc" prompt every frame until disc `n` is detected or the player
 presses START to force the game to continue. On the dual-layer disc
-`xglCdDiskCheck` always reports `CD_DISC_FLAGS_DUAL_LAYER`, and
-`GameDiskChange` returns at once. No third group exists on the released disc,
-so the multi-disc path was probably used for development discs.
+`xglCdDiskCheck` reports `CD_DISC_FLAGS_DUAL_LAYER`, and `GameDiskChange`
+returns at once. With the drive open it reports `CD_CHECK_SHELL_OPEN` instead.
+The released disc has no `xenosaga.30`, so the multi-disc path was probably used
+for development discs.
 
 The diagram below shows where each group lives and what it contains.
 
@@ -801,9 +802,12 @@ sound containers and the ADPCM streams.
 
 ## Development paths
 
-Several paths in the code only make sense on a development system. Absolute
-paths starting with `\` are read from `host0:/home/xeno/vcd-u/`, the
-developers' copy of the disc image on a PC. `GameSnapShotExecute` writes
+Several paths in the code only make sense on a development system. An archive
+slot with the host source is read from `host0:/home/xeno/vcd-u/`, probably the
+developers' copy of the disc image on a PC, and a path that starts with `\` can
+name any device (see
+[From a path to bytes in memory](#from-a-path-to-bytes-in-memory)).
+`GameSnapShotExecute` writes
 screenshots to `host0:/home/xeno/work/snap/game0000.jpg`. `ModelPath` switches
 all models to `test` folders. None of these are reachable in the retail game
 without changing code or memory. The debug tools are described in

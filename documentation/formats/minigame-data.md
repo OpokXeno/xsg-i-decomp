@@ -366,9 +366,9 @@ stored decks. Nothing calls it.
 
 Each of the 24 `.bin` files is a single XTX texture or a run of XTX textures
 stored back to back, with the same header as the `.xtx` files, and none of
-them is a table. The name only tells which files the artists exported together.
-The table lists each file with its size, the number of XTX blocks it holds,
-the address the code loads it to and what the code draws with it.
+them is a table. The table lists each file with its size, the number of XTX
+blocks it holds, the address the code loads it to and what the code draws with
+it.
 
 | File | Bytes | XTX blocks | Loaded to | Used as |
 | --- | --- | --- | --- | --- |
@@ -497,8 +497,11 @@ source and the name tables were searched for every file name.
 | `help\helpdamy.lex` | 20,912 | a dummy help layout ("damy" is probably "dummy") |
 
 The prefix `New` on many names (`NewCardBase`, `NewCard_B`, `NewTitle`,
-`NewYama`, `NewPop`, `NewLost`) marks a second version of the art. The old
-versions that were left behind are the ones above.
+`NewYama`, `NewPop`, `NewLost`) probably marks a second version of the art.
+Two older versions are in the list above, `CardBase.bin` and `game\yama.lex`.
+The older pop-ups `game\pop1.lex`, `pop2.lex` and `pop.xtx` are still loaded
+beside `NewPop`. For the other names the folder holds no file of the same name
+without the prefix.
 
 ## 3. Network Casino: data\tanaka
 
@@ -625,8 +628,8 @@ The code never reads past a NUL, so none of this shows in the game.
 
 ### The casino textures
 
-Every casino texture is an XTX file with one upload. The 92 sketch parts and
-14 of the other textures have the same shape: one 256 × 256 rectangle of
+Every casino texture is an XTX file. The 92 sketch parts and 14 of the other
+textures have the same shape: a single upload of one 256 × 256 rectangle of
 32-bit GS memory (262,144 bytes plus an `0x50`-byte header, 262,224 bytes in
 all). Most casino sprites read that memory as an 8-bit picture of 512 × 512
 pixels. The GS arranges 8-bit pixels in pages of 128 × 64 where 32-bit pixels
@@ -641,8 +644,8 @@ of `mini_g.c` give its position as a GS block address (`clut_base`). A
 uses, for example at `(240, 240)` for `BG.xtx`, `exchange1.xtx` and
 `exchange2.xtx` and at `(0, 224)` for all 92 sketch parts.
 
-The sprite tables are compiled into the overlay, not stored on
-the disc. Each `SpriteTex` (28 bytes) names a rectangle `u`, `v`, `w`, `h` in
+The sprite tables are compiled into the overlay `OV11.OVL`. The folder holds
+no file for them. Each `SpriteTex` (28 bytes) names a rectangle `u`, `v`, `w`, `h` in
 pixels of the 8-bit picture, the two block addresses `texture_base` and
 `clut_base` (relative to block `0x3800`, where the casino uploads its
 textures) and a `format` that selects the `TEX0` setting of the GS. `TEX0` is
@@ -724,9 +727,9 @@ flowchart TD
 
 ### The folder
 
-The 42 files of the A.G.W.S. folder use five container and text formats of
-their own and the motion packs of the main game. The two `.npr` files are
-ARX-packed (1,239,312 and 783,552 bytes on the disc). All files are read
+The 42 files of the A.G.W.S. folder use six container, picture list and text
+types of their own and the motion packs of the main game. The two `.npr` files
+are ARX-packed (1,239,312 and 783,552 bytes on the disc). All files are read
 through `RgFileSys`, the file cache of the engine (see
 [files and archives](../game/minigames/agws-battle-engine.md#files-and-archives)).
 
@@ -1146,8 +1149,8 @@ delimiters until it meets the tag followed by the sub-tag (such as
 The files differ in encoding and line ends. Most are EUC-JP, but
 `rg_weapon.info` is Shift-JIS and `rg_camera.info` uses NEC extension
 characters (the circled digits ① to ③, bytes `AD A1` to `AD A3`) that plain
-EUC-JP lacks. The Japanese text appears only in comments, so the parser never
-sees it.
+EUC-JP lacks. The Japanese text appears only in comments, apart from the
+delimiter lines of `rg_robot_spec.info`, so the parser sees no other Japanese.
 
 | File | Bytes | Encoding | Line ends | Structure | Records |
 | --- | --- | --- | --- | --- | --- |

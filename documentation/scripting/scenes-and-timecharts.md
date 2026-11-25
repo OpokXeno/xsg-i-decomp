@@ -14,17 +14,16 @@ actors, `src/main/map_create_unit_peer.c` for map units) interpolate positions,
 rotations, scales and motions over a number of frames.
 
 How a cutscene is triggered, loaded and ended is described in
-[events.md](events.md). The sections below cover what happens while it plays.
-The VM threads and waits are described in [java-vm.md](java-vm.md) and every
-native in [natives.md](natives.md).
+[events.md](events.md), the VM threads and waits in [java-vm.md](java-vm.md)
+and every native in [natives.md](natives.md).
 
 [← Back to the overview](../README.md)
 
 ## Scene and stage classes
 
-The two script base classes live in `data\base.evt`. A class that extends
-`xeno/Scene` is a cutscene and its entry point is the method `play()`. A
-class that extends `xeno/Stage` is the script of a field area. It has no
+The two script base classes are in the class library `data\system.evt`. A
+class that extends `xeno/Scene` is a cutscene and its entry point is the
+method `play()`. A class that extends `xeno/Stage` is the script of a field area. It has no
 entry point and reacts to field triggers instead (see
 [events.md](events.md#field-triggers)). `SCRIPT_exec2` tells them apart with
 `JNI_searchClasses` and the `skip_count` it reports (see
@@ -281,8 +280,8 @@ the enabled flag. A step works like this:
    `SCRIPT_test(argument, method)`. That initialises `stageVM` and calls the
    method with the observer object as `this`.
 
-The script usually waits for the end with `getSignal()` in a loop, or lets the
-observers drive the whole scene. The flowchart below shows the step.
+A script can wait for the end with `getSignal()` in a loop. The flowchart
+below shows the step.
 
 ```mermaid
 flowchart TD
@@ -679,7 +678,8 @@ frame-exact with a pre-made animation follows `playControl.currentTime`:
   (`ACT_updateMPack`),
 - units in `Unit.start(5, ..)` set their motion time to it
   (`MAP_updateUnitMPack`),
-- time chart observers fire script methods at the keys of their records.
+- time chart observers would fire script methods at the keys of their records,
+  but no retail script registers one.
 
 The cutscene's camera work and character animation can therefore be authored
 together as packs and played in lockstep. Pausing the clock (`stop()`) or
@@ -691,11 +691,12 @@ starts them.
 
 Voices are started by the script with `Sound.streamPlay` (see
 [events.md](events.md#synchronising-text-voices-and-actions)). The code has no
-link between the stream and the time chart. Lines are probably started from
-time chart observers or right after a window print, and the script then waits
-with the same mechanisms as for text.
+link between the stream and the time chart. The script thread starts a line,
+probably next to the window print of its text, and then waits with the same
+mechanisms as for text.
 
-The flowchart below shows what each clock drives.
+The flowchart below shows what each clock drives. The branch through the time
+chart observers is code that no retail script uses.
 
 ```mermaid
 flowchart LR
@@ -723,9 +724,9 @@ flowchart LR
 
 ## A cutscene from start to finish
 
-This walkthrough follows a cutscene through all the systems on this page and
-on [events.md](events.md). The Java side is described by the natives it
-calls, since the bytecode itself is data on the disc.
+A cutscene passes through all the systems described here and in
+[events.md](events.md). The Java side is described by the natives it calls,
+since the bytecode itself is data on the disc.
 
 1. **Trigger.** A Stage method runs, for example a `KickEvent` from an event
    locator. It calls `Runtime.jumpEvent(n)`. The native schedules

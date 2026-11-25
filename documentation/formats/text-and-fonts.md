@@ -61,8 +61,9 @@ The 326 UML files total 2,877,824 bytes (1,344,000 for the mails and
 ## Where text lives
 
 The game keeps its text in four kinds of places, and each kind reaches the
-screen through its own converter before it ends in the font engine's print
-queue.
+screen through its own converter. The converted text ends in the font engine's
+print queue, except the names of the battle HUD, which `menuFontPut` draws as
+sprites from `stat.xtx`.
 
 | Text | Where it is stored | Markup | Converted by | Drawn with |
 | --- | --- | --- | --- | --- |
@@ -391,7 +392,7 @@ font0.tex
 00078040: 040f 070e 050f 0610 0510 050f 050f 0510   metrics: slot 0 = (4, 15), slot 1 = (7, 14), ...
 ```
 
-The layout of the whole file, drawn to scale by size, is:
+The layout of the whole file is:
 
 ```
 0x00000 +----------------------------------------------+
@@ -705,7 +706,8 @@ stat.xtx
 
 The fourth word of each entry (`0x3002`, `0x0A02`) is the length of the
 transfer packet in quadwords, the pixel data (`0x3000` and `0xA00` quadwords)
-plus the two quadwords of the VIF and GIF header.
+plus the two quadwords of the VIF and GIF header. `xglPacketTextureTrans`
+passes it to the DMA `REF` tag that sends the packet.
 
 ### Texture setup
 
@@ -975,7 +977,7 @@ which keeps the box-drawing frames of the mails aligned. A database page starts
 with its title between `0D 02` and `0D 00` and a ruler line of `―`
 (`A1BD`).
 
-The loader converts four `@` codes while copying the text:
+The loader converts five `@` codes while copying the text:
 
 | Code | Uses | Effect |
 | --- | --- | --- |
@@ -1113,7 +1115,8 @@ line by line:
 
 The file starts with an empty line, then 25 groups. Each group is a comment
 line `//`, a TAB and the group letter, then one `NNNN.uml,` line per entry,
-then `-1,` (once `-1` without the comma). The groups are A to Z without Q
+then `-1,` (once `-1` without the comma). An empty line follows the separator
+of 13 groups (A to L and R). The groups are A to Z without Q
 and X, then `#` for titles that do not start with a letter. The last group
 has no separator. The 245 entries are the ids 9000 to 9244, each once, in
 ascending order, so the alphabetical order comes from the numbering of the
@@ -1126,6 +1129,7 @@ database pages.
 9001.uml,
 ...
 -1,
+(empty line)
 //<TAB>B
 ...
 //<TAB>#
@@ -1134,11 +1138,12 @@ database pages.
 9244.uml,
 ```
 
-The list shows an index bar from `umlIndexLetters`, a string of 26 two-byte
+The list shows an index bar from `umlIndexLetters`, a string of 25 two-byte
 entries: the 24 letters `A` to `Z` without `Q` and `X`, each followed by a
 zero byte, then `##`, which the hash escape draws as `#`.
-`TYA_UML_INDEX_COUNT` is 26, so the 26th entry of the bar is empty, one more
-than the 25 groups of the file.
+`TYA_UML_INDEX_COUNT` is 26, so `disp_index` also prints a 26th entry. It
+starts at the zero byte that ends the string, so it is empty. The 25 other
+entries match the 25 groups of the file.
 
 ## Event texts
 
@@ -1354,8 +1359,6 @@ umntxt.bin
 
 ### Open points
 
-- The fourth word of each `.xtx` sub-image entry is probably a quadword
-  count, but no code that reads it was traced for this page.
 - The mails use both `15 02 04 01` and `15 02 04 07` for the fixed-box mode.
   The engine only tests the value for zero, so the two values probably mean
   the same.

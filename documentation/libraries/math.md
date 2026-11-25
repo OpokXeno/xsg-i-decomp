@@ -5,8 +5,10 @@ libraries with different styles, which probably come from different
 programmers: the `xgl` system library's math file, the `MMath` helpers used by
 battle effects, the `MATRIX_` and `CUR_MATRIX_` helpers used by skeletons, the
 game-play geometry helpers of the field code, and a spline library used by
-cameras and scripts. They all share the same vector and matrix types and the
-same conventions, and most of them do their work on the VU0 vector unit.
+cameras and scripts. They share the same vector and matrix types and the same
+conventions. `xgl`, `MMath` and the `MATRIX_` helpers do most of their work on
+the VU0 vector unit. The field geometry helpers and the spline library are
+plain C code on the FPU.
 
 The system library that owns `xgl_2.c` is described in [xgl.md](xgl.md).
 
@@ -38,7 +40,8 @@ them in some places and its own VU0 versions in others.
 
 ### Types
 
-All libraries use the types of `include/shared.h`:
+The libraries use the types of `include/shared.h`, plus two types from the
+headers named in the table:
 
 | Type | Definition | Use |
 | --- | --- | --- |
@@ -51,10 +54,10 @@ All libraries use the types of `include/shared.h`:
 | `HermiteVector` | struct of four floats `x`, `y`, `z`, `w` | Control points of Hermite curves |
 | `Vector3` (`include/main/get.h`) | struct of three floats `x`, `y`, `z` | Control points of B-spline paths |
 
-A vector always has four floats, even when only x, y and z mean something.
-The VU0 unit loads and stores 16 bytes at a time, so a 3-component vector
-would cost the same and would complicate the code.
-For points, w is usually 1. For directions it is often left as it was.
+Except for `Vector3`, every vector type in the table has four floats, even
+when only x, y and z mean something. The VU0 unit loads and stores 16 bytes at
+a time, so a 3-component vector would cost the same and would complicate the
+code. For points, w is usually 1. For directions it is often left as it was.
 
 Many functions come in two versions. The plain version works on all four
 components. The `XYZ` version works on x, y and z only and copies w from the
@@ -119,11 +122,13 @@ space (see [Projection to the screen](#projection-to-the-screen)).
 
 ### Angles
 
-Angles are in **radians** everywhere, as `float`. Degrees appear only where a
-person types the value: the fan widths of `Check_InsideFan` are given in
-degrees and converted, and `MMathDeg2RadVector` and `MMathRad2DegVector`
-convert whole vectors of Euler angles. The `...I` versions of these two
-functions read or write integer degrees.
+The math functions take and return angles in **radians**, as `float`. Degrees
+appear in values set by scripts and data, and the code converts them: the Java
+rotation fields `rx`, `ry` and `rz`, the angle arguments of the camera, light
+and `Chr` rotation natives, and the fan widths of `Check_InsideFan`.
+`MMathDeg2RadVector` and `MMathRad2DegVector` convert whole vectors of Euler
+angles. The `...I` versions of these two functions read or write integer
+degrees.
 
 Angles are often kept in the range [-pi, pi]. `Get_Decimal_Surplus_for_Radius`
 wraps any angle into that range, and `MMathCalcRotNear` returns the signed
@@ -144,7 +149,7 @@ flowchart LR
 
 The PlayStation 2's main processor (the EE) has two vector units. VU1 is used
 for geometry by the model library (see [nml.md](nml.md)). **VU0** is tightly
-coupled to the EE and is the unit all the math code uses.
+coupled to the EE and is the unit that the vector and matrix code uses.
 
 VU0 has 32 vector registers, `vf0` to `vf31`. Each holds four floats, x, y, z
 and w, and one instruction works on all four lanes at once. `vf0` is a
@@ -662,7 +667,7 @@ computed volumes and pan values into integers.
 
 File: `src/main/m_math.c`
 
-`MMath` is a second vector and matrix library, written entirely in VU0 macro
+`MMath` is a second vector and matrix library, written mostly in VU0 macro
 mode. It is used mainly by the battle overlay, in the battle effects
 (`src/ov01/m_ef*.c`) and the battle camera (`src/ov01/m_cam.c`), and by the
 effect library (`src/main/sef.c`) and `src/main/sdv.c`. Battle itself is

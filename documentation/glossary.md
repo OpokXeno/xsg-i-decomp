@@ -60,7 +60,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Alter event**: An 18-word row of an effect script table that describes one trail (an alter). See [Effect data: alter events](formats/effects.md#alter-events).
 
-**Alter mode**: The texture mode of a ribbon trail of the effect system: 1 plain, 2 scrolling, 3 and 4 with a phase per sample. See [Effects: alters (trails)](libraries/sef.md#alters-trails).
+**Alter mode**: The texture mode of a ribbon trail of the effect system: 1 plain, 2 scrolling, 3 and 4 with a phase per sample. See [sef: alters (trails)](libraries/sef.md#alters-trails).
 
 **Ambient bank**: Sound effect bank 3 of the field, loaded from the second name of the scene command `loadse` (an `ENV_*` SED and SWD pair). See [The field game: field sound banks](game/field.md#field-sound-banks).
 
@@ -236,7 +236,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Defocus layer**: One of the 16 full-screen filter layers (types 1 to 11) that `DefocusMain` draws. The special timeline of an effect drives them. See [sef: defocus layers](libraries/sef.md#defocus-layers).
 
-**Descriptor setting**: The third word of an effect slot descriptor. A value of 0 or more links to another descriptor, whose category becomes the loop target. The values -0x100, -0x200 and -0x201 have special meanings. See [Effects: effect slots](libraries/sef.md#effect-slots).
+**Descriptor setting**: The third word of an effect slot descriptor. A value of 0 or more links to another descriptor, whose category becomes the loop target. The values -0x100, -0x200 and -0x201 have special meanings. See [sef: effect slots](libraries/sef.md#effect-slots).
 
 **Design sketch parts**: The textures `NN_Y1`, `NN_Y2` or `NN_W1` to `NN_W4` that the casino data viewer shows. See [Minigame data files: the design sketches](formats/minigame-data.md#the-design-sketches).
 
@@ -278,7 +278,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Effect scheduler (`SchedulerState`)**: One running instance of a visual effect, `0xAB0` bytes, from a pool of 128. It is the peer of a Java `xeno.Effect`, and effect scripts create schedulers with their EFFECT commands. See [sef: schedulers](libraries/sef.md#schedulers).
 
-**Effect script**: The small bytecode language of the effect system, called sc after its interpreter `src/main/sc_get.c`. It is unrelated to the Java scripts. Each effect number can have a script of 16-bit commands that picks camera shots, waits for hits, starts effect schedulers with its EFFECT commands, plays movies and fires missiles. It has 73 opcodes and 16 registers, and runs as 16 records of 8 tasks. See [sef: effect scripts](libraries/sef.md#effect-scripts), [Events and cutscenes: effect scripts](scripting/events.md#effect-scripts) and [Effect data: the effect script table](formats/effects.md#the-effect-script-table).
+**Effect script**: The small bytecode language of the effect system, called sc after its interpreter `src/main/sc_get.c`. It is unrelated to the Java scripts. Each effect number can have a script of 16-bit commands that starts effect schedulers with its EFFECT commands, waits for them, fires missiles and can play movies. Camera shots and hit waits belong to the timelines of the schedulers. It has 73 opcodes and 16 registers, and runs as 16 records of 8 tasks. See [sef: effect scripts](libraries/sef.md#effect-scripts), [Events and cutscenes: effect scripts](scripting/events.md#effect-scripts) and [Effect data: the effect script table](formats/effects.md#the-effect-script-table).
 
 **Effect script table**: The graph of 16-bit words inside a script chunk of an effect file. It holds the bytecode, the scheduler records, the command lists, the line headers and the key lists of one effect. See [Effect data: the effect script table](formats/effects.md#the-effect-script-table).
 
@@ -550,7 +550,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 ## L
 
-**Label texture**: The 120 × 72 rectangle of `title_obj.xtx` that holds the title menu entry labels in 18-pixel rows. See [Title and boot: the frame loop](game/title-and-boot.md#the-frame-loop).
+**Label texture**: The 120 × 72 rectangle of `title_obj.xtx` that holds the title menu entry labels in 18-pixel rows. See [Boot and title screen: the frame loop](game/title-and-boot.md#the-frame-loop).
 
 **Ladder (Hashigo)**: The ladder code of the field. Ladders are marked in the collision mesh, not placed as units, and the ladder state lives in the player's enemy work record at `+0x3830`. See [Maps and units: ladders](game/map-and-units.md#ladders).
 
@@ -566,7 +566,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Light set (`StudioLight`)**: One ambient light and three parallel lights, `0xF0` bytes. Studios and actors each have one, and `xglLightCalcMatrix` turns it into the matrices for vertex lighting. See [xgl: lights](libraries/xgl.md#lights).
 
-**Lighting variant**: The part of a VU1 entry point name that says how a lit vertex is shaded: plain diffuse light, `Spec` (a highlight added to the color), `MultiSpec` (the highlight drawn as a second strip) or `ReflSpec` (the highlight plus a reflection map strip). See [nml: lighting](libraries/nml.md#lighting).
+**Lighting variant**: The part of a VU1 entry point name that says how a lit vertex is shaded: plain diffuse light, `Spec` (a highlight added to the colour), `MultiSpec` (the highlight drawn as a second strip) or `ReflSpec` (the highlight plus a reflection map strip). See [nml: lighting](libraries/nml.md#lighting).
 
 **Line (`SefLineData`)**: An effect emitter with keyframed tracks that spawns particles. All effects share 128 lines. See [sef: lines](libraries/sef.md#lines).
 
@@ -584,7 +584,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **LOOK**: The look-at controllers that turn the spine (joint 36), the head (joint 48) and the eyes toward a point of interest chosen by `Actor.look_mode`. See [Animation: look modes](libraries/animation.md#look-modes).
 
-**Loop target (`link_id`)**: The frame at which a looping effect scheduler restarts when all its slots have ended, taken from the category of the linked descriptor. See [Effects: effect slots](libraries/sef.md#effect-slots).
+**Loop target (`link_id`)**: The frame at which a looping effect scheduler restarts when all its slots have ended, taken from the category of the linked descriptor. See [sef: effect slots](libraries/sef.md#effect-slots).
 
 **Loop word**: The sample record field at `+0x04` of a wave bank. It is never sent to the SPU2, because the loops come from the flags of the ADPCM packets. See [Sound files: sample records](formats/sound.md#sample-records).
 
@@ -788,7 +788,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **`processClass` states**: The link states a Java class passes through before it can be used: 4 when its members are resolved, 6 when its constants are resolved and 11 when it is initialized. `loadClass` always asks for state 11. See [Java VM: linking and initialization](scripting/java-vm.md#linking-and-initialization).
 
-**Procurator**: The 3D guide model of the U.M.N., with id `0x1D`. In English its name is Bunnie, and the event texts call it `UKUN`. See [U.M.N.: the procurator and the manzai windows](game/umn.md#5-the-procurator-and-the-manzai-windows).
+**Procurator**: The 3D guide model of the U.M.N., with id `0x1D`. The menu's name table names it Bunnie, and the event texts call it `UKUN`. See [U.M.N.: the procurator and the manzai windows](game/umn.md#5-the-procurator-and-the-manzai-windows).
 
 **Program (SWD)**: An instrument of an SWD wave bank, with an ADSR envelope, a voice range, four LFO slots, a 16-byte name and its key splits. See [Sound files: programs](formats/sound.md#programs).
 
@@ -864,7 +864,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **RTPS**: Rotate, translate, perspective: the VU0 routine that turns a 3D point into a GS screen position. See [Math helpers: projection to the screen](libraries/math.md#projection-to-the-screen).
 
-**`Runtime.execBattle`**: The script native that starts a battle. It sets the battle map and the monster set in OV01, runs `battleProc` until the battle ends, then rebuilds the actor scene and restores the saved state. Battles started by touching an enemy take another path, through `GameModeCfMain`. See [Battle system: how a battle starts](game/battle.md#how-a-battle-starts) and [Overview: game logic in Java](README.md#8-game-logic-in-java).
+**`Runtime.execBattle`**: A script native that starts a battle. No script on the disc calls it. It sets the battle map and the monster set in OV01, runs `battleProc` until the battle ends, then rebuilds the actor scene and restores the saved state. Battles started by touching an enemy, or by a stage script through enemy command 14, take another path, through `GameModeCfMain`. See [Battle system: how a battle starts](game/battle.md#how-a-battle-starts) and [Overview: game logic in Java](README.md#8-game-logic-in-java).
 
 ## S
 
@@ -888,7 +888,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Scene archive**: A file with the extension `.a` that holds all files of a field scene in the order its resource script reads them, for example `data\scene\cf0010.a`. `GameResourceLoad` reads it in one piece to the top of memory, so the scene loads without many seeks on the disc. See [Files and resources: scene archives](architecture/files-and-resources.md#scene-archives) and [Scripts and scene archives: scene archives](formats/scripts-and-archives.md#scene-archives-a).
 
-**Scene archive header overflow**: The end-offset table of a scene archive with more than 63 entries runs past `archeader` into `GameResourceWorkReloadTable`. See [Scripts and archives: header overflow](formats/scripts-and-archives.md#header-overflow).
+**Scene archive header overflow**: The end-offset table of a scene archive with more than 63 entries runs past `archeader` into `GameResourceWorkReloadTable`. See [Scripts and scene archives: header overflow](formats/scripts-and-archives.md#header-overflow).
 
 **Scene resource script**: The text file `data\scene\cfNNNN.txt` or `evNNNN.txt` of a place or cutscene. Between `#scn` and `#end` it lists load commands and a `.txa` archive, and its `script` command loads the script archive of the place. See [Events and cutscenes: scene resource scripts](scripting/events.md#scene-resource-scripts), [Files and resources: scene resource scripts](architecture/files-and-resources.md#scene-resource-scripts) and [Scripts and scene archives: scene resource scripts](formats/scripts-and-archives.md#scene-resource-scripts-txt).
 
@@ -924,13 +924,13 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **Sequence channel**: One of the eight EE sound slots for music. Each holds an SMD sequence together with its own wave bank. See [Audio: music sequences](architecture/audio.md#8-music-sequences).
 
-**Settlement (`seisan`)**: The battle result screen, shown by OV01 when a battle is won. See [Character growth: battle results](game/character-growth.md#battle-results).
+**Settlement (`seisan`)**: The battle result screen, shown by OV01 when a battle is won or escaped and `cfEvent` bit 0x10 is clear. See [Character growth: battle results](game/character-growth.md#battle-results).
 
 **Shadow kinds**: The shadow types of an actor (`shadow_kind`): 1 circle, 2 round, 3 drop circle, 4 stencil shadow volume, and 5 to 10 texture-map shadows drawn by nml. See [Actors: shadows and footsteps](libraries/actors.md#shadows-and-footsteps).
 
 **Shape binding**: A type-3 pool entry of a JNT skeleton that makes the z translation of a joint drive a shape (morph) target of the model, probably for the mouth and the eyelids. See [Skeletons and motion: rotation limits and shape bindings](formats/skeletons-and-motion.md#rotation-limits-and-shape-bindings).
 
-**Shape blend**: The morph of a LEX block. The VU1 program mixes the pairs of morph targets by the shape weight and writes the result over the positions and normals, or over the colors when the block's `shapeFlags` byte is 2. See [nml: how a program runs](libraries/nml.md#how-a-program-runs) and [Models and textures: shape bytes](formats/models-and-textures.md#shape-bytes).
+**Shape blend**: The morph of a LEX block. The VU1 program mixes the pairs of morph targets by the shape weight and writes the result over the positions and normals, or over the colours when the block's `shapeFlags` byte is 2. See [nml: how a program runs](libraries/nml.md#how-a-program-runs) and [Models and textures: shape bytes](formats/models-and-textures.md#shape-bytes).
 
 **Shape bytes**: The bytes of each LEX block that give its math mode and parameters. `nmlModelLexBlockDoit` reads them. See [Models and textures: shape bytes](formats/models-and-textures.md#shape-bytes).
 
@@ -1160,7 +1160,7 @@ This glossary explains the terms used across the pages of the Xenosaga Episode I
 
 **WaveBankType**: The SED and SMD command `0xAB`, which plays a sample of any loaded wave bank. It takes a sample index, then a bank id stored high byte first. See [Sound files: effect tracks](formats/sound.md#effect-tracks).
 
-**Wide ASCII style**: Text style code 25 (style bit 1), which draws ASCII with the full-width or proportional glyphs instead of the 8 × 8 strip. See [XGL: glyphs and fonts](libraries/xgl.md#glyphs-and-fonts).
+**Wide ASCII style**: Text style code 25 (style bit 1), which draws ASCII with the full-width or proportional glyphs instead of the 8 × 8 strip. See [xgl: glyphs and fonts](libraries/xgl.md#glyphs-and-fonts).
 
 **Wind**: The global wind of the extra motion (`EXM_WindState`), set by `Runtime.setWindParam`, by `SetUwaWind` and at the start of a battle. See [Animation: wind](libraries/animation.md#wind).
 

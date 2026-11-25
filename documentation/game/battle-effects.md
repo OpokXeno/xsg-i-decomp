@@ -224,9 +224,10 @@ installs the callbacks. It returns 1. The four callbacks then do this:
   `sefHitEffect()` when the counter equals the family's hit frame and calls
   `MEfObjDestroy` when it reaches the lifetime.
 
-There is no other way to end an effect. The pool does not track owners, and
-`MBattleDestroy` only disables the pool, so a battle that ends early leaves
-the records to be cleared by the next `MBattleCreate`.
+No other function destroys an effect once its callbacks are installed. The
+pool does not track owners, and `MBattleDestroy` only disables the pool, so a
+battle that ends early leaves the records to be cleared by the next
+`MBattleCreate`.
 
 The state diagram below shows the life of one effect object.
 
@@ -245,6 +246,7 @@ stateDiagram-v2
     Flying --> Impact : PO frame == hit frame
     Impact --> Fading : sefHitEffect()
     Fading --> Free : PO frame >= lifetime, MEfObjDestroy
+    Flying --> Free : next MBattleCreate clears the pool
 ```
 
 ## Frame timing
@@ -498,8 +500,8 @@ the object lives until frame 53 while the ribbons fade.
 
 ### ECM01
 
-ECM01 is the slowest family. The constructor places it at the creation offset
-on the actor, sets a small motion per step toward the target coordinate and
+ECM01 has the longest lifetime of all families. The constructor places it at
+the creation offset on the actor, sets a small motion per step toward the target coordinate and
 randomises its angle and size. For 60 frames it
 records a history of 31 positions, which the draw pass shows as two fading line
 strips. The hit comes at frame 60 and the object ends at frame 90.

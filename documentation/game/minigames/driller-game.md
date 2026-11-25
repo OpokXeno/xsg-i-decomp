@@ -265,13 +265,15 @@ stateDiagram-v2
     Return --> PowerOff : drops used up, drill_end
     Standby --> Return : time over (timer reaches 0)
     ZMove --> Return : time over
+    ZStop --> Return : time over
     XMove --> Return : time over
 ```
 
 ## 4. Timer and requests from the script
 
 After the phase handler, `MAP_updateUnitDrill()` does three more jobs every
-frame while the drill is not powered off.
+frame. The timer runs only while the drill is not powered off. The other two
+jobs run in every phase.
 
 **The timer.** When `DRILL_FLAG_TIMER_SHOWN` is set, the drill prints a
 timer at the top of the screen with the xgl font. With `DRILL_FLAG_COUNT_UP`
@@ -291,6 +293,8 @@ drill head along their own axes. `partIndexA` takes the Z position and
 `partIndexB` the X and Z positions, while C and D copy the whole matrix.
 
 **Requests.** The script can ask for three things through the argument area.
+The drill handles at most one request per frame, the first pending one in the
+order clear, reset, end.
 `clearRequest` removes all containers (`DrillClearContainer`).
 `resetRequest` clears the item flags and places `containerCount` new
 containers (`DrillResetFlag` then `SetContainer`). `command = 1` ends the run

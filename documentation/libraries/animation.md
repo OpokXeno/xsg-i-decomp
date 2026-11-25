@@ -361,14 +361,14 @@ The high flags are passed to the skeleton code each frame with
 ### Resetting the clock
 
 `ANM_reset(clock, pack)` starts the entry `currentDataId` of a pack. It stores
-the pack and the entry and clears the finished flag. The limits are the entry's
-first and last frame multiplied by 1/30. For format 2 entries it reads the
-attribute stream: a playback range replaces the limits and sets the speed
-(stored in units of 1/32), and a reset range is kept for looping. A speed of 0
-becomes 1/30. The frame is placed at the start (or at the end for a negative
-speed). If flag `0x1` is set, the clock enters the waiting state and
-`loop_limit` (`blendEndFrame` in the actor) is set to the start time plus
-`wait_duration` (`blendDuration`).
+the pack and the entry and clears the finished flag. The limits are the
+entry's first and last frame multiplied by 1/30. For entries of format 2 or
+later it reads the attribute stream: a playback range replaces the limits and
+sets the speed (stored in units of 1/32), and a reset range is kept for
+looping. A speed of 0 becomes 1/30. The frame is placed at the start (or at
+the end for a negative speed). If flag `0x1` is set, the clock enters the
+waiting state and `loop_limit` (`blendEndFrame` in the actor) is set to the
+start time plus `wait_duration` (`blendDuration`).
 
 The variants `ANM_resetPack`, `ANM_resetTime`, `ANM_resetTimeInterp` and
 `ANM_resetDefault` do the same with small differences (the pack is already
@@ -494,19 +494,20 @@ sequenceDiagram
 
 ### The skeleton file
 
-The `.jnt` file starts with a 16-byte header that `jnt.c` reads as
+The `.jnt` file starts with a 16-byte header. From version 2 on, the attribute
+block follows it. `jnt.c` reads the header and the first word of that block as
 `JntHairIdSource`. The byte layout of the whole file is described in
 [Skeleton files (JNT)](../formats/skeletons-and-motion.md#skeleton-files-jnt).
 
 | Offset | Field | Meaning |
 | --- | --- | --- |
-| `+0x4` | `version` | Format version. From version 2 an attribute block follows the header |
+| `+0x4` | `version` | Format version. In version 1 the channels follow the header |
 | `+0x6` | `channel_limit` | Number of channels (joints). `ACT_allocMatrix` uses it as the matrix count |
 | `+0x8` | `primary_id` | Number of body joints |
 | `+0xa` | `secondary_id` | Number of extra joints after them (hair, cloth) |
 | `+0xc` | `additional_primary_count` | Joints after the extra joints that take values from the pack |
 | `+0xe` | `additional_secondary_count` | Last joints, which take their rest values |
-| `+0x10` | `attribute_size` | Byte size of the attribute block. The channels start at `0x10` plus this value |
+| `+0x10` | `attribute_size` | First word of the attribute block, its byte size. The channels start at `0x10` plus this value |
 
 The four counts add up to `channel_limit`. In `kosmos.jnt` the attribute
 block is `0xF0` bytes, so the channels start at `0x100`.
@@ -584,9 +585,9 @@ The flags in `work->flags` are set by the motion step before the evaluation
 and by the evaluation itself. The most important ones are `0x2` (blend with
 the previous pose), `0x100` (never stop early when off screen), `0x200`
 (stop after the inherit channel, set for hidden actors), `0x40` (the
-skeleton was found off screen), `0x10` (model matrices changed) and `0x20`
-(no pack, use rest values). The motion step also sets `0x8000` for every
-actor evaluation.
+skeleton was found off screen), `0x4` (the end of the pack was read), `0x10`
+(model matrices changed) and `0x20` (no pack). The motion step also sets
+`0x8000` for every actor evaluation.
 
 ### The joint producer and its consumers
 
@@ -665,10 +666,10 @@ skeleton in ranges:
    the view with `nmlModelCalcClip`. The radius is `clip_radius`, or 2.0 when
    it is not set. If the sphere is outside the view, or work flag `0x200` is
    set, and flag `0x100` is not set, it sets `0x40`. With clock flag
-   `0x10000000` or work flag `0x200` it then stops here. The motion step later
-   marks the actor as culled when the clock allows it. The static-chain path,
-   used when the skeleton name does not match, makes the same test but ignores
-   flag `0x100`.
+   `0x10000000` or work flag `0x200` it then also sets `0x4` and stops here.
+   The motion step later marks the actor as culled when the clock allows it.
+   The static-chain path, used when the skeleton name does not match, sets
+   `0x40` only when the sphere is outside the view and ignores flag `0x100`.
 4. It samples the remaining channels up to that end and builds the remaining
    body matrices. `JNT_setInterrupt` arms the look-at consumers on their joints.
 5. It fills the extra joints (hair, cloth). They come from the motion pack
@@ -704,8 +705,8 @@ flowchart TB
     B --> C[JNT_getVal body channels<br/>until the inherit channel]
     C --> D[JNT_constructMatrix<br/>joints so far]
     D --> E{inherit joint<br/>in view?}
-    E -- "no, early stop allowed" --> X[flag 0x44, return]
-    E -- yes --> F[sample rest of body]
+    E -- "no, early stop allowed" --> X["set 0x40 and 0x4,<br/>return"]
+    E -- "yes, or no early stop" --> F[sample rest of body]
     F --> G[JNT_setInterrupt<br/>build body matrices<br/>LOOK consumers run]
     G --> H{hair source}
     H -- "flag 0x80000000" --> H1[pack curves]
@@ -731,7 +732,10 @@ flowchart TB
   `JNT_computeMatrix`.
 - `JNT_resetHair` resets the hair state.
 - `JNT_setFCurve(pack, mask)` starts the curve reader on a curve set. A null
-  pack sets the "no pack" flag, so the consumers fall back to rest values.
+  pack sets the "no pack" flag `0x20`. `JNT_computeMatrix`,
+  `JNT_computeHair` and `JNT_defaultConsumer` then return at once and leave
+  the joint matrices as they are. `JC_face`, `JC_setParent` and
+  `JC_setParent2` use rest values.
 - `JNT_getRootTrans`, `JNT_getRootRotate` and `JNT_getRootScale` return the
   root's values from the last evaluation. The motion step copies the root
   translation to `Actor.rootTranslation`.

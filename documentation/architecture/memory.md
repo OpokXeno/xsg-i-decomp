@@ -310,9 +310,11 @@ other screens can overwrite the player block freely and only have to call
 
 `GameResourceGetFreeAddr()` returns the address of the first free slot, but
 never an address below `RES_WORK_BASE`. Code uses it as a temporary buffer
-that does not disturb loaded resources. `Intermission` decodes its chapter
-picture there, and the leader's foot-step sound bank is read there before it
-is sent to the IOP.
+that does not disturb loaded resources. `Intermission` in
+`src/main/game_over.c` decodes its chapter picture there, the movie player in
+`src/main/game_movie.c` places its caption text and MPEG buffers there, the
+capture tool in `src/main/tya.c` takes its capture buffer there, and the leader's
+foot-step sound bank is read there before it is sent to the IOP.
 
 `GameResourceDump` prints a page of the table with the debug font. The debug
 menu in `src/main/game_debug_menu.c` calls it. The test screens
@@ -348,8 +350,8 @@ set, it calls `ACT_init()` and `GameResourceLoad(GameLoopState.scene_id)`,
 which runs the current scene's resource script again and reloads everything
 from disc. If it is not set, the field data was never touched, and only a
 map-change fade is started. The users are the main menu (`0x500000` bytes),
-the U.M.N. (`0x480000` bytes), the shop, the game-over screen, the field
-movie player and the `tya` helpers.
+the U.M.N. when it is opened directly (`0x480000` bytes) and the shop
+(`0x180000` bytes).
 
 The flowchart below shows the decision.
 
@@ -473,7 +475,7 @@ encounter grid and objects at `0x01D9E000` and `0x01DBF840`
 [Battle stage files](../formats/maps-and-field-data.md#battle-stage-files),
 the battle system in [battle.md](../game/battle.md).
 
-## Allocators with real free
+## Heaps and arenas
 
 ### smAlloc, the effect pool
 

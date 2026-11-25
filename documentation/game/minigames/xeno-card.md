@@ -353,20 +353,20 @@ letter: `C` (61 cards), `U` (32), `R` (36) or `P` (19). The two weapon cards
 Shield and Battle Suit have attack type 0. Every record stores 0 as its
 description offset, so `CardDisp()` never prints a description. Two other
 bytes are never read: the second byte of a record, which numbers the cards
-of each kind, and the word at `0x08`, which is zero except on Lv10 chaos.
+of each kind, and the word at `0x08`, which is zero except on Lv 10 chaos.
 
 ### Card ids
 
 A card id is the index of the card in `card.dat`. `include/ov10/card_id.h`
 names every id after the English card name, for example `0x00` Lv 1 Shion,
-`0x01` Swim Suit Shion, `0x02` Lv1 Ziggy, `0x03` Lv1 MOMO, `0x04` Lv1
-KOS-MOS, `0x05` Lv1 Jr., `0x06` Lv1 chaos, `0x07` to `0x0D` the Lv10 versions,
+`0x01` Swim Suit Shion, `0x02` Lv 1 Ziggy, `0x03` Lv 1 MOMO, `0x04` Lv 1
+KOS-MOS, `0x05` Lv 1 Jr., `0x06` Lv 1 chaos, `0x07` to `0x0D` the Lv 10 versions,
 `0x0E` Albedo, `0x0F` Hammer, `0x1D` Bunnie, `0x22` Proto Dora, `0x25`
 VX-7000, `0x27` VX-10000, `0x2A` Saber, `0x2B` Cannon, `0x2C` Shield, `0x2F`
 Battle Suit, `0x34` Third Armament and `0x36` Virgil. `CARD_ID_COUNT` (150) is only the
 size of the per-card arrays. `card.dat` holds 148 cards (`CARD_DISP_ID_COUNT`
 is `0x94`), so ids 148 and 149 have no data.
-For the six main characters the Lv10 card id is the Lv1 id plus 7, a fact the code
+For the six main characters the Lv 10 card id is the Lv 1 id plus 7, a fact the code
 uses in several places (`CGP_PAIRED_CARD_OFFSET`, `CARD_LV10_ID_OFFSET`). The
 help text speaks of 148 collectable cards.
 
@@ -592,8 +592,8 @@ Gnosis cards may be placed outside the standby area, but the player must first
 discard the number of battle cards that the card asks for. Weapon cards are
 not placed alone. They are equipped to a compatible battle card on the
 battlefield or in standby. `CGPWeaponEquipChk()` holds the rules. Mech weapons
-go only to Mech cards (with Lv1 and Lv10 KOS-MOS, Durandal and Zohar Emulator
-as exceptions), the Third Armament only to Lv10 KOS-MOS, and Human weapons to
+go only to Mech cards (with Lv 1 and Lv 10 KOS-MOS, Durandal and Zohar Emulator
+as exceptions), the Third Armament only to Lv 10 KOS-MOS, and Human weapons to
 Human or Realian cards except the Ziggy cards and Albedo. `CGPequipSub()` then
 puts the weapon on top of the stack, pays its costs and sends a previous
 weapon to the junk pile.
@@ -601,9 +601,9 @@ weapon to the junk pile.
 Paying for a card happens in `CGPCommFinishSub()`. The reserve cost moves
 that many cards from the top of the deck to the lost pile
 (`CardPlayCostCard`), and the played event card goes to the junk pile.
-`CGPChkCardPlayCost()` adds a few discounts. Lv1 KOS-MOS and VX-10000 cost
+`CGPChkCardPlayCost()` adds a few discounts. Lv 1 KOS-MOS and VX-10000 cost
 nothing while a Shion card is on the battlefield, and VX-7000 costs nothing
-next to Lv1 or Lv10 Jr.
+next to Lv 1 or Lv 10 Jr.
 
 ### Battle phase
 
@@ -684,7 +684,7 @@ until six cards remain. The computer discards with `CardEnemyEnd()`. Then
 ### Winning and losing
 
 The object of the game is to empty the opponent's deck. `CardGameProc()`
-checks both decks every frame. When `CardPlayYamaCnt()` returns 0 for side 1,
+checks both decks every frame until flow request 3, 4 or 5 is pending. When `CardPlayYamaCnt()` returns 0 for side 1,
 it raises flow request 3 (`CARD_FLOW_ENEMY_DECK_OUT`) and side 0 wins. When
 the player's deck is empty it raises flow request 4 and side 0 loses.
 `CaedGameWinMode()` then shows the win or loss banner (`victory1` to `victory7`, `NewLost1`, `NewLost2`
@@ -697,10 +697,15 @@ The diagram below shows the flow requests inside `CardGameProc()`.
 
 ```mermaid
 flowchart TD
-    F[every frame] --> D{deck counts}
-    D -- side 1 deck empty --> W[flow 3: CaedGameWinMode<br/>player wins]
-    D -- side 0 deck empty --> L[flow 4: CaedGameWinMode<br/>player loses]
+    F[every frame] --> E{flow request<br/>3, 4 or 5 pending}
+    E -- no --> D{deck counts}
+    E -- yes --> R
+    D -- side 1 deck empty --> S3[raise flow 3] --> R
+    D -- side 0 deck empty --> S4[raise flow 4] --> R
     D -- both have cards --> R{flow request}
+    R -- 3 --> W[CaedGameWinMode<br/>player wins]
+    R -- 4 --> L[CaedGameWinMode<br/>player loses]
+    R -- 5 final round --> C[CaedGameWinMode<br/>champion banner]
     R -- 1 confirm --> CF{Circle or Cross}
     CF -- Circle --> CK{move phase rules<br/>Compulsory Sortie, DSSS,<br/>Override Code}
     CK -- ok --> N[CGPNextTurnSub]
@@ -776,7 +781,7 @@ between actions so the player can follow the moves.
   `CC_Kara_SetFase_1` plays a situation card first, then ranks the battle
   cards in the hand and places the best one. Separate routines place Gnosis
   cards (`CC_Kara_SetGuno`, where *Guno* probably stands for Gnosis), weapons
-  (`CC_Kara_SetWeapon`) and Lv10 cards (`CC_Kara_SetLv10`).
+  (`CC_Kara_SetWeapon`) and Lv 10 cards (`CC_Kara_SetLv10`).
 - **Move** (`CC_Kara_MoveFase`) first looks for special moves: card combos,
   the Compulsory Sortie and A Rat in a Trap situations and checks for Gnosis,
   Realian and Gainan cards. When none applies, `CC_Kara_MoveFase_2` runs ten

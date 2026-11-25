@@ -321,7 +321,7 @@ actor. The low bits belong to the actor library. The high bits (from
 | `0x200` | Never cull the skeleton when it is off screen |
 | `0x400` | Motion does not update. Together with `0x8` the motion update is skipped completely |
 | `0x800` | Use the draw environment (`ACTOR_FLAG_TRANSLUCENT`) instead of the draw hook |
-| `0x1000` | Culled this frame. The skeleton's root left the view, so draw and shadow are skipped and the children are not animated |
+| `0x1000` | Culled this frame. A sphere around the skeleton's inherit joint was outside the view (see [JNT_computeMatrix](animation.md#jnt_computematrix-step-by-step)), so draw and shadow are skipped and the children are not animated |
 | `0x2000` | Joint matrices changed. The model matrices and shape weights are rebuilt at draw time |
 | `0x4000` | The actor owns an MDL model handle (set by `ACT_setModelWrapper`) |
 | `0x8000` | The actor has its own light (set by `GameIdLightSet`) |
@@ -397,8 +397,10 @@ when no slot is free. It then sets:
 scripts. It calls `ACT_create`, sets `update` to `ACT_updateSequence`, a circle
 shadow of size 80, and clears the actor's entry in `actSequence`.
 
-`ACT_createNPC(slot, id)` does the same but uses `ACT_updateNPC`, the update
-for townspeople who wander on their own.
+`ACT_createNPC(slot, id)` also clears the actor's entry in `actSequence`, but
+uses `ACT_updateNPC`, the update for townspeople who wander on their own, and
+keeps the shadow that `ACT_create` chose. No code calls it. Wandering NPCs are
+created with `ACT_createChr` (see [The Chr peer](#the-chr-peer)).
 
 `ACT_createEnemy` (`src/main/enemy_system_init.c`) creates a field enemy with
 `ACT_updateEnemy` and fills its `enepc` defaults. It belongs to
@@ -407,23 +409,23 @@ for townspeople who wander on their own.
 ### Loading the files
 
 `ACT_loadResource(actor, id)` loads the model. It calls
-`RES_loadFile(-1, 0, id & 0xffffff)` and, if that fails, retries with the low
-byte cleared (the first model of the group). The loaded set fills
+`RES_loadFile(-1, 0, id & 0xffffff)` and, if that fails for an id that is not
+a face, retries with the low byte cleared (the first model of the group). The loaded set fills
 `modelResource` with the [LEX model](../formats/models-and-textures.md#lex-models),
 `matrixResource` with the
 [XTX texture set](../formats/models-and-textures.md#xtx-texture-sets) and
 `move` with the [skeleton](../formats/skeletons-and-motion.md#skeleton-files-jnt).
 It then calls `ACT_allocMatrix(actor, -1)` and `ACT_setModelWrapper`.
 
-For a person with a separate face model (an id without sub-index bits,
-`(id & 0xfff000) == 0`, and a kind of `0x600` or less), `ACT_loadResource`
-also creates the face. It claims a slot with `ACT_create(-2, id + 0x10000)`,
-loads the face files, turns its shadow off, clears its flag `0x20`, prepares
-its motion with `ACT_initMotion` and binds it to the body with
+For a character (`(id & 0xfff000) == 0`) whose `inUseId & 0xffff00` is `0x600`
+or less, which covers the groups CID0 to CID6, `ACT_loadResource` also creates
+the face. It claims a slot with `ACT_create(-2, inUseId + 0x10000)`, loads the
+face files, turns its shadow off, clears its flag `0x20`, prepares its motion
+with `ACT_initMotion` and binds it to the body with
 `ACT_setRelation(face, actor, 0x8200, 1)`. If the face files do not exist, the
-slot is given back with `ACT_dispose2(face, 1)`. Finally `ACT_setHumanHand`
-shows the default hand models. An actor without a skeleton gets its shadow
-turned off.
+slot is given back with `ACT_dispose2(face, 1)`. For every character id,
+`ACT_setHumanHand` then shows the default hand models, and the shadow is
+turned off when there is no skeleton.
 
 `ACT_loadMotion(actor, id, bank)` loads the
 [motion pack](../formats/skeletons-and-motion.md#motion-packs-fpk). It does
@@ -524,7 +526,7 @@ stateDiagram-v2
     Active --> Active : each frame update, animate, draw
     Active --> Hidden : flag 0x8 (setVisible false)
     Hidden --> Active : flag 0x8 cleared
-    Active --> Culled : root outside the view
+    Active --> Culled : inherit joint outside the view
     Culled --> Active : next frame inside the view
     Active --> Free : ACT_dispose
     Hidden --> Free : ACT_dispose
@@ -785,12 +787,14 @@ kind of shadow comes from `shadow_kind`.
 | 4 | `DrawDropShadow`, a shadow volume |
 | 5 to 10 | Texture-map shadows drawn by nml (`nmlModelSetTexMap`), nothing here |
 
-The shadow volume of kind 4 is the shadow of characters. It is built from
-contact runs listed in `DropShadowDefineTable[10]`, chosen by the actor's kind
-mask. Each run is a list of joint matrices with a width at each point. The
-volume is projected along the direction stored in `shadow_offset` (`+0xa0`)
-with a flattening matrix, and drawn in a back pass and a front pass on the
-stencil buffer.
+`ACT_create` gives kind 4 to actors with a character id, but `ACT_createChr`
+and `ACT_initScene` set kind 1, so script characters start with the circle
+shadow. `Chr.setShadow(int, int)` sets the kind and the size of one actor. The
+shadow volume of kind 4 is built from contact runs listed in
+`DropShadowDefineTable[10]`, chosen by the actor's kind mask. Each run is a
+list of joint matrices with a width at each point. The volume is projected
+along the direction stored in `shadow_offset` (`+0xa0`) with a flattening
+matrix, and drawn in a back pass and a front pass on the stencil buffer.
 
 After drawing, `ACT_DrawShadow` copies the current light direction (from the
 actor's own light when it has flag `0x8000`, otherwise from the studio light)

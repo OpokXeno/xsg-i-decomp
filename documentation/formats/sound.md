@@ -143,7 +143,7 @@ so these effects work everywhere.
 
 ### Layout
 
-An SWD file has four parts. A 64-byte header comes first. A chunk list
+An SWD file has three parts. A 64-byte header comes first. A chunk list
 follows, with the sample table (chunk type 3), the program table (chunk type
 4) and an end marker (chunk type 0). The ADPCM body follows the end chunk and
 runs to the end of the file. The end chunk's size is chosen so that the body
@@ -240,7 +240,8 @@ The base pitch sets the playback rate. A note is computed as
 with a base pitch of 0 plays at 48,000 Hz (the SPU2 pitch `0x1000`). A base
 pitch of `-3072` is one octave lower. The value therefore probably encodes the
 rate the sample was recorded at, as `48000 × 2^(base_pitch / 3072)`. The
-common values match standard rates exactly.
+common values fall within 0.04 percent of round rates such as 16,000, 22,050
+and 48,000 Hz.
 
 | `base_pitch` | Samples | Rate it gives |
 | --- | --- | --- |
@@ -250,7 +251,7 @@ common values match standard rates exactly.
 | -2388 | 307 | 28,005 Hz |
 | -3879 | 277 | 20,005 Hz |
 | -1796 | 188 | 32,007 Hz |
-| -375, -374 | 147 | 44,106 Hz |
+| -375, -374 | 147 | 44,106 and 44,116 Hz |
 | 0 | 113 | 48,000 Hz |
 | -3071 | 80 | 24,005 Hz |
 
@@ -277,8 +278,8 @@ names are Shift-JIS. No name has bytes after its terminating zero.
 
 The body is a series of SPU ADPCM packets of 16 bytes. Each sample is a run of
 packets starting at its `body_offset`. The body starts with 16 zero bytes,
-which is the zero packet in front of sample 0. Every real sample has the same
-shape:
+which is the zero packet in front of sample 0. Of the 5,086 real samples, 5,074
+have the same shape:
 
 - a packet of 16 zero bytes,
 - a first data packet with flag `0x04` (loop start) for a one-shot sample, or
@@ -289,10 +290,16 @@ shape:
 - a last packet with flag `0x01` (end) for a one-shot sample or `0x03` (end
   and repeat) for a looping one.
 
-4,382 real samples end with `0x01` and 697 with `0x03`. Seven end with `0x07`,
-a packet that is loop start, repeat and end at once, which loops one packet
-forever (for example `Tri1575Hz.vag` in `ENV_ELS1.SWD`, a three-packet test
-tone). No two samples overlap, and samples follow each other without gaps.
+The other twelve also begin with the zero packet. Two looping samples of
+`ENV_GNK02.SWD` (`test1.27-L.vag` and `test1.27-R.vag`) have the loop start
+`0x06` on their first data packet. Three one-shot samples of `ENV_UTA02.SWD`
+have no loop start flag, so all their packets before the last have flag `0x00`.
+Seven samples end with `0x07`, a packet that is loop start, repeat and end at
+once, which loops one packet forever. They are `Tri1575Hz.vag` in five banks
+(for example in `ENV_ELS1.SWD`), a three-packet test tone, and
+`dummy28samples` in `REGIST.SWD` and `REGISTCF.SWD`, which has two packets.
+In all, 4,382 real samples end with `0x01`, 697 with `0x03` and seven with
+`0x07`. No two samples overlap, and samples follow each other without gaps.
 After the last sample the body ends with 0 to 64 unused bytes.
 
 The diagram below shows how the parts of a bank point at each other.
@@ -435,7 +442,8 @@ starts at `0x80`:
   programs in 265 banks with 4,870 splits.
 - Sizes range from 2,816 bytes (`UTRE004C.SWD`) to 1,172,480 bytes
   (`ENV_KUK03B.SWD`).
-- `ENV_UMN.SWD` and `Umnmode.SWD` are byte-identical (1,032,384 bytes).
+- Byte-identical pairs: `ENV_UMN.SWD` and `Umnmode.SWD` (1,032,384 bytes), and
+  `UTMA002C.SWD` and `UTMA009C.SWD`.
 - Five bank ids are shared by several files: `0x0002` (`ENV_UMN`, `ENV_VOK`,
   `ENV_VOK1`, `Umnmode`), `0x2940` (`UTMA002C`, `UTMA009C`), `0x5109`
   (`Z8_PRO01`, `Z8_PRO02`), `0x5305` (`KM_PRO03`, `KM_PRO04`) and `0x7931`
@@ -550,8 +558,8 @@ The name at `0x20` is the name of the bank followed by `.sav`, in lower case
 in 243 files (`regist.sav`, `minislot.sav`) and in mixed case in the others.
 The blocks inside the battle containers carry names like `boss004m.sav`. It is
 probably the project file of the sound tool, and the driver never reads it.
-Two loose files carry the name of another bank, which shows where they were
-copied from (see the statistics below).
+Two loose files carry the name of another bank, which probably shows where
+they were copied from (see the statistics below).
 
 `effect_offsets[0]` is 0 in every file, so effect 0 never exists. 4,978 of the
 8,257 offsets are 0 in the loose files, and an offset of 0 makes
@@ -791,8 +799,9 @@ Sunday = 1, as the classic Mac OS date record does. The dates run from late
 The voice range bytes are read twice. `SsdNewMidiDevice` takes them as the
 voice range of the device, and `SsdInitSequence` reads the same two bytes as
 `settings.master.note` and `settings.master.pan` and passes them to
-`SsdSetMidiDevicePriority`. The environment sequences keep to voices 0 to 23
-and the music uses 0 to 47.
+`SsdSetMidiDevicePriority`. The 103 environment sequences keep to voices 0 to
+23. Ten of the twelve music files use voices 0 to 47, `ENV_GNK02` uses 0 to 24
+and `ENV_UTA02` uses 0 to 23.
 
 `midi_channel_count` is used when it is not zero, otherwise the driver counts
 the channels itself (`SsdCheckMidiChannel`). In every file it is one more than
@@ -810,9 +819,9 @@ environment sequences read `ゼノサーガ`, `ゼノサーガ`, `金子昌晃�
 `Yasunori Mitsuda`. `JINGLE1.SMD` and `JINGLE2.SMD` still hold the tool's
 template text: `新規プロジェクト` (new project), `著作者（個人名）` (author,
 personal name), `著作者（組織名）` (author, organisation) and `コメント`
-(comment). `BATTLE1` has the comment `IBENT BATTLE` and `BATTLE2` the comment
-`EVENT BATTLE` with the title `Battle1`. The chunk is padded to a 4-byte
-boundary.
+(comment). `BATTLE1` and `BATTLE2` both have the title `Battle1`. The comment
+is `IBENT BATTLE` in `BATTLE1` and `EVENT BATTLE` in `BATTLE2`. The chunk is
+padded to a 4-byte boundary.
 
 `SsdSetDataAddress` stores a pointer to the strings in `sequence->metadata`,
 but nothing reads them afterwards.
@@ -927,9 +936,14 @@ and then idles forever.
   tracks and five (`ENV_VOK13`, `ENV_VOK13B`, `ENV_VOK24` to `ENV_VOK26`) have
   five. The music has 29 to 37.
 - All files are valid: checksums, chunk sizes and track counts match.
-- Byte-identical copies: `ENV_UMN.SMD` = `Umnmode.SMD`. `BATTLE1` and
-  `BATTLE2` have the same size and differ in their ids, `JINGLE1` and
-  `JINGLE2` likewise.
+- Byte-identical copies: `ENV_UMN.SMD` = `Umnmode.SMD` and `ENV_ELS07.SMD` =
+  `ENV_ELS11.SMD`.
+- `BATTLE1` and `BATTLE2` have the same size. They differ in the checksum, file
+  id, timestamp, header bank id and the operands of 30 `0xA9` bank commands,
+  and in the game and comment strings (`XENOSAGA` and `IBENT BATTLE` against
+  `Xenosaga` and `EVENT BATTLE`). `JINGLE1` and `JINGLE2` also have the same
+  size and differ in the checksum, file id, timestamp, header bank id and 25
+  bank commands.
 - Pairs that share a file id: `ENV_ELS07` and `ENV_ELS11`, `ENV_PRO01` and
   `ENV_PRO02`, `ENV_UTA06_2` and `ENV_UTA07`, `ENV_VOK25` and `ENV_VOK26`,
   `ENV_UMN` and `Umnmode`. `SsdAddSequenceData` refuses a second sequence with
@@ -1018,8 +1032,8 @@ first SED starts right after the last offset.
 `SndSeBankHeader` in `src/ov01/snd.h` declares the first two words as one
 64-bit `count`, and `dataSndSeRegLoad2` divides that 64-bit value by 2 to get
 the pair count. The result is right only because the size word is always even:
-the size ends up in bit 31 of the quotient when it is odd. The code
-never reads the size otherwise. `sndSeTrans` checks the `seds` and `swdm`
+the lowest bit of the size ends up in bit 31 of the quotient. The code never
+reads the size otherwise. `sndSeTrans` checks the `seds` and `swdm`
 magics of the pair it sends and refuses an SED larger than 64 KiB.
 
 ### Naming
@@ -1109,8 +1123,8 @@ data. A `.vds` file holds two channels and a `.vdm` file one.
 | --- | --- | --- | --- | --- |
 | `s190xxx.vds` | 10 | 30 | 132,304,896 | cutscenes `SCE01xxx` |
 | `s191xxx.vds` | 10 | 7 | 28,180,480 | cutscenes `SCE01001` to `SCE01003B1`, `SCE02002A`, `SCE02004A`, `SCE02004B` |
-| `s195xxx.vds` | 10 | 16 | 15,394,816 | field stage scripts (`ST0740`, `ST1510`, `ST1800`, `ST2790` and others), looping |
-| `s196xxx.vdm` | 10 | 11 | 1,792,000 | field stage scripts `ST0040`, `ST0324`, `ST0325`, `ST0329`, `ST0381`, `ST0382` |
+| `s195xxx.vds` | 10 | 16 | 15,394,816 | field stage scripts (`ST0740`, `ST1510`, `ST1800`, `ST2790` and others), looping, except `s195007`, which no script names |
+| `s196xxx.vdm` | 10 | 11 | 1,792,000 | `s196011` and `s196021`: field stage scripts `ST0040`, `ST0324`, `ST0325`, `ST0329`. `s196031`: `ST0381`, `ST0382`. No script names the other eight |
 | `s290xxx.vds` | 10, 20 | 39 + 10 | 216,707,072 | cutscenes `SCE02xxx` |
 | `s390xxx.vds` | 20 | 34 | 162,756,608 | cutscenes `SCE03xxx` |
 | `gameover.vds` | 00 | 1 | 3,880,960 | the game over screen (`src/main/game_over.c`) |
@@ -1229,10 +1243,10 @@ The sixteen `s195xxx.vds` files are encoded differently. Every packet has flag
 most of them start with silent packets `0c 02 00 00 ...`. Their sizes are
 multiples of 2 KiB with no padding. They were probably encoded as looping
 sounds by the tool. The driver ignores the flags, so to the game they are
-ordinary streams. They are played by the map unit classes (`ST0740$Mapunits`
-and others) of field stages, which suggests ambience or machine sounds tied
-to map objects. `s195009.vds` starts with an audible packet `3b 02` instead of
-silence.
+ordinary streams. All but `s195007.vds` are played by the map unit classes
+(`ST0740$Mapunits` and others) of field stages, which suggests ambience or
+machine sounds tied to map objects. `s195009.vds` starts with an audible packet
+`3b 02` instead of silence.
 
 ### Example: gameover.vds
 

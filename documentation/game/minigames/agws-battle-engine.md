@@ -135,9 +135,10 @@ type also has a `Disp` function that queues its drawing. The words "pass time"
 executable at `0x00A01EA8`. It saves eight words of the main render state
 (`_push`), calls `XrgSystemInit` and `InitXrgSoundSystem`, and then loops over
 the title menu. Each lap calls `XrgSystemInit` again, so every mode starts with
-empty heaps and no singletons. After the mode it calls
-`RgDrawCreateDrawStudioFullScreen`, `RgFileSysClear` and `XrgSystemDispose`.
-When the player exits, it calls `DisposeXrgSoundSystem` and `_pop`. The
+empty heaps and no singletons. At the end of every lap, also after Exit, it
+calls `RgDrawCreateDrawStudioFullScreen`, `RgFileSysClear` and
+`XrgSystemDispose`. After the last lap it calls `DisposeXrgSoundSystem` and
+`_pop`. The
 [game page](agws-battle.md#getting-in-and-out) shows how the main executable
 loads the overlay around this call.
 

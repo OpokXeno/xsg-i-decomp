@@ -470,14 +470,20 @@ the homing flag.
 
 ### Escape and route chase
 
-The move kinds 12 and 13 never leave their route. They use a finer spline with
-32 steps per point. Each frame `Enemy_Escape` compares three positions on the
-route: one step back, the current one and one step ahead. It moves to the one
-farthest from the target. `Enemy_Route_Chase` does the same with the nearest
+The escape action of move kind 12 and the route-chase action of move kind 13
+keep the enemy on its route. They use a finer spline with 32 steps per point.
+Each frame `Enemy_Escape` compares three positions on the route: one step
+back, the current one and one step ahead. It moves to the one farthest from
+the target. `Enemy_Route_Chase` does the same with the nearest
 one. When the enemy stays where it is, it turns to face the target. Each step
 sets a cooldown counter to 16. While the enemy stays put the counter runs
 down, and the enemy keeps the run motion until it reaches zero. Then it
 switches to the walk motion.
+
+A fleeing enemy ignores sightings and noises, and move kind 13 only sets the
+face-the-player flag when it notices the player. An enemy of kind 12 that is
+in another action, for example after trap damage, reacts to a sighting with
+the found action and the chase.
 
 ### Homing graphs
 
@@ -548,12 +554,14 @@ after another, each for its own length, and then returns to the route.
 
 An enemy starts in the init action and settles into the pause. From there the
 move kind decides whether it stands, patrols, wanders, flees or pursues along
-its route. A sighting or a noise leads to the found action and the chase, or to the
-tentacle attack. A chase that fails ends in a threat, and the homing search
-started with it brings the enemy back along its homing graph. Trap damage can
-interrupt any of these actions (see [Trap damage](#trap-damage)), and each
-damage action ends in a threat, a pause or the stiff action. Contact with the
-player leaves the state machine and starts a battle from any action.
+its route. A sighting or a noise during the pause, threat, route or unique
+action leads to the found action and the chase, or to the tentacle attack. A
+chase that fails ends in a threat, and the homing search started with it
+brings the enemy back along its homing graph. Trap damage can interrupt any of
+these actions (see [Trap damage](#trap-damage)). Electric damage ends in a
+threat, seal damage in a pause, and explosion damage in the stiff action, or
+in the chase when the stun bit is clear. Contact with the player leaves the
+state machine and starts a battle from any action.
 
 Most transitions happen when `hit_count` reaches `hit_limit`. The route action
 switches at route points, the chase switches when it loses the player, and
@@ -561,10 +569,14 @@ the stiff action ends when its timer runs out. The escape and route-chase
 actions have no exit of their own. They last until the script, a trap or a
 battle changes them.
 
-The state diagram below shows these transitions.
+The state diagram below shows these transitions. `ANY` stands for every
+action. An explosion trap starts no action on an enemy that is already in the
+explosion or stiff action, and the electric and seal traps do not restart
+their own action. The arrows marked "noticed" stand for a sighting or a noise.
 
 ```mermaid
 stateDiagram-v2
+    state "any action" as ANY
     [*] --> INIT
     INIT --> PAUSE : Enemy_Init, READY
     PAUSE --> PAUSE : stand kinds 5, 6
@@ -577,20 +589,26 @@ stateDiagram-v2
     ROUTE --> THREAT : threat mark
     ROUTE --> UNIQUE : unique action at point
     UNIQUE --> ROUTE
-    PAUSE --> FOUND : sighting, kinds 1, 5, 8, 12
-    ROUTE --> FOUND : sighting
-    THREAT --> FOUND : sighting
+    PAUSE --> FOUND : noticed, kinds 1, 5, 8, 12
+    ROUTE --> FOUND : noticed, kinds 1, 5, 8, 12
+    THREAT --> FOUND : noticed, kinds 1, 5, 8, 12
+    UNIQUE --> FOUND : noticed, kinds 1, 5, 8, 12
     FOUND --> CHASE : after 14 frames
-    ROUTE --> TENTACLE : sighting, kinds 2, 3
-    PAUSE --> TENTACLE : sighting, kinds 2, 3
+    PAUSE --> TENTACLE : noticed, kinds 2, 3
+    ROUTE --> TENTACLE : noticed, kinds 2, 3
+    THREAT --> TENTACLE : noticed, kinds 2, 3
+    UNIQUE --> TENTACLE : noticed, kinds 2, 3
     TENTACLE --> PAUSE : after the attack
     CHASE --> THREAT : lost, Homing_Search
+    ANY --> DAMAGE_EXPLOSION : explosion trap
+    ANY --> DAMAGE_ELECTRIC : electric trap
+    ANY --> DAMAGE_SEAL : seal trap
     DAMAGE_EXPLOSION --> STIFF : stun bit set
     DAMAGE_EXPLOSION --> CHASE : stun bit clear
     STIFF --> THREAT : timer ends, Homing_Search
     DAMAGE_ELECTRIC --> THREAT : after 90 frames, Homing_Search
     DAMAGE_SEAL --> PAUSE : after 30 frames, Homing_Search
-    CHASE --> [*] : contact, battle
+    ANY --> [*] : contact, battle
     TENTACLE --> [*] : player in reach, battle
 ```
 
@@ -658,9 +676,9 @@ flowchart TD
 
 Scripts control an enemy through a command queue in the actor's argument area:
 a count at `+0x120`, up to 16 command types at `+0x140` and five parameter
-rows at `+0x180`. The script writes the queue with `Chr.setArgs`, probably
-through helper methods of the `xeno.Enepc` class. At the start of every enemy
-update `Start_Enemy_Command` runs all queued commands in order and empties the
+rows at `+0x180`. The script writes the queue with `Chr.setArgs`
+through the `kickEnepc` methods of the `xeno.Enepc` class. At the start of
+every enemy update `Start_Enemy_Command` runs all queued commands in order and empties the
 queue.
 
 | Type | Function | Effect |
@@ -764,9 +782,9 @@ directly with its own side value.
 freely. It also does nothing while a floor script runs or the player is locked
 (`GAME_FLAG_ENTERED_SCRIPT` and `GAME_FLAG_PLAYER_LOCK`, see
 [Game flags](field.md#game-flags)). Otherwise it fills the encounter record
-and requests the battle. The script command and the battle native
-`Runtime.execBattle` are the only other ways into a battle. No random
-encounter code was found in the field.
+and requests the battle. Enemy command 14 and the battle native
+`Runtime.execBattle`, which no script on the disc calls, are the only other
+ways into a battle. No random encounter code was found in the field.
 
 ### The encounter side
 

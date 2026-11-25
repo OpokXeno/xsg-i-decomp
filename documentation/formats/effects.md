@@ -9,9 +9,10 @@ table `seffect.esp` that turns an effect number into a file name. The folder
 also holds the two models of the effect viewer and two loose missile models,
 which the retail game does not read.
 
-Every `.esd` and `.esp` file is a list of 64-byte aligned chunks. A chunk holds
-one picture, one colour table, one model, one texture set or one effect script
-table. The script table is a compact graph of 16-bit words: a small bytecode
+Every `.esd` file and every `.esp` pack is a list of 64-byte aligned chunks
+(`seffect.esp` is a flat array). A chunk holds one picture, one colour table,
+one model, one texture set, one effect script table or one embedded `.esd`
+file. The script table is a compact graph of 16-bit words: a small bytecode
 program, scheduler records, command lists, emitters ("lines") and keyframe
 tracks. The counts below come from walking every file and every structure
 reachable in it. How the effect system runs this data is described in
@@ -311,8 +312,9 @@ with odd ids and their colour tables follow with even ids, as in the listing of
 ```
 
 An effect whose category loads it from a pack never reads its `.esd` file.
-346 of the 1051 files are such duplicates of a kind-10 chunk in a pack, and 68
-of them differ from the copy in the pack (see [unused files](#files-that-nothing-loads)).
+346 of the 1051 files are such copies of a kind-10 chunk in a pack: 278 are
+identical to the chunk and 68 differ from it (see
+[unused files](#files-that-nothing-loads)).
 
 ## The .esp effect packs
 
@@ -375,8 +377,8 @@ In `.esd` files the field is 0 in every chunk.
 
 ### Embedded .esd chunks
 
-A kind-10 chunk wraps a complete `.esd` file. Its data at +0x40 is that file
-byte for byte: a kind-1 header whose `byteSize` equals `byteSize - 0x40` of
+A kind-10 chunk wraps a complete `.esd` file. Its data at +0x40 has the layout
+of such a file: a kind-1 header whose `byteSize` equals `byteSize - 0x40` of
 the outer chunk, the kind-5 script chunk, and the kind-0 end. The script table
 therefore starts at outer chunk offset 0xC0. `svAddScript2` registers it like a
 kind-5 chunk: data pointer at +0xC0, name pointer at +0x14 (the outer chunk's
@@ -967,9 +969,9 @@ Following every reference from word 8 reaches 84.7 % of all words of the 1051
 | 15 116 | 1.0 % | Zero padding at the end of the table |
 | 65 585 | 4.5 % | Other leftovers: disabled camera candidates and their tracks, scheduler records no command uses (such as the record at word 13 of `debs0013.esd`), other default tracks |
 
-So the conversion tool wrote every track and candidate it had, and then left
-the defaults and the disabled parts out of the tables. A few tables also hold
-errors, which the game reads as they are.
+The conversion tool probably wrote every track and candidate that the effect
+had and left out only the references to the defaults and the disabled parts.
+A few tables also hold errors, which the game reads as they are.
 
 - In 10 tracks of 7 files (`c_so03`, `c_ko07`, `shb00`, `ecm02`, `boss0143`,
   `item08`, `item09`) the 0x400 end of a key list is missing. The list runs
@@ -1012,7 +1014,7 @@ The name table and the loaders above decide which files the game can reach.
 - 347 of the 1051 `.esd` files are never read. 346 of them are standalone
   copies of scripts that the game loads from a pack, such as `c_so01` to
   `c_so06` (from `shion.esp`), all weapon scripts (from the weapon packs) and
-  the 37 field effects `ef00001` to `ef10203` (from `cf_def.esp`). 284 copies
+  the 37 field effects `ef00001` to `ef10203` (from `cf_def.esp`). 278 copies
   are identical to the pack version and 68 differ. In many weapon effects,
   such as `bam00`, `bl00` and `hb00`, the only difference is the z offset of
   the first camera position key: 1000 or 1100 in the `.esd` file and 940 in
@@ -1021,8 +1023,10 @@ The name table and the loaders above decide which files the game can reach.
   `def001`.
 - 10 `.esp` packs are not named by `_loadComboData` or `_weaponTbl`: the empty
   `bw00`, `drl00`, `drl01`, `guno_101`, `guno_102`, `guno_103`, `msp01` and
-  `msp03`, and `boss_103` and `boss_104`, whose scripts `debs1031` to
-  `debs1043` are read from their standalone `.esd` files instead.
+  `msp03`, and `boss_103` and `boss_104`, whose six scripts `debs1031` to
+  `debs1033` and `debs1041` to `debs1043` are read from their standalone `.esd`
+  files instead. These six files are identical to the chunks of the unused
+  packs.
 - `hama.lex`, `hama.xtx`, `sen.lex` and `sen.xtx` are only read by the effect
   viewer, and `m\de_mss.lex` and `m\misl.lex` by nothing.
 - The other way round, 425 named effect numbers have no script anywhere on the

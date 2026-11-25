@@ -109,8 +109,9 @@ The first 0x74 bytes hold the save's bookkeeping and the player's options.
 `version` must be `FILE_SAVE_VERSION` (3) for the save screen to accept a
 save. `checksum` protects the whole block and is described below.
 `save_count` is incremented by every save. `unit_map_count` counts saves made
-on map 10 (`FILE_UNIT_MAP_NO`). Nothing in the recovered code reads it back,
-so its purpose is unknown.
+on map 10 (`FILE_UNIT_MAP_NO`), which the load list refuses to load (see
+[Slot list and states](#slot-list-and-states)). Nothing in the recovered code
+reads the count back, so its purpose is unknown.
 
 The option bytes are written by the system options screen of the main menu
 (`src/main/menu_system.c`, see [main-menu.md](../game/main-menu.md)) and
@@ -477,7 +478,8 @@ the clock at `0x68`. The state of each slot is kept in
 A save needs 165 KB of free space on a memory card (`FILE_CARD_SAVE_KB`) and
 225 KB on the HDD (`FILE_HDD_SAVE_KB`). After every save the screen
 recomputes which empty slots still fit. Only existing saves can be loaded,
-and only new or existing slots can be saved to.
+except that a save made on map 10 (`FILE_UNIT_MAP_NO`) plays the buzzer sound
+and stays in the list. Only new or existing slots can be saved to.
 
 ### The state machine
 
@@ -605,9 +607,10 @@ The same file has a development screenshot tool:
   APP14 segment holding the metadata and a thumbnail at quality 50, and the
   full frame after them. `PauseMenu` in `src/main/game_pause_disp.c` calls it
   in its snapshot mode and writes the result with `GameSnapShotSaveFile`.
-- `GameSnapShotCheck`, called every frame by the save screen, is empty.
+- `GameSnapShotCheck` is empty. The field loop, the main menu, the save screen,
+  the shop, the U.M.N. and the battle loop still call it every frame.
 
-All of these write to `host0:`, so they only work with a development kit
+The screenshots go to `host0:`, so the tool only works with a development kit
 connected to a PC. The debug tools are described in
 [debug-tools.md](../game/debug-tools.md).
 

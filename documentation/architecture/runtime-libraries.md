@@ -360,26 +360,29 @@ Internally they unpack each double into sign, exponent and fraction
 `double` addition runs through about 1.1 KiB of code: `dpadd`, two calls of
 `__unpack_d`, `_fpadd_parts` and `__pack_d`.
 
-The game code avoids `double`, but it appears in 34 source files. The most
-common reason is C's rule for variable argument lists: a `float` passed to
-`printf` or to the game's `DB_println` is converted to `double`, so each such
-call runs `fptodp`. The fdlibm double functions and newlib's `strtod` and
-`dtoa` also use the soft-float routines throughout.
+The game code mostly uses `float`. The type `double` appears in 27 recovered C
+files. The most common reason is C's rule for variable argument lists: a `float`
+passed to `printf` or to the game's `DB_println` is converted to `double`, so
+each such call runs `fptodp`. A few files also compute in `double`, such as the
+window opening motion in `src/main/open_close_main.c` and the camera movement in
+the test screens `hair_test.c` and `wind_test.c`. The fdlibm double functions
+and newlib's `strtod` and `dtoa` also use the soft-float routines throughout.
 
-Some recovered sources call the routines by name and handle doubles as
-64-bit bit patterns. The original code probably used `double` there, and
-the calls are what that code compiled to. The files that do this are listed
-below.
+Eleven of these files call the routines by name, and three of them handle
+doubles as 64-bit bit patterns. The original code probably used `double` there,
+and the calls are what that code compiled to. The files are listed below.
 
 - `src/main/xgl_font.c` reads a `%f` argument of the font formatter as a
   64-bit value and converts it with `dptofp`.
 - `src/ov11/mini_g.c` (Network Casino) draws numbers digit by digit with
   `pow(DOUBLE_TEN, litodp(digits))`, `dpcmp` and `dpdiv`, where
   `DOUBLE_TEN` is `0x4024000000000000`, the bit pattern of 10.0.
-- `src/main/matrix_print.c`, `src/main/db_light_write.c`,
-  `src/main/init_uwamono_sys.c`, `src/main/wind_test.c`,
-  `src/main/karakama_test.c` and the OV12 files `rg_main.c`,
-  `rg_battlemgr.c`, `rg_weapon_db.c` and `rg_motion_info_db.c` do the same.
+- `src/main/matrix_print.c` passes values through `fptodp`, `acos` and `dptofp`,
+  partly as 64-bit values.
+- `src/main/db_light_write.c`, `src/main/init_uwamono_sys.c`,
+  `src/main/wind_test.c`, `src/main/karakama_test.c` and the OV12 files
+  `rg_main.c`, `rg_battlemgr.c`, `rg_weapon_db.c` and `rg_motion_info_db.c`
+  call the routines on `double` values, mostly `fptodp` for a print.
 
 The diagram below shows what a debug print of one `float` costs.
 

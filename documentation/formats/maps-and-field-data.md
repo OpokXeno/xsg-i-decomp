@@ -581,10 +581,11 @@ bits (value 7).
 
 The camera code tests `(attr & 0x38000000) == 0x20000000` and takes the
 index from bits 20–26 (`UNDU_ATTR_CAMERA_*` in `game_camera.c`). Bits 27–29
-must therefore be 4, not 2 as [Floor attributes](../game/map-and-units.md#floor-attributes)
-states. The values 0x28000000 (343 triangles) and 0x29000000 (23) have bit
-27 set, so they fail the test and the camera keeps its current index there.
-Keeping the camera is probably what those zones are for.
+must therefore be 4 (see
+[Floor attributes](../game/map-and-units.md#floor-attributes)). The values
+0x28000000 (343 triangles) and 0x29000000 (23) have bit 27 set, so they fail
+the test and the camera keeps its current index there. Keeping the camera is
+probably what those zones are for.
 
 The value 0x2300 also appears in records 0, 4 and 5 (about 2,300 triangles
 each), where no reader of those lists tests it. It is probably a copy of the

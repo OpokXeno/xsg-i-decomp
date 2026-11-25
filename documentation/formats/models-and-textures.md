@@ -73,7 +73,7 @@ A LEX file is one contiguous image that is used in place: every reference inside
 5. In 7 files, an [embedded texture set](#embedded-texture-sets).
 6. In 1152 files, the 16-byte trailer `MagicCarpetCome\0`.
 
-Every file size is a multiple of 16 and the parser finds no gaps and no unexplained bytes between these parts. The ASCII box shows the layout of `char\pc\kosmos.lex` (421 680 bytes, 26 parts, 37 blocks, 46 skin joints).
+Every file size is a multiple of 16, and there are no gaps and no unexplained bytes between these parts. The ASCII box shows the layout of `char\pc\kosmos.lex` (421 680 bytes, 26 parts, 37 blocks, 46 skin joints).
 
 ```
 0x00000  +-------------------------------------------+
@@ -197,7 +197,7 @@ A **block** (`NmlModelBlock`) is one drawable piece of a model: a set of triangl
 
 The three names never coincide. The mesh name at +0x00 is the one the name visibility functions compare and the one `add_exec_prog` searches for `lenz` and `eye`. The material name at +0x170 is the one `nmlModelLexBlockDoit` compares to apply a multiply color to one material. The group name at +0x150 is not read by any code found so far.
 
-The header declares `matrixIndices` as 48 entries, but the files use only the first 32. `nmlPacketAddParts` compares 0x3E bytes of the list against its cache, which is 31 entries, and the parser never finds more than 31 indices before the terminator. The two vectors at +0x70 and +0x80 are a per-block bounding box in the same max-then-min order as the header, with w = 1.
+The header declares `matrixIndices` as 48 entries, but the files use only the first 32. `nmlPacketAddParts` compares 0x3E bytes of the list against its cache, which is 31 entries, and no block has more than 31 indices before the terminator. The two vectors at +0x70 and +0x80 are a per-block bounding box in the same max-then-min order as the header, with w = 1.
 
 The geometry table fields are dead in the retail data. `geometryTableOffset` always points at the matrix table, `geometryIndex` is always -1, the vertex index fields are always 0, and block flag `0x10` (indexed vertices) is never set. The indexed path of `nmlPacketAddParts` therefore never runs on the disc's models.
 
@@ -225,7 +225,7 @@ The word at +0xC0 combines what the code reads with bits that only describe the 
 | `0x1` | 46675 | `nmlPacketAddGifTag`, `nmlPacketAddTextureParam` | Textured: sets TME in the GIF tag and sends the texture registers |
 | `0x2`, `0x4` | 5597, 6902 | sort code in `nml_model_set.c` | Transparent: the block goes to the alpha groups |
 | `0x8` | 25160 | `add_exec_prog` | Specular highlight: the `Spec` or `MultiSpec` program of the block's family (skipped when the render level has `NML_LEVEL_NO_SPECULAR`) |
-| `0x10` | 38058 | many (`NML_BLOCK_MATERIAL_NAMED_PARTS`) | Map vertex layout and map program slots. Set on every block of all 248 maps and of 33 of the 44 `muobj` models, nowhere else |
+| `0x10` | 38058 | many (`NML_BLOCK_MATERIAL_NAMED_PARTS`) | Map program slots, with the map vertex layout in all but four maps. Set on every block of all 248 maps and of 33 of the 44 `muobj` models, nowhere else |
 | `0x20`, `0x40` | 14, 1 | pixel control | Additive and subtractive blending |
 | `0x80` | 10731 | none | Float vertex layout with per-vertex normals (characters, enemies, objects) |
 | `0x100`, `0x200` | 17645, 17612 | none | Unknown. Almost always set together |
@@ -237,7 +237,7 @@ The word at +0xC0 combines what the code reads with bits that only describe the 
 | `0x20000` | 166 | `nmlPacketAddBlockMaterial` | `NML_MATERIAL_LIGHT_PARA`: also upload the light parameters to `0x3D1` |
 | `0x40000` | 3 | sort code | With bit `0x4`, keeps the block out of the opaque groups |
 
-The flags and the vertex layout agree in every block of every file. Each block has exactly one of `0x10` and `0x80`: `0x10` (38 058 blocks) always comes with the compact map layout of the [Vertex layouts](#vertex-layouts) section, `0x80` (10 731 blocks) with the float layout that carries normals, and `0x10000` comes with the normal index array and never without it. A map block without `0x10000` has no normals, and `nmlPacketAddTransMicrocode` then keeps it on the `PLAIN` family even under point lights (the test `(materialFlagsQword & 0x10010) == 0x10`).
+Each block has exactly one of `0x10` and `0x80`, and `0x10000` comes with the normal index array and never without it. `0x80` (10 731 blocks) always comes with the float layout of the [Vertex layouts](#vertex-layouts) section, which carries normals. `0x10` (38 058 blocks) comes with the compact map layout in 36 416 blocks. The other 1642 blocks are all the blocks of four maps that store float normals. `MC_DYU04` and `MC_DYU04B` (553 blocks each) have the float positions and normals of the float layout with the byte colors of the map layout, and `MC_UMN01` (259 blocks) and `MC_UMN02` (277 blocks) have the float layout in [merged uploads](#early-files-with-merged-uploads). None of them has `0x10000`. `nmlPacketAddTransMicrocode` keeps a block with `0x10` and without `0x10000` on the `PLAIN` family even under point lights (the test `(materialFlagsQword & 0x10010) == 0x10`).
 
 98 blocks have bit `0x1` set but carry no texture registers and an untextured PRIM. They are probably converter leftovers.
 
@@ -334,7 +334,7 @@ Each vertex batch is one independent triangle strip of `n` vertices, so it draws
 
 ### Vertex layouts
 
-The rest of the input buffer holds per-vertex arrays at fixed multiples of `n`. Two layouts exist, chosen by the material flags, and both keep the same addresses so that the programs can find each array.
+The rest of the input buffer holds per-vertex arrays at fixed multiples of `n`. Two layouts exist, which follow the material flags in all files but the four maps named under [Material flags](#material-flags), and both keep the same addresses so that the programs can find each array.
 
 | VU address | Float layout (`materialFlags & 0x80`) | Map layout (`materialFlags & 0x10`) |
 | --- | --- | --- |
@@ -346,7 +346,7 @@ The rest of the input buffer holds per-vertex arrays at fixed multiples of `n`. 
 | 4n+1 to 6n | joint references and weights (skinned blocks only) | not used |
 | 6n+1 and up | morph targets (only when header word 3 is 1) | morph targets |
 
-The float layout uploads the header, the positions and the normals with one `UNPACK V4-32` of `2n + 1` quadwords. The map layout uploads the header and positions as `n + 1` quadwords, then the t coordinates as `V1-32` (one float per vertex, copied to every lane), then sets `STMASK 0xC0C0C0C0` and writes a byte per vertex with a masked `V1-8`. The mask protects lane w, so the byte lands in x, y and z while t stays in w. That byte is an index into the 114-entry normal table `s_aNormalTbl` that the CPU uploads to VU1 address `0x350`. It is present only in blocks with `materialFlags & 0x10000`, values run from 0 to 113 plus 255 (94 vertices, probably "no normal"), and index 113 (straight up, (0, 1, 0)) is the most common at 507 690 vertices, followed by index 0 (straight down) at 181 591. With these compressed normals the map layout stores a vertex in 16 + 4 + 1 + 4 bytes instead of 48.
+The float layout uploads the header, the positions and the normals with one `UNPACK V4-32` of `2n + 1` quadwords (the early files with [merged uploads](#early-files-with-merged-uploads) put more arrays into it). The map layout uploads the header and positions as `n + 1` quadwords, then the t coordinates as `V1-32` (one float per vertex, copied to every lane), then sets `STMASK 0xC0C0C0C0` and writes a byte per vertex with a masked `V1-8`. The mask protects lane w, so the byte lands in x, y and z while t stays in w. That byte is an index into the 114-entry normal table `s_aNormalTbl` that the CPU uploads to VU1 address `0x350`. It is present only in blocks with `materialFlags & 0x10000`, values run from 0 to 113 plus 255 (94 vertices, probably "no normal"), and index 113 (straight up, (0, 1, 0)) is the most common at 507 690 vertices, followed by index 0 (straight down) at 181 591. With these compressed normals the map layout stores a vertex in 16 + 4 + 1 + 4 bytes instead of 48.
 
 The colors are vertex colors in the PS2 convention, where 128 means full brightness and the GS doubles the modulated texel. The character blocks sampled have (128, 128, 128, 128) nearly everywhere, while maps carry baked lighting in their colors.
 
@@ -386,7 +386,7 @@ The weights of a vertex add up to 1. In `char\citi\baba_a.lex`, for example, the
 
 ### Face normals
 
-Many blocks, rigid and map ones alike, add an `UNPACK V3-32` of `n` quadwords at `3n + 1`. Element `i` (for `i` from 2) is the cross product of the triangle `(i - 2, i - 1, i)` of the strip. It is not normalized: its length is twice the triangle's area. Elements 0 and 1 copy element 2. The parser checks the direction of 391 993 triangles against their vertices. The vectors point into the surface, opposite to the vertex normals. Only the `Face` and `Back` programs of the `PLAIN` family read them, to drop the triangles that face away from the camera or towards it (see [Front and back faces](../libraries/nml.md#front-and-back-faces)).
+Many blocks, rigid and map ones alike, add an `UNPACK V3-32` of `n` quadwords at `3n + 1`. Element `i` (for `i` from 2) is the cross product of the triangle `(i - 2, i - 1, i)` of the strip. It is not normalized: its length is twice the triangle's area. Elements 0 and 1 copy element 2. The vectors point into the surface: they are opposite to the vertex normals in 40 461 of the 40 564 triangles that have face normals and float vertex normals. Only the `Face` and `Back` programs of the `PLAIN` family read them, to drop the triangles that face away from the camera or towards it (see [Front and back faces](../libraries/nml.md#front-and-back-faces)).
 
 ### Morph targets
 
@@ -536,7 +536,7 @@ A material batch from `map\MC_KAS35.lex`, block `sdoa01`:
 
 #### Map models
 
-The 248 maps are the largest models: up to 935 parts and 940 blocks (`MC_EVE36`) and 1 884 624 bytes (`MC_DYU04B`). Every map block has `materialFlags & 0x10` and the compact layout, and 383 map blocks also have block flag `0x400`. Map parts have real placements in array A (rotated in 170 maps, translations only in 67), and maps have no skin joints. The map microcode slots and the per-part visibility (`nmlModelSetPartsVisible` on blocks with `NML_BLOCK_MATERIAL_NAMED_PARTS`) apply only to them and to the `muobj` objects that share the layout.
+The 248 maps are the largest models: up to 935 parts and 940 blocks (`MC_EVE36`) and 1 884 624 bytes (`MC_DYU04B`). Every map block has `materialFlags & 0x10`, and every map has the compact layout except `MC_DYU04`, `MC_DYU04B`, `MC_UMN01` and `MC_UMN02` (see [Material flags](#material-flags)). 383 map blocks also have block flag `0x400`. Map parts have real placements in array A (rotated in 170 maps, translations only in 67), and maps have no skin joints. The map microcode slots and the per-part visibility (`nmlModelSetPartsVisible` on blocks with `NML_BLOCK_MATERIAL_NAMED_PARTS`) apply only to them and to the `muobj` objects that share the layout.
 
 `map\MC_GUN08.lex` is not in the map name table of `src/main/map_1.c`, has no `.xtx`, carries its textures as an [embedded texture set](#embedded-texture-sets) and dates from 2001-07-04. It is probably an early test map that no code can reach.
 
@@ -550,11 +550,11 @@ In 13 maps the word at +0xA0 is the offset of a table placed right after the las
 
 #### Early files with merged uploads
 
-The oldest files (`MC_UMN01`, `MC_UMN02`, the four `matumoto` markers, `weapon\pc\kos_hw01` to `kos_hw03`, `stn_sw01`, `simajiri\sen` and `hama`, and `obj\dummy`) upload a whole batch with one `UNPACK V4-32` of `4n + 1` or `5n + 1` quadwords and leave header word 1 at 0. The arrays still sit at the same multiples of `n`, so the same programs read them. They were written between 23 May and 18 June 2001 and make up 13 of the 16 files older than July 2001, so they show an earlier version of the converter.
+The oldest files (`MC_UMN01`, `MC_UMN02`, the four `matumoto` markers, `weapon\pc\kos_hw01` to `kos_hw03`, `stn_sw01`, `simajiri\sen` and `hama`, and `obj\dummy`) upload a whole batch with one `UNPACK V4-32` of `4n + 1` or `5n + 1` quadwords of floats and leave header word 1 at 0. The arrays still sit at the same multiples of `n`, so the same programs read them. They were written between 23 May and 18 June 2001 and make up 13 of the 16 files older than July 2001, so they show an earlier version of the converter.
 
 #### Xeno Card models
 
-The 249 models in `carddata` are flat rigid cards, boards and windows. 248 of them have a single part, and all 343 of their blocks are rigid and use the float layout. 161 of the models have no `.xtx` of the same name, because OV10 loads its texture sheets separately and draws the models with them, and 24 use a sheet whose name is a prefix of their own.
+The 249 models in `carddata` are flat rigid cards, boards and windows. 248 of them have a single part, and all 343 of their blocks are rigid and use the float layout. 185 of the models have no `.xtx` of the same name. 24 of them use a sheet whose name is a prefix of their own, and OV10 loads the texture sheets of the other 161 separately and draws the models with them.
 
 #### Marker and effect models
 
@@ -661,13 +661,13 @@ For each entry `xglPacketTextureTrans` adds `FLUSHE`, then a `DIRECT` block with
 
 ### How a model finds its texels
 
-The XTX rectangles are always uploaded as 32-bit pixels, but very few textures are 32-bit. The converter packed the textures, mostly 8-bit indexed images with 256-color palettes, into the rectangle so that a plain 32-bit upload lays them out in GS memory exactly as the GS expects to read them in their own format. The model's `TEX0` then reads the same memory as `PSMT8`, `PSMT4` or `PSMCT32`.
+The XTX rectangles are always uploaded as 32-bit pixels, but most textures are not 32-bit: only 3690 of the 46 577 textured blocks read theirs as `PSMCT32`. The converter packed the textures, mostly 8-bit indexed images with 256-color palettes, into the rectangle so that a plain 32-bit upload lays them out in GS memory exactly as the GS expects to read them in their own format. The model's `TEX0` then reads the same memory as `PSMT8`, `PSMT4` or `PSMCT32`.
 
 This works because GS memory is organized in 8 KiB **pages** of 32 **blocks** of 256 bytes, and each pixel format arranges its pixels differently inside a block and a page. A `PSMCT32` page covers 64 x 32 pixels and a `PSMT8` page covers 128 x 64 pixels, with the same number of bytes. A 512 x 128 rectangle in `PSMCT32` with buffer width 8 fills 8 x 4 = 32 pages, which as `PSMT8` with buffer width 16 are a 1024 x 256 image. KOS-MOS's `TEX0` selects this image: `PSMT8`, `TBW` 16, `TW` 10, `TH` 8, base 0. The palettes sit in the same sheet as 16 x 16 rectangles of 32-bit colors (8 x 2 for `PSMT4`), at the block given by `CBP`, in the `CSM1` arrangement, where palette index `i` is found at position `i` with bits 3 and 4 swapped.
 
 A sheet holds many textures and many palettes. Each block picks its window with `CLAMP`: `REGION_REPEAT` keeps a power-of-two window by masking (`u = (u & MINU) | MAXU`) so that the texture can tile, and `REGION_CLAMP` clamps to a rectangle. `kosmos_kubi` uses u 768 to 895 and v 128 to 255 with the palette at block 992. The block headers of KOS-MOS use 13 such windows with 12 different palettes.
 
-The parser checks this for every textured block of every model. For each block it takes the `TEX0` window and palette, finds the GS blocks they cover under the GS block arrangement of their format, and tests that the model's texture set uploads all of them. 45 677 blocks are covered by the set of the same name, 605 face blocks by the body's set, 102 blocks by an embedded set and 64 by a set whose name is a prefix of the model name. Only two blocks are not covered: the `PSMT4` block of `carddata\name` and the block `gun01_r` of `enemy\utma\utma_001`. The palettes are covered in every case except `carddata\name`. A decoder that writes the rectangles into a model of GS memory and reads them back as `PSMT8` through the `CSM1` palette produces clean images for the windows of KOS-MOS's sheet, which confirms the arrangement.
+The `TEX0` window and the palette of a block cover certain GS blocks under the GS block arrangement of their format, and the model's texture set uploads all of them in almost every case. Of the 46 577 textured blocks, 45 590 are covered by the set of the same name, 604 face blocks by the body's set, 96 blocks by an embedded set and 64 by a set whose name is a prefix of the model name. Another 221 blocks belong to models without such a set: 219 to `carddata` models, whose sheets OV10 loads separately, and one each to `simajiri\m\de_mss` and `misl`. Two blocks are not covered by their model's set: the `PSMT4` block of `carddata\name` and one of the three blocks named `gun01_r` of `enemy\utma\utma_001`. The palettes are covered in every case except `carddata\name`. A decoder that writes the rectangles into a model of GS memory and reads them back as `PSMT8` through the `CSM1` palette produces clean images for the windows of KOS-MOS's sheet, which confirms the arrangement.
 
 The diagram below follows one texel from the file to the screen.
 

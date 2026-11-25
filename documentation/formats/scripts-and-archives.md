@@ -4,11 +4,13 @@ Xenosaga Episode I runs its field scenes, events and cutscenes from four kinds
 of file. A scene resource script (`cfNNNN.txt` or `evNNNN.txt`) is a short text
 file that lists the models, motions, sounds, effects and map a scene needs and
 names the Java script that runs the scene. A scene archive (`cfNNNN.a`) holds
-copies of exactly those files in load order, so that a field scene loads with
-one long DVD read instead of many seeks. The Java scripts are compiled Java
-class files stored in FL00 volumes (`.evt`). FL00 is a small read-only file
-system that the game also uses for a fourth kind of file: the resource volumes
-(`.arc`) that carry the camera curves and motion packs of the story events.
+copies of the model, motion, map, sound, texture, movie clip, effect and enemy
+preset files of one script in load order, so that most of a field scene loads
+with one long DVD read instead of many seeks. The party leader's files, the
+Java volume and the full-screen movies are always read from their own files.
+The Java scripts are compiled Java class files stored in FL00 volumes
+(`.evt`). FL00 is a small read-only file system that the game also uses for a
+fourth kind of file: the resource volumes (`.arc`) that carry the camera curves and motion packs of the story events.
 
 All layouts below hold for every one of the 569 `.evt`, 77 `.arc`, 568 scene
 `.txt` and 112 `.a` files of the North American disc, parsed and checked
@@ -98,7 +100,7 @@ volume of the running script.
 
 ### Layout
 
-A volume has three parts. A 12-byte header comes first, followed by the
+A volume has four parts. A 12-byte header comes first, followed by the
 record table. The table starts with the record of group 0, followed by the
 records of its entries, then the record of group 1 and its entries, and so on.
 The data of all entries follows the table directly, in record order. Each
@@ -797,7 +799,7 @@ behaviour of each command is summarised in
 
 | Command | Lines | Files | Arguments seen | What it loads | Archive entries |
 | --- | --- | --- | --- | --- | --- |
-| `reset` | 568 | 568 | `0` in all, always the first line | frees slot 0 and all later slots | 0 |
+| `reset` | 568 | 568 | `0` in all, always the first command | frees slot 0 and all later slots | 0 |
 | `loadse` | 363 | 363 | `SO_<foot>, <env>` 277, `SO_<foot>, <env>-` 85, one with an empty third field | stores the foot-step name for `player`, loads `data\sound\sed\<env>.SWD` and `.SED` | 2 (3 with a sequence, never used) |
 | `loadsmd` | 362 | 362 | one name 356, two names 6, all but 6 names end in `+` | `data\sound\smd\<name>.SMD`, one per sequence slot | 1 per name |
 | `npcse` | 609 | 236 | `CID_<key>, NPC_M` or `NPC_F`, a number | NPC sound bank `.SWD` and `.SED` | 2 |
@@ -1156,9 +1158,6 @@ entry counter `arcno` is a `u8`, which limits an archive to 255 entries.
   is never read. It may have been reserved for flags.
 - The text at `+0x06` and `+0x0C` of the `.cam` headers is probably a
   converter leftover, but its source is not known.
-- The meaning of the 16-byte key type 1 (two keys on the disc) and the exact
-  role of the extra value of key type 4 belong to the FCV2 interpolation code
-  and were not traced byte by byte.
 - `c01s42.tch` holds a header only. Whether it was meant as an empty chart
   or is a broken export is not known.
 - Whether the `loadResource` calls of the four SCE volumes without an `.arc`

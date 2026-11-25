@@ -322,9 +322,10 @@ development console.
 
 Three tests start the minigames of the overlays 10 to 12:
 
-- `YmineTest` (OV10) calls `CardGameRoot`, the Xeno Card game (see
-  [xeno-card.md](minigames/xeno-card.md)). The game itself is started by
-  another entry (`func_00A00338`). The card code prints the debug text
+- `YmineTest` (OV10) only calls `CardGameRoot`, the Xeno Card game (see
+  [xeno-card.md](minigames/xeno-card.md)). The main menu (`mini_game_no` 13)
+  and the script native `Runtime.minigameExec(13)` call `CardGameRoot`
+  directly at `0x00A00338`. The card code prints the debug text
   `Build:Nov 24 2002 11:02:50`.
 - `TanakaTest` (OV11) is both a test and the real entry of the casino (see
   [network-casino.md](minigames/network-casino.md)). The main menu
@@ -334,7 +335,8 @@ Three tests start the minigames of the overlays 10 to 12:
   light, and runs the casino until it returns a non-zero value.
 - `NisimoriTest` (OV12) only prints 西森 (Nishimori) with
   `xglFontDebugPrintf` until SELECT + START. The AGWS battle game of OV12 is
-  started by `func_00A01EA8` (see [agws-battle.md](minigames/agws-battle.md)).
+  started by `RobotGameMain` at `0x00A01EA8` (see
+  [agws-battle.md](minigames/agws-battle.md)).
 
 ## 5. The in-game debug menu: `GameDebugMenu`
 
@@ -518,9 +520,9 @@ the Snap row of the debug menu, and optionally a `.bin` file with metadata.
 The pause handler `PauseMenu` in `src/main/game_pause_disp.c` also has two
 credit steps and a snapshot step that writes the image with
 `GameSnapShotSaveFile`. No code sets the pause mode to these steps, and
-`GameSnapShotCheck`, called at the end of every field frame and every U.M.N.
-frame, is empty. Snapshots were probably taken for screenshots and
-documentation.
+`GameSnapShotCheck`, called every frame by the field, the battle, the main
+menu, the save screen, the shop and the U.M.N., is empty. Snapshots were
+probably taken for screenshots and documentation.
 
 ### OV12 debug flags
 
@@ -603,9 +605,9 @@ marker models, `bikkuri.lex` (surprise), `hatena.lex` (question mark),
 `maru.lex` (circle) and `sikaku.lex` (square). Only enemy debug code draws
 the markers: the homing graph editor `Disp_Homing`, and a ring of `maru`
 models around an enemy while the enemy debug flag is set (see
-[Marker models](../formats/maps-and-field-data.md#marker-models)). The retail
-game still loads files from these folders, so the developers' folder
-structure went into the final disc unchanged.
+[Marker models](../formats/maps-and-field-data.md#marker-models)). The disc
+holds all the data folders of the table above, and the retail game loads files
+from them. The folder `data\test\` of the debug menu is not on the disc.
 
 ### Work from a host PC
 

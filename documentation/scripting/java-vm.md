@@ -190,7 +190,7 @@ returns the new WorkEnd
 ```
 
 The two scene images form a double buffer. The next map or event is loaded
-into the inactive slot while the current one still runs, and `SCRIPT_exec`
+into the inactive slot while the current one still runs, and `SCRIPT_exec2`
 then swaps them. Each slot is a `ScriptDbEntry` with the archive image, the
 name of the main class (`active`), the thread that runs it and the class
 database slot it uses. The archives stay in memory while they are in use
@@ -802,7 +802,7 @@ names come from the debug string table `JTHREAD_ALG_*` in `jthread.c`.
 | --- | --- | --- |
 | 0 SYSTEM | `initVM` (`initVMThread`), `SCRIPT_init` (`defaultVM`, `stageVM`, `evtVM`) | C code calling `JNI_callMethod` directly |
 | 1 CHR | `Toolkit.getPeer` for a `Chr` or `Enepc` | `JTHREAD_cntl` through `JTHREAD_defaultChr` |
-| 2 STAGE | `SCRIPT_exec` for the scene's main object, `Toolkit.getPeer` for a `Stage` | `JTHREAD_cntl` through `JTHREAD_defaultScene` or `JTHREAD_defaultStage` |
+| 2 STAGE | `SCRIPT_exec2` (or `SCRIPT_exec`) for the scene's main object, `Toolkit.getPeer` for a `Stage` | `JTHREAD_cntl` through `JTHREAD_defaultScene` or `JTHREAD_defaultStage` |
 | 3 SCENE | Named in the table, no creator found in the recovered code | |
 | 4 DEFAULT | `Thread.create` from Java | `JTHREAD_cntl` through `JTHREAD_default` |
 | 5 UNIT | `Toolkit.getPeer` for a `Unit` or `Uwamono` | `JTHREAD_cntl` through `JTHREAD_defaultUnit` |
@@ -1175,33 +1175,35 @@ the job of `script.c` and is described in full on the [Events](events.md) and
 [Scenes and time charts](scenes-and-timecharts.md) pages. The VM side has
 these steps:
 
-1. A loader reads the archive into the inactive `scriptDB` slot:
-   `SCRIPT_load` on map changes (`MapGetName(map) + ".evt"`, from the loader
-   task in `src/main/disp_on.c`), `SCRIPT_load2` from the resource list keyword
-   `script` (`src/main/res_get_path.c`), or `SCRIPT_load_DBG` from
-   `Stage.play` (a development loader that reads the files with `sceOpen`
-   into fixed addresses above 32 MiB, so probably usable only on a
-   development kit).
+1. A loader reads the archive into the inactive `scriptDB` slot. The game uses
+   `SCRIPT_load2`, called by the resource list keyword `script`
+   (`src/main/res_get_path.c`). Two older loaders belong to debug paths.
+   `SCRIPT_load` reads `MapGetName(map) + ".evt"` from the map folder for the
+   loader task in `src/main/disp_on.c`, which only the debug map selection
+   starts (`LoadMap2`), and the disc has no `.evt` file in that folder.
+   `SCRIPT_load_DBG` serves `Stage.play` and the debug file selector. It reads
+   the files with `sceOpen` into fixed addresses above 32 MiB, so it probably
+   worked only on a development kit.
 2. The loader calls `JNI_searchClasses(image, "xeno/Scene:xeno/Stage", 2,
    &skip)`. This walks the archive's class files without loading them,
    compares each super class name with the two candidates, and returns the
    name of the first match. `skip` tells which one matched: 0 for a `Scene`
    subclass (an event scene) and 1 for a `Stage` subclass (a map).
-3. `SCRIPT_exec` (or `SCRIPT_exec2`) makes the loaded slot current and unloads
-   the other one. Before the new scripts are loaded, the heap mark of the
-   previous scripts is popped and a new mark is pushed. Then
-   `JNI_loadNativeClass` runs again and `JNI_loadClassDB` registers the archive
-   in its class database slot.
-4. For a `Stage` subclass (a map), `SCRIPT_exec` creates the main object with
+3. `SCRIPT_exec2` (`SCRIPT_exec` after the two older loaders) makes the loaded
+   slot current and unloads the other one. Before the new scripts are loaded,
+   the heap mark of the previous scripts is popped and a new mark is pushed.
+   Then `JNI_loadNativeClass` runs again and `JNI_loadClassDB` registers the
+   archive in its class database slot.
+4. For a `Stage` subclass (a map), `SCRIPT_exec2` creates the main object with
    `newObject(loadClass(active))` and a thread of kind 2 with 6 frames for it,
    and calls `STAGE_instance(defaultVM, object)`. That runs the constructor,
    creates the camera field `cam0` and the `Chr` members, and runs `init()`.
    The map then runs in the normal field mode. Its methods are called through
    talk, touch, `entered`, `KickEvent` and the threads its `init` started.
-5. For a `Scene` subclass (an event), the game switches to the event mode and
-   a `sceneObserver` task is started (`sceneObserver2` for `SCRIPT_exec2`). The
-   main object and its kind 2 thread are created the same way, by the task's
-   first step or directly by `SCRIPT_exec2`. `SCENE_instance` runs the
+5. For a `Scene` subclass (an event), the game switches to the event mode.
+   `SCRIPT_exec2` creates the main object and its kind 2 thread the same way
+   and starts a `sceneObserver2` task. (`SCRIPT_exec` starts a `sceneObserver`
+   task, which creates them in its first step.) `SCENE_instance` runs the
    constructor, creates the message window `msg` and the `Chr` and `Unit`
    members (each constructed with the scene as argument, then `init()`), and
    runs the scene's `init()`. Then `SCENE_start(defaultVM, object, 8, "play")`
@@ -1216,19 +1218,20 @@ The sequence below shows an event scene from load to unload.
 
 ```mermaid
 sequenceDiagram
-    participant L as Loader (disp_on.c or res_get_path.c)
+    participant L as Loader (res_get_path.c)
     participant S as script.c
     participant J as VM (JNI, loader, heap)
-    participant O as sceneObserver task
+    participant O as sceneObserver2 task
     participant T as JTHREAD_cntl
-    L->>S: SCRIPT_load(name.evt) into the free slot
+    L->>S: SCRIPT_load2(name.evt) into the free slot
     S->>J: JNI_searchClasses finds the Scene subclass
-    L->>S: SCRIPT_exec
+    L->>S: SCRIPT_exec2
+    S->>S: switch to the event mode
     S->>J: JNI_pushFrame, JNI_loadNativeClass, JNI_loadClassDB
-    S->>O: start the event mode and the observer
-    O->>J: newObject(loadClass(active)), JNI_createThread(2)
-    O->>J: SCENE_instance runs constructor and init on defaultVM
-    O->>J: SCENE_start(object, "play")
+    S->>J: newObject(loadClass(active)), JNI_createThread(2)
+    S->>O: start the observer
+    S->>J: SCENE_instance runs constructor and init on defaultVM
+    S->>J: SCENE_start(object, "play")
     loop every frame
         T->>J: JTHREAD_defaultScene calls play()
         O->>O: check DONE or skip

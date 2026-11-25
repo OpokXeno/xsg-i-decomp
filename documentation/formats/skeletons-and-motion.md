@@ -19,7 +19,7 @@ recovered source code wherever one exists.
 ## The files at a glance
 
 The motion data is spread over several directories and containers. The table
-lists every place where the disc stores it. Sizes are the decoded sizes.
+lists the files of each format by directory. Sizes are the decoded sizes.
 "ARX" is the game's own compression, described in
 [Files and resources](../architecture/files-and-resources.md#packed-files-arx).
 
@@ -416,8 +416,9 @@ The header and the start of the attribute block of
 ```
 
 The accessory joints 152 to 169 are the last 18 channels, the fourth range.
-The hair tag `0x8A0015` names channel 21. Channel 13, a chain link, shows the
-type-2 extra floats:
+The hair tag `0x8A0015` holds the count 21, so a motion pack drives channels
+0 to 94 (the 74 body channels and the first 21 hair channels). Channel 13, a
+chain link, shows the type-2 extra floats:
 
 ```
 00000440: 0200 0300 0000 0000 0000 0000 0000 0c00   type 2, flags 3, no limits, parent 12
@@ -1256,8 +1257,8 @@ entries, because the entry number is a fixed battle motion number and not
 every unit has every motion. The 2,460 curve sets are named after the battle
 skeletons (155 names such as `BOSS004`, `UTRE004`, `VX02`, `SHION` and
 `KOSMOS`), except 24 sets with an 8-byte attribute stream and no name. The
-battle packs are also the only packs that use
-[range records](#range-records-and-attribute-slots) for real.
+battle packs are also the only packs whose slots select playback ranges (see
+[range records](#range-records-and-attribute-slots)).
 
 ### Motion trigger data (MTD)
 
@@ -1341,7 +1342,7 @@ that each hit once:
 
 The names below are not reached by any code path or script found. The
 search covered every string in the recovered code (including `cfMtnList`,
-`motFile` and the OV12 tables), the `loadmot` lines of all 588 scene resource
+`motFile` and the OV12 tables), the `loadmot` lines of all 568 scene resource
 scripts and the constant pools of all 569 event scripts. Members of a
 script volume count as used only when the volume's own script names them,
 because `Toolkit.loadResource(String)` searches only the volume of the

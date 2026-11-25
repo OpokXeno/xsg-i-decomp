@@ -2,10 +2,10 @@
 
 The battle system is the turn-based combat of Xenosaga Episode I. It is in the
 overlay OV01, which is linked at 0x00A00000 and stays loaded during normal
-play. A battle starts when the player touches an enemy on the field or when an
-event script calls the `execBattle` native. OV01 then runs its own blocking
-loop, `battleProc`, until the battle is won, lost or escaped, and hands a
-result code back to the field.
+play. A battle starts when the player touches an enemy on the field or when a
+stage script queues the encounter command of an enemy. OV01 then runs its own
+blocking loop, `battleProc`, until the battle is won, lost or escaped, and hands
+a result code back to the field.
 
 Besides the battle itself, OV01 contains the game-data tables and accessors
 (`batdat.bin`, character records, item, ether and technique names) that the
@@ -61,13 +61,15 @@ result screen), `nusumu` (steal), `syoukan` (summon), `hensin` (transform),
 
 ## How a battle starts
 
-There are two ways into a battle. Both end in the same function,
+The code has two ways into a battle. Both end in the same function,
 `battleProc` in `src/ov01/entry_first_init.c`. The main executable refers to
 it only by address (`func_A22668`).
 
 The first way is a field encounter. `Check_Encount` in
-`src/main/set_motion.c` runs when the player touches a field enemy. It fills
-the encounter record in `GameLoopState` (described in
+`src/main/set_motion.c` runs when the player touches a field enemy or when a
+stage script queues enemy command 14 (see
+[Enemy commands](field-enemies.md#enemy-commands)). It fills the encounter
+record in `GameLoopState` (described in
 [Encounter data](#encounter-data)) and sets bit 0 of
 `GameLoopState.event_sub_id`. The field mode function `GameModeCfMain` in
 `src/main/game.c` sees the non-zero value on its next pass and starts the
@@ -94,7 +96,7 @@ battle. The enemy side of this check is explained in
    it as described in [How a battle ends](#how-a-battle-ends).
 
 The second way is the Java native `Java_xeno_util_Runtime_execBattle__II` in
-`src/main/runtime.c`, which event scripts call (see
+`src/main/runtime.c`, which no script on the disc calls (see
 [Natives](../scripting/natives.md)). It takes two integers. The first is the
 battle map number and goes to `mapNoSet` (`func_00A0B728`). The second is the
 monster set number and goes to `monsSetNoSet` (`func_00A0B708`). Both setters
@@ -103,8 +105,8 @@ game state with `GameStateSave`, calls `battleProc`, rebuilds the actor scene
 with `ACT_resourceInit`, `ACT_initScene` and `ACT_initMTNResource`, starts a
 fade-in with `nmlModelSetFadeIn` and `FX_ScreenMask`, and calls
 `GameStateRestore`. It does not call `Game_Data_Push` or `Game_Data_Pop`, and
-it does not read the battle result. The script itself is responsible for what
-happens next.
+it does not read the battle result. A script that calls it would have to decide
+what happens next.
 
 `GameStateSave` stores the game mode, the state of the controlled actor, the
 map number and the camera and light settings. `GameStateRestore` puts the mode
@@ -739,10 +741,12 @@ sequenceDiagram
 ✕ in the root state of the manual input opens the battle menu
 (`menuOpenBat`, five entries). The manual input is a small state machine
 (`manInput`, `ManSelectState` values 0 to 0xF) that also drives the target
-cursors. The menu returns 1 for Ether, 2 for Item, 3 for Guard, 4 for
-A.G.W.S., 5 for Move and 6 for the A.G.W.S. W-ACT attack. Opening each
-submenu fires its own camera event (0xD to 0x12 and 0x16), so the camera
-frames the acting unit while the player chooses.
+cursors. The entries come from one of two tables. A character has Ether,
+Item, Move, A.G.W.S. and Guard (`chaTbl`), and an A.G.W.S. has the W-ACT
+attack in place of Ether (`agwsTbl`). The menu returns 1 for Ether, 2 for
+Item, 3 for Guard, 4 for A.G.W.S., 5 for Move and 6 for W-ACT. Opening the
+menu fires camera event 0x12 and each choice fires its own (0xD to 0x11 and
+0x16), so the camera frames the acting unit while the player chooses.
 
 `menuCmdExecChk` decides which entries are available:
 
@@ -921,9 +925,11 @@ sequenceDiagram
 All hit and damage rules are in `src/ov01/calc.c`. The entry point is
 `calcHitDmg(user, cmd, hit)`. It first calls `calcHit`. A result of 0 is a
 miss and prints "DMG: EVA". On a hit it calls `calcDmg`. It then applies two
-special cases: a party attack on an enemy deals 0 when cfEvent bit 0x01 is
-set, and the debug option "PL ICHIGEKI" (one-hit kill) sets the damage to the
-target's maximum HP.
+special cases to party attackers. When cfEvent bit 0x01 is set and the target
+is an enemy, the damage becomes 0 and the function returns. Otherwise the
+debug option "PL ICHIGEKI" (one-hit kill) turns a miss or a hit with mode 1
+into a hit with mode 1 whose damage is the target's maximum HP. It leaves the
+other hit modes unchanged.
 
 `calcHit` works from the technique's `effectType`:
 

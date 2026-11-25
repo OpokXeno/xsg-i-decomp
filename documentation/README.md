@@ -540,9 +540,10 @@ calls ordinary engine code, which in turn uses `xgl` and the hardware. For
 example, `Runtime.execBattle(int, int)` saves part of the field state, sets
 the battle map and the monster set in OV01, runs the battle until it ends,
 then rebuilds the actor scene, fades in and restores the saved state
-(`src/main/runtime.c`). This is how a script starts a battle. Battles started
-by touching an enemy on the field take another path, through the field mode
-itself (see [section 6](#the-field-game-loop),
+(`src/main/runtime.c`). No script on the disc calls it. Battles started by
+touching an enemy on the field, or by a stage script through an enemy command,
+take another path, through the field mode itself (see
+[section 6](#the-field-game-loop),
 [game/field-enemies.md](game/field-enemies.md#starting-a-battle) and
 [game/battle.md](game/battle.md)). The whole VM is described in
 [scripting/java-vm.md](scripting/java-vm.md) and every native in

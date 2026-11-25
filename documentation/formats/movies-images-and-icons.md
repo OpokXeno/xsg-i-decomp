@@ -184,8 +184,8 @@ Three stream ids appear. Stream `E0` is the MPEG-2 video. Stream `BD`, MPEG's
 | `BE` | padding | 298 |
 
 A pack usually holds four PES packets of 4,090 bytes, or 4,076 bytes for the
-last one, which together fill the 16,384 bytes. 395,654 packs have four PES
-packets, 213 have five, 27 have three, 26 have six and one has two.
+last one, which together fill the 16,384 bytes. 395,762 packs have four PES
+packets, 105 have five, 27 have three, 26 have six and one has two.
 
 The pack header is 14 bytes long. The values in the table are those of the
 first pack of every file.
@@ -213,18 +213,19 @@ stream 1 does not count as an MPEG audio stream.
 
 A PES packet starts with its start code, the stream id and a 16-bit length.
 Two flag bytes and a header data length follow. The first flag byte is always
-`0x83`, which means "copyright" and "original". The muxer always gives the
+`0x83`, which means "copyright" and "original". The muxer normally gives the
 header 10 bytes of data and fills the bytes it does not need with `FF`
 stuffing, so the payload of nearly every PES packet starts at the same
-offset. Only the first video packet of each file has a longer header of 13
-bytes, because it also carries the P-STD buffer size.
+offset. The first video packet of each file has a longer header of 13 bytes,
+because it also carries the P-STD buffer size. One other video packet has 11
+bytes of header data.
 
 | Stream | Flag bytes | Header data | Contents of the header data | Packets |
 | --- | --- | --- | --- | --- |
 | `E0`, first of the file | `83 C1` | 13 bytes | PTS, DTS, extension flags, P-STD buffer | 108 |
 | `E0` | `83 C0` | 10 bytes | PTS and DTS | 162,202 |
 | `E0` | `83 80` | 10 bytes | PTS and 5 stuffing bytes | 318,379 |
-| `E0` | `83 00` | 10 bytes | 10 stuffing bytes | 883,118 |
+| `E0` | `83 00` | 10 bytes (11 in one packet) | stuffing bytes only | 883,118 |
 | `BD` | `83 80` | 10 bytes | PTS and 5 stuffing bytes | 219,707 |
 
 Every audio packet has a PTS. In every file the first audio PTS equals the
@@ -389,8 +390,10 @@ The user data of the first sequence header names the encoder in 103 files.
 `2000_1`, `2031_2`, `3050C1_9`) were made with version 2.02.31.119 and three
 (`2002B_1`, `2007C_1`, `2007C_2`) with version 2.01.30.116. The three files
 with frame rate code 5 are all among these seven older encodings. The five
-battle movies have no user data at all. They also differ in every other
-detail, so they probably come from another encoder and another team.
+battle movies have no user data at all. They also differ from the cutscenes
+in their bit rates, `progressive_sequence`, sequence headers, GOP length and
+first time code ([section 2.8](#28-variants-and-statistics)), so they probably
+come from another encoder and another team.
 
 ### 2.5 The audio stream
 
@@ -988,7 +991,7 @@ Monolith Soft logo about 7.6 seconds.
 file of 3,123,245 bytes, but the archive directory gives it only 1,384,448
 bytes, exactly the 676 sectors up to the start of `mvs0102.ipu`. The stored
 part holds 42 complete frames and ends in the middle of frame 43. No script
-names this movie, so the damage is never seen.
+names this movie, so the damage is probably never seen.
 
 ### 3.7 Which small movies are used
 
@@ -1530,9 +1533,13 @@ with the English meaning added in the right column.
 | `uninstallmes1` | 削除します。 | will be deleted. |
 | `uninstallmes2` | セーブデータは削除されません。 | Save data is not deleted. |
 
-The text is not localized in the North American release. The background and
-light settings are the same as in the memory card `icon.sys`, written as
-integers from 0 to 255 instead of floats, apart from the light direction.
+The text is not localized in the North American release. The background
+settings are the same as in the memory card `icon.sys`. The light colours are
+integers here and floats there. The light colour 96 and the ambient light 40
+stand for the 0.8 and 0.3 of `icon.sys`. The scale of the integers is not
+known, and no single scale gives both values exactly. The first light
+direction also differs, with (0.5, 0.5, 0.5) here and (0.5, 0.5, 0.707) in
+`icon.sys`.
 
 ### 7.4 How the install writes it
 

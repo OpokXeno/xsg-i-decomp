@@ -8,11 +8,12 @@ transfer Ether, and S.Pts extract Skills from accessories and raise a
 character's skill level. Equipment is bought in shops and fitted on the
 Characters and A.G.W.S. screens.
 
-All of this code is in the main executable (`src/main/`), next to the
-[main menu](main-menu.md) that hosts most of the screens. The battle data
-itself (unit tables, ether and technique tables, the stat calculation) is in
-overlay OV01, so OV01 must be loaded whenever these screens run. The battle
-side of growth (how experience and points are earned in combat) is described
+The code of the screens is in the main executable (`src/main/`), next to the
+[main menu](main-menu.md) that hosts most of them. The battle data itself
+(unit tables, ether and technique tables), the stat calculation and the
+functions that hand out the battle rewards and level-ups (`calcResult`,
+`calcResultSub` and `calcLvUp` in `src/ov01/calc.c`) are in overlay OV01, so
+OV01 must be loaded whenever these screens run. The battle side of growth (how experience and points are earned in combat) is described
 in [battle](battle.md).
 
 [← Back to the overview](../README.md)
@@ -233,7 +234,7 @@ shows where points come from and where they go.
 
 ```mermaid
 flowchart LR
-    B["battle won<br/>calcResult (OV01)"] --> T["T.Pts"]
+    B["battle won or escaped<br/>calcResult (OV01)"] --> T["T.Pts"]
     B --> E["E.Pts"]
     B --> S["S.Pts"]
     B --> X["experience, level"]
@@ -250,8 +251,8 @@ flowchart LR
 
 ## Battle results
 
-When a battle is won, OV01 shows the result screen, which the code calls the
-**settlement** ("seisan"). Its code is in `src/main/seisan_count_init1.c` and
+When a battle is won or escaped and cfEvent bit 0x10 is clear, OV01 shows the
+result screen, which the code calls the **settlement** ("seisan"). Its code is in `src/main/seisan_count_init1.c` and
 the battle overlay drives it from `src/ov01/result.c`: `resultProcInit`
 calls `SeisanInit()` once, then `resultProc` calls `SeisanMain()` every frame
 until it returns 0. The battle display code (`src/ov01/entry_first_init.c`)
@@ -701,10 +702,10 @@ MOMO 37, 43 and 46, and Jr. 49 and 57. The tree is the full set of ethers
 reachable from the roots through the child ids of `etree.bin`, whether
 learned or not. That file holds three child ids for each of the ethers 1 to
 80 (layout in [ether tree](../formats/game-tables.md#ether-tree-etreebin)).
-Its records form nine separate trees, one per root ether. Every child id is
-larger than its parent and no ether has two parents. The root 59 of
-character 4 is a "Reserve" ether with no children, and the ethers 13 to 16
-and 59 to 80 that are not roots or children belong to no tree.
+Its records form nine separate trees, one for each root ether except the root
+59 of character 4, which is a "Reserve" ether with no children. Every child id
+is larger than its parent and no ether has two parents. The ethers 13 to 16,
+59 to 71 and 80 belong to no tree.
 
 `EtherTreeInit` carves its arena from the menu work: a system block (0x80),
 an object table of 80 nodes of 0x70 bytes (0x2300), a line table (0x1900),

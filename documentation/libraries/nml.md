@@ -188,7 +188,9 @@ skinned blocks. `0x400` forbids the extended two-pass programs and is set in
 - `0x2` and `0x4` make the block transparent.
 - `0x10` (`NML_BLOCK_MATERIAL_NAMED_PARTS`, read on the first block) means the
   model has named parts. It is set on every block of the maps and of most
-  `muobj` objects, and it always comes with the compact map vertex layout.
+  `muobj` objects, and it comes with the compact map vertex layout except in the
+  maps `MC_DYU04`, `MC_DYU04B`, `MC_UMN01` and `MC_UMN02`, which store float
+  normals.
 - `0x20` and `0x40` select additive and subtractive blending.
 - `0x80` marks the float vertex layout with per-vertex normals. Each block has
   exactly one of `0x10` and `0x80`.

@@ -22,10 +22,12 @@ The player starts the minigame with the **Battle Passport**, an event item. In
 the English release it is obtained by visiting the KOS-MOS Simulator in the EVS
 again, and it is used from a save point that has EVS access. The item screen
 (`MenuItem` in `src/main/menu_item.c`) shows the event items 11 to 15. Item 11
-is the Segment Map. The items 12 to 15 can only be picked when the main menu
-was opened with `GameLoopState.flags & MENU_ITEM_GAME_FLAG_PICK` (`0x400000`),
-which is probably the flag set at those EVS save points. Picking an item makes
-`MenuItem` return its number as the minigame number `mini_game_no`. The
+is the Segment Map. The items 12 to 15 can only be picked while
+`GameLoopState.flags` has the bit `0x400000` (`MENU_ITEM_GAME_FLAG_PICK`). This
+is the bit `GAME_FLAG_ON_EVENT_SYMBOL` of `include/main/game.h`, which
+`src/main/game.c` sets while the player stands on an event symbol. Picking an
+item makes `MenuItem` return its number as the minigame number `mini_game_no`.
+The
 [main menu](../main-menu.md) page explains the menu loop and the item screen.
 
 The main menu loop in `src/main/window_tex_load.c` first tears down the menu
@@ -113,10 +115,10 @@ picks the VX-10000 or the AG-02 background (`top_base_vx01.bxx` or
 | `RG_TITLE_RESULT_HELP` | 4 | `_Help()`, the help pages |
 | `RG_TITLE_RESULT_EXIT` | 5 | leaves the loop and returns to the main menu |
 
-After every mode, `RobotGameMain` switches the draw system back to one full
-screen (`RgDrawCreateDrawStudioFullScreen`), forgets every loaded file
-(`RgFileSysClear`) and disposes the engine (`XrgSystemDispose`). The next lap
-of the loop builds everything again. The flowchart below shows this outer loop.
+After every choice, Exit included, `RobotGameMain` switches the draw system
+back to one full screen (`RgDrawCreateDrawStudioFullScreen`), forgets every
+loaded file (`RgFileSysClear`) and disposes the engine (`XrgSystemDispose`).
+The next lap of the loop builds everything again. The flowchart below shows this outer loop.
 
 ```mermaid
 flowchart TD
@@ -127,12 +129,14 @@ flowchart TD
     TITLE -->|2| P1H[_VsCpuGame hard]
     TITLE -->|3| VS[_2PGame]
     TITLE -->|4| HELP[_Help]
-    TITLE -->|5 Exit| QUIT[DisposeXrgSoundSystem<br/>_pop]
+    TITLE -->|5 Exit| RESET
     P1 --> RESET[full-screen studio<br/>RgFileSysClear<br/>XrgSystemDispose]
     P1H --> RESET
     VS --> RESET
     HELP --> RESET
-    RESET --> INIT
+    RESET --> MORE{Exit chosen}
+    MORE -->|no| INIT
+    MORE -->|yes| QUIT[DisposeXrgSoundSystem<br/>_pop]
     QUIT --> DONE([return to the main menu])
 ```
 
@@ -322,14 +326,14 @@ fists.
 The player may only pick weapons the party owns in the main game.
 `RgSelectWeapons` keeps a weapon if `XrgEventIsUsableWeapon` finds it in the
 main inventory, or if its essence has the `default` keyword. The check uses a
-table of 41 weapon names and their item ids 71 to 111, and asks
-`dataWpnBoxChk(id) > 0`. The names follow the main game's A.G.W.S. weapons:
+table of 41 weapon names. Forty of them have the weapon ids 71 to 111 without
+97, and AIRC-AG2 has id 0. The check asks `dataWpnBoxChk(id) > 0`. The names follow the main game's A.G.W.S. weapons:
 SWD21AG, LG24VX, HG45VX, LG10AG, SMG99AG, GRD20AG, HMP33AG, PB55AG, SHD02AG,
 SHD12VX, LG100VX, SWD34VX, HMR55AG, CB85VX, ECM1-VX, ER-VX, BMP45VX, HG75VX,
 GLG76AG, FLM64AG, DLC02AG4, WCT02AG4, SHB67AG, BSW13AG, BL24AG, AXE11AG,
 SMP53AG, SMG32VX, ECM2-VX, LM11VX, BA15VX, AIRD-AG2, HMR-AG5, AIRC-AG2,
-BMP-AG5, HMP-AG5, HGG-AG5, BBC-AG5, LC-AG5, LW-VX4 and DEF-VX. AIRC-AG2 has
-item id 0, so it can only appear as a default weapon.
+BMP-AG5, HMP-AG5, HGG-AG5, BBC-AG5, LC-AG5, LW-VX4 and DEF-VX. With id 0,
+AIRC-AG2 can only appear as a default weapon.
 
 The CPU picks its weapons at random with `RgSelectGetEnemyWeapons`. It starts
 from random offsets in the three slot lists and searches for a combination

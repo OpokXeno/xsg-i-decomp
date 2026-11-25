@@ -48,15 +48,20 @@ drives the camera and light modules.
 
 ## How the parts fit together
 
-The game runs on the control thread. Instead of talking to the hardware
-directly, it only fills queues and buffers: the current GPU packet, the text
-print queue, the file read queue and the sound command queue. The other system
-threads empty them on their next turn. The render thread sends the packet,
-the queued text and the sound commands, and reads the controllers. The CD
-thread advances file reads and refills streams. The studio thread updates the
-cameras, whose matrices the game then uses for drawing.
+The game runs on the control thread. For most of its work it fills queues and
+buffers: the current GPU packet, the text print queue, the file read queue and
+the sound command queue. The other system threads empty them on their next
+turn. The render thread sends the packet, the queued text and the sound
+commands, and reads the controllers. The CD thread advances file reads and
+refills streams. The studio thread updates the cameras, whose matrices the
+game then uses for drawing.
 
-The diagram below shows these flows.
+Some functions bypass the queues and work on the thread that calls them. The
+movie players drive the IPU and DMA, the HDD error screen sends a rectangle to
+the GS by DMA, and the `Direct` sound functions and the bank and music
+functions call the sound driver at once.
+
+The diagram below shows the flows through the queues.
 
 ```mermaid
 flowchart TB
@@ -567,8 +572,9 @@ Each output word is decoded like this:
 1. Read one flag bit. If it is 0, the next word of the stream is a literal.
    Copy it to the output.
 2. If the flag is 1, read a unary prefix: count the 1 bits up to the first 0.
-   The count selects a group of table entries. Group 1 holds entries 0–1,
-   group 2 entries 2–5, group 3 entries 6–13 and group 4 entries 14–29.
+   The count plus 1 is the number of the group of table entries. Group 1 holds
+   entries 0–1, group 2 entries 2–5, group 3 entries 6–13 and group 4 entries
+   14–29.
 3. Read as many bits as the group number and use them as the index inside the
    group. Output that table word.
 4. Repeat until the expanded size is reached.
@@ -580,7 +586,7 @@ shows the decoding of one word.
 flowchart TD
     S([next output word]) --> F{flag bit}
     F -->|0| L["take the next whole word<br/>from the stream (literal)"]
-    F -->|1| U["count 1 bits up to a 0<br/>= group g (1..4)"]
+    F -->|1| U["count 1 bits up to a 0<br/>group g = count + 1 (1..4)"]
     U --> I["read g bits = index i"]
     I --> T["table[first index of group g + i]"]
     L --> W[write word, advance output]
@@ -1549,10 +1555,10 @@ The font textures are loaded with `xglFontLoad(index, flags)` from
 file holds two kanji textures of `0x3C020` bytes and a table of 256
 proportional widths. A "kanji texture" is a ready GS upload packet: one VIF
 quadword (three `NOP` codes and a `DIRECTHL` of 15,361 quadwords), one GIF
-`IMAGE` tag and 320 × 192 pixels in 32-bit colour (`PSMCT32`). The glyph
+`IMAGE` tag and 320 × 192 pixels in 32-bit color (`PSMCT32`). The glyph
 sprites read the same video memory back as a 4-bit indexed texture
 (`PSMT4`). Each 4-bit texel holds two 2-bit pixels of two glyph sheets, and
-two 16-entry colour tables select the low or the high bit pair, so the two
+two 16-entry color tables select the low or the high bit pair, so the two
 blocks hold four sheets of 1,024 cells with four grey levels each. The cell
 layout, the code mapping and the metrics are described in
 [Kanji fonts](../formats/text-and-fonts.md#kanji-fonts). `xglFontInitial`

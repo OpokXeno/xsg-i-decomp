@@ -50,8 +50,8 @@ immediately if you have a different release. This project reproduces the NTSC-U 
 
 For every compiler and assembler, `config/toolchain-identity.json` gives the
 version, the SHA-256 of each payload, and the provenance needed to obtain or
-rebuild it. Two of the tools are patched, and both patches
-are recorded there in full:
+rebuild it. Two of the tools are patched, and both patches are recorded there in
+full:
 
 | Tool | What the build uses it for                                                                                | Where it comes from |
 | --- |-----------------------------------------------------------------------------------------------------------| --- |
@@ -70,7 +70,8 @@ python3 -B tools/tu/toolchain.py --check
 ```
 
 It prints where it looked and what it found. When a tool is missing or different,
-it stops with an error that gives the tool's name, both hashes and the recipe.
+it stops with an error that gives the tool's name and the recipe, and for a
+different file also both hashes.
 
 ### 3. The disassembler
 
@@ -122,10 +123,10 @@ from the published object ranges and original ELF symbols when the private
 
 ## Contributing
 
-Pick an object from `config/objects/<unit>.objects.json` that has no source yet,
-write the C, and build: `ninja` tells you whether the file still comes out
-identical. A function counts when its translation unit's source defines it in C
-and the whole-file gate passes.
+Every in-scope function has source, so contributions improve it: clearer names,
+more accurate types, simpler code. Edit an object's source and build: `ninja`
+tells you whether the file still comes out identical. A function counts when its
+translation unit's source defines it in C and the whole-file gate passes.
 
 ## Acknowledgments
 

@@ -281,11 +281,13 @@ stateDiagram-v2
     DEBUG --> CFMAIN: START or SELECT
     CFMAIN --> [*]: QUIT or EXIT flag
     CFEVENT --> [*]: QUIT flag
+    PAUSE --> [*]: QUIT flag
+    DEBUG --> [*]: QUIT flag, modes 6 and 7
 ```
 
-Every mode handler accepts START together with SELECT, L1 and R1
-(`GAME_PAD_COMBO`) and sets `GAME_FLAG_QUIT`. This is the soft-reset
-combination that returns to the title screen.
+Every mode handler except `GameModeDebugMenu` accepts START together with
+SELECT, L1 and R1 (`GAME_PAD_COMBO`) and sets `GAME_FLAG_QUIT`. This is the
+soft-reset combination that returns to the title screen.
 
 ### CF main: free field control
 
@@ -405,9 +407,9 @@ does the following:
    to walk away. The player's look-at is reset and the map units are updated
    once.
 
-Scripts can also start battles directly with `Runtime.execBattle(map,
-monsterSet)`. It writes both numbers into the encounter record, saves only
-the light game state (`GameStateSave`), calls `battleProc`, rebuilds the actor
+`Runtime.execBattle(map, monsterSet)` can also start a battle directly, but no
+script on the disc calls it. It writes both numbers into the encounter record,
+saves only the light game state (`GameStateSave`), calls `battleProc`, rebuilds the actor
 scene, fades back in and calls `GameStateRestore`. It does not read the battle
 result (see [How a battle starts](battle.md#how-a-battle-starts)).
 
@@ -829,7 +831,9 @@ texture set, see [XTX texture sets](../formats/models-and-textures.md#xtx-textur
 
 The radar fades in and out with `radarRate`. It fades out when the radar option
 in the save data is off, when `GAME_FLAG_RADAR` is clear, or while a window is
-open. It is drawn in three parts:
+open. `GameRadarDraw` first draws the radar texture as three sprites, a square
+of 128 by 128 pixels and a strip of 8 by 144 pixels on each side of it. Then
+it calls two functions:
 
 - `DrawRadarPing` draws a ring of 24 segments that expands from the centre and
   restarts, like a sonar ping. It grows by 8 each frame unless the game is
@@ -838,9 +842,8 @@ open. It is drawn in three parts:
   (`0x380` by `0x300` radar units, 64 units per world unit). Enemies that can
   start a battle are yellow, or red and pulsing while they chase the player or
   reach out for it with their tentacle range. Other actors are green. The
-  player is a red marker in the centre.
-- An actor counts only if it is in use, not hidden and not attached to another
-  actor (`CheckActorExist`).
+  player is a red marker in the centre. An actor counts only if it is in use,
+  not hidden and not attached to another actor (`CheckActorExist`).
 
 ## Background draw types
 

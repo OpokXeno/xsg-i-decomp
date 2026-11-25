@@ -61,6 +61,8 @@ come from a programmer's name, because the window textures live in
 `data\yajima\` and whose test screen is `src/main/yajima_test.c`. The TWSYS
 names (`TComponent`, `TWIN`, `TMENU`, `TSLIDER`, `EW`) follow a third style.
 
+The diagram below shows the two toolkits and what they draw through.
+
 ```mermaid
 flowchart TB
     subgraph SCR["Scripts and field"]
@@ -203,9 +205,10 @@ section covers the part that the windows use.
 ### Message tags
 
 `MSG_convert` rewrites each window tag as `/[` followed by one compact byte.
-Later, `MSG_queuePop` hands the window one character at a time and reports a
-compact tag in the queue's `last` field as a value of 128 or more. The other
-tags turn into font control codes, as listed in
+Later, `MSG_queuePop` hands the window the text up to a limit of characters
+per call (2 for a conversation window, 24 for a scene window, 1 for a menu
+question) and reports a compact tag in the queue's `last` field as a value of
+128 or more. The other tags turn into font control codes, as listed in
 [events.md](../scripting/events.md#text-tags). The output bytes of every tag
 and their counts in the scene scripts are given in
 [MIF2 message tags](../formats/text-and-fonts.md#mif2-message-tags).
@@ -486,6 +489,8 @@ widgets. Labels print their lines. Clip and mask widgets of the text-pass
 types queue `set_clip` and `mask_put` as callbacks at their own keys, so they
 land between the text records in the right order.
 
+The flowchart below shows both passes.
+
 ```mermaid
 flowchart TD
     D["EW_draw()"] --> P["queue EW_sendPacket<br/>at EW_ORDER_FRAME"]
@@ -545,7 +550,8 @@ the kind. Both live in `src/main/tslider_create.c` and call `TWIN_init2`.
 | +0x188 | `lineData` | three 0xC0-byte lines and a 0x80-byte caption |
 
 The widget slots are `CLIP` 0, `MASK` 1, `LABEL` 2, `SCREEN_CLIP` 3, `FRAME`
-4 and `CURSOR` 5, all children of one container.
+4 and `CURSOR` 5, all children of one container. The diagram below shows this
+widget tree.
 
 ```mermaid
 flowchart TD
@@ -685,9 +691,10 @@ Java object to the VM.
 | `setLocation(int x, int y)` | clears `FOLLOW_OWNER` and sets `x` and `y` |
 | `setName(String)` | empty |
 
-Every command is text. `clear`, `close`, `waitkey` and `wait` append a tag to
-the same queue as the dialogue instead of acting at once, so the window
-reaches them in order, after the text before them has appeared.
+`clear`, `close`, `waitkey`, `wait` and `closeWaitKey` are text commands. They
+append a tag to the same queue as the dialogue instead of acting at once, so
+the window reaches them in order, after the text before them has appeared.
+`signal`, `setSize` and `setLocation` change the slot at once.
 
 ### Waiting for a window
 
@@ -820,6 +827,8 @@ the items start.
   `IDLE`, which keeps the menu on screen.
 - `CLOSING` hides the root widget at once, counts 10 frames and calls
   `TMENU_dispose`.
+
+The state diagram below shows these states.
 
 ```mermaid
 stateDiagram-v2
@@ -977,6 +986,8 @@ Because the drawing happens later, the info structures must stay valid until
 the render thread has used them. The widgets therefore keep separate
 "render" copies of their state: `ESprite` has render coordinates, `eNumber`
 has `render[4]` and `eWindow` has its own `primitive`.
+
+The sequence diagram below shows one frame of the queue.
 
 ```mermaid
 sequenceDiagram
@@ -1228,7 +1239,7 @@ through it. `MenuSelectWindow` and `MenuInfoWindow` in
   `CLOSING` (5), which runs the animation and ends in `FINISHED` (-1).
 
 `WindowDXFlagChange()` only allows legal transitions, and `WindowDXSet()`
-resets a window to defaults.
+resets a window to defaults. The state diagram below shows the transitions.
 
 ```mermaid
 stateDiagram-v2
@@ -1328,7 +1339,7 @@ classDiagram
     EMessageParam *-- ECursolMainData : page cursor
 ```
 
-A list screen runs the same loop every frame.
+A list screen runs the same loop every frame. The flowchart below shows it.
 
 ```mermaid
 flowchart TD
@@ -1400,6 +1411,8 @@ The text of the menus may be queued before that callback, but each text sits
 at its window's depth plus 2, so the depth test keeps it in front of its own
 window.
 
+The diagram below shows the drawing order of one frame.
+
 ```mermaid
 flowchart TD
     subgraph GAME["game thread, one frame"]
@@ -1431,8 +1444,8 @@ flowchart TD
 
 ## tya helpers
 
-The `tya` files hold helpers from one programmer that ended up in different
-parts of the game.
+The `tya` files hold helpers for different parts of the game, probably written
+by one programmer.
 
 | Function | File | What it does | Used by |
 | --- | --- | --- | --- |
@@ -1445,11 +1458,13 @@ parts of the game.
 
 `tyaDisplaySetting` has three uses. With NULL it applies the saved screen
 offsets, which `src/main/game.c` does. With 1 it resets them. With a frame
-buffer it runs the adjustment screen. It shows `data\yajima\mnt_set.jpg`
-(see [the quantization tables of mnt_set.jpg](../formats/movies-images-and-icons.md#43-the-quantization-tables-of-mnt_setjpg)
-for a decoder quirk that fades its colours) and
-moves `DispEnv.display` in steps of ±20, 5 dot units at a time horizontally.
-Square resets, Circle confirms and Cross cancels.
+buffer it runs the adjustment screen. It shows `data\yajima\mnt_set.jpg` (see
+[the quantization tables of mnt_set.jpg](../formats/movies-images-and-icons.md#43-the-quantization-tables-of-mnt_setjpg)
+for a decoder quirk that fades its colours) and moves `DispEnv.display`. Each
+press of a direction (or repeat while it is held) is one step, which moves the
+picture by 1 scanline vertically or 5 dot units horizontally, and the offset
+is limited to 20 steps in each direction. Square resets, Circle confirms and
+Cross cancels.
 
 `tyaMenuBgEntry` creates 16 `task_menubg` row tasks with a random palette of
 512 shades. The rows draw the moving wall pattern behind the main menu through

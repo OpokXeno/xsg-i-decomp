@@ -36,15 +36,12 @@ OV01. Two pieces of work are moved across the swap for this reason:
 - **Gnosis records.** Before the swap, `UmnInterface()` fills one record per
   Gnosis (unit ids `0x22` to `0x3E`) in `UmnGunoDataBaseTop` from the battle
   unit tables in OV01 and from the menu text (`MenuTextGet`). Each record gets
-  the unit's name, its maximum HP and its weak element from the unit record
-  of `batdat.bin`, and its experience, money, T.Pts, E.Pts and S.Pts and the
-  names of its normal and rare drop items from its gain record (see
+  the unit's name, its maximum HP and its weakness flags (one bit per
+  attribute) from the unit record of `batdat.bin`, and its experience, money,
+  T.Pts, E.Pts and S.Pts and the names of its normal and rare drop items from
+  its gain record (see
   [gain records](../formats/game-tables.md#gain-records)). The Database
-  screen only reads these records (section 8). The field names of the views
-  in `src/main/window_tex_load.h` do not describe this use: `unit_type` is the
-  maximum HP, `text_type` the weak element, `unit_id` the experience, `value`
-  the money, `property_a` to `property_c` the three point values, and `name`
-  and `description` the names of the two drop items.
+  screen only reads these records (section 8).
 - **KOS-MOS specials.** Some mails teach KOS-MOS a special ability. The
   function that records it, `dataSpecLearnSet` (`src/ov01/data_unit_org_get.c`,
   see [character-growth.md](character-growth.md)), is in OV01. The mail screen
@@ -312,9 +309,10 @@ together with arrows and labels.
 ## 5. The procurator and the manzai windows
 
 The procurator is a 3D menu model (model id `0x1D`) that stands beside the
-U.M.N. windows. The Xeno Series Wiki names this character Bunnie. The event
-texts call the speaker `UKUN`, which is probably the character's Japanese name
-U-kun. Its model unit is kept in `UmnModelUkn`. Menu models are explained in
+U.M.N. windows. The menu's name table gives this unit id the name Bunnie
+(`char_name_6` in `src/main/menu_1.c`). The event texts call the speaker
+`UKUN`, which is probably the character's Japanese name U-kun. Its model unit
+is kept in `UmnModelUkn`. Menu models are explained in
 [main-menu.md](main-menu.md).
 
 `UmnProcuratorSet()` runs on every screen change and gives the model a new

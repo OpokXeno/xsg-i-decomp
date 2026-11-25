@@ -261,8 +261,9 @@ HDD support was probably carried over unchanged from the Japanese release.
 
 ### The memory card check
 
-`mc_check()` makes sure that progress can be saved on a memory card. Its
-loop is:
+`mc_check()` checks whether progress can be saved on a memory card and warns
+the player when it cannot. The player can continue without saving. Its loop
+is:
 
 1. Poll the cards for eight frames so that their state settles.
 2. Queue four requests with `xglMcRequest`: the free space of each port
@@ -398,14 +399,15 @@ Each pass of the loop is one frame. The input part works like this:
 1. `frameTimer` counts down from 600 frames, about ten seconds. When it
    reaches zero, `Title()` returns `logoEntrySelection`, and the control loop
    plays the logo movies before the title appears again.
-2. For the first four frames (`preroll`) input is ignored. After that, once
-   the fade has ended, START or Circle chooses the highlighted entry. The
+2. For the first four frames (`preroll`) START and Circle are ignored. After
+   that, once the fade has ended, they choose the highlighted entry. The
    choice plays the confirm sound, copies the frame and leaves the loop. A
    guard plays the buzzer instead when the HDD entry is chosen while the HDD
    is unusable, but the cursor cannot reach the hidden entry.
-3. Up and Down (with auto-repeat) move the cursor between the entries. The
-   cursor skips the HDD entry when it is hidden. A move plays the cursor
-   sound, resets `preroll` to four frames and restarts the 600-frame timer.
+3. Up and Down (with auto-repeat) move the cursor between the entries in every
+   frame, also during `preroll` and the fade. The cursor skips the HDD entry
+   when it is hidden. A move plays the cursor sound, resets `preroll` to four
+   frames and restarts the 600-frame timer.
 4. The fade value starts at 128 and drops by 4 per frame until it is 0.
 
 The draw part builds one VIF packet per frame (see
@@ -452,11 +454,12 @@ The diagram below shows the states of the title screen.
 stateDiagram-v2
     [*] --> Loading
     Loading --> Preroll: data loaded, fade = 128
-    Preroll --> Fading: 4 frames passed
+    Preroll --> Fading: 4 frames passed, fade above 0
+    Preroll --> Waiting: 4 frames passed, fade at 0
     Fading --> Waiting: fade reached 0
-    Preroll --> Preroll: cursor moved (preroll reset)
-    Fading --> Fading: cursor moved
-    Waiting --> Waiting: cursor moved, timer reset
+    Preroll --> Preroll: cursor moved, preroll and timer reset
+    Fading --> Preroll: cursor moved, preroll and timer reset
+    Waiting --> Preroll: cursor moved, preroll and timer reset
     Waiting --> Chosen: START or Circle
     Preroll --> Timeout: 600 frames without a move
     Fading --> Timeout: 600 frames without a move

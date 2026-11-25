@@ -1018,12 +1018,12 @@ themselves (see
 
 ## 15. Quirks in the code
 
-The recovered code has a few mismatches between the EE client and the IOP
-driver. They are harmless in the shipped game.
+The recovered code has two small errors.
 
 - `xglMakeSePacket` accepts a packet while `packet_count < 65`. The array has
   64 entries, so a 65th packet in one frame would be written past the end of
-  `SoundWork`. This appears to be an off-by-one in the original.
+  `SoundWork`, over the start of `partitionname`, the HDD partition name string
+  that follows it. This appears to be an off-by-one in the original.
 - The EE defines `SsdQuit` (command `0x02`) and `SsdSetSPDIFMode` (command
   `0x11`). The IOP dispatcher has no case for them and prints "illegal
-  function".
+  function". No game code calls either function.

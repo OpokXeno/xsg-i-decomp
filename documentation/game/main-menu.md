@@ -508,12 +508,12 @@ grids (up and down move by two, left and right by one).
 
 `MenuScenarioNoGet()` turns the event flags into a **scenario number**, a
 number that grows as the story advances. The table `scenarioRangeTable` lists
-five ranges of event flags (500, 400 down to 300, 197 down to 100, and 56
-down to 1). The function scans them from the top and returns the number of
-the first set flag, so the scenario number is the highest story flag that is
-set, or 0 when none is. The menu uses it to lock commands, to fix the leader
-and to change names. For example `MenuCharNameGet` returns "Ziggurat 8" for
-Ziggy before scenario 108.
+five ranges of event flags (500, 400 down to 399, 399 down to 300, 197 down to
+100, and 56 down to 1). The function scans them from the top and returns the
+number of the first set flag, so the scenario number is the highest story flag
+that is set, or 0 when none is. The menu uses it to lock commands, to fix the
+leader and to change names. For example `MenuCharNameGet` returns "Ziggurat 8"
+for Ziggy before scenario 108.
 
 `MenuEquipStealMaskCheck()` tests event flag 0x3F9. While it is set the
 weapon, ammunition and accessory lists are hidden, and the shop of type 6
@@ -797,12 +797,12 @@ runs as level 6.
 1. It draws one more normal menu frame, so the closing windows are shown.
 2. It fills the U.M.N. database buffer `UmnGunoDataBaseTop` with 29
    `UmnGunoRecord` entries, one per unit id 0x22 to 0x3E. Each record gets the
-   enemy's name, its HP and weakness flags from OV01's `dataUnitInitGet`, its
-   T.Pts, E.Pts, S.Pts, experience and money from `dataGainGet`, and the names
-   of its normal and rare drop items through `MenuTextGet`. OV02 cannot reach
-   the OV01 tables, so the menu prepares this data while OV01 is still loaded.
-   The records are the analysis data of the Gnosis entries of the U.M.N.
-   Database.
+   enemy's name, its maximum HP and weakness flags from OV01's
+   `dataUnitInitGet`, its T.Pts, E.Pts, S.Pts, experience and money from
+   `dataGainGet`, and the names of its normal and rare drop items through
+   `MenuTextGet`. OV02 cannot reach the OV01 tables, so the menu prepares this
+   data while OV01 is still loaded. The records are the analysis data of the
+   Gnosis entries of the U.M.N. Database.
 3. `UmnkosmosSpecialInit()` clears `UmnKosmosSpecialBox`, the menu models are
    freed, the frame is copied and the screen is cleared.
 4. `xglCdLoadOverlay(2)` replaces OV01 with OV02. `UmnMain()` runs the U.M.N.
@@ -856,7 +856,7 @@ sequenceDiagram
 
 ## Minigames, Driller Game and U.M.N. Simulation
 
-The menu can end in four special ways. Three are real minigame overlays, and
+The menu can end in five special ways. Three are real minigame overlays, and
 two are script scene jumps that the field performs after the menu.
 
 ### Minigame overlays
@@ -894,9 +894,11 @@ restores the field normally. Back in `GameModeCfMain`, the field sees
 the player position in `GameLoopState.user_longs[0..1]`, and calls
 `Java_xeno_util_Runtime_jumpCF__II` with scene 0xA0 and entry 1. The Driller
 Game is therefore a script scene, described in
-[Driller Game](minigames/driller-game.md). `user_word` and `user_longs` are
-part of the save area copied by `GamePushSaveDataUser`, which probably lets
-the game return the player to the right place afterwards.
+[Driller Game](minigames/driller-game.md). `Runtime.evsExit()` later reads the
+same two fields (offsets `0x2A018` and `0x2A020` of `GameLoopState`) to jump
+back to the saved event and put the player at the saved position. Both fields
+are part of the save area copied by `GamePushSaveDataUser`, so the return
+point survives a save.
 
 ### U.M.N. Simulation
 
@@ -927,7 +929,7 @@ map and enemy effects and restarts those sequences only when
 `UmnSimulationNo` and `MenuDrillCall` are both zero, probably because a scene
 jump with its own music follows otherwise.
 
-The flowchart below shows the four endings.
+The flowchart below shows these endings and the normal close.
 
 ```mermaid
 flowchart TD
@@ -937,7 +939,7 @@ flowchart TD
     D --> E["load OV12, OV10 or OV11<br/>run RobotGameMain, CardGameRoot, TanakaTest"]
     E --> F["load OV01, ACT_init, Game_Data_Pop"]
     C -->|15| G[MenuDrillCall = 1]
-    C -->|0| H[normal close]
+    C -->|0| H["normal close or<br/>U.M.N. Simulation"]
     G --> I["GameResourceWorkReload<br/>GameCfPlayerLoadResource(1)<br/>MenuGameDataPop"]
     H --> I
     F --> R[return to GameModeCfMain]

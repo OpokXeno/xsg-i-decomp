@@ -9,10 +9,9 @@ Events also use the triggers in the field code, the message system that turns
 script text into window text (`src/main/msg_init.c`), and the jump natives in
 `src/main/runtime.c` that move the game from one scene to the next.
 
-The sections below follow an event from its trigger to its end. The Java
-virtual machine itself is described in [java-vm.md](java-vm.md) and the native
-methods in [natives.md](natives.md). Cutscene playback (scenes, time charts, event
-cameras and actor movement) has its own page,
+The Java virtual machine itself is described in [java-vm.md](java-vm.md), the
+native methods in [natives.md](natives.md) and cutscene playback (scenes, time
+charts, event cameras and actor movement) in
 [scenes-and-timecharts.md](scenes-and-timecharts.md). A second, unrelated
 script language, the effect scripts of `src/main/sc_get.c`, is described at the
 end of this page.
@@ -318,7 +317,7 @@ events are:
 | `mpeg2 NAME` | plays `data\movie\mpeg2\NAME.pss` with `GameMpeg2Play(path, 2)` |
 | `mpeg2_btl NAME` | calls `SCRIPT_fade(2)`, then plays the movie in mode 1 (battle) |
 | `mpeg2_nofade NAME` | plays the movie in mode 5 (no fade) |
-| `event_btl` | `SCRIPT_frameLock2Battle()`, so the event ends straight into a battle |
+| `event_btl` | `SCRIPT_frameLock2Battle()`, so the last frame of the event stays up until the battle |
 | `player_lock` | sets `GAME_LOOP_FLAG_PLAYER_LOCK` (`0x8000`) |
 | `save N` | `Intermission(N)`, the save prompt between story parts |
 | `disk N` | `GameDiskChange`, the disc change screen |
@@ -973,25 +972,38 @@ cutscene. The movie player belongs to [field.md](../game/field.md).
 
 ## Battles started by events
 
-An event can lead into a battle in three ways.
+A script can start a battle in two ways, and field encounters start battles
+without a script.
 
 `Runtime.execBattle(int, int)` runs a scripted battle inside the current
 script. It saves the field state (`GameStateSave`), runs the battle in OV01,
 recreates the actors, fades back in and restores the state. The script
-thread continues after the call. No script on the disc calls this native, so
-the released game uses only the two ways below.
+thread continues after the call. No script on the disc calls this native.
 
-The resource commands `event_btl` and `mpeg2_btl` mark a cutscene that ends in
-a battle. `SCRIPT_frameLock2Battle` sets `s_nScriptFrameLockEntry`. The scene
-observer then holds the last frame (`frame_lock_wait`) instead of fading out,
-and later copies the back buffer for the battle transition
-(`nmlModelSetBackBufferToBattle`).
+The shipped scripts start their battles with the field enemy command 14
+(`Enemy_Command_Encount`, see
+[Enemy commands](../game/field-enemies.md#enemy-commands)). A Stage script
+queues it with the method `kickEnepc` of `xeno/Enepc`, and `Check_Encount` then
+sets bit 0 of `event_sub_id` just as a touched enemy does. Ordinary field
+stages use it (`ST1030` for a boss), and so do the 17 `JumpBattle` stages
+`ST90xx`, which create one invisible enemy and queue the command in
+`Final_init`. A cutscene that leads into a battle ends with `Runtime.jumpCF` to
+such a stage. The `EOB` method of the stage runs after the battle and continues
+the story with `Runtime.jumpEvent` or `Runtime.jumpCF`.
 
-Field encounters are not started by scripts. `GameModeCfMain` starts them
-from `event_sub_id` and afterwards notifies the Stage script with
-`EOB_Always` and `EOB` or `EOB_Escape`. The two calls run at the same time on
-the two event VMs. Battles are described in
-[battle.md](../game/battle.md) and encounters in
+Two resource commands prepare the picture of such a cutscene, and 16 cutscenes
+use one of them. `event_btl` (6 cutscenes) calls `SCRIPT_frameLock2Battle`,
+which sets `s_nScriptFrameLockEntry`. The scene observer then holds the last
+frame (`frame_lock_wait`) instead of fading out, and later copies the back
+buffer for the battle transition (`nmlModelSetBackBufferToBattle`).
+`mpeg2_btl` (10 cutscenes) calls `SCRIPT_fade(2)` and plays the cutscene's
+movie in the battle mode of `GameMpeg2Play`. The scripts of all 16 cutscenes
+call `jumpCF` for one of the stages 9001 to 9005, 9011 to 9015 or 9021 to 9026.
+
+`GameModeCfMain` starts every battle that `event_sub_id` requests, scripted or
+not, and afterwards notifies the Stage script with `EOB_Always` and `EOB` or
+`EOB_Escape`. The two calls run at the same time on the two event VMs. Battles
+are described in [battle.md](../game/battle.md) and encounters in
 [field-enemies.md](../game/field-enemies.md).
 
 ## Effect scripts
@@ -1000,8 +1012,8 @@ The files `src/main/sc_get.c` and `src/main/sc_wait_parse_script.c` contain a
 second, much smaller script language. It is a bytecode for effect sequences
 and is unrelated to the Java scripts. Each effect number of the effect system
 can have such a script, which starts sub-effects, movies and missiles in a
-timed order. Events reach it only indirectly, when a Java script or the field
-starts an effect. The language, its records, commands and wait modes are
+timed order. Events do not run it, because a Java script or the field creates an
+effect with `sefCreateEffectCf`, without a running script. The language, its records, commands and wait modes are
 described with the effect system in
 [sef.md](../libraries/sef.md#effect-scripts), and its use in battle in
 [battle-effects.md](../game/battle-effects.md). The scripts are stored in the

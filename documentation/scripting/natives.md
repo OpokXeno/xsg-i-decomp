@@ -5,9 +5,9 @@ from moving a character to starting a battle, goes through a **native
 method**, because the scripts have no direct access to the engine. A native
 method is declared with the `native` keyword by a library class such as
 `xeno.Chr` and implemented as a C function by the main executable. The
-executable has 401 of them, spread over 21 Java classes. This page explains
-how a native is called, how Java objects are tied to engine objects, and what
-each class's natives do.
+executable has 401 of them, spread over 21 Java classes. All natives share one
+C signature, and most instance natives work on an engine object (such as an
+actor, a map unit or a camera) that is tied to the Java object.
 
 How the VM loads classes, runs bytecode and schedules script threads is
 explained on the [Java virtual machine](java-vm.md) page.
@@ -390,7 +390,7 @@ Java `Thread` object is the `JThread` record itself.
 As recovered, `sin` and `cos` call each other's xgl function. Either the
 natives or the xgl names are swapped. `xglSin` in `src/main/xgl_2.c` uses the
 VU0 sine routine, so the natives probably return the cosine for `sin` and the
-sine for `cos`, and the scripts were written against that behaviour. The xgl
+sine for `cos`. Whether the scripts allow for this is not known. The xgl
 math helpers are described in [Math](../libraries/math.md).
 
 ## xeno.util.Runtime
@@ -411,8 +411,9 @@ the game such as battles and minigames. All of them are static.
 | `setEventTimer(String, int)` | Starts a timer task (`setEventTimerTaskEntry`, `src/main/disp_on.c`) that counts the frames down and then calls the named method of the map script through `CallMethod` |
 
 `VMRegister` is outside the VM heap, so its values survive scene changes and
-VM resets. It is probably the way scripts pass small values from one scene to
-the next.
+VM resets. The scripts on the disc write registers but never call
+`getRegister`. The only reader is the `#n` expansion of `System.println`, so
+the registers were probably used to watch script values during development.
 
 ### Map changes and jumps
 
@@ -431,8 +432,9 @@ Leaving the current map or event always goes through one of these natives:
 The jump natives cannot do their work while the script is running, because the
 jump resets the VM and would delete the running thread. They store the
 destination in `args_jump`, set `jthreadResetFunc` to `scriptReset_jump` or
-`scriptReset_evsExit`, block further talk with `SCRIPT_talkIgnoreSet` and stop
-the thread for good with the flags `DONE` and `WAITING`. `jumpEvent` reads a
+`scriptReset_evsExit` and stop the thread for good with the flags `DONE` and
+`WAITING`. `jumpCF` and `jumpEvent` also block further talk with
+`SCRIPT_talkIgnoreSet`, while `evsExit` does not. `jumpEvent` reads a
 second argument slot as the entrance even though its descriptor has only one
 `int`, so the entrance comes from whatever the caller's operand stack holds
 above the argument (probably a leftover of an older two-argument version).

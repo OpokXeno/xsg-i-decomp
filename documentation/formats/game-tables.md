@@ -92,11 +92,13 @@ flowchart LR
 
 ## Shared conventions
 
-**One-based ids.** Every table is indexed by an id that starts at 1. The id 0
-means "none" and ends every list. The OV01 getters (`dataTecGet`,
-`dataWpnGet`, `dataItmGet` and the others in `data_unit_org_get.c`) return
-`records[id - 1]`. They print an error such as `** dataTecGet: err %d` for an
-id of 0 or less and do not check the upper bound.
+**One-based ids.** Ids start at 1, and the id 0 means "none". The OV01 getters
+of `data_unit_org_get.c` return `records[id - 1]`, except `dataGainGet` and
+`dataExpTblGet` (see [Section list](#section-list)). `dataTecGet`,
+`dataWpnGet`, `dataAttGet`, `dataEthGet`, `dataItmGet`, `dataAccGet`,
+`dataFrmGet`, `dataEngGet`, `dataSklGet` and `dataGainGet` print an error such
+as `** dataTecGet: err %d` for an id of 0 or less. The other getters do not
+check the id, and no getter checks the upper bound.
 
 **Strings.** Text is EUC-JP: plain ASCII plus two-byte JIS X 0208 characters
 with both bytes at 0xA1 or above. The English release still uses a few of
@@ -138,7 +140,7 @@ byte at +0x11 of the technique record confirms the ranges.
 | Technique ids | Count | `kind` | Meaning |
 |---------------|------:|--------|---------|
 | 1 to 44 | 44 | 0 or 1 | Normal attacks, six per character from chaos to Jr. (19 to 24 belong to the unused character 4), then 43 and 44 for Virgil |
-| 45 to 98 | 54 | 2 | Tech Attacks, eight ids per character: 45 chaos, 53 KOS-MOS, 60 Shion, 68 character 4, 76 Ziggy, 83 MOMO, 91 Jr. |
+| 45 to 98 | 54 | 2 | Tech Attacks, seven ids for KOS-MOS and Ziggy and eight for the others: 45 chaos, 53 KOS-MOS, 60 Shion, 68 character 4, 76 Ziggy, 83 MOMO, 91 Jr. (the motion of 98 is Jr.'s, but no table names it) |
 | 99 to 553 | 455 | 0 | Enemy attacks |
 | 554 to 731 | 178 | 3 | Ethers, technique = 553 + ether id |
 | 732 to 871 | 140 | 4, 5 or 6 | Weapon attacks (character and A.G.W.S. weapons) |
@@ -197,14 +199,15 @@ batdat.bin (0xE0D0 bytes)
 
 ### Section list
 
-Every section has one getter. Most getters return `records[id - 1]`. The gain
-getter is the exception: its table starts 0x294 bytes (33 records) before the
-section offset, so it is indexed by the enemy's unit id directly and record 1
-belongs to unit 33.
+Every section has one getter. Sixteen of them return `records[id - 1]`. The
+table of `dataGainGet` starts 0x294 bytes (33 records) before the section
+offset, so it is indexed by the enemy's unit id directly and the first record
+belongs to unit 33. `dataExpTblGet` returns the start of its section, and its
+callers (`dataPlUnitInit`, `calcLvUp`) index it with the level.
 
 | # | Section | Offset | Bytes | Record | Records | Getter | Index |
 |--:|---------|--------|------:|-------:|--------:|--------|-------|
-| 0 | `unitInit` | 0x0050 | 0x25C8 | 0x34 | 186 | `dataUnitOrgGet`, `dataUnitInitGet` | unit id |
+| 0 | `unitInit` | 0x0050 | 0x25C8 | 0x34 | 186 | `dataUnitInitGet` | unit id |
 | 1 | `technique` | 0x2618 | 0x51A8 | 0x18 | 871 | `dataTecGet` | technique id |
 | 2 | `normalInit` | 0x77C0 | 0x08B8 | 0x0C | 186 | `dataNormInitGet` | unit id |
 | 3 | `specialInit` | 0x8078 | 0x00C0 | 0x0C | 16 | `dataSpecInitGet` | unit id |
@@ -260,8 +263,8 @@ A unit record (0x34 bytes) holds the start state of one combatant. At the
 start of a battle `calcCopyParaMake` copies it into the first 0x34 bytes of
 the battle unit (`CalcUnitParam`, `include/ov01/calc.h`). The field names
 below come from the debug view `UnitOrgData` in `src/ov01/debug_entry.c`,
-whose labels the debug status screen prints. The battle side names the same
-fields differently, as the last column shows.
+whose labels the debug status screen prints. Where the battle side uses another
+name for the same field, the Meaning column gives it in parentheses.
 
 | Offset | Size | Type | Field | Meaning | Range seen |
 |--------|-----:|------|-------|---------|------------|
@@ -316,8 +319,8 @@ The first record is chaos (`batdat.bin` at 0x0050):
 000060: 96 00 32 00 0b 00 00 00 00 00 00 00 00 00 34 00
         atkRng defRng lv sz cR ec weak   spec   flags  weight
         150    50     11 0  0  0  0      0      0      52
-000070: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  bRate, bNum, +0x22, protect[0..6]
-000080: 00 00 00 00                                      protect[7]
+000070: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  bRate, bNum, +0x22, protect[0..5]
+000080: 00 00 00 00                                      protect[6..7]
 ```
 
 ### Technique records
@@ -369,12 +372,12 @@ enemy lists at battle start.
 
 | Section | Record | Content | Records with data |
 |---------|--------|---------|-------------------|
-| `normalInit` | 6 x s16 | normal technique ids, unit +0x76 | 159 of 186. Characters 1 to 7 and 10 use ids 1 to 44, the enemies ids 99 to 553 |
+| `normalInit` | 6 x s16 | normal technique ids, unit +0x76 | 159 of 186. Characters 1 to 3, 5 to 7 and 10 use ids 1 to 18 and 25 to 44, the enemies ids 99 to 553 |
 | `specialInit` | 6 x s16 | Tech Attack ids, unit +0x82 | 6 of 16 (chaos, KOS-MOS, Shion, Ziggy, MOMO, Jr.) |
-| `etherInit` | 12 x s16 | ether ids, unit +0x8E | 39 of 186. Seven player-side records and 32 enemies, ids 17 to 155 |
+| `etherInit` | 12 x s16 | ether ids, unit +0x8E | 39 of 186. Seven player-side records (1 to 7) and 32 enemies, ids 1 to 155 |
 
-The ether start list of character 4 holds ethers 59 to 70, the twelve
-"Reserve" ethers. The chaos records are typical:
+The ether start list of character 4 holds ethers 59 to 70, twelve of the
+thirteen "Reserve" ethers (59 to 71). The chaos records are typical:
 
 ```
 normalInit  1 at 0x77C0: 01 00 02 00 03 00 04 00 05 00 06 00   techniques 1 to 6
@@ -719,9 +722,11 @@ includes 57 (`S・CHAIN`) and 98.
 
 ## Growth tables
 
-The menu screens of `data\endou` read five small growth tables. None of them
-has a header. Each is a fixed array indexed by character (1 to 8) or by
-accessory id.
+`data\endou` holds five small growth tables. `PartyDataInit` reads
+`tecinit.bin` and `skilldat.bin` on a new game, and the menu screens read
+`skilldat.bin` and the other three. None of the tables has a header. They are
+fixed arrays, indexed by character (1 to 8), by accessory id (`skilldat.bin`)
+or by ether id (`etree.bin`).
 
 ### Technique start values (tecinit.bin)
 
@@ -757,14 +762,15 @@ upgrades. The cost of the next level is `levelPointBase + levelPointIncrement
 
 | Offset | Size | Type | Field | Meaning |
 |--------|-----:|------|-------|---------|
-| 0x00 | 8 | u8[8] | `unmodeled_00` | base power of each technique, the same value as the technique's `powLevBase` in `batdat.bin` |
+| 0x00 | 8 | u8[8] | `unmodeled_00` | base power of each technique, the technique's `powLevBase` in `batdat.bin` |
 | 0x08 | 8 | u8[8] | `levelPointIncrement` | extra T.Pts per level |
 | 0x10 | 16 | u16[8] | `levelPointBase` | T.Pts base cost of a level |
 | 0x20 | 16 | u16[8] | `speedPointCost` | T.Pts cost of the speed upgrade |
 | 0x30 | 16 | u16[8] | `waitPointCost` | T.Pts cost of the wait upgrade |
 
-The menu does not read the first eight bytes. In every record they repeat
-the base power of the eight techniques, and unused slots hold 0. The
+The menu does not read the first eight bytes. They repeat the base power of
+the character's techniques. Unused slots hold 0, and so do KOS-MOS's
+`S・CHAIN` and MOMO's Magic Caster, whose base power is 20. The
 techniques that cannot be levelled (increment 0) are not consistent: S・CHAIN
 and Magic Caster hold 0, while Demon Banisher and Ether Amp hold 20. The records of characters 4 and 8 are
 entirely zero. chaos's record is the first 64 bytes:
@@ -982,8 +988,10 @@ chapters and at the end. The save file itself is described in
 
 The 100 files `data\yamamoto\think\think000.bin` to `think099.bin` (186,762
 bytes in all, 382 to 11,220 bytes each, unpacked) are the enemy AI of the
-field maps. Each file belongs to one field map and holds the monster sets
-that can attack on that map and the scripts that drive the enemies. The
+field maps. A file holds the monster sets that can attack on a map and the
+scripts that drive the enemies. `think001.bin` to `think091.bin` belong to
+one field map each, and `think092.bin` to `think099.bin` are never selected
+(see [How a program is chosen](#how-a-program-is-chosen)). The
 scripts are bytecode of the think machine of `src/ov01/cmd.c`, described in
 [Battle system: enemy AI and the think VM](../game/battle.md#enemy-ai-and-the-think-vm).
 
@@ -1085,8 +1093,9 @@ Register values are masked to 15 bits when stored. Jump targets and table
 entries are plain file offsets. A string operand is stored inline, ends with
 a NUL byte and is padded to an even length. Its text is EUC-JP.
 
-The script of the attack of think068.bin at offset 0xEA shows the encoding.
-The enemy picks a random attack from a table and shows a message:
+The attack script at offset 0xEA of think068.bin shows the encoding. It belongs
+to unit 64 in the third monster set of the file. The enemy picks a random
+attack from a table and shows a message:
 
 ```
 0000ea: 2c 00 00 80 88 00 06 00           ATKTBL R00, 136, 6
@@ -1106,7 +1115,7 @@ ideographic space. The header of the same file is `02 00`, and its first
 monster set is `22 00 1a 00 00 00 00 00 00 00`: spawn list at 0x22, stage 26,
 no set scripts. The spawn list at 0x22 is `4b 00 15 00 4a 01 00 00` three
 times, three enemies of unit 75 at the positions 21, 20 and 19, each with the
-attack script at 0x14A.
+attack script at 0x14A, which follows the listed one.
 
 ### Opcodes
 
@@ -1198,8 +1207,9 @@ less or equal. The files use them 1,350, 188, 82, 574, 64 and 56 times. An AI
 script usually ends by filling the command registers and calling `THINKSET`,
 which turns them into the enemy's action (`cmdThinksetSub`).
 
-Forty opcodes never appear in any think file: the three bit operations
-`R_XOR`, `R_NOT` and `R_NEG`, the debug opcodes `MEMDUMP`, `CMDPUTON` and
+Forty-two opcodes never appear in any think file: the register operations
+`R_XOR` (exclusive or), `R_NOT` (complement) and `R_NEG` (negation), the two
+`NULL` entries, which have no handler, the debug opcodes `MEMDUMP`, `CMDPUTON` and
 `CMDPUTOFF`, all light and camera opcodes, `EVENT`, `WAIT_EVENT`,
 `WAIT_CAM_MOVE`, `MAP_MULSET`, `THINKNO_GET` and `DEAD_TIME`. The light and
 camera opcodes belong to the camera programs that `camInit` takes from the
